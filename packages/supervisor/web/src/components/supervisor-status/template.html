@@ -1,0 +1,24 @@
+<div v-if="visible" class="sstat">
+  <span class="sbar" aria-hidden="true">
+    <i
+      v-for="(s, i) in stages"
+      :key="s.id || i"
+      :class="{ done: done(s, i, stageIndex), cur: i === stageIndex }"
+    />
+  </span>
+  <span class="slab">{{ stageIndex >= 0 ? stageIndex + 1 : 0 }}/{{ stages.length }}</span>
+
+  <span v-if="stats.length" class="sstats" role="list">
+    <span
+      v-for="c in stats"
+      :key="c.k"
+      class="stat"
+      :class="[c.tone || '', { na: c.na }]"
+      role="listitem"
+    >
+      <i v-if="c.dot" class="sdot" :class="c.tone || 'ok'" />
+      <em>{{ c.k }}</em>
+      <b>{{ c.v }}</b>
+    </span>
+  </span>
+</div>

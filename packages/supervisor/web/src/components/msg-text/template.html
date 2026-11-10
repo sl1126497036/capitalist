@@ -1,0 +1,36 @@
+<span class="mtx">
+  <template v-for="(s, i) in segs" :key="i">
+    <button
+      v-if="s.type === 'ref' && entry(s.raw)"
+      class="mref"
+      type="button"
+      aria-haspopup="dialog"
+      :aria-expanded="card && card.raw === s.raw ? 'true' : 'false'"
+      :aria-label="t('查看任务 #{no}', { no: entry(s.raw).no })"
+      @click.stop="openRef($event, s.raw)"
+      >#{{ entry(s.raw).no }}</button
+    >
+    <span v-else-if="s.type === 'skill'" class="mskill" :title="s.raw">{{ s.name || "skill" }}</span>
+    <span v-else>{{ s.type === "ref" ? s.raw : s.text }}</span>
+  </template>
+</span>
+
+<Teleport to="body">
+  <div v-if="card" class="mrc" :style="pos" role="dialog" :aria-label="t('任务引用详情')">
+    <div class="hd">
+      <b>#{{ card.no }}</b>
+      <span class="ttl">{{ card.title }}</span>
+      <button class="x" type="button" :aria-label="t('关闭')" @click="close">×</button>
+    </div>
+    <div class="rows">
+      <div><span>{{ t("状态") }}</span><em>{{ card.status || "—" }}</em></div>
+      <div><span>{{ t("阶段") }}</span><em>{{ card.stage || "—" }}</em></div>
+      <div><span>{{ t("单号") }}</span><em class="mono">{{ card.dispatch || card.raw }}</em></div>
+      <div><span>{{ t("进程号") }}</span><em class="mono">{{ card.worker || "—" }}</em></div>
+    </div>
+    <div class="ft">
+      <button v-if="card.threadId" class="go" type="button" @click="go">{{ t("打开任务面板") }}</button>
+      <span class="hint">{{ t("点击编号查看任务详情") }}</span>
+    </div>
+  </div>
+</Teleport>

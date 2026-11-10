@@ -1,0 +1,136 @@
+/**
+ * 页面底座。背景为三层叠加且顺序固定：竖向渐变、四个 position:fixed 径向光晕、Body 外框。
+ * 光晕不参与交互。
+ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-deep) 45%, var(--bg-bottom) 100%);
+  color: var(--t3);
+  font-family: var(--font);
+  font-size: var(--f-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* 四层光晕以伪元素挂在 #app 上，避免额外 DOM 节点。 */
+#app::before,
+#app::after,
+#app > .glow-a,
+#app > .glow-b {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  z-index: 0;
+}
+
+#app::before {
+  width: 800px;
+  height: 800px;
+  left: -180px;
+  top: -280px;
+  background: var(--glow-1);
+}
+
+#app::after {
+  width: 740px;
+  height: 740px;
+  right: -320px;
+  top: -320px;
+  background: var(--glow-2);
+}
+
+#app > .glow-a {
+  width: 780px;
+  height: 620px;
+  left: -120px;
+  bottom: -160px;
+  background: var(--glow-3);
+}
+
+#app > .glow-b {
+  width: 980px;
+  height: 780px;
+  left: 380px;
+  bottom: -240px;
+  background: var(--glow-4);
+}
+
+/* 滚动条悬停才显形；两栏留固定 gutter 避免滚动条出现时宽度抖动（见 App.vue）。 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--r-pill);
+}
+*:hover::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* AntD Tooltip 配色改用令牌以与主题一致；只改颜色与字号，不改定位与动效。 */
+.ant-tooltip .ant-tooltip-inner {
+  background: var(--raise);
+  color: var(--t1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-row);
+  font-size: var(--f-sub);
+  line-height: 1.5;
+  box-shadow: none;
+}
+.ant-tooltip .ant-tooltip-arrow-content,
+.ant-tooltip .ant-tooltip-arrow::before {
+  background: var(--raise);
+}
+
+/* 统一浮层提示由 lib/tooltip.js 驱动；宽度随内容、最长 340px，不设指针事件。 */
+.su-tip {
+  position: fixed;
+  z-index: 9000;
+  max-width: 340px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--raise);
+  color: var(--t2);
+  font-size: var(--f-meta);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.su-tip.on {
+  opacity: 1;
+  transform: none;
+}

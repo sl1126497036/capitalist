@@ -1,0 +1,167 @@
+<!-- 停止调度与关停按 props.root 发指令；顶栏账号菜单的暂停调度只对默认根生效。 -->
+<span class="mbar" role="group" :aria-label="t('监工指标')">
+  <span class="mcell mcell-model">
+    <em>{{ t("模型") }}</em>
+    <button
+      ref="modelBtnEl"
+      class="mval"
+      type="button"
+      :aria-expanded="modelOpen ? 'true' : 'false'"
+      @click.stop="toggleModels"
+    >
+      {{ modelLabelText }}
+    </button>
+  </span>
+
+  <template v-for="c in cells" :key="c.k">
+    <i v-if="c.sep" class="msep" aria-hidden="true"/>
+    <span v-else class="mcell" :class="[c.tone, { na: c.na }]">
+      <em>{{ c.k }}</em>
+      <b v-if="c.vparts && !c.btn"><span v-for="(p, i) in c.vparts" :key="i" :class="p.cls">{{ p.t }}</span></b>
+      <button
+        v-else-if="c.btn"
+        ref="concBtnEl"
+        class="mval"
+        type="button"
+        :title="c.tip"
+        :aria-expanded="concOpen ? 'true' : 'false'"
+        @click.stop="openConc"
+      >
+        <span v-if="c.vparts"><span v-for="(p, i) in c.vparts" :key="i" :class="p.cls">{{ p.t }}</span></span>
+        <template v-else>{{ c.v }}</template>
+      </button>
+      <b v-else>{{ c.v }}</b>
+    </span>
+  </template>
+
+  <span v-if="note" class="mnote" :class="{ bad: noteBad }" role="status">{{ note }}</span>
+
+  <slot name="end" />
+
+  <span class="macts">
+    <button
+      type="button"
+      class="mbtn"
+      :class="{ warn: paused }"
+      :disabled="busy || Boolean(pausePending)"
+      :aria-busy="pausePending ? 'true' : 'false'"
+      @click="togglePause"
+    >
+      {{ pauseLabel }}
+    </button>
+    <button
+      type="button"
+      class="mbtn"
+      :disabled="busy"
+      @click="restartSupervisor"
+    >
+      {{ t("重启") }}
+    </button>
+    <button
+      type="button"
+      class="mbtn danger"
+      :disabled="busy"
+      @click="shutdown"
+    >
+      {{ t("关停") }}
+    </button>
+  </span>
+
+  <div v-if="confirmAsk" class="mpick confirm" role="dialog" :aria-label="confirmAsk.title" @click.stop>
+    <div class="mpickhd">
+      <span>{{ confirmAsk.title }}</span>
+      <button class="mpickx" type="button" @click.stop="confirmAsk = null">×</button>
+    </div>
+    <div class="mptext">{{ confirmAsk.text }}</div>
+    <div class="mpacts">
+      <button class="mbtn" type="button" @click.stop="confirmAsk = null">{{ t("取消") }}</button>
+      <button class="mbtn" :class="{ danger: confirmAsk.danger }" type="button" @click.stop="confirmYes">
+        {{ confirmAsk.ok }}
+      </button>
+    </div>
+  </div>
+
+  <!-- 弹层用 fixed 定位：.chead / .chat 都有 overflow:hidden，放里面会被裁。 -->
+  <div
+    v-if="modelOpen"
+    class="mpick"
+    role="dialog"
+    :aria-label="t('选择监工对话层的模型')"
+    :style="{ left: `${modelPos.left}px`, top: `${modelPos.top}px` }"
+    @click.stop
+  >
+    <div class="mpickhd">
+      <span>{{ t("监工对话模型") }}</span>
+      <button class="mpickx" type="button" @click.stop="modelOpen = false">×</button>
+    </div>
+    <div class="mpicklist">
+      <div v-if="modelLoading" class="mpickempty">{{ t("宿主模型读取中…") }}</div>
+      <template v-else>
+        <!-- 默认模型不在清单里时才补一行。 -->
+        <!-- 宿主默认有具体模型名时直接按模型列出，不再出现抽象的「宿主默认」行；清单里有的走下面的循环。 -->
+        <button
+          v-if="hostDefault && !hostModels.includes(hostDefault)"
+          class="mpickrow"
+          :class="{ on: !supervisorCur }"
+          type="button"
+          :disabled="modelBusy !== null"
+          @click.stop="pickSupervisorModel('')"
+        >
+          <span class="mpname">{{ modelLabel(hostDefault) }}</span>
+          <em class="dflt">{{ t("宿主默认") }}</em>
+        </button>
+        <button
+          v-for="m in hostModels"
+          :key="m"
+          class="mpickrow"
+          :class="{ on: supervisorCur ? m === supervisorCur : m === hostDefault }"
+          type="button"
+          :disabled="modelBusy !== null"
+          @click.stop="pickSupervisorModel(m === hostDefault ? '' : m)"
+        >
+          <span class="mpname">{{ modelLabel(m) }}</span>
+          <em v-if="m === hostDefault" class="dflt">{{ t("宿主默认") }}</em>
+        </button>
+        <div v-if="modelNote" class="mpickempty">{{ modelNote }}</div>
+      </template>
+    </div>
+    <!-- 切换在途时铺满面板：请求回来才撤，点完立即有反馈。 -->
+    <div v-if="modelBusy !== null" class="mpick-busy" role="status" aria-live="polite">
+      <span class="mpick-spin" aria-hidden="true"></span>
+      {{ t("切换中…") }}
+    </div>
+  </div>
+
+  <div
+    v-if="concOpen"
+    ref="concEl"
+    class="mpick conc"
+    role="dialog"
+    :aria-label="t('调整并行度')"
+    :style="{ left: `${concPos.left}px`, top: `${concPos.top}px` }"
+    @click.stop
+  >
+    <div class="mpickhd">
+      <span>{{ t("调整并行度") }}</span>
+      <button class="mpickx" type="button" @click.stop="concOpen = false">×</button>
+    </div>
+    <div class="concrow">
+      <button class="concstep" type="button" :disabled="busy" @click.stop="stepConc(-1)">−</button>
+      <input
+        v-model="concVal"
+        class="concinput"
+        type="text"
+        inputmode="numeric"
+        :aria-label="t('并行度上限')"
+      />
+      <button class="concstep" type="button" :disabled="busy" @click.stop="stepConc(1)">＋</button>
+    </div>
+    <div v-if="concInvalid" class="mpickempty">{{ concVal.trim() === "" ? t("请填写并行度数字") : t("并行度需要正整数") }}</div>
+    <div class="mpacts">
+      <button class="mbtn" type="button" @click.stop="concOpen = false">{{ t("取消") }}</button>
+      <button class="mbtn" type="button" :disabled="concInvalid || busy" @click.stop="submitConc">
+        {{ t("提交") }}
+      </button>
+    </div>
+  </div>
+</span>

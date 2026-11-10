@@ -1,0 +1,404 @@
+<aside class="queue">
+  <div class="qhead">
+    <b>{{ t("任务队列") }}</b>
+    <button
+      type="button"
+      class="forestbtn"
+      aria-haspopup="dialog"
+      :aria-label="t('工作树')"
+      :data-tip="t('查看派单节点关系')"
+      @click.stop="emit('forest')"
+    >
+      <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+        <path d="M8 4.2 V7.4 M8 7.4 H4.6 V9.6 M8 7.4 H11.4 V9.6" fill="none" stroke="currentColor"
+              stroke-width="1.2" stroke-linecap="round" />
+        <circle cx="8" cy="2.9" r="1.3" fill="currentColor" />
+        <circle cx="4.6" cy="11" r="1.3" fill="currentColor" />
+        <circle cx="11.4" cy="11" r="1.3" fill="currentColor" />
+      </svg>
+    </button>
+    <div ref="fbox" class="qfilter">
+      <button
+        type="button"
+        class="fbtn"
+        aria-haspopup="listbox"
+        :aria-expanded="menuOpen ? 'true' : 'false'"
+        aria-controls="qMenu"
+        :data-filter="filter"
+        @click="menuOpen = !menuOpen"
+      >
+        <span>{{ curFilter.label }}</span>
+        <b>{{ counts[curFilter.key] }}</b>
+        <span class="fcar" aria-hidden="true">{{ menuOpen ? "▴" : "▾" }}</span>
+      </button>
+      <div v-show="menuOpen" id="qMenu" class="fmenu" role="listbox" :aria-label="t('按状态筛选')">
+        <button
+          v-for="f in FILTERS"
+          :key="f.key"
+          type="button"
+          class="fopt"
+          :class="[f.key === filter ? 'on' : '']"
+          role="option"
+          :aria-selected="f.key === filter ? 'true' : 'false'"
+          :data-filter="f.key"
+          @click="pickFilter(f.key)"
+        >
+          <i class="fdot" :class="f.tone" aria-hidden="true" />
+          <span class="fname">{{ f.label }}</span>
+          <b class="fnum">{{ counts[f.key] }}</b>
+        </button>
+      </div>
+    </div>
+    <span class="fold">
+      <button
+        class="qbtn"
+        type="button"
+        :aria-expanded="folded ? 'false' : 'true'"
+        @click="folded = !folded"
+      >
+        {{ t(folded ? "展开列表" : "收起列表") }}
+      </button>
+    </span>
+    <span class="refresh">
+      <!-- 清空只作用于当前筛选档，归档记录而不结束在跑进程；运行中的进程完成后会重新出现。 -->
+      <button
+        v-if="canClear"
+        class="qbtn danger"
+        type="button"
+        @click="clearAsk = true"
+      >{{ t("清空") }}</button>
+      <button class="qbtn" type="button" @click="emit('refresh')">{{ t("刷新") }}</button>
+    </span>
+  </div>
+
+  <label class="search">
+    <SearchOutlined class="sicon" aria-hidden="true" />
+    <input
+      v-model="q"
+      type="text"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+      :placeholder="t('搜索任务 / 编号 / PID / 批次')"
+      :aria-label="t('搜索任务 / 编号 / PID / 批次')"
+    />
+    <button
+      v-if="q"
+      class="sclear"
+      type="button"
+      :aria-label="t('清除搜索')"
+      @mousedown.prevent
+      @click.prevent="q = ''"
+    >
+      <CloseOutlined aria-hidden="true" />
+    </button>
+  </label>
+
+  <button
+    type="button"
+    class="row srow"
+    :class="[current === 'capitalist' ? 'on' : '']"
+    :data-state="supervisorState.state"
+    role="tab"
+    :aria-selected="current === 'capitalist' ? 'true' : 'false'"
+    :aria-current="current === 'capitalist' ? 'true' : 'false'"
+    @click="emit('capitalist')"
+  >
+    <span class="sbody">
+      <span class="sl1">
+        <i class="sq" aria-hidden="true" />
+        <b class="sname">{{ supervisorTitle }}</b>
+        <span v-if="supervisorState.badge" class="sbadge" :class="supervisorState.cls">{{ supervisorState.badge }}</span>
+      </span>
+      <span class="smdl">
+        <template v-if="supervisorModel">
+          <span class="mn">{{ supervisorModel.name }}</span>
+          <span v-if="supervisorModel.ver" class="mv">{{ supervisorModel.ver }}</span>
+        </template>
+        <span v-else class="na">{{ t("宿主默认") }}</span>
+        <span v-if="supervisorCtx" class="mctx">{{ t("上下文") }} {{ supervisorCtx }}</span>
+      </span>
+      <span class="sl2">{{ supervisorMeta }}</span>
+    </span>
+    <span v-if="supervisorUnreadShown" class="unb">{{
+      capNum(supervisorUnreadShown)
+    }}</span>
+  </button>
+
+  <div class="qdiv" role="separator" :aria-label="t('监工与任务列表分界')" />
+
+  <div v-show="!folded" ref="rowsEl" class="rows">
+    <!-- 每张卡默认只显示最近一次派单，历史重派收进计数；旧任务按 3 小时口径默认收起。 -->
+    <template v-for="(r, ri) in shown" :key="r.t.id">
+    <button
+      class="row"
+      :class="[`t-${r.tone}`, r.tone === 'bad' ? 'bad' : '', ri % 2 ? 'alt' : '', r.ids.includes(current) ? 'on' : '']"
+      role="tab"
+      :aria-selected="r.ids.includes(current) ? 'true' : 'false'"
+      :aria-current="r.ids.includes(current) ? 'true' : 'false'"
+      :data-state="r.tone"
+      :data-tid="r.t.id"
+      :data-shard="r.t.shard || ''"
+      :data-tip="r.tip"
+      @click="touchThread(r.t.id); emit('pick', r.t.id)"
+    >
+        <span class="body">
+          <span class="nm">
+            <!-- 状态点放在 .nm 内用 align-self 对齐首行；放在 .row 下会被居中到整块中心。 -->
+            <i class="dot" :class="[r.tone, r.unreadDot ? 'unread' : '']" />
+            <em class="sid">#{{ r.short }}</em>
+            <span v-fadeclip class="nmtext">{{ r.title }}</span>
+            <em v-if="r.t.promoted_at && !r.retry" class="pin">{{ t("立即执行") }}</em>
+            <em v-if="r.t.yielded_at && !r.retry" class="yield">{{ t("已让位") }}</em>
+          </span>
+          <!-- 第二行只列启动时间、耗时、模型；消耗与上下文改由整卡悬停提示给出。 -->
+          <span class="mt">
+            <span class="mi">
+              <em>{{ t("启动") }}</em>
+              <b :class="{ na: !r.at }">{{ r.at || t("未记录") }}</b>
+            </span>
+            <span class="mi">
+              <em>{{ t("耗时") }}</em>
+              <b :class="{ na: !r.durText }">{{ r.durText || t("无采样") }}</b>
+            </span>
+            <span class="mi mi-model">
+              <template v-if="r.model">
+                <span class="mn">{{ r.model.name }}</span>
+                <span v-if="r.model.ver" class="mv">{{ r.model.ver }}</span>
+              </template>
+              <span v-else class="na">{{ t("模型 未记录") }}</span>
+            </span>
+          </span>
+        </span>
+        <!-- 状态词绝对定位在 .row 下；.mt 有 overflow:hidden，放里面会被裁切。 -->
+        <span v-if="r.word" class="tb" :class="`tb-${r.tone}`">{{ r.word }}</span>
+        <!-- 操作蒙版 inset:0 不参与布局，收到响应后由上层清掉 busyKey / stopBusy 撤除，避免重复下发。 -->
+        <span
+          v-if="busyKey === r.t.id || (stopBusy && stopBusy === (r.t.dispatch || r.t.id))"
+          class="cardbusy"
+          role="status"
+          aria-live="polite"
+        >{{ busyKey === r.t.id ? t("清除中") : canPromote(r.t) ? t("取消中") : t("关闭中") }}</span>
+        <span
+          v-if="r.retry"
+          class="rp"
+          role="button"
+          tabindex="0"
+          :aria-expanded="histOpen[r.t.id] ? 'true' : 'false'"
+          :data-tip="histOpen[r.t.id] ? t('收起历史重派') : t('展开历史重派')"
+          @click.stop="toggleHist(r.t.id)"
+          @keydown.enter.stop.prevent="toggleHist(r.t.id)"
+        >
+          {{ t("重派") }} {{ r.retry }}
+          <svg class="rchev" :class="{ on: histOpen[r.t.id] }" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M3 4.8 L6 7.8 L9 4.8" fill="none" stroke="currentColor" stroke-width="1.4"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span v-if="canWake(r.t)" class="racts" @click.stop>
+          <template v-if="waking !== r.t.id">
+            <span
+              class="ract"
+              role="button"
+              tabindex="0"
+              :aria-label="`${t('唤醒')} ${r.title}`"
+              :data-tip="t('解除暂停，按队列顺序重新参与调度')"
+              @click.stop="wakeTap(r)"
+              @keydown.enter.stop.prevent="wakeTap(r)"
+            >
+              <PlayCircleOutlined aria-hidden="true" />
+            </span>
+          </template>
+          <template v-else>
+            <span
+              class="ract ok"
+              role="button"
+              tabindex="0"
+              :aria-label="t('确认唤醒')"
+              @click.stop="wakeConfirm(r)"
+              @keydown.enter.stop.prevent="wakeConfirm(r)"
+              >{{ t("确认") }}</span
+            >
+            <span
+              class="ract"
+              role="button"
+              tabindex="0"
+              :aria-label="t('取消唤醒')"
+              @click.stop="waking = ''"
+              @keydown.enter.stop.prevent="waking = ''"
+              >{{ t("取消") }}</span
+            >
+          </template>
+        </span>
+        <span v-if="canPromote(r.t)" class="racts" @click.stop>
+          <template v-if="promoting !== r.t.id">
+            <span
+              class="ract"
+              role="button"
+              tabindex="0"
+              :aria-label="`${t('立即执行')} ${r.title}`"
+              :data-tip="t('提到队首，必要时让在跑的单让位')"
+              @click.stop="promoteTap(r)"
+              @keydown.enter.stop.prevent="promoteTap(r)"
+            >
+              <ThunderboltOutlined aria-hidden="true" />
+            </span>
+          </template>
+          <template v-else>
+            <span
+              class="ract ok"
+              role="button"
+              tabindex="0"
+              :aria-label="t('确认立即执行')"
+              @click.stop="promoteConfirm(r)"
+              @keydown.enter.stop.prevent="promoteConfirm(r)"
+              >{{ t("确认") }}</span
+            >
+            <span class="ract" role="button" tabindex="0" :aria-label="t('取消立即执行')"
+              @click.stop="promoting = ''" @keydown.enter.stop.prevent="promoting = ''">{{ t("取消") }}</span
+            >
+          </template>
+        </span>
+        <span v-if="canClose(r.t)" class="racts" @click.stop>
+          <template v-if="closing !== r.t.id">
+            <span
+              class="ract"
+              role="button"
+              tabindex="0"
+              :aria-label="`${closeWord(r.t)} ${r.title}`"
+              :data-tip="closeTip(r.t)"
+              @click.stop="closeTap(r)"
+              @keydown.enter.stop.prevent="closeTap(r)"
+            >
+              <CloseOutlined aria-hidden="true" />
+            </span>
+          </template>
+          <template v-else>
+            <span
+              class="ract danger"
+              role="button"
+              tabindex="0"
+              :aria-label="`${t('确认')}${closeWord(r.t)}`"
+              @click.stop="closeConfirm(r)"
+              @keydown.enter.stop.prevent="closeConfirm(r)"
+              >{{ t("确认") }}{{ closeWord(r.t) }}</span
+            >
+            <span class="ract" role="button" tabindex="0" :aria-label="t('取消关闭')"
+              @click.stop="closing = ''" @keydown.enter.stop.prevent="closing = ''">{{ t("取消") }}</span
+            >
+          </template>
+        </span>
+        <!-- 已完成、已关闭与异常档的任务卡提供两段式清除；清除只打标记让卡离开列表，历史台账不删除。 -->
+        <span v-if="canClearCard(r.t)" class="racts" @click.stop>
+          <template v-if="busyKey === r.t.id">
+            <span class="ract busy" role="status">{{ t("清除中…") }}</span>
+          </template>
+          <template v-else-if="clearing !== r.t.id">
+            <span
+              class="ract"
+              role="button"
+              tabindex="0"
+              :aria-label="`${t('清除任务卡')} ${r.title}`"
+              :data-tip="clearTip(r.t)"
+              @click.stop="clearTap(r)"
+              @keydown.enter.stop.prevent="clearTap(r)"
+            >
+              <DeleteOutlined aria-hidden="true" />
+            </span>
+          </template>
+          <template v-else>
+            <span
+              class="ract danger"
+              role="button"
+              tabindex="0"
+              :aria-label="`${t('确认清除')} ${r.title}`"
+              @click.stop="clearConfirm(r)"
+              @keydown.enter.stop.prevent="clearConfirm(r)"
+              >{{ t("确认清除") }}</span
+            >
+            <span class="ract" role="button" tabindex="0" :aria-label="t('取消清除')"
+              @click.stop="clearing = ''" @keydown.enter.stop.prevent="clearing = ''">{{ t("取消") }}</span
+            >
+          </template>
+        </span>
+      </button>
+      <!-- 进程未推进时任务卡给出卡点类型、判据与跳出办法；送达失败时额外提供人工介入入口。 -->
+      <div
+        v-if="r.stuck"
+        class="stuck"
+        :class="{ failed: r.stuck.channel === 'failed' }"
+        role="note"
+        :aria-label="`${r.title} ${t('卡点')} ${r.stuck.label}`"
+      >
+        <div class="shead">
+          <b>{{ t("卡点") }} {{ r.stuck.label }}</b>
+          <span class="satt">{{ t("第 {n} 次指导", { n: r.stuck.attempts }) }}</span>
+          <span v-if="r.stuck.channel === 'consumed'" class="sok">{{ t("已送达") }}</span>
+          <span v-else-if="r.stuck.channel === 'hook'" class="sok">{{ t("已写入，等待工作进程领取") }}</span>
+          <span v-else class="sbad">{{ t("送达失败") }}</span>
+        </div>
+        <div class="swhy">{{ r.stuck.why }}</div>
+        <div class="sguide">{{ r.stuck.guidance }}</div>
+        <button
+          v-if="r.stuck.channel !== 'consumed'"
+          type="button"
+          class="sact"
+          @click.stop="emit('pick', r.t.id)"
+        >
+          {{ t("人工介入") }}
+        </button>
+      </div>
+      <div v-if="r.retry && histOpen[r.t.id]" class="hist" role="list" :aria-label="`${r.title} ${t('历史重派')}`">
+        <button
+          v-for="h in r.history"
+          :key="h.t.id"
+          class="hrow"
+          type="button"
+          role="listitem"
+          :data-tid="h.t.id"
+          @click="touchThread(h.t.id); emit('pick', h.t.id)"
+        >
+          <i class="dot" :class="h.tone" />
+          <em class="hsid">#{{ h.short }}</em>
+          <span class="hat">{{ h.at }}</span>
+          <span v-if="h.word" class="hst">{{ h.word }}</span>
+          <span class="hdur">{{ h.durText || t("无采样") }}</span>
+          <span v-if="h.spend" class="hspend">{{ h.spend }}</span>
+        </button>
+      </div>
+    </template>
+    <EmptyState
+      v-if="!list.length && !threads.length"
+      :desc="t('监工派单后会出现在这里')"
+    />
+    <div v-else-if="!list.length" class="empty">{{ t("没有匹配的进程") }}</div>
+
+    <button v-if="staleCount > 0 && !showStale" type="button" class="more" @click="showStale = true">
+      {{ t("显示") }} <b>{{ staleCount }}</b> {{ t("个旧任务（结束超过 3 小时）") }}
+    </button>
+    <button v-else-if="staleCount > 0 && showStale" type="button" class="more" @click="showStale = false">
+      {{ t("收起") }} <b>{{ staleCount }}</b> {{ t("个旧任务") }}
+    </button>
+  </div>
+
+  <button v-if="folded" type="button" class="qfold" @click="folded = false">
+    {{ t("任务列表已折叠") }} <b>{{ list.length }}</b> {{ t("项") }} {{ t("点此展开") }}
+  </button>
+
+  <!-- 清空为归档操作，记录移入 .capitalist/archive/，界面仅声明卡片从列表移除。 -->
+  <Teleport to="body">
+    <div v-if="clearAsk" class="askwrap" @click.self="clearAsk = false">
+      <div class="askbox" role="dialog" aria-modal="true" :aria-label="`${t('清空')}${curFilter.label}`">
+        <div class="askhd">{{ t("清空「{label}」", { label: curFilter.label }) }}</div>
+        <div class="askbd">
+          <p>{{ clearBody }}</p>
+        </div>
+        <div class="askacts">
+          <button class="qbtn" type="button" @click="clearAsk = false">{{ t("取消") }}</button>
+          <button class="qbtn danger" type="button" @click="doClear">{{ t("清空") }}</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</aside>

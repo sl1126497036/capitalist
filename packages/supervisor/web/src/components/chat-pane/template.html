@@ -1,0 +1,1014 @@
+<XProvider :theme="xTheme">
+  <main ref="chatEl" class="chat" :class="[isSupervisor ? 'mode-capitalist' : 'mode-worker', { squeezed }]">
+    <div class="chead">
+      <span class="qtoggle">
+        <button
+          class="qtogbtn"
+          type="button"
+          :aria-expanded="!queueCollapsed ? 'true' : 'false'"
+          :aria-label="queueCollapsed ? t('展开任务队列') : t('收起任务队列')"
+          @click="emit('toggleQueue')"
+        >
+          <MenuUnfoldOutlined v-if="queueCollapsed" aria-hidden="true"/>
+          <MenuFoldOutlined v-else aria-hidden="true"/>
+        </button>
+      </span>
+      <span class="who" :class="isSupervisor ? 'capitalist' : 'worker'">{{ isSupervisor ? t("监工") : t("工作进程") }}</span>
+
+      <button v-fadeclip class="ctitle" type="button" :class="{ self: isSupervisor }" @click="openSupervisor">
+        {{ cardTitle }}
+      </button>
+      <span v-if="isSupervisor" class="cmwrap memwrap">
+        <button
+          ref="memBtnEl"
+          class="cmeta cmbtn memb"
+          type="button"
+          :aria-expanded="memOpen ? 'true' : 'false'"
+          @click.stop="toggleMem"
+        >{{ t("记忆") }}<span v-if="memStats" class="memcbadge">{{ memStats.count }}</span></button>
+        <div
+          v-if="memOpen"
+          class="pickbox membox"
+          role="dialog"
+          :aria-label="t('项目记忆')"
+          :style="memPos"
+          @click.stop
+        >
+          <div class="pickhd">
+            <span class="pickpath plain">{{ t("记忆") }}</span>
+            <span v-if="memStats" class="memcount">{{ memStats.count }} / {{ memLimits?.max ?? "—" }}</span>
+            <button class="pickx" type="button" @click.stop="memOpen = false">×</button>
+          </div>
+          <div class="memlist">
+            <div v-if="memLoading" class="pickempty">{{ t("正在读记忆…") }}</div>
+            <div v-else-if="memError" class="pickempty membad">{{ memError }}</div>
+            <template v-else>
+              <div v-if="memEditing === 'new'" class="memedit memnew">
+                <select v-model="memDraftKind" class="memsel" :aria-label="t('记忆类别')">
+                  <option v-for="k in MEM_KINDS" :key="k.id" :value="k.id">{{ t(k.label) }}</option>
+                </select>
+                <textarea
+                  v-model="memDraft"
+                  class="memta"
+                  rows="3"
+                  :maxlength="memLimits?.note_max || 160"
+                  :placeholder="t('一条对当前任务有用的记忆：用户习惯、运行环境、项目约定、注意事项等')"
+                ></textarea>
+                <div class="memacts">
+                  <button class="membtn ok" type="button" :disabled="memSaving" @click.stop="memSave">{{ t("保存") }}</button>
+                  <button class="membtn" type="button" @click.stop="memEditing = ''">{{ t("取消") }}</button>
+                </div>
+              </div>
+              <div v-if="!memEntries.length && memEditing !== 'new'" class="pickempty">
+                {{ t("还没有记忆。清空任务不会删这里的条目。") }}
+              </div>
+              <div v-for="e in memEntries" :key="e.id" class="memrow" :class="{ editing: memEditing === e.id }">
+                <template v-if="memEditing === e.id">
+                  <div class="memedit">
+                    <select v-model="memDraftKind" class="memsel" :aria-label="t('记忆类别')">
+                      <option v-for="k in MEM_KINDS" :key="k.id" :value="k.id">{{ t(k.label) }}</option>
+                    </select>
+                    <textarea v-model="memDraft" class="memta" rows="3" :maxlength="memLimits?.note_max || 160"></textarea>
+                    <div class="memacts">
+                      <button class="membtn ok" type="button" :disabled="memSaving" @click.stop="memSave">{{ t("保存") }}</button>
+                      <button class="membtn" type="button" @click.stop="memEditing = ''">{{ t("取消") }}</button>
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="memtop">
+                    <span class="membadge" :class="e.kind">{{ memKindLabel(e.kind) }}</span>
+                    <span class="memtimes">{{ e.count > 1 ? `×${e.count}` : "" }} {{ String(e.last_at || "").slice(0, 10) }}</span>
+                    <button
+                      class="memicon"
+                      type="button"
+                      :aria-label="t('编辑这条记忆')"
+                      @click.stop="memStartEdit(e)"
+                    >
+                      <EditOutlined aria-hidden="true"/>
+                    </button>
+                    <button
+                      class="memicon danger"
+                      :class="{ armed: memAskDel === e.id }"
+                      type="button"
+                      :data-tip="memAskDel === e.id ? '' : t('删除这条记忆')"
+                      :aria-label="memAskDel === e.id ? t('再点一次确认删除') : t('删除这条记忆')"
+                      @click.stop="memDelete(e)"
+                    >
+                      <DeleteOutlined v-if="memAskDel !== e.id" aria-hidden="true"/>
+                      <span v-else class="memdelword">{{ t("确认删除") }}</span>
+                    </button>
+                  </div>
+                  <div class="memtext">{{ e.note }}</div>
+                </template>
+              </div>
+            </template>
+          </div>
+          <div class="memfoot">
+            <button class="membtn ok" type="button" @click.stop="memStartNew">{{ t("＋ 新增一条") }}</button>
+            <span v-if="memStats" class="memstat">
+              {{ t("{a}/{b} 字", { a: memStats.chars, b: memLimits?.total_chars }) }} {{ t("保留 {n} 天", { n: memLimits?.ttl_days }) }}
+            </span>
+          </div>
+        </div>
+      </span>
+
+
+      <button
+        v-if="!isSupervisor"
+        class="ptoggle"
+        type="button"
+        :aria-expanded="auxOpen ? 'true' : 'false'"
+        :aria-label="auxOpen ? t('收起辅助面板') : t('展开辅助面板')"
+        @click="auxOpen = !auxOpen"
+      >
+        <span v-if="!isSupervisor" class="ptlabel">{{ t("验收项") }}</span>
+        <svg class="chev" :class="{ on: auxOpen }" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M3 4.8 L6 7.8 L9 4.8" fill="none" stroke="currentColor" stroke-width="1.4"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+      <span v-if="!isSupervisor" class="cmwrap">
+        <em class="ulabel">{{ t("模型") }}</em>
+        <button
+          ref="modelBtnEl"
+          class="cmeta cmbtn"
+          type="button"
+          :aria-expanded="modelOpen ? 'true' : 'false'"
+          @click.stop="toggleModel"
+        >{{ headInfo }}</button>
+        <div
+          v-if="modelOpen"
+          class="pickbox modelbox"
+          role="dialog"
+          :aria-label="t('对话模型')"
+          :style="modelPos"
+          @click.stop
+        >
+          <div class="pickhd">
+            <span class="pickpath plain">{{ t("对话模型") }}</span>
+            <button class="pickx" type="button" @click.stop="modelOpen = false">×</button>
+          </div>
+          <div class="picklist" role="listbox">
+            <div v-if="modelLoading" class="pickempty">{{ t("正在读宿主模型…") }}</div>
+            <template v-else>
+              <!-- 宿主默认有具体模型名时直接按模型列出；清单里已含该模型时由下面的循环渲染。 -->
+              <button
+                v-if="hostDefault && !hostModels.includes(hostDefault)"
+                class="pickrow"
+                :class="{ on: !curModel }"
+                type="button"
+                role="option"
+                :aria-selected="!curModel ? 'true' : 'false'"
+                :disabled="modelBusy !== null"
+                @click.stop="pickModel('')"
+              >
+                <span class="pickname">{{ hostDefault }}</span>
+                <em v-if="modelBusy === ''" class="dflt">{{ t("切换中…") }}</em>
+                <em v-else class="dflt">{{ t("宿主默认") }}</em>
+              </button>
+              <button
+                v-for="m in hostModels"
+                :key="m"
+                class="pickrow"
+                :class="{ on: curModel ? m === curModel : m === hostDefault }"
+                type="button"
+                role="option"
+                :aria-selected="(curModel ? m === curModel : m === hostDefault) ? 'true' : 'false'"
+                :disabled="modelBusy !== null"
+                @click.stop="pickModel(m === hostDefault ? '' : m)"
+              >
+                <span class="pickname">{{ m }}</span>
+                <em v-if="modelBusy === (m === hostDefault ? '' : m)" class="dflt">{{ t("切换中…") }}</em>
+                <em v-else-if="m === hostDefault" class="dflt">{{ t("宿主默认") }}</em>
+                <em v-else-if="modelOf(m)?.note" class="dflt">{{ modelOf(m).note }}</em>
+              </button>
+              <div v-if="modelNote" class="pickempty">{{ modelNote }}</div>
+            </template>
+          </div>
+          <!-- 切换在途时铺满面板：请求回来才撤，点完立即有反馈。 -->
+          <div v-if="modelBusy !== null" class="pickbox-busy" role="status" aria-live="polite">
+            <span class="pickbox-spin" aria-hidden="true"></span>
+            {{ t("切换中…") }}
+          </div>
+        </div>
+      </span>
+      <span v-if="!isSupervisor" class="urow">
+        <span
+          v-for="c in usageBriefCells"
+          :key="c.key"
+          class="mcell-end"
+          :class="{ na: c.na, pickable: c.pick }"
+          :title="c.tip"
+          @click="c.pick && openCtxWindow(threadScope())"
+        >
+          <em>{{ c.k }}</em>
+          <b>{{ c.v }}</b>
+        </span>
+      </span>
+
+      <MetricBar
+        v-if="isSupervisor"
+        class="hmetrics"
+        :capitalist="capitalist"
+        :root="root"
+        :paused="paused"
+        @pause="$emit('pause', $event)"
+        @refresh="$emit('refresh')"
+      >
+        <template #end>
+          <span
+            v-for="c in supervisorUsageCells"
+            :key="c.k"
+            class="mcell mcell-end"
+            :class="{ na: c.na, pickable: c.pick, bad: c.bad }"
+            @click="c.pick && openCtxWindow('supervisor')"
+          >
+            <em>{{ c.k }}</em>
+            <b>{{ c.v }}</b>
+          </span>
+        </template>
+      </MetricBar>
+
+      <div v-if="ctxPick.open" class="ctxpick" role="dialog" aria-modal="false">
+        <div class="ctxpick-t">
+          {{ t("上下文窗口") }}
+          <span class="ctxpick-s">{{ ctxPick.scope === "supervisor" ? t("监工") : t("工作进程 {id}", { id: ctxPick.scope }) }}</span>
+          <span class="ctxpick-m">{{ ctxPick.model || t("当前模型未知") }}</span>
+        </div>
+        <div class="ctxpick-row">
+          <button
+            v-for="p in ctxPick.presets"
+            :key="p"
+            class="ctxpick-b"
+            :class="{ on: p === ctxPick.window }"
+            type="button"
+            :disabled="ctxPick.applying"
+            @click="chooseCtxWindow(p)"
+          >
+            {{ p >= 1000000 ? "1M" : Math.round(p / 1000) + "k" }}
+          </button>
+        </div>
+        <div v-if="ctxPick.warn" class="ctxpick-warn">{{ ctxPick.warn }}</div>
+        <div class="ctxpick-foot">
+          <button v-if="ctxPick.warn" class="ctxpick-b go" type="button" :disabled="ctxPick.applying" @click="chooseCtxWindow(ctxPick.want, true)">
+            {{ t("仍然设置") }}
+          </button>
+          <button class="ctxpick-b" type="button" :disabled="ctxPick.applying" @click="ctxPick.open = false">{{ t("取消") }}</button>
+        </div>
+        <!-- 设置请求在途时铺满整块面板；成功关闭、409 转确认或异常后由 applying 翻 false 撤除。 -->
+        <div v-if="ctxPick.applying" class="ctxpick-busy" role="status" aria-live="polite">
+          <span class="ctxpick-spin" aria-hidden="true"></span>
+          {{ t("正在设置…") }}
+        </div>
+      </div>
+
+      <button
+        v-if="canInterject"
+        class="stopbtn"
+        type="button"
+        @click="openStop"
+      >
+        中断
+      </button>
+      <template v-if="canCloseSel">
+        <button
+          v-if="!closeAsk"
+          class="stopbtn close"
+          type="button"
+          @click="closeSelTap"
+        >
+          关闭
+        </button>
+        <template v-else>
+          <button
+            class="stopbtn close armed"
+            type="button"
+            @click="closeSelConfirm"
+          >
+            {{ t("确认关闭") }}
+          </button>
+          <button class="stopbtn close" type="button" @click="closeAsk = false">{{ t("取消") }}</button>
+        </template>
+      </template>
+      <span v-if="live.tone" class="lclose">
+        <button class="xclose" type="button" :aria-label="t('收起这条状态')"
+                @click="clearLive">×</button>
+      </span>
+    </div>
+
+
+    <Transition name="pswap" mode="out-in">
+
+      <div v-if="!isSupervisor" v-show="auxOpen" key="worker" class="pblocks"
+           data-pmode="worker" :aria-label="t('工作进程面板')">
+        <section class="pblk" data-block="acceptance">
+          <div class="pbbody">
+            <div class="pbhead">
+              <span class="pbname">{{ t("这一单的验收项") }}</span>
+              <span class="pbmeta">{{
+                  accItems.length ? t("{n} 条 派单原文", { n: accItems.length }) : t("派单没有编号验收项")
+                }}</span>
+            </div>
+            <ol v-if="accItems.length" class="accs">
+              <li v-for="it in accItems" :key="it.id">
+                <span class="accn">{{ it.n }}</span>
+                <span class="acct">{{ it.text }}</span>
+              </li>
+            </ol>
+            <div v-else class="gempty">{{ t("派单正文里没有编号条目，按报告要求逐条交付") }}</div>
+            <div class="accgate" :class="accGate.length ? 'bad' : 'ok'">
+              <i class="gdot" :class="accGate.length ? 'bad' : 'done'"/>
+              <span v-if="accGate.length">{{ t("验收清单还有未完成的检查项：") }}{{ accGate.join(t("；")) }}</span>
+              <span v-else>这一单没有待验收的检查项，验收清单为空{{ accReport ? ` ${accReport}` : "" }}</span>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </Transition>
+
+    <section class="msgs" data-block="messages">
+      <div class="streamhd">
+        <i class="hdot" :class="isSupervisor ? 'capitalist' : 'worker'"/>
+        <span class="hname">{{ isSupervisor ? t("监工消息流") : t("这一单的消息") }}</span>
+        <button
+          v-if="isSupervisor && logRows.length"
+          class="logbar"
+          type="button"
+          :aria-expanded="logOpen ? 'true' : 'false'"
+          @click="logOpen = !logOpen"
+        >
+          <svg class="chev" :class="{ on: logOpen }" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M3 4.8 L6 7.8 L9 4.8" fill="none" stroke="currentColor" stroke-width="1.4"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="lgname">{{ t("工作树重建记录") }}</span>
+          <b class="lgcount">{{ logRows.length }}</b>
+        </button>
+        <span v-if="isSupervisor && reload?.active" class="hbadge">{{ t("监工重载中") }}</span>
+        <span class="hmeta">{{ headMeta }}</span>
+      </div>
+
+      <div v-if="isSupervisor && paused" class="pausecard" role="status">
+        <span class="pctitle">{{ t("调度已暂停") }}</span>
+        <span class="pcdesc">{{ t("点击右上角「恢复调度」继续") }}</span>
+      </div>
+
+      <div v-if="isSupervisor && logOpen && logRows.length" class="logpane" role="list" :aria-label="t('过程日志')">
+        <div v-for="r in logRows" :key="r.ref" class="logrow" role="listitem">
+          <span class="lgtime">
+            {{ r.count > 1 ? `${hhmm(r.first_at)}–${hhmm(r.last_at)}` : hhmm(r.at) }}
+          </span>
+          <span class="lgtag">{{ r.label }}</span>
+          <span class="lgtimes">{{ r.count > 1 ? t("{n} 次", { n: r.count }) : "" }}</span>
+          <span class="lgtxt">{{ r.text }}</span>
+        </div>
+      </div>
+
+      <div v-if="isSupervisor && activity" class="activity">
+        <i class="adot"/>
+        <span class="alab">{{ t("工具调用") }}</span>
+        <span class="atxt">{{ activity }}</span>
+      </div>
+
+      <div class="streamwrap">
+        <div ref="streamEl" class="stream" role="log" :aria-label="t('消息流')" @scroll.passive="onScroll">
+          <div v-if="truncNote" class="trunc">{{ truncNote }}</div>
+          <button v-if="canLoadOlder" type="button" class="olderbtn" @click="emit('loadOlder')">
+            {{ t("展开更早的消息") }}
+          </button>
+
+          <template v-for="v in rows" :key="v.ref">
+            <div v-if="v.seam" class="seam" role="separator" :aria-label="v.seam">
+              <span>{{ v.seam }}</span>
+            </div>
+
+            <div
+              v-if="v.c === 'engine'"
+              class="msg blk dbg"
+              :class="v.first ? 'first' : ''"
+              :data-id="v.ref"
+              :data-mref="v.ref"
+            >
+              <div class="bhead">
+                <i class="bdot"/>
+                <span class="btag">{{ t("引擎调试") }}</span>
+                <span class="bacts">
+                <button
+                  class="mact"
+                  type="button"
+                  :class="{ done: copied[v.ref] }"
+                  :aria-label="copied[v.ref] ? t('已复制到剪贴板') : t('复制引擎调试全文')"
+                  @click.stop="copy(v.m.text, v.ref)"
+                >
+                  <CheckOutlined v-if="copied[v.ref]" aria-hidden="true"/>
+                  <CopyOutlined v-else aria-hidden="true"/>
+                  <span v-if="copied[v.ref]">{{ t("已复制") }}</span>
+                </button>
+              </span>
+                <span class="btime">{{ stamp(v.m.at) }}</span>
+              </div>
+              <button
+                class="dbgtog"
+                type="button"
+                :aria-expanded="dbgOpen[v.ref] ? 'true' : 'false'"
+                @click.stop="toggleDbg(v.ref)"
+              >
+                <span class="dbgsum">{{ t("已隐藏 {n} 行引擎调试输出", { n: v.m.lines || lineCount(v.m) }) }}</span>
+                <span class="dbgact">
+                {{ dbgOpen[v.ref] ? t("收起") : t("展开") }}
+                <svg class="chev" :class="{ on: dbgOpen[v.ref] }" viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M3 4.8 L6 7.8 L9 4.8" fill="none" stroke="currentColor" stroke-width="1.4"
+                        stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              </button>
+              <div class="dbgwrap" :class="{ open: dbgOpen[v.ref] }">
+                <div class="dbgclip">
+                  <div class="dbgtext">{{ v.m.text }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-else-if="v.c === 'redispatch'"
+              class="msg blk rdup"
+              :class="v.first ? 'first' : ''"
+              :data-id="v.ref"
+              :data-mref="v.ref"
+            >
+              <div class="bhead">
+                <i class="bdot"/>
+                <span class="btag">{{ t("重派记录") }}</span>
+                <span class="rdupc">{{ t("{n} 条", { n: v.items.length }) }}</span>
+                <span class="btime">{{ stamp(v.m.at) }}</span>
+              </div>
+              <button
+                class="logtog"
+                type="button"
+                :aria-expanded="rdupOpen[v.ref] ? 'true' : 'false'"
+                @click.stop="toggleRedispatch(v.ref)"
+              >
+                <span class="logsum rdupsum">{{ t("最近一次：{t}", { t: v.m.text }) }}</span>
+                <span class="logact">
+                  {{ rdupOpen[v.ref] ? t("收起") : t("展开") }}
+                  <svg class="chev" :class="{ on: rdupOpen[v.ref] }" viewBox="0 0 12 12" aria-hidden="true">
+                    <path d="M3 4.8 L6 7.8 L9 4.8" fill="none" stroke="currentColor" stroke-width="1.4"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+              <div v-if="rdupOpen[v.ref]" class="rdupwrap">
+                <div v-for="it in v.items" :key="it.ref" class="rduprow">
+                  <span class="rdtime">{{ stamp(it.at) }}</span>
+                  <span class="rdtext"><MsgText :text="it.text" :refs="refIndex" @pick="emit('pick', $event)"/></span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-else-if="isBlock(v)"
+              class="msg blk"
+              :class="[v.c, v.tone, v.first ? 'first' : '', { shut: foldedOf(v) }]"
+              :data-id="v.ref"
+              :data-mref="v.ref"
+            >
+              <div class="bhead">
+                <i class="bdot"/>
+                <span class="btag">{{ blockTag(v) }}</span>
+                <span v-if="v.tone === 'bad'" class="bmark">{{ t("错误") }}</span>
+                <span v-if="v.note" class="tnote">{{ t(v.note) }}</span>
+                <span v-if="v.m.event === 'supervisor_cmd' && v.m.action" class="cmdchip">{{ cmdLabel(v.m.action, v.m.urgent) }}</span>
+                <span class="btime">{{ stamp(v.m.at) }}</span>
+                <span v-if="v.m.event === 'supervisor_cmd'" class="bst" :class="v.m.ok ? 'ok' : 'bad'">
+                {{ evtReceipt(v.m) }}
+              </span>
+                <span v-if="v.m.event === 'mq_message'" class="bst" :class="v.m.status === 'done' ? 'ok' : ''">
+                {{ v.m.status === "done" ? t("已回执") : t("待回执") }}
+              </span>
+                <span class="bacts">
+                <button
+                  v-if="v.m.jump"
+                  class="bact jump"
+                  type="button"
+                  @click.stop="emit('pick', v.m.jump.id)"
+                >
+                  {{ t("查看任务") }}
+                </button>
+                <button
+                  class="mact"
+                  type="button"
+                  :aria-label="t('引用到输入框')"
+                  @click.stop="quoteOf(v.m, v.ref)"
+                >
+                  <NumberOutlined aria-hidden="true"/>
+                </button>
+                <button
+                  class="mact"
+                  type="button"
+                  :class="{ done: copied[v.ref] }"
+                  :aria-label="copied[v.ref] ? t('已复制到剪贴板') : t('复制这一段')"
+                  @click.stop="copy(v.m.text, v.ref)"
+                >
+                  <CheckOutlined v-if="copied[v.ref]" aria-hidden="true"/>
+                  <CopyOutlined v-else aria-hidden="true"/>
+                  <span v-if="copied[v.ref]">{{ t("已复制") }}</span>
+                </button>
+              </span>
+              </div>
+              <template v-if="v.c === 'think'">
+                <!-- 展开态限高并在块内滚动，标题行 sticky 吸顶以便随时收起。 -->
+                <div class="thinkwrap" :class="{ open: thinkOpen[v.ref] }">
+                  <button
+                    class="logtog thinktog"
+                    type="button"
+                    :aria-expanded="thinkOpen[v.ref] ? 'true' : 'false'"
+                    @click.stop="toggleThink(v.ref)"
+                  >
+                    <span class="logsum thinksum">{{ blockParts(v.m).sum }}</span>
+                    <span class="logact">
+                    {{ thinkOpen[v.ref] ? t("收起") : t("展开") }}
+                    <svg class="chev" :class="{ on: thinkOpen[v.ref] }" viewBox="0 0 12 12" aria-hidden="true">
+                      <path d="M3 4.8 L6 7.8 L9 4.8" fill="none" stroke="currentColor" stroke-width="1.4"
+                            stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  </button>
+                  <div v-if="thinkOpen[v.ref]" class="btxt thinkbody">
+                    <MsgText :text="blockText(v)" :refs="refIndex" @pick="emit('pick', $event)"/>
+                  </div>
+                </div>
+              </template>
+              <button
+                v-else-if="v.huge && !hugeOpen[v.ref]"
+                class="logtog"
+                type="button"
+                aria-expanded="false"
+                @click.stop="toggleHuge(v.ref)"
+              >
+                <span class="logsum">{{ t("已折叠 {n} 行日志", { n: lineCount(v.m) }) }} {{ blockParts(v.m).sum }}</span>
+                <span class="logact">{{ t("展开") }}
+                  <svg class="chev" viewBox="0 0 12 12" aria-hidden="true">
+                    <path d="M3 4.8 L6 7.8 L9 4.8" fill="none" stroke="currentColor" stroke-width="1.4"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </button>
+              <template v-else>
+                <div v-if="foldedOf(v)" class="bpeek">{{ blockParts(v.m).sum }}</div>
+                <div v-else class="btxt" :class="{ clamp: v.fold && !v.full }">
+                  <MsgText :text="blockText(v)" :refs="refIndex" @pick="emit('pick', $event)"/>
+                </div>
+                <div v-if="v.fold && !foldedOf(v)" class="bfoot">
+                  <span>{{ blockParts(v.m).meta }}</span>
+                  <button
+                    v-if="v.huge"
+                    class="bact"
+                    type="button"
+                    aria-expanded="true"
+                    @click.stop="toggleHuge(v.ref)"
+                  >
+                    {{ t("收起日志") }}
+                  </button>
+                </div>
+              </template>
+            </div>
+
+            <div
+              v-else
+              class="msg bub"
+              :class="[`k-${v.c}`, v.first ? 'first' : '', v.grp ? 'grp' : '', { fresh: v.fresh, dcard: v.card }]"
+              :data-id="v.ref"
+              :data-mref="v.ref"
+            >
+              <Bubble :placement="bubblePlacement(v.c)" :content="v.text">
+                <template #message="{ content }">
+                  <div v-if="v.c === 'user' || v.c === 'human'" class="usig">{{ t("我：") }}</div>
+                  <div v-if="v.c === 'supervisorsay'" class="rhdr">
+                    <span class="rtitle">{{ v.m.kind === "say" ? t("监工：") : t("监工裁决：") }}</span>
+                    <span v-if="v.m.kind === 'say'" class="rsig">{{ t("对话层") }}</span>
+                    <span
+                      v-if="v.assoc"
+                      class="assocchip"
+                    >{{ t("同一派单") }} {{ v.assoc }}</span>
+                  </div>
+                  <div v-if="v.atts.length" class="bthumbs">
+                    <button
+                      v-for="(a, ai) in v.atts"
+                      :key="a.path"
+                      class="bthumb"
+                      type="button"
+                      @click="openZoom(v.atts, ai)"
+                    >
+                      <img
+                        v-if="a.url && !badThumbs.has(a.path)"
+                        :src="a.url"
+                        :alt="a.name"
+                        @error="markBadThumb(a.path)"
+                      />
+                      <span v-else class="bfile">
+                      <FileImageOutlined aria-hidden="true"/>{{ a.name }}
+                    </span>
+                      <span v-if="a.tag || a.thread" class="btag">
+                      <b v-if="a.tag">{{ a.tag }}</b><i v-if="a.thread">{{ a.thread }}</i>
+                    </span>
+                    </button>
+                  </div>
+                  <div v-if="content" class="ctxt">
+                    <MsgText :text="content" :refs="refIndex" @pick="emit('pick', $event)"/>
+                  </div>
+                  <div class="bmeta">
+                    <button
+                      v-if="stat(v) && v.jump"
+                      class="sayst jump"
+                      :class="v.m.status"
+                      type="button"
+                      data-tip=""
+                      @click.stop="emit('locate', String(v.m.no))"
+                      @mouseenter="saystTipOn($event, v)"
+                    >{{ stat(v) }}</button>
+                    <span
+                      v-else-if="stat(v)"
+                      class="sayst"
+                      :class="v.m.status"
+                      data-tip=""
+                      @mouseenter="saystTipOn($event, v)"
+                    >{{ stat(v) }}</span>
+                    <span class="bacts">
+                    <button
+                      v-if="v.m.quote || sentQuotes[v.m.text]"
+                      class="qref"
+                      type="button"
+                      @click="jumpTo(v.m.quote || sentQuotes[v.m.text])"
+                    >
+                      <LinkOutlined aria-hidden="true"/>
+                      <span>#{{ v.m.quote || sentQuotes[v.m.text] }}</span>
+                    </button>
+                    <button
+                      class="mact"
+                      type="button"
+                      :aria-label="t('引用到输入框')"
+                      @click="quoteOf(v.m, v.ref)"
+                    >
+                      <NumberOutlined aria-hidden="true"/>
+                    </button>
+                    <button
+                      class="mact"
+                      type="button"
+                      :class="{ done: copied[v.ref] }"
+                      :aria-label="copied[v.ref] ? t('已复制到剪贴板') : t('复制这条')"
+                      @click="copyMsg(v, v.ref)"
+                    >
+                      <CheckOutlined v-if="copied[v.ref]" aria-hidden="true"/>
+                      <CopyOutlined v-else aria-hidden="true"/>
+                      <span v-if="copied[v.ref]">{{ t("已复制") }}</span>
+                    </button>
+                  </span>
+                    <span class="mtime">{{ stamp(v.m.at) }}</span>
+                  </div>
+                </template>
+              </Bubble>
+            </div>
+          </template>
+
+          <div v-if="tailShown" ref="liveEl" class="msg bub k-worker live" data-live="1">
+            <Bubble placement="start" :content="tailShown"/>
+          </div>
+
+
+      <div v-if="(loading || msgPending) && !rows.length" class="chatload" role="status" aria-live="polite">
+        <span class="ldots" aria-hidden="true"><i/><i/><i/></span>
+        <span class="cltxt">{{ t("正在载入消息…") }}</span>
+      </div>
+      <EmptyState v-else-if="!rows.length && !msgPending && !tailShown && !thinkLine"
+                  :title="emptyState.h" :desc="emptyState.d"/>
+        </div>
+
+        <button v-if="pending > 0" class="newfloat" type="button" @click="toBottom">
+          <ArrowDownOutlined aria-hidden="true"/>
+          <span>{{ t("{n} 条新消息", { n: pending }) }}</span>
+        </button>
+
+        <div
+          v-if="stateRow"
+          class="liverow"
+          :class="{ bad: stateRow.bad, warn: stateRow.warn, run: stateRow.run }"
+          role="status"
+          aria-live="polite"
+        >
+          <span v-if="stateRow.tag" class="ltag">{{ stateRow.tag }}</span>
+          <span v-if="stateRow.text" class="ltxt" :class="{ noell: stateRow.dots }">{{ stateRow.text }}</span>
+          <span v-if="stateRow.dots" class="ldots" aria-hidden="true"><i/><i/><i/></span>
+        </div>
+      </div>
+    </section>
+
+    <div
+      class="composer"
+      :class="{ dragging }"
+      @paste="onPaste"
+      @dragenter.prevent="onDragEnter"
+      @dragover.prevent="onDragOver"
+      @dragleave.prevent="onDragLeave"
+      @drop.prevent="onDrop"
+    >
+      <div
+        class="dragline"
+        :class="{ on: resizing }"
+        role="separator"
+        aria-orientation="horizontal"
+        :aria-label="t('拖动调整输入框高度')"
+        @pointerdown="startResize"
+        @dblclick="resetH"
+      />
+      <div v-if="quote" class="qbar">
+        <span class="qlabel">{{ t("引用") }}</span>
+        <span class="qid">#{{ quote.ref }}</span>
+        <span class="qtext">{{ quote.text }}</span>
+        <button class="xclose" type="button" :aria-label="t('取消引用')" @click="clearQuote">×</button>
+      </div>
+      <div v-if="attachments.length || uploading || uploadFails.length" class="attachbar">
+        <div v-for="(a, i) in attachments" :key="a.path" class="athumb">
+          <img :src="a.url" :alt="a.name"/>
+          <span class="adel">
+            <button class="xclose" type="button" :aria-label="t('移除这张附件')"
+                    @click="dropAttachment(i)">×</button>
+          </span>
+        </div>
+        <span v-if="uploading" class="aupload">{{ t("上传中，完成后可发送") }}</span>
+        <span v-if="uploadFails.length" class="aupload bad" role="alert">
+          {{ t("{n} 张上传失败", { n: uploadFails.length }) }}
+          <button class="uret" type="button" @click="retryUploads">{{ t("重试") }}</button>
+        </span>
+      </div>
+      <div class="inputrow">
+        <div class="inputbox">
+          <textarea
+            ref="inputEl"
+            v-model="draft"
+            class="input"
+            rows="1"
+            :placeholder="placeholder"
+            :disabled="readonly"
+            autocomplete="off"
+            spellcheck="false"
+            @keydown="onKey"
+          />
+          <span class="sendb">
+            <button
+              class="sendbtn"
+              type="button"
+              :disabled="!canSend"
+              :aria-label="uploading ? t('图片上传中，完成后可发送') : sending ? t('已发出 仍可继续发送') : t('发送')"
+              @click="submit"
+            >
+              <ArrowUpOutlined aria-hidden="true"/>
+            </button>
+          </span>
+        </div>
+      </div>
+      <div class="chint">
+        <span class="pickwrap">
+          <button
+            ref="pickBtnEl"
+            class="pickbtn"
+            type="button"
+            :aria-expanded="pickOpen ? 'true' : 'false'"
+            @click.stop="togglePick"
+          >
+            <FolderOpenOutlined aria-hidden="true"/>
+            <span>{{ t("图片/路径") }}</span>
+          </button>
+          <!-- .chint 为 overflow:hidden，弹层须用 fixed 相对视口定位才不被裁切。 -->
+          <div
+            v-if="pickOpen"
+            class="pickbox"
+            role="dialog"
+            :aria-label="t('选择文件')"
+            :style="{ left: `${pickPos.left}px`, bottom: `${pickPos.bottom}px` }"
+            @click.stop
+          >
+            <div class="pickhd">
+              <button class="pickup" type="button" :disabled="!pickCanUp" @click.stop="pickGoUp">
+                <ArrowUpOutlined aria-hidden="true"/>
+              </button>
+              <input
+                class="pickpath"
+                :class="{ outside: pickOutside }"
+                :value="pickPathInput"
+                spellcheck="false"
+                :placeholder="t('相对路径或绝对路径，回车跳转')"
+                @click.stop
+                @input="pickPathInput = $event.target.value"
+                @keydown.enter.stop="pickJump"
+                @keydown.esc.stop="pickOpen = false"
+              />
+              <button class="pickx" type="button" @click.stop="pickOpen = false">×</button>
+            </div>
+            <div class="picklist" role="listbox">
+              <div v-if="pickLoading" class="pickempty">{{ t("读取中…") }}</div>
+              <template v-else>
+                <button
+                  v-for="e in pickEntries"
+                  :key="e.rel"
+                  class="pickrow"
+                  :class="{ dir: e.dir }"
+                  type="button"
+                  role="option"
+                  @click.stop="e.dir ? pickOpenDir(e.rel) : pickInto(e.rel)"
+                >
+                  <span class="pickic">{{ e.dir ? "▸" : "·" }}</span>
+                  <span class="pickname">{{ e.name }}</span>
+                  <span v-if="!e.dir" class="picksize">{{ sizeText(e.size) }}</span>
+                </button>
+                <div v-if="!pickEntries.length" class="pickempty">{{ t("目录为空") }}</div>
+              </template>
+            </div>
+          </div>
+        </span>
+        <span v-if="isSupervisor" class="pickwrap">
+          <button
+            ref="nextBtnEl"
+            class="pickbtn modbtn"
+            type="button"
+            :aria-expanded="nextOpen ? 'true' : 'false'"
+            :title="nextLabel"
+            @click.stop="toggleNext"
+          >
+            <ThunderboltOutlined aria-hidden="true"/>
+            <span>{{ nextLabel }}</span>
+          </button>
+          <div
+            v-if="nextOpen"
+            class="pickbox"
+            role="dialog"
+            :aria-label="t('派单模型')"
+            :style="nextPos"
+            @click.stop
+          >
+            <div class="pickhd">
+              <span class="pickpath plain">{{ t("派单模型") }}</span>
+              <button class="pickx" type="button" @click.stop="nextOpen = false">×</button>
+            </div>
+            <div class="picklist" role="listbox">
+              <div v-if="modelLoading" class="pickempty">{{ t("正在读宿主模型…") }}</div>
+              <template v-else>
+                <button
+                  v-if="hostDefault && !hostModels.includes(hostDefault)"
+                  class="pickrow"
+                  :class="{ on: !nextModel }"
+                  type="button"
+                  role="option"
+                  :aria-selected="!nextModel ? 'true' : 'false'"
+                  :disabled="nextBusy !== null"
+                  @click.stop="pickNext('')"
+                >
+                  <span class="pickname">{{ modelLabel(hostDefault) }}</span>
+                  <em v-if="nextBusy === ''" class="dflt">{{ t("切换中…") }}</em>
+                  <em v-else class="dflt">{{ t("宿主默认") }}</em>
+                </button>
+                <button
+                  v-for="m in hostModels"
+                  :key="m"
+                  class="pickrow"
+                  :class="{ on: nextModel ? m === nextModel : m === hostDefault }"
+                  type="button"
+                  role="option"
+                  :aria-selected="(nextModel ? m === nextModel : m === hostDefault) ? 'true' : 'false'"
+                  :disabled="nextBusy !== null"
+                  @click.stop="pickNext(m === hostDefault ? '' : m)"
+                >
+                  <span class="pickname">{{ modelLabel(m) }}</span>
+                  <em v-if="nextBusy === (m === hostDefault ? '' : m)" class="dflt">{{ t("切换中…") }}</em>
+                  <em v-else-if="m === hostDefault" class="dflt">{{ t("宿主默认") }}</em>
+                  <em v-else-if="modelOf(m)?.note" class="dflt">{{ modelOf(m).note }}</em>
+                </button>
+                <div v-if="modelNote" class="pickempty">{{ modelNote }}</div>
+              </template>
+            </div>
+          </div>
+        </span>
+        <button
+          v-if="!isSupervisor"
+          class="viabtn"
+          :class="{ on: viaSupervisor }"
+          type="button"
+          role="switch"
+          :aria-checked="viaSupervisor ? 'true' : 'false'"
+          @click="viaSupervisor = !viaSupervisor"
+        >
+          <span class="vlab">{{ t("监工介入") }} {{ viaSupervisor ? t("开") : t("关") }}</span>
+          <span class="vtrack"><i class="vknob"/></span>
+        </button>
+        <Transition name="hintswap" mode="out-in">
+          <span v-if="hintText" :key="hintIdx" class="fhint" role="note" :aria-label="t('功能提示')">{{ hintText }}</span>
+        </Transition>
+        <span class="kbd" :data-os="isMac ? 'mac' : 'pc'">
+          <SendOutlined class="kico" aria-hidden="true"/>
+          <span>{{ t("Enter 发送") }}</span>
+          <EnterOutlined class="kico" aria-hidden="true"/>
+          <span>{{ t("Shift + Enter 换行") }}</span>
+        </span>
+      </div>
+      <div v-if="held" class="tools">
+        <button class="handback" type="button" @click="$emit('handback')">{{ t("交还监工") }}</button>
+      </div>
+    </div>
+  </main>
+
+  <Teleport to="body">
+    <div
+      v-if="zoom"
+      class="zoombox"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="t('附件预览')"
+      @click.self="closeZoom"
+      @wheel.stop
+    >
+      <div ref="zoomStage" class="zstage" @click="onZoomBlank" @wheel="onZoomWheel">
+        <div v-if="zoomFail" class="zerr" role="alert">
+          <FileImageOutlined aria-hidden="true"/>
+          <p class="zerr-t">{{ t("图片加载失败") }}</p>
+          <p class="zerr-p">{{ zoomItem?.path || zoomItem?.name }}</p>
+          <p class="zerr-h">{{ t("附件可能已被清理，或取图接口出错。") }}</p>
+          <button class="zretry" type="button" @click.stop="retryZoom">{{ t("重试") }}</button>
+        </div>
+        <img
+          v-else
+          :src="zoomSrc"
+          :alt="zoomItem?.name || ''"
+          :style="zoomSize.w ? { width: `${zoomSize.w}px`, height: `${zoomSize.h}px` } : null"
+          @load="onZoomLoad"
+          @error="onZoomError"
+        />
+      </div>
+      <button
+        v-if="zoomCount > 1"
+        class="znav prev"
+        type="button"
+        :aria-label="t('上一张（←）')"
+        @click.stop="stepZoom(-1)"
+      >
+        <LeftOutlined aria-hidden="true"/>
+      </button>
+      <button
+        v-if="zoomCount > 1"
+        class="znav next"
+        type="button"
+        :aria-label="t('下一张（→）')"
+        @click.stop="stepZoom(1)"
+      >
+        <RightOutlined aria-hidden="true"/>
+      </button>
+      <div class="zbar">
+        <span class="zname">{{ zoomItem?.name || zoomItem?.path }}</span>
+        <span v-if="zoomCount > 1" class="zidx">{{ zoom.i + 1 }} / {{ zoomCount }}</span>
+        <span v-if="zoomSize.w" class="zctrl">
+          <button type="button" :aria-label="t('缩小')" @click.stop="stepScale(1 / 1.25)">−</button>
+          <button type="button" class="zpct" :aria-label="t('恢复初始大小')"
+                  @click.stop="resetScale">{{ zoomPct }}%</button>
+          <button type="button" :aria-label="t('放大')" @click.stop="stepScale(1.25)">+</button>
+        </span>
+        <span class="zclose">
+          <button class="xclose" type="button" :aria-label="t('关闭预览（Esc）')"
+                  @click="closeZoom">×</button>
+        </span>
+      </div>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div v-if="pauseAsk" class="veil" @click.self="pauseAskCancel">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pauseAskTitle">
+        <h2 id="pauseAskTitle">{{ t("下发派单") }}</h2>
+        <p class="warn">{{ t("已暂停调度") }}</p>
+        <div class="macts">
+          <button class="mcancel" type="button" @click="pauseAskCancel">{{ t("取消") }}</button>
+          <button class="mok" type="button" @click="pauseAskConfirm">{{ t("确认下发") }}</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div v-if="stopOpen" class="veil" @click.self="stopOpen = false">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="stopTitle">
+        <h2 id="stopTitle">{{ t("中断这一单？") }}</h2>
+        <p class="warn">{{ t("中断后这一单会被重派，除非同时登记阻塞。") }}</p>
+        <p class="mdetail">{{ stopDetail }}</p>
+        <label class="mcheck">
+          <input v-model="alsoBlock" type="checkbox"/>
+          <span>{{ t("同时登记阻塞（不重派，等外部条件解决后手动解除）") }}</span>
+        </label>
+        <p v-if="draft.trim()" class="mnote">{{ t("输入框中的内容会先登记，重派时携带。") }}</p>
+        <div class="macts">
+          <button class="mcancel" type="button" @click="stopOpen = false">{{ t("取消") }}</button>
+          <button class="mok" type="button" @click="doStop">{{ t("中断") }}</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</XProvider>

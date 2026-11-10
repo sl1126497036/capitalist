@@ -1,0 +1,177 @@
+/* 节点卡片配色只取 tokens.css 令牌；失败、断链子树、等父节点各有独立外观，不单靠颜色区分。 */
+.fv-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 0 auto;
+}
+
+.fv-node {
+  width: 218px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  padding: var(--s10);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-row);
+  background: var(--surface-2);
+}
+
+.fv-nl1 {
+  display: flex;
+  /* 状态点与标题首行对齐；标题折成两行时按 center 会落在两行之间。 */
+  align-items: flex-start;
+  gap: var(--s6);
+  min-width: 0;
+}
+
+.fv-ntitle {
+  font-size: var(--f-card);
+  color: var(--t1);
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 卡片宽 218px，第二行按「标签 + 值」紧凑排列，值允许折行，避免模型名撑破卡片。 */
+.fv-nmeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s6);
+  font-size: 10px;
+  color: var(--t5);
+}
+.fv-nmeta .dim {
+  color: var(--t8);
+}
+.fv-nmeta .warn {
+  color: var(--warn);
+}
+
+.fv-tm {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* 读数整项不折行，空间不足时由 .fv-nmeta 的 flex-wrap 整项换到下一行，避免项内被压缩。 */
+.fv-nmeta > span {
+  white-space: nowrap;
+}
+
+.fv-tm em {
+  font-style: normal;
+  color: var(--t8);
+  white-space: nowrap;
+}
+
+.fv-tm b {
+  font-weight: 500;
+  color: var(--t4);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.fv-nreason,
+.fv-nflag,
+.fv-nwait {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.fv-nreason {
+  color: var(--t4);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.fv-nflag {
+  color: var(--bad);
+}
+.fv-nwait {
+  color: var(--violet);
+}
+
+/* 状态色点，与图例同一套。 */
+.fv-dot {
+  width: 6px;
+  height: 6px;
+  /* margin-top 6px 使色点中线与首行文字中线对齐。 */
+  margin-top: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--t8);
+}
+.fv-dot.running {
+  background: var(--accent-2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 22%, transparent);
+}
+.fv-dot.queued {
+  background: var(--t5);
+}
+.fv-dot.waiting {
+  background: var(--violet);
+}
+.fv-dot.review {
+  background: var(--orange);
+}
+.fv-dot.done {
+  background: var(--ok);
+}
+.fv-dot.failed {
+  background: var(--bad);
+}
+.fv-dot.closed {
+  background: var(--t8);
+}
+
+/* 非常态 */
+.fv-node.failed {
+  border-color: var(--bad-line);
+  background: var(--bad-bg);
+  box-shadow: inset 3px 0 0 var(--bad);
+}
+
+.fv-node.cut {
+  opacity: 0.62;
+  border-style: dashed;
+  border-color: var(--bad-line);
+  background: var(--surface-3);
+}
+
+.fv-node.waiting {
+  border-style: dashed;
+  border-color: var(--line-soft);
+}
+
+.fv-node.cycle {
+  border-color: var(--warn);
+  border-style: dashed;
+}
+
+/* 子节点：父上子下，兄弟并排。 */
+.fv-kids {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-left: 16px;
+  padding-left: 16px;
+  border-left: 1px solid var(--line-soft);
+}
+.fv-kids > .fv-col {
+  position: relative;
+  padding-top: 16px;
+}
+.fv-kids > .fv-col::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 0;
+  width: 16px;
+  height: 1px;
+  background: var(--line-soft);
+}

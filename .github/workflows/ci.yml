@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [18, 20, 22]
+    # Windows 上 npm 默认用 cmd.exe，不展开 test/*.test.js；Node 18 与 20 会收到字面量通配符并报错。
+    # 由 Git for Windows 的 bash 展开通配符，不依赖 PATH。
+    env:
+      npm_config_script_shell: ${{ matrix.os == 'windows-latest' && 'C:/Program Files/Git/bin/bash.exe' || 'bash' }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/supervisor
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: packages/supervisor/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/supervisor
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/supervisor/package-lock.json
+            packages/supervisor/web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Install board deps
+        run: npm ci --prefix web
+
+      - name: Build
+        run: npm run build:dist
+
+      # 检查发布 tar 包是否包含看板产物与内置契约。
+      - name: Pack
+        run: npm pack --ignore-scripts
+
+      - name: Inspect tarball
+        run: |
+          tar -tzf capitalist-*.tgz > files.txt
+          for f in \
+            package/dist/cli/main.js \
+            package/dist/host/main.js \
+            package/dist/board-web/index.html \
+            package/contracts/minimal.contract.json \
+            package/skill/SKILL.md \
+            package/LICENSE \
+            package/NOTICE \
+            package/THIRD-PARTY-NOTICES; do
+            grep -qx "$f" files.txt || { echo "缺少 $f"; exit 1; }
+          done

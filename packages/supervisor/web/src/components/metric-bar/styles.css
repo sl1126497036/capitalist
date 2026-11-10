@@ -1,0 +1,426 @@
+.mbar {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s10);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.mcell {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s5);
+  font-size: var(--f-tiny);
+  line-height: 1;
+  color: var(--t7);
+}
+
+.mcell em {
+  font-style: normal;
+  color: var(--t8);
+}
+
+.mcell b {
+  font-family: var(--num);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--t3);
+}
+
+.mcell + .mcell {
+  padding-left: var(--s10);
+  border-left: 1px solid var(--line-3);
+}
+
+.msep {
+  flex: 0 0 auto;
+  align-self: stretch;
+  margin: 3px 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--line-2);
+}
+
+.msep + .mcell {
+  padding-left: var(--s10);
+}
+
+.mcell.run b {
+  color: var(--accent);
+}
+
+.mcell b .run {
+  color: var(--accent);
+}
+
+.mcell.warn b {
+  color: var(--warn);
+}
+
+.mcell.bad b {
+  color: var(--bad);
+}
+
+.mcell.vio b {
+  color: var(--violet);
+}
+
+.mcell.ok b {
+  color: var(--ok);
+}
+
+.mcell.na b {
+  font-family: var(--font);
+  font-weight: 400;
+  color: var(--t8);
+}
+
+@media (max-width: 1099px) {
+  /* 窄屏只保留前几格读数。 */
+  .mcell:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+.macts {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s4);
+  margin-left: var(--s6);
+  padding-left: var(--s6);
+  border-left: 1px solid var(--line-soft);
+}
+
+.mbtn {
+  height: 20px;
+  padding: 0 var(--s7);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--raise);
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  color: var(--t3);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mbtn:hover {
+  border-color: var(--select-line);
+  color: var(--t1);
+}
+.mbtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.mbtn.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.mbtn.danger:hover {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.mnote {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--f-tiny);
+  color: var(--t7);
+}
+.mnote.bad {
+  color: var(--bad);
+}
+
+@media (max-width: 1099px) {
+  .macts,
+  .mnote {
+    display: none;
+  }
+}
+
+.mcell-model .mval {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  background: none;
+  font-family: var(--num);
+  font-weight: 600;
+  font-size: inherit;
+  line-height: 1;
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.mcell-model .mval:hover {
+  color: var(--t1);
+  border-bottom-color: var(--select-line);
+}
+
+/* .chead / .chat 均为 overflow:hidden，弹层须用 fixed 定位，否则被裁。 */
+.mpick {
+  position: fixed;
+  z-index: 70;
+  width: 240px;
+  max-height: min(320px, 44vh);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-block);
+  /* 浮层用不透明底色：这里用 surface 会透出背后的队列文字。 */
+  background: var(--pop-bg);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+/* 切换在途时铺满面板：inset:0 不占布局，自身接指针避免重复提交；收到响应后随 modelBusy 撤除。 */
+.mpick-busy {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s6);
+  border-radius: inherit;
+  background: rgba(9, 13, 24, 0.72);
+  color: var(--t1);
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  letter-spacing: 0.4px;
+  cursor: progress;
+}
+
+.mpick-spin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--accent-2);
+  animation: mpick-rotate 0.8s linear infinite;
+}
+
+@keyframes mpick-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mpickhd {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s6);
+  padding: var(--s6) var(--s8);
+  border-bottom: 1px solid var(--line-3);
+  font-size: var(--f-tiny);
+  color: var(--t4);
+}
+
+.mpickx {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--t4);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mpickx:hover {
+  background: var(--raise-3);
+  color: var(--t1);
+}
+
+.mpicklist {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s4);
+}
+
+.mpickrow {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  width: 100%;
+  padding: var(--s5) var(--s6);
+  border: 0;
+  border-radius: var(--r-row);
+  background: none;
+  text-align: left;
+  font-family: var(--num);
+  font-size: var(--f-meta);
+  line-height: 1.35;
+  color: var(--t3);
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.mpname {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dflt {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: var(--f-tiny);
+  color: var(--t7);
+}
+
+.mpickrow:hover {
+  background: var(--raise-3);
+  color: var(--t1);
+}
+
+.mpickrow.on {
+  background: var(--select-bg);
+  color: var(--t1);
+}
+
+.mpickrow.on::after {
+  content: " ✓";
+  color: var(--ok);
+}
+
+.mpickempty {
+  padding: var(--s10);
+  text-align: center;
+  font-size: var(--f-tiny);
+  color: var(--t7);
+  white-space: normal;
+}
+
+.mpick.confirm {
+  left: 50%;
+  top: 22%;
+  transform: translateX(-50%);
+  width: 340px;
+  max-height: none;
+}
+.mpick.confirm .mptext {
+  padding: var(--s10) var(--s10) var(--s8);
+  font-size: var(--f-meta);
+  line-height: 1.65;
+  color: var(--t4);
+  white-space: normal;
+}
+.mpick.confirm .mpacts {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s6);
+  padding: 0 var(--s10) var(--s10);
+}
+
+.mcell .mval {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  background: none;
+  font-family: var(--num);
+  font-weight: 600;
+  font-size: inherit;
+  line-height: 1;
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.mcell .mval:hover {
+  color: var(--t1);
+  border-bottom-color: var(--select-line);
+}
+
+.mpick.conc {
+  width: 200px;
+  max-height: none;
+  padding-bottom: var(--s10);
+}
+
+.mpick.conc .mpickhd {
+  padding: var(--s8) var(--s10);
+}
+
+.concrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s8);
+  padding: var(--s10) var(--s10) var(--s8);
+}
+
+.concstep {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--raise);
+  color: var(--t3);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.concstep:hover {
+  border-color: var(--select-line);
+  color: var(--t1);
+}
+.concstep:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.concinput {
+  width: 64px;
+  height: 26px;
+  padding: 0 var(--s5);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-row);
+  background: var(--raise);
+  color: var(--t1);
+  font-family: var(--num);
+  font-size: var(--f-meta);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  outline: none;
+}
+.concinput:focus {
+  border-color: var(--select-line);
+}
+
+.mpick.conc .mpickempty {
+  padding: 0 var(--s10) var(--s8);
+  text-align: center;
+  color: var(--bad);
+}
+
+.mpick.conc .mpacts {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--s16);
+  padding: 0 var(--s10);
+}
+
+.mpick.conc .mpacts .mbtn {
+  height: 26px;
+  padding: 0 var(--s10);
+  border-radius: var(--r-row);
+  font-size: var(--f-meta);
+  line-height: 1;
+}

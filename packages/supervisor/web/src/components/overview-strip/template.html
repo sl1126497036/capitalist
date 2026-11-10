@@ -1,0 +1,6 @@
+<span class="ovstrip" role="group" :aria-label="t('全局读数')">
+  <span v-for="c in cells" :key="c.k" class="ocell" :class="c.tone">
+    <em>{{ c.k }}</em>
+    <b>{{ c.v }}</b>
+  </span>
+</span>

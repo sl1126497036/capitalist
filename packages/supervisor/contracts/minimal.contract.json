@@ -1,0 +1,150 @@
+{
+  "name": "minimal",
+  "domain": "通用任务",
+  "_note": "未加载领域 skill、目标为单句描述时使用。三阶段，不预设行业知识。",
+  "pack_base": ".",
+  "memory_file": "memory.md",
+  "context": {
+    "worker_max_tokens": 600000,
+    "worker_max_compacts": 3,
+    "supervisor_max_tokens": 500000,
+    "supervisor_max_compacts": 3
+  },
+  "brief_redlines": [
+    "禁止删除任务根以外的本机内容",
+    "禁止读取凭据：.env / 密钥 / *.pem / ~/.ssh",
+    "禁止执行 SQL 破坏性语句（DELETE / DROP / TRUNCATE / flushall），本地与线上同限",
+    "修改既有文件前先备份"
+  ],
+  "stages": [
+    {
+      "id": "S0",
+      "name": "需求确认",
+      "goal": "把目标拆成「要做什么 / 不要做什么 / 怎么算做完」，复述后确认",
+      "next": "写需求要点进 memory.md，然后 capitalist record req '{\"item\":\"...\",\"acceptance\":\"...\"}'",
+      "done": {
+        "type": "all_of",
+        "checks": [
+          { "type": "jsonl_min", "file": "req.jsonl", "min": 1, "msg": "未登记需求" },
+          { "type": "jsonl_all_field", "file": "req.jsonl", "field": "acceptance",
+            "msg": "{n} 条需求未写验收标准" }
+        ]
+      }
+    },
+    {
+      "id": "S1",
+      "name": "执行",
+      "goal": "按确认的需求执行并留存改动记录",
+      "next": "完成一项后执行 capitalist record changes '{\"file\":\"...\",\"what\":\"...\"}'",
+      "done": {
+        "type": "jsonl_min",
+        "file": "changes.jsonl",
+        "min": 1,
+        "msg": "未登记改动，无法核对变更内容"
+      }
+    },
+    {
+      "id": "S2",
+      "name": "交付前复核",
+      "goal": "逐项核对验收标准，确认全部完成",
+      "next": "逐条对照 req.jsonl 的验收标准，逐条写结论进 ledger",
+      "done": {
+        "type": "all_of",
+        "checks": [
+          { "type": "jsonl_min", "file": "ledger.jsonl", "min": 1, "msg": "结论台账为空" },
+          { "type": "file_exists", "path": "memory.md", "msg": "memory.md 没更新" }
+        ]
+      }
+    }
+  ],
+  "redlines": [
+    {
+      "id": "DEL-LOCALSHELL",
+      "level": "BLOCK",
+      "label": "本机删除命令（按路径判定）",
+      "pattern": "(?i)(^|[;&|]\\s*)(rm\\s+-[rf]{1,2}|rm\\s|del\\s+/|rmdir\\s+/s|Remove-Item\\s+-Recurse|shutil\\.rmtree|os\\.remove)",
+      "defer": "local_delete",
+      "fix": "任务根以内的删除允许；以外的一律拒绝。路径不确定时先 capitalist ask。"
+    },
+    {
+      "id": "SQL-DESTRUCTIVE",
+      "level": "BLOCK",
+      "label": "SQL 破坏性语句（DELETE / DROP / TRUNCATE / 清空数据库）",
+      "pattern": "\\bDELETE\\s+FROM\\b|\\bDROP\\s+(?:TABLE|DATABASE|SCHEMA|INDEX|VIEW)\\b|\\bTRUNCATE\\s+(?:TABLE\\s+)?\\w|\\bflushall\\b|\\bflushdb\\b|\\bdropDatabase\\b|\\bdb\\.\\w+\\.drop\\w*\\s*\\(",
+      "skip_if": "^(?:grep|rg|findstr|less|more|head|tail)\\b",
+      "fix": "线上库删除后通常不可恢复。只读查询不受影响。确需删除测试数据时先 capitalist ask，注明库名与环境。"
+    },
+    {
+      "id": "NEED-CREDS",
+      "level": "NEED_USER",
+      "label": "读凭据文件",
+      "pattern": "(?i)(\\.env\\b|\\.ssh/|\\.aws/|id_rsa|credentials|\\.pem\\b|password\\s*=)",
+      "fix": "凭据类操作需当次授权确认。"
+    }
+  ],
+  "local_guard": {
+    "_note": "通用边界。allow_roots 按机器实际情况改。",
+    "allow_roots": [],
+    "sensitive_paths": [
+      "~/.ssh", "~/.aws", "~/.gnupg", "~/Documents",
+      "C:/Windows", "/etc", "/var/log", "AppData"
+    ],
+    "sensitive_names": [".env", "id_rsa", "id_ed25519", "credentials", "Login Data", ".npmrc", ".pypirc"],
+    "sensitive_globs": ["*.pem", "*.key", "*.p12", "*.pfx"]
+  },
+  "workers": {
+    "_note": "多进程配置。default_cmd 是模板，{prompt} 与 {model} 会被替换。",
+    "default_cmd": ["claude", "-p", "{prompt}", "--model", "{model}"],
+    "pool": [
+      { "id": "W1", "model": "sonnet", "focus": "" },
+      { "id": "W2", "model": "haiku", "focus": "" }
+    ],
+    "restart": { "max_retries": 2, "backoff_sec": 5, "on_exhausted": "report" },
+    "timeout_sec": 1800
+  },
+  "output_style": {
+    "_note": "分层表达。mode 设为 off 时关闭。",
+    "mode": "layered",
+    "layers": {
+      "payload": "零损耗：代码、命令、路径、数字、报错原文、结论原样保留，不概括改写",
+      "process": "压到最短：只写动作与依据，避免重复表述",
+      "chat": "默认不写：寒暄、客套、自我评价"
+    },
+    "switch_back": "涉及风险判断、红线边界、需裁决的选项或结论不确定时，恢复完整表述"
+  },
+  "env_notes": {
+    "_note": "引擎不预设具体系统。环境信息以命令返回为准。",
+    "summary": "以 uname / ver / systeminfo 的输出确认本机环境；路径分隔符、包管理器与可用命令以实际探测结果为准。"
+  },
+  "reply_checks": {
+    "items": [
+      { "id": "CLAIM-DONE", "level": "NOTE", "pattern": "(已全部完成|全都做完了|一切就绪)",
+        "label": "声称全部完成", "fix": "对照 req.jsonl 的验收标准逐条核对后再声明完成。" },
+      { "id": "CLAIM-DESTRUCTIVE", "level": "BLOCK",
+        "pattern": "(我已经把.{0,10}(删除|清空|清掉)了|已执行删除)",
+        "label": "自述做了删除", "fix": "禁止删除。已执行时立即停止并报告。" }
+    ]
+  },
+  "realtime_rules": {
+    "_note": "实时规则由监工常驻执行，纯代码判定、不调模型。",
+    "rules": [
+      { "id": "LOOP-REPEAT", "type": "repeat", "threshold": 6, "window": 300, "cooldown": 120,
+        "level": "warn", "label": "同一条命令反复出现（疑似循环）",
+        "suggestion": "先停止执行，核对参数是否重复尝试同一路径。" },
+      { "id": "BURST-ACTION", "type": "burst", "pattern": ".", "threshold": 50, "window": 60,
+        "cooldown": 120, "level": "warn", "label": "动作频率异常",
+        "suggestion": "确认未在循环中重复下发命令。" },
+      { "id": "REDLINE-RETRY", "type": "burst",
+        "pattern": "(?i)(rm\\s+-rf|drop\\s+table|delete\\s+from|flushall)",
+        "threshold": 3, "window": 600, "cooldown": 300, "level": "high",
+        "label": "反复触碰破坏性动作（拦截后仍继续）",
+        "suggestion": "拦截后应改用其它路径，或先 capitalist ask 由监工裁决。" }
+    ]
+  },
+  "inspect_triggers": {
+    "on_alerts": 3,
+    "on_stage_advance": true,
+    "min_interval_sec": 300,
+    "max_stale_min": 30
+  }
+}

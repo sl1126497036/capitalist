@@ -1,0 +1,223 @@
+/**
+ * 主题令牌：本文件为默认主题，其余三套由 themes.css 按 :root[data-theme] 覆盖。
+ * 组件样式只引用变量，不写色值字面量；新增颜色令牌须同步覆盖全部主题。
+ */
+:root {
+  --bg-top: #172140;
+  --bg-deep: #080a14;
+  --bg-bottom: #12071f;
+
+  --surface: rgba(18, 26, 46, 0.58);
+  --surface-2: rgba(13, 18, 30, 0.6);
+  --surface-3: rgba(13, 18, 31, 0.6);
+  --surface-4: rgba(15, 23, 41, 0.9);
+  /* 浮层底色：选择面板、弹窗等盖在正文上的层，须不透明，避免透出背后文字。 */
+  --pop-bg: #0f1729;
+  --raise: #101628;
+  --env-bg: #0e2016;
+  --header-bg: rgba(10, 15, 28, 0.72);
+  --t-sub: #5c6880;
+  --num-total: #e8eef9;
+  --raise-2: rgba(14, 16, 29, 0.5);
+  --raise-3: rgba(13, 18, 31, 0.6);
+  --search: rgba(10, 13, 23, 0.7);
+
+  --line: #1e2637;
+  --line-2: #1c2433;
+  --line-3: rgba(255, 255, 255, 0.08);
+  /* 与仅用于分栏细线的 --line-3 分开，两者不可混用，否则面板边界消失。 */
+  --line-soft: rgba(255, 255, 255, 0.12);
+
+  --fill-weak: rgba(255, 255, 255, 0.07);
+  --fill-line: rgba(255, 255, 255, 0.16);
+  --scrim: rgba(0, 0, 0, 0.25);
+  --veil: rgba(0, 0, 0, 0.62);
+  --on-veil: #ffffff;
+  --on-bad: #ffffff;
+
+  --t1: #eff3fb;
+  --t2: #d8e1f2;
+  --t3: #c4cfe2;
+  --t4: #8e9bb2;
+  --t5: #68738a;
+  --t6: #6b7684;
+  --t7: #5f6b80;
+  --t8: #4e5869;
+  --t9: #465062;
+
+  --accent: #6b9dff;
+  --accent-2: #8ab4ff;
+  /* 主题预览色值由 lib/theme.js 内联，令牌只反映当前主题。 */
+  --on-accent: #08111f;
+  --ok: #35c088;
+  --bad: #f0503a;
+  --warn: #f5a524;
+  --violet: #a78bfa;
+  --orange: #ff9b5b;
+
+  --t-row-on: #e4edfc;
+  --t-row-time: #67728a;
+  --t-row-on-time: #a8c4f0;
+  --t-row-bad-name: #e0b4ac;
+  --t-row-bad-time: #f0705a;
+  --idle: #5a6478;
+  --pill-queue: rgba(26, 41, 71, 0.9);
+  --t-capitalist-line: #d3e0ff;
+
+  --select-bg: rgba(36, 56, 102, 0.75);
+  --select-line: #4066ad;
+  --bad-bg: rgba(33, 15, 18, 0.7);
+  --bad-line: #472121;
+  --bad-bg-2: rgba(33, 15, 18, 0.75);
+
+  --note-bg: rgba(90, 66, 18, 0.42);
+  --note-line: rgba(214, 158, 46, 0.5);
+  --note-text: #e6b455;
+  --note-soft: rgba(214, 158, 46, 0.16);
+  --info-bg: rgba(26, 46, 88, 0.55);
+  --info-line: rgba(107, 157, 255, 0.45);
+  --info-text: #9dbcff;
+
+  --user-grad: linear-gradient(90deg, #3f5bcc, #6548c7);
+  --human-bubble: #453625;
+  --human-line: #614a1f;
+
+  /* 气泡与整宽块不得互相借色，否则无法区分消息发起人。 */
+  --user-text: #eef3fd;
+  --user-time: #c5d3fb;
+  --human-text: #eed7b7;
+  --human-tail: #b39789;
+  --sys-dot: #6d9efd;
+  --sys-label: #9cafed;
+  --tool-label: #3ac08a;
+  --bad-block: #1d1015;
+  --bad-label: #ec5e49;
+  --bad-time: #745a54;
+  --bad-body: #c7a8a0;
+  --qcap-bg: rgba(26, 41, 71, 0.9);
+  --dim: #5a6478;
+
+  --chat-bg: rgba(9, 12, 20, 0.82);
+  --blk-bg: #0d121e;
+  --blk-line: #192030;
+  --blk-time: #4d576a;
+  --bub-bg: #0f1728;
+  --bub-line: #263047;
+
+  --talk-bg: rgba(27, 30, 34, 0.82);
+  --talk-line: #3a3f46;
+  --talk-text: #dfe3e8;
+  --talk-sig: #9aa2ab;
+  --cmd-chip-bg: rgba(64, 44, 12, 0.85);
+  --cmd-chip-line: #7d5a1c;
+  --cmd-chip-text: #f0c168;
+  /* 状态条压在滚动内容上，须用不透明底，避免文字透叠。 */
+  --status-bar: #0b0f19;
+
+  --bar-track: #172033;
+  --bar-a: linear-gradient(90deg, #5285ff, #8c73ff);
+  --bar-b: linear-gradient(90deg, #946bff, #d96be5);
+
+  /* 光晕以令牌定义，换主题时整组切换，app.css 不写死 radial-gradient。 */
+  --glow-1: radial-gradient(circle at center, rgba(66, 133, 255, 0.48) 0%, rgba(66, 133, 255, 0.16) 42%, rgba(66, 133, 255, 0) 100%);
+  --glow-2: radial-gradient(circle at center, rgba(158, 87, 255, 0.42) 0%, rgba(158, 87, 255, 0.14) 42%, rgba(158, 87, 255, 0) 100%);
+  --glow-3: radial-gradient(circle at center, rgba(107, 56, 217, 0.22) 0%, rgba(107, 56, 217, 0.06) 50%, rgba(107, 56, 217, 0) 100%);
+  --glow-4: radial-gradient(circle at center, rgba(26, 158, 204, 0.26) 0%, rgba(26, 158, 204, 0.08) 50%, rgba(26, 158, 204, 0) 100%);
+  --scroll-thumb: rgba(107, 157, 255, 0.22);
+  --scroll-thumb-hover: rgba(107, 157, 255, 0.36);
+
+  --f-brand: 40px;
+  --f-sub: 12px;
+  --f-card: 13px;
+  --f-num: 24px;
+  --f-meta: 11px;
+  --f-tiny: 10px;
+  --f-micro: 9px;
+  --f-body: 13px;
+  --lh-body: 1.75;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --num: Inter, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --r-card: 14px;
+  --r-block: 9px;
+  --r-bubble: 12px;
+  --r-row: 8px;
+  --r-pill: 999px;
+
+  --s4: 4px;
+  --s5: 5px;
+  --s6: 6px;
+  --s7: 7px;
+  --s8: 8px;
+  --s10: 10px;
+  --s11: 11px;
+  --s12: 12px;
+  --s14: 14px;
+  --s16: 16px;
+
+  --h-header: 88px;
+  --h-metrics: 140px;
+  --h-row: 48px;
+  --h-search: 32px;
+  --w-left: 330px;
+  --w-bubble: 540px;
+  --w-user: 420px;
+  --w-human: 360px;
+}
+
+:root {
+  --queue-name-done: #aab4c8;
+  --queue-name-idle: #b4bfd7;
+  --queue-time-done: #646e83;
+  --queue-run-halo: rgba(138, 180, 255, 0.22);
+  /* 隔行底色仅对深色主题生效，浅色主题由 --surface 系列承担。 */
+  --queue-row-alt: rgba(255, 255, 255, 0.05);
+}
+
+:root {
+  --chat-fold-h: 176px;
+  --chat-live-h: 132px;
+}
+
+/* 会话消息三档着色的判定见 lib/msgTone.js。 */
+:root {
+  --warn-block: #211a0b;
+  --warn-line: #5a441b;
+  --warn-label: #e0a44b;
+  --warn-time: #7b6a4c;
+  --warn-body: #d3c1a0;
+  --warn-chip-bg: rgba(70, 50, 12, 0.85);
+}
+
+/* 图标色一律引用既有令牌，四套主题无需为图标单独覆盖。 */
+:root {
+  --icon-size-sm: 12px;
+  --icon-size: 14px;
+  --icon-size-lg: 16px;
+
+  --icon-box-sm: 18px;
+  --icon-box: 22px;
+  --icon-box-lg: 32px;
+
+  --icon-radius: 6px;
+  --icon-radius-round: 50%;
+
+  --icon-color: var(--t4);
+  --icon-color-strong: var(--t1);
+  --icon-hover-bg: var(--fill-weak);
+  --icon-active: var(--accent-2);
+  --icon-danger: var(--bad);
+  --icon-danger-bg: var(--bad-bg);
+  --icon-ok: var(--ok);
+  --icon-solid-bg: var(--accent);
+  --icon-solid-bg-hover: var(--accent-2);
+  --icon-solid-fg: var(--on-accent);
+  --icon-disabled: var(--t8);
+}
+
+:root {
+  --empty-art-size: 48px;
+  --empty-art-color: var(--idle);
+}

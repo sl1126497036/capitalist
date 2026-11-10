@@ -1,2 +1,23 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# 文本文件在仓库与工作区统一使用 LF。
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换，也不参与 diff。
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.woff binary
+*.woff2 binary
+
+# 构建产物由 npm run build 生成，不参与 diff。
+dist/** linguist-generated=true -diff
+packages/*/dist/** linguist-generated=true -diff
+*.tsbuildinfo linguist-generated=true -diff
+
+# 锁文件由包管理器生成，不参与 diff。
+package-lock.json linguist-generated=true -diff

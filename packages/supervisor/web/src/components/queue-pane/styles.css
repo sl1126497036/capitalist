@@ -1,0 +1,1099 @@
+.queue {
+  flex: 0 0 var(--w-left);
+  width: var(--w-left);
+
+  min-width: var(--w-left);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s10);
+  padding: var(--s12);
+  border-right: 1px solid var(--line-3);
+  min-height: 0;
+}
+
+.qhead {
+  display: flex;
+  align-items: center;
+  gap: var(--s8);
+  padding: 0 var(--s4);
+}
+.qhead b {
+  /* 全行统一 --f-tiny 与 line-height: 1，各控件行盒一致，center 才按字面中心对齐。 */
+  font-size: var(--f-tiny);
+  line-height: 1;
+  font-weight: 500;
+  color: var(--t2);
+  /* 标题右侧的空间由筛选下拉的 margin-left:auto 吸收，动作组靠边对齐。 */
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qfilter {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.fold,
+.refresh {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: var(--s6);
+}
+.qbtn {
+  height: 20px;
+  padding: 0 var(--s6);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--t5);
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.qbtn:hover {
+  border-color: var(--select-line);
+  color: var(--t1);
+}
+
+.forestbtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--t5);
+  cursor: pointer;
+}
+/* inline svg 按基线落位会带出行盒下方空隙，display:block 后由 center 居中。 */
+.forestbtn svg {
+  display: block;
+}
+.forestbtn:hover {
+  border-color: var(--select-line);
+  color: var(--accent-2);
+}
+
+.fbtn,
+.fopt,
+.more {
+  border: 0;
+
+  background: transparent;
+  font-family: var(--font);
+}
+.fbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s4);
+  height: 20px;
+  padding: 0 var(--s5) 0 var(--s6);
+  border-radius: var(--r-pill);
+  background: var(--pill-queue);
+  font-size: var(--f-tiny);
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+  /* 子项字体度量不同，统一 line-height: 1 使 center 等价于字面中心对齐。 */
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.fbtn:hover {
+  background: var(--raise-3);
+}
+.fbtn b {
+  font-family: var(--num);
+  font-weight: 500;
+  color: var(--accent-2);
+  font-size: inherit;
+  line-height: 1;
+}
+
+.fcar {
+  flex: 0 0 auto;
+  font-size: var(--f-tiny);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  color: var(--t5);
+}
+.fbtn:hover .fcar {
+  color: var(--t3);
+}
+.fbtn[aria-expanded="true"] {
+  color: var(--t1);
+}
+.fbtn[aria-expanded="true"] .fcar {
+  color: var(--t1);
+}
+
+.fmenu {
+  position: absolute;
+  top: calc(100% + var(--s6));
+  right: 0;
+  z-index: 30;
+  min-width: 136px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--s4);
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: var(--r-block);
+}
+.fopt {
+  display: flex;
+  align-items: center;
+  gap: var(--s6);
+  width: 100%;
+  padding: var(--s6) var(--s7);
+  border-radius: var(--r-row);
+  font-size: var(--f-meta);
+  color: var(--t3);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.fopt:hover {
+  background: var(--raise-3);
+}
+.fopt.on {
+  background: var(--select-bg);
+  color: var(--t1);
+}
+.fopt.on .fnum {
+  color: var(--accent-2);
+}
+.fname {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fnum {
+  /* margin-left:auto 在 flex 中优先级最高，菜单被 min-width 撑宽时仍贴右。 */
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 2ch;
+  text-align: right;
+  font-family: var(--num);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--t6);
+  align-self: center;
+  line-height: 1;
+}
+
+.fdot {
+  flex: 0 0 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--idle);
+}
+.fdot.run {
+  background: var(--accent-2);
+}
+.fdot.warn {
+  background: var(--warn);
+}
+.fdot.bad {
+  background: var(--bad);
+}
+.fdot.done {
+  background: var(--ok);
+}
+
+.search {
+  flex: 0 0 var(--h-search);
+  height: var(--h-search);
+  display: flex;
+  align-items: center;
+  gap: var(--s7);
+  padding: 0 var(--s8);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-row);
+  background: var(--search);
+  color: var(--idle);
+}
+.search:focus-within {
+  border-color: var(--select-line);
+}
+
+.search .sicon {
+  flex: 0 0 auto;
+  font-size: var(--icon-size);
+  color: var(--idle);
+}
+.search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--t3);
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+}
+.search input::placeholder {
+  color: var(--t8);
+}
+
+.search .sclear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--idle);
+  font-size: var(--icon-size);
+  line-height: 1;
+  cursor: pointer;
+}
+.search .sclear:hover {
+  color: var(--t3);
+}
+
+.qdiv {
+  flex: 0 0 1px;
+  height: 1px;
+  margin: var(--s4) var(--s4);
+  background: var(--line-soft);
+}
+
+.rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  padding-right: 2px;
+}
+
+.qfold {
+  flex: 0 0 32px;
+  height: 32px;
+  width: 100%;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-row);
+  background: transparent;
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  color: var(--t7);
+  cursor: pointer;
+}
+.qfold:hover {
+  color: var(--t4);
+  border-color: var(--select-line);
+}
+.qfold b {
+  font-family: var(--num);
+  font-weight: 500;
+  color: var(--t5);
+}
+
+.nm .sid {
+  flex: 0 0 auto;
+  font-family: var(--num);
+  font-size: inherit;
+  font-style: normal;
+  line-height: 1;
+  color: var(--t6);
+  opacity: 1;
+  font-variant-numeric: tabular-nums;
+}
+.row.on .nm .sid {
+  color: var(--t5);
+}
+.row {
+  flex: 0 0 58px;
+  height: 58px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s8);
+  padding: 0 var(--s10);
+  border: 1px solid transparent;
+  border-radius: var(--r-row);
+  background: transparent;
+
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition: none;
+  }
+}
+/* .alt 须在 .row:hover / .on / .bad 之前定义，三档底色才能压过隔行底色。 */
+.row.alt {
+  background: var(--queue-row-alt);
+}
+.row:hover {
+  background: var(--raise-2);
+}
+.row.on {
+  background: var(--select-bg);
+  border-color: var(--select-line);
+}
+
+.row.flash {
+  border-color: var(--select-line);
+  outline: 1px solid var(--select-line);
+  outline-offset: 2px;
+}
+.row.bad {
+  background: var(--bad-bg);
+  border-color: var(--bad-line);
+}
+.row.bad.on {
+  border-color: var(--bad-line);
+}
+
+.row.t-done:not(.on) .nm {
+  color: var(--queue-name-done);
+}
+.row.t-done:not(.on) .tb {
+  color: var(--queue-time-done);
+}
+.row.t-idle:not(.on) .nm {
+  color: var(--queue-name-idle);
+}
+/* 已取消按中性档处理，不用异常红。 */
+.row.t-cancel:not(.on) .nm {
+  color: var(--queue-name-done);
+}
+.row.t-cancel:not(.on) .mt {
+  color: var(--queue-time-done);
+}
+.row.t-run .dot {
+  animation: qpulse 2.4s ease-in-out infinite;
+}
+/* .nm 有 overflow:hidden，状态点用 inset 内发光，避免外扩效果被裁成半圆。 */
+.row .dot.unread {
+  animation: dotpulse 1.6s ease-in-out infinite;
+}
+@keyframes dotpulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row .dot.unread {
+    animation: none;
+  }
+}
+@keyframes qpulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--queue-run-halo);
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--queue-run-halo);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row.t-run .dot {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--queue-run-halo);
+  }
+}
+
+/* 首行状态点 / 编号占 15px（7px 图标 + 8px 间距），后续行补这段偏移才与首行文字左对齐。 */
+.smdl,
+.sl2 {
+  padding-left: calc(7px + var(--s8));
+}
+.srow {
+  flex: 0 0 64px;
+  height: 64px;
+  gap: var(--s8);
+}
+
+.sq {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--idle);
+  align-self: center;
+}
+.srow[data-state="online"] .sq {
+  background: var(--accent-2);
+}
+.srow[data-state="timeout"] .sq {
+  background: var(--warn);
+}
+.sbody {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sl1 {
+  display: flex;
+  align-items: center;
+  gap: var(--s6);
+  min-width: 0;
+}
+.sname {
+  font-size: var(--f-body);
+  font-weight: 500;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.sbadge {
+  flex: 0 0 auto;
+  height: 16px;
+  padding: 0 var(--s5);
+  border-radius: var(--r-pill);
+  background: var(--raise-2);
+  font-size: var(--f-tiny);
+  line-height: 16px;
+  color: var(--t7);
+  white-space: nowrap;
+}
+.sbadge.on {
+  color: var(--ok);
+}
+.sbadge.bad {
+  /* --bad-bg 半透明会随底色偏色，补 --bad-line 描边并改用 --bad-label 文字色。 */
+  color: var(--bad-label);
+  background: var(--bad-bg);
+  box-shadow: inset 0 0 0 1px var(--bad-line);
+}
+.sl2 {
+  font-family: var(--num);
+  font-size: var(--f-tiny);
+  color: var(--t7);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smdl {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  font-size: var(--f-tiny);
+  line-height: 1.2;
+  color: var(--t6);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.srow.on .sname {
+  color: var(--t-row-on);
+}
+.srow.on .sl2 {
+  color: var(--t-row-on-time);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* 标题行从顶部起排，y 只由 padding-top 决定，第二行上边距不会顶动标题行。 */
+  justify-content: flex-start;
+  padding-top: var(--s7);
+  /* 撑满行高，否则 .row 的 align-items:center 会再居中一次，把标题行下移。 */
+  align-self: stretch;
+
+  gap: 5px;
+}
+
+.nm {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s5);
+
+  font-size: var(--f-body);
+  line-height: 1.25;
+  color: var(--t3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* scrollWidth 超出容器时才启用渐隐，短标题不淡出。 */
+.nm .nmtext {
+  overflow: hidden;
+}
+.nm .nmtext.fadeclip {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.mctx {
+  margin-left: var(--s4);
+  font-family: var(--num);
+  font-variant-numeric: tabular-nums;
+  color: var(--t7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mt .mn {
+  color: var(--t3);
+}
+.mt .mv {
+  font-size: var(--f-micro);
+  color: var(--t8);
+  letter-spacing: 0.2px;
+}
+.row.on .mt .mn {
+  color: var(--t-row-on-time);
+}
+
+.mt {
+  display: flex;
+  align-items: center;
+  margin-top: var(--s8);
+  gap: var(--s4);
+  /* 底行补 5px + var(--s5)，与标题行「#编号」文字共用左起点。 */
+  padding-left: calc(5px + var(--s5));
+  font-family: var(--num);
+  font-size: var(--f-tiny);
+  /* 行高对齐指标条；改这里时右下角 .tb 的定位算式要跟着改。 */
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--t7);
+  white-space: nowrap;
+  overflow: hidden;
+  padding-right: 52px;
+}
+
+.mt .mi {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s5);
+}
+.mt .mi + .mi {
+  padding-left: var(--s10);
+  border-left: 1px solid var(--line-3);
+}
+.mt .mi em {
+  font-style: normal;
+  color: var(--t8);
+}
+.mt .mi b {
+  font-weight: 600;
+  color: var(--t3);
+}
+.mt .mi b.na {
+  font-family: var(--font);
+  font-weight: 400;
+  color: var(--t8);
+}
+
+.row.t-done:not(.on) .mt {
+  color: var(--queue-time-done);
+}
+/* 数值色固定为 --t3，已完成 / 已取消的压暗需在此按档覆写。 */
+.row.t-done:not(.on) .mt .mi b,
+.row.t-cancel:not(.on) .mt .mi b {
+  color: var(--queue-time-done);
+}
+.row.on .mt {
+  color: var(--t-row-on-time);
+}
+.row.on .mt .mi b {
+  color: var(--t-row-on-time);
+}
+.row.on .nm {
+  font-weight: 500;
+  color: var(--t-row-on);
+}
+.row.bad .nm {
+  font-weight: 500;
+  color: var(--t-row-bad-name);
+}
+.nm em {
+  margin-left: var(--s5);
+  font-style: normal;
+  font-size: var(--f-tiny);
+  color: var(--t7);
+}
+
+.nm em.pin {
+  color: var(--accent-2);
+  border: 1px solid var(--select-line);
+  border-radius: var(--r-pill);
+  padding: 0 var(--s4);
+  line-height: 14px;
+  opacity: 1;
+}
+
+/* 「已让位」用弱色，不画成失败色。 */
+.nm em.yield {
+  color: var(--t4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 0 var(--s4);
+  line-height: 14px;
+  opacity: 1;
+}
+
+.unb {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--s5);
+  border-radius: var(--r-pill);
+  background: var(--pill-queue);
+  color: var(--accent-2);
+  font-family: var(--num);
+  font-size: var(--f-tiny);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+.row.on .unb {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.rp {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 7px;
+  height: 16px;
+  line-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+  border-radius: var(--r-pill);
+  font-style: normal;
+  font-size: var(--f-tiny);
+  font-variant-numeric: tabular-nums;
+  color: var(--t7);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.rp:hover {
+  color: var(--t4);
+  background: var(--raise-2);
+}
+.rp .rchev {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  transition: transform 140ms ease;
+}
+.rp .rchev.on {
+  transform: rotate(180deg);
+}
+
+/* 送达状态用颜色区分，不用透明度（透明度会让文字读不清）。 */
+.stuck {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 2px calc(var(--s10) + 12px);
+  padding: var(--s6) var(--s8);
+  border-left: 2px solid var(--warn);
+  border-radius: var(--r-row);
+  background: var(--warn-block);
+  font-size: var(--f-tiny);
+  line-height: 1.45;
+  color: var(--warn-body);
+}
+.stuck.failed {
+  border-left-color: var(--bad);
+  background: var(--bad-block, var(--warn-block));
+}
+.shead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s6);
+  flex-wrap: wrap;
+  color: var(--warn-label);
+}
+.shead b {
+  font-weight: 600;
+}
+.satt {
+  color: var(--warn-time);
+}
+.sok {
+  color: var(--t6);
+}
+.sbad {
+  color: var(--bad);
+  font-weight: 600;
+}
+.swhy {
+  color: var(--t6);
+}
+.sguide {
+  color: var(--warn-body);
+}
+.sact {
+  align-self: flex-start;
+  margin-top: var(--s4);
+  padding: 1px var(--s8);
+  border: 1px solid var(--bad-line, var(--warn-line));
+  border-radius: var(--r-pill);
+  background: transparent;
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  color: var(--t1);
+  cursor: pointer;
+}
+.sact:hover {
+  background: var(--raise-2);
+}
+
+.hist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: -2px 0 0 calc(var(--s10) + 12px);
+  padding-left: var(--s8);
+  border-left: 1px dashed var(--line-2);
+}
+.hrow {
+  display: flex;
+  align-items: center;
+  gap: var(--s5);
+  min-height: 22px;
+  padding: 0 var(--s6);
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  color: var(--t6);
+  text-align: left;
+  cursor: pointer;
+}
+.hrow:hover {
+  background: var(--raise-2);
+}
+.hrow .dot {
+  width: 4px;
+  height: 4px;
+}
+.hsid {
+  flex: 0 0 auto;
+  font-family: var(--num);
+  font-style: normal;
+  color: var(--t5);
+  font-variant-numeric: tabular-nums;
+}
+.hat,
+.hdur,
+.hspend {
+  flex: 0 0 auto;
+  color: var(--t7);
+  font-variant-numeric: tabular-nums;
+}
+.hst {
+  flex: 0 0 auto;
+  color: var(--t5);
+}
+.hspend {
+  margin-left: auto;
+}
+
+.row:not(.t-run):not(.on):not(.srow) .unb {
+  background: transparent;
+  border: 1px solid var(--line-2);
+  color: var(--t7);
+}
+.row.t-bad:not(.on) .unb {
+  border-color: var(--bad-line);
+  color: var(--t-row-bad-time);
+}
+
+.srow .unb {
+  margin-top: 8px;
+}
+
+/* 蒙版铺满整卡：inset:0 不占布局，自身接指针避免重复下发，role="status" 供读屏播报。 */
+.cardbusy {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s6);
+  border-radius: inherit;
+  background: rgba(9, 13, 24, 0.72);
+  color: var(--t1);
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  letter-spacing: 0.4px;
+  cursor: progress;
+}
+.cardbusy::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--accent-2);
+  animation: busyspin 0.8s linear infinite;
+}
+@keyframes busyspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cardbusy::before {
+    animation: none;
+    border-top-color: var(--accent-2);
+    opacity: 0.85;
+  }
+}
+
+.tb {
+  /* .tb 与 .mt 同字号同行高，改 .body / .mt 的行距或字号时此处定位算式要跟着改。 */
+  position: absolute;
+  right: var(--s10);
+  bottom: calc(
+    100% - (var(--s7) + var(--f-body) * 1.25 + 5px + var(--s8) + var(--f-tiny) * 1)
+  );
+  line-height: 1;
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  white-space: nowrap;
+  color: var(--t-row-time);
+}
+.tb.tb-cancel {
+  color: var(--violet);
+}
+
+.row .racts {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 6px;
+  margin-left: var(--s4);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.row .ract {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  font-family: var(--font);
+  font-size: var(--f-tiny);
+  line-height: 14px;
+  color: var(--t6);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  opacity: 0.72;
+  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.row:hover .ract,
+.row .ract:focus-visible {
+  opacity: 1;
+}
+.row .ract:hover,
+.row .ract:focus-visible {
+  color: var(--t1);
+  border-color: var(--t6);
+  opacity: 1;
+}
+
+.row .ract.ok {
+  color: var(--ok);
+  border-color: var(--ok);
+  opacity: 1;
+}
+.row .ract.danger {
+  color: var(--bad);
+  border-color: var(--bad-line);
+  opacity: 1;
+}
+.row .ract.busy {
+  color: var(--t6);
+  border-color: transparent;
+  cursor: default;
+  opacity: 1;
+}
+.tb:empty {
+  display: none;
+}
+
+.mt .na {
+  color: var(--t8);
+  font-family: var(--font);
+  font-variant-numeric: normal;
+}
+.row.on .tb {
+  color: var(--t-row-on-time);
+}
+.row.bad .tb {
+  color: var(--t-row-bad-time);
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--t8);
+  align-self: center;
+}
+.dot.run {
+  background: var(--accent-2);
+}
+.dot.warn {
+  background: var(--warn);
+}
+.dot.bad {
+  background: var(--bad);
+}
+.dot.done {
+  background: var(--ok);
+}
+.dot.cancel {
+  background: var(--violet);
+}
+.dot.idle {
+  background: var(--idle);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s4);
+  padding: var(--s16) var(--s12);
+  font-size: var(--f-tiny);
+  color: var(--t7);
+  text-align: center;
+  margin: auto 0;
+  line-height: 1.6;
+}
+
+.more {
+  display: block;
+  width: 100%;
+  margin-top: var(--s6);
+  padding: var(--s6) 0;
+  border-radius: var(--r-row);
+  font-size: var(--f-tiny);
+  color: var(--t9);
+  text-align: center;
+  cursor: pointer;
+}
+.more:hover {
+  color: var(--t7);
+}
+.more b {
+  font-family: var(--num);
+  font-weight: 400;
+  color: var(--t7);
+  font-variant-numeric: tabular-nums;
+}
+
+
+.qbtn.danger {
+  color: var(--bad);
+  border-color: var(--bad-line);
+}
+.qbtn.danger:hover {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.askwrap {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.askbox {
+  width: min(420px, calc(100vw - 48px));
+  padding: var(--s16);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-block);
+  background: var(--surface-3);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  color: var(--t2);
+  font-family: var(--font);
+}
+
+.askhd {
+  font-size: var(--f-body);
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.askbd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  margin-top: var(--s10);
+  font-size: var(--f-meta);
+  line-height: 1.6;
+  color: var(--t5);
+}
+.askbd p {
+  margin: 0;
+}
+.askbd b {
+  color: var(--t2);
+  font-variant-numeric: tabular-nums;
+}
+.askwarn {
+  color: var(--warn);
+}
+
+.askacts {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s8);
+  margin-top: var(--s16);
+}

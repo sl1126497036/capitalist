@@ -1,0 +1,29 @@
+.estate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s16) var(--s12);
+  margin: auto;
+  max-width: 360px;
+  text-align: center;
+  color: var(--t4);
+}
+.estate .art {
+  display: block;
+  margin: 0 auto var(--s8);
+  font-size: var(--empty-art-size);
+  line-height: 1;
+  color: var(--empty-art-color);
+}
+.estate .eh {
+  font-size: var(--f-card);
+  font-weight: 500;
+  color: var(--t2);
+  margin-bottom: var(--s8);
+}
+.estate .ed {
+  font-size: var(--f-meta);
+  color: var(--t8);
+  line-height: 1.7;
+}

@@ -1,0 +1,58 @@
+<Teleport to="body">
+  <div v-if="open" class="fv-veil" @click.self="emit('close')">
+    <section class="fv-panel" role="dialog" aria-modal="true" aria-labelledby="fvTitle">
+      <header class="fv-head">
+        <div class="fv-hl">
+          <h2 id="fvTitle">{{ tr("工作树看板") }}</h2>
+          <p class="fv-sub">{{ summary || tr("正在读取派单台账…") }}</p>
+        </div>
+        <div class="fv-actions">
+          <button type="button" class="fv-ghost" :disabled="loading" @click="load">{{ tr("刷新") }}</button>
+          <button type="button" class="fv-x" :aria-label="tr('关闭工作树看板')" @click="emit('close')">
+            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+              <path d="M3 3 L9 9 M9 3 L3 9" fill="none" stroke="currentColor" stroke-width="1.4"
+                    stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="fv-legend" aria-hidden="true">
+        <span v-for="l in LEGEND" :key="l.k" class="fv-lg">
+          <i class="fv-dot" :class="l.k" />{{ l.text }}
+        </span>
+        <span class="fv-lg">
+          <i class="fv-dot failed" />{{ tr("失败节点带「断链」标记，其下整棵子树降亮并注明受影响的单号") }}
+        </span>
+      </div>
+
+      <p v-if="degraded" class="fv-degraded" role="alert">{{ degraded }}</p>
+      <p v-if="error" class="fv-err" role="alert">{{ tr("台账读取失败：{e}", { e: error }) }}</p>
+
+      <div class="fv-body">
+        <p v-if="loading && !view" class="fv-hint">{{ tr("正在读取派单台账…") }}</p>
+        <p v-else-if="empty" class="fv-empty">{{ tr("台账中没有派单，森林为空。") }}</p>
+        <template v-else>
+          <section
+            v-for="(t, i) in trees"
+            :key="t.rootId + ':' + i"
+            class="fv-tree"
+            :class="{ dead: !t.alive, bad: t.cycle || t.stats.blocked > 0 }"
+          >
+            <header class="fv-thead">
+              <span v-if="rootNo(t)" class="fv-tidx">{{ rootNo(t) }}</span>
+              <b class="fv-tt">{{ t.cycle ? tr("脏数据：成环节点") : rootTitle(t) }}</b>
+              <span class="fv-tmeta">{{ progress(t) }}</span>
+              <span v-if="t.cycle" class="fv-tag bad">{{ tr("成环") }}</span>
+              <span v-else-if="!t.alive" class="fv-tag">{{ tr("无在途") }}</span>
+              <span v-if="t.stats.blocked" class="fv-tag bad">{{ tr("{n} 个断链", { n: t.stats.blocked }) }}</span>
+            </header>
+            <div class="fv-canvas">
+              <ForestNode v-for="item in t.forest" :key="item.node.id" :item="item" />
+            </div>
+          </section>
+        </template>
+      </div>
+    </section>
+  </div>
+</Teleport>

@@ -1,0 +1,412 @@
+/**
+ * 切换只换 `<html data-theme>`，不重建组件。每个主题块须覆盖 tokens.css 全部颜色令牌，
+ * 漏项会残留上一套色值；组件只引用 `var(--x)`，不写色值字面量。
+ */
+
+/* 薄雾灰 */
+:root[data-theme="mist"] {
+  --bg-top: #e3e2dd;
+  /* 浅色主题的隔行底色叠黑，叠白在浅底上不可见。 */
+  --queue-row-alt: rgba(0, 0, 0, 0.04);
+  --bg-deep: #d5d3cd;
+  --bg-bottom: #dbd9d3;
+
+  --surface: rgba(243, 242, 238, 0.92);
+  --surface-2: rgba(245, 244, 240, 0.94);
+  --surface-3: rgba(245, 244, 240, 0.94);
+  --surface-4: rgba(248, 247, 243, 0.97);
+  /* 浮层底色：选择面板、弹窗等盖在正文上的层，须不透明，避免透出背后文字。 */
+  --pop-bg: #f6f5f1;
+  --raise: #f3f2ee;
+  --env-bg: #dcebdf;
+  --header-bg: rgba(241, 240, 235, 0.9);
+  --raise-2: rgba(234, 233, 228, 0.92);
+  --raise-3: rgba(229, 228, 222, 0.92);
+  --search: rgba(232, 231, 226, 0.95);
+
+  --line: #cfcdc6;
+  --line-2: #c9c7c0;
+  --line-3: rgba(28, 26, 22, 0.09);
+  --line-soft: rgba(28, 26, 22, 0.13);
+  --fill-weak: rgba(28, 26, 22, 0.06);
+  --fill-line: rgba(28, 26, 22, 0.16);
+  --scrim: rgba(28, 26, 22, 0.07);
+  /* 浅色主题的遮罩仍用深色。 */
+  --veil: rgba(16, 15, 12, 0.52);
+  --on-veil: #ffffff;
+  --on-bad: #ffffff;
+
+  --t1: #1b1a17;  --t2: #2a2824;
+  --t3: #3a3733;
+  --t4: #55524c;
+  --t5: #6d6a63;
+  --t6: #716e67;
+  --t7: #7a776f;
+  --t8: #88857d;
+  --t9: #918e86;
+  --t-sub: #726f68;
+  --num-total: #201e1a;
+  --t-row-on: #201e1a;
+  --t-row-time: #84817a;
+  --t-row-on-time: #2e4a63;
+  --t-row-bad-name: #8f4a42;
+  --t-row-bad-time: #c23a28;
+  --t-capitalist-line: #38352f;
+  --idle: #726f68;
+  --dim: #726f68;
+
+  --accent: #3d6180;
+  --accent-2: #2d4d68;
+  --on-accent: #ffffff;
+  --ok: #12795a;
+  --bad: #bf3a2c;
+  --warn: #96650a;
+  --violet: #6b4f9e;
+  --orange: #b5561d;
+
+  --select-bg: rgba(61, 97, 128, 0.14);
+  --select-line: #3d6180;
+  --bad-bg: rgba(252, 236, 232, 0.9);
+  --bad-line: #e4b7ad;
+  --bad-bg-2: rgba(252, 236, 232, 0.94);
+  --note-bg: rgba(250, 240, 214, 0.92);
+  --note-line: #dcc191;
+  --note-text: #7d5708;
+  --note-soft: rgba(176, 134, 44, 0.14);
+  --info-bg: rgba(230, 238, 246, 0.95);
+  --info-line: #b4c6d6;
+  --info-text: #2b4c66;
+
+  --user-grad: linear-gradient(90deg, #3d6180, #4a5a8c);
+  --human-bubble: #faf0d8;
+  --human-line: #dcc287;
+  --user-text: #ffffff;
+  --user-time: #d8e2ec;
+  /* 用户气泡底色上的三档状态小字单独取值，深底渐变上原状态色对比度不足。 */
+  --user-ok: #9df3cf;
+  --user-warn: #ffe2a0;
+  --user-bad: #ffb7a8;
+  --human-text: #55401a;
+  --human-tail: #857049;
+
+  --sys-dot: #33587a;
+  --sys-label: #4a6076;
+  --tool-label: #106b4f;
+  --bad-block: #fceeeb;
+  --bad-label: #b8342a;
+  --bad-time: #96756f;
+  --bad-body: #654741;
+  --qcap-bg: rgba(226, 224, 218, 0.94);
+  --pill-queue: rgba(226, 224, 218, 0.94);
+
+  --chat-bg: rgba(245, 244, 240, 0.94);
+  --blk-bg: #f7f6f2;
+  --blk-line: #ddd9d1;
+  --blk-time: #837f77;
+  --bub-bg: #efeee9;
+  --bub-line: #d9d6ce;
+
+  --talk-bg: rgba(246, 245, 241, 0.96);
+  --talk-line: #d3cfc6;
+  --talk-text: #33302b;
+  --talk-sig: #6a655c;
+  --cmd-chip-bg: #fbf3e0;
+  --cmd-chip-line: #d9be83;
+  --cmd-chip-text: #6f4c10;
+  --status-bar: #f7f6f2;
+
+  --bar-track: #dcd9d1;
+  --bar-a: linear-gradient(90deg, #3d6180, #5f7fa6);
+  --bar-b: linear-gradient(90deg, #4a5a8c, #6d6f9e);
+
+  --queue-name-done: #625f58;
+  --queue-name-idle: #45423c;
+  --queue-time-done: #84817a;
+  --queue-run-halo: rgba(61, 97, 128, 0.16);
+
+  --warn-block: #fbf5e4;
+  --warn-line: #ddc794;
+  --warn-label: #8a6208;
+  --warn-time: #877962;
+  --warn-body: #5b4a24;
+  --warn-chip-bg: #f8eed2;
+
+  --glow-1: radial-gradient(circle at center, rgba(61, 97, 128, 0.12) 0%, rgba(61, 97, 128, 0.04) 42%, rgba(61, 97, 128, 0) 100%);
+  --glow-2: radial-gradient(circle at center, rgba(107, 79, 158, 0.1) 0%, rgba(107, 79, 158, 0.03) 42%, rgba(107, 79, 158, 0) 100%);
+  --glow-3: radial-gradient(circle at center, rgba(61, 97, 128, 0.08) 0%, rgba(61, 97, 128, 0.02) 50%, rgba(61, 97, 128, 0) 100%);
+  --glow-4: radial-gradient(circle at center, rgba(46, 127, 112, 0.08) 0%, rgba(46, 127, 112, 0.02) 50%, rgba(46, 127, 112, 0) 100%);
+  --scroll-thumb: rgba(61, 97, 128, 0.24);
+  --scroll-thumb-hover: rgba(61, 97, 128, 0.4);
+}
+
+/* 冷青终端 */
+/* 强调色为青（185°），渐变条第二段保留紫。 */
+:root[data-theme="cyan"] {
+  --bg-top: #0a2430;
+  --queue-row-alt: rgba(255, 255, 255, 0.05);
+  --bg-deep: #030b0f;
+  --bg-bottom: #06181e;
+
+  --surface: rgba(12, 30, 38, 0.58);
+  --surface-2: rgba(8, 20, 26, 0.6);
+  --surface-3: rgba(8, 20, 27, 0.6);
+  --surface-4: rgba(10, 24, 32, 0.9);
+  /* 浮层底色：选择面板、弹窗等盖在正文上的层，须不透明，避免透出背后文字。 */
+  --pop-bg: #0b1a22;
+  --raise: #081820;
+  --env-bg: #0a2a28;
+  --header-bg: rgba(4, 14, 19, 0.72);
+  --raise-2: rgba(8, 18, 24, 0.5);
+  --raise-3: rgba(8, 20, 27, 0.6);
+  --search: rgba(5, 14, 19, 0.7);
+
+  /* 文本灰阶偏青，与青底协调。 */
+  --t1: #eef6f9;  --t2: #d7e5ea;
+  --t3: #c3d3d9;
+  --t4: #8fa3aa;
+  --t5: #6a7f87;
+  --t6: #6b8088;
+  --t7: #60757d;
+  --t8: #4e636b;
+  --t9: #465b63;
+  --t-sub: #5c6f77;
+  --num-total: #e9f3f7;
+  --t-row-on: #e2eef3;
+  --t-row-time: #677b83;
+  --t-row-on-time: #a8cdd8;
+  --t-row-bad-name: #e0b4ac;
+  --t-row-bad-time: #f0705a;
+  --idle: #5a6e76;
+  --t-capitalist-line: #d3e6ef;
+
+  --line: #1b3038;
+  --line-2: #182a32;
+  --line-3: rgba(210, 245, 255, 0.08);
+  --line-soft: rgba(210, 245, 255, 0.12);
+  --fill-weak: rgba(210, 245, 255, 0.07);
+  --fill-line: rgba(210, 245, 255, 0.16);
+  --scrim: rgba(0, 0, 0, 0.25);
+  --veil: rgba(0, 0, 0, 0.62);
+  --on-veil: #ffffff;
+  --on-bad: #ffffff;
+
+  --accent: #3ad2e6;
+  --accent-2: #7fe6f2;
+  --on-accent: #03151b;
+  --ok: #37c9a0;
+  --bad: #f0563f;
+  --warn: #f2b23c;
+  --violet: #6fa8f0;
+  --orange: #ff9b5b;
+
+  --select-bg: rgba(20, 64, 84, 0.7);
+  --select-line: #2d7f96;
+  --bad-bg: rgba(32, 14, 18, 0.7);
+  --bad-line: #4a2029;
+  --bad-bg-2: rgba(32, 14, 18, 0.75);
+  --note-bg: rgba(66, 50, 12, 0.42);
+  --note-line: rgba(214, 158, 46, 0.5);
+  --note-text: #e6b455;
+  --note-soft: rgba(214, 158, 46, 0.16);
+  --info-bg: rgba(12, 46, 62, 0.55);
+  --info-line: rgba(58, 210, 230, 0.4);
+  --info-text: #8fe0ee;
+
+  --user-grad: linear-gradient(90deg, #1c6fa8, #2a9ac4);
+  --human-bubble: #3b3122;
+  --human-line: #5c4a22;
+  --user-text: #eef8fc;
+  --user-time: #c2e3f0;
+  /* 用户气泡底色上的三档状态小字单独取值。 */
+  --user-ok: #9af4d1;
+  --user-warn: #ffe6a4;
+  --user-bad: #ffbcac;
+  --human-text: #efdcb8;
+  --human-tail: #b09a7a;
+
+  --sys-dot: #4fc9e0;
+  --sys-label: #92cfe0;
+  --tool-label: #3ac08a;
+  --bad-block: #1c1014;
+  --bad-label: #ec5e49;
+  --bad-time: #745a54;
+  --bad-body: #c7a8a0;
+  --qcap-bg: rgba(20, 40, 48, 0.9);
+  --pill-queue: rgba(20, 40, 48, 0.9);
+  --dim: #5a6478;
+
+  --chat-bg: rgba(5, 11, 15, 0.82);
+  --blk-bg: #081318;
+  --blk-line: #16303a;
+  --blk-time: #4d6169;
+  --bub-bg: #0a1820;
+  --bub-line: #1f3b47;
+
+  --talk-bg: rgba(22, 29, 33, 0.82);
+  --talk-line: #374249;
+  --talk-text: #dde5e8;
+  --talk-sig: #97a5ab;
+  --cmd-chip-bg: rgba(58, 44, 12, 0.85);
+  --cmd-chip-line: #7a601e;
+  --cmd-chip-text: #f0c168;
+  --status-bar: #050f13;
+
+  --bar-track: #122430;
+  --bar-a: linear-gradient(90deg, #2fb8d6, #4f8cf0);
+  --bar-b: linear-gradient(90deg, #3e8cf0, #7a6be5);
+
+  --queue-name-done: #a9b6bc;
+  --queue-name-idle: #b2c2c9;
+  --queue-time-done: #636f77;
+  --queue-run-halo: rgba(58, 210, 230, 0.2);
+
+  --warn-block: #201a0b;
+  --warn-line: #584518;
+  --warn-label: #e0a44b;
+  --warn-time: #7b6a4c;
+  --warn-body: #d3c1a0;
+  --warn-chip-bg: rgba(70, 50, 12, 0.85);
+
+  --glow-1: radial-gradient(circle at center, rgba(34, 176, 208, 0.46) 0%, rgba(34, 176, 208, 0.15) 42%, rgba(34, 176, 208, 0) 100%);
+  --glow-2: radial-gradient(circle at center, rgba(74, 126, 240, 0.4) 0%, rgba(74, 126, 240, 0.13) 42%, rgba(74, 126, 240, 0) 100%);
+  --glow-3: radial-gradient(circle at center, rgba(24, 122, 168, 0.22) 0%, rgba(24, 122, 168, 0.06) 50%, rgba(24, 122, 168, 0) 100%);
+  --glow-4: radial-gradient(circle at center, rgba(30, 190, 190, 0.26) 0%, rgba(30, 190, 190, 0.08) 50%, rgba(30, 190, 190, 0) 100%);
+  --scroll-thumb: rgba(58, 210, 230, 0.22);
+  --scroll-thumb-hover: rgba(58, 210, 230, 0.36);
+}
+
+/* 晨光白 */
+/* 浅色主题与深色主题相反：文本为深灰，描边用深色低透明，底色越白越靠前。 */
+:root[data-theme="dawn"] {
+  --bg-top: #edf1f7;
+  --queue-row-alt: rgba(0, 0, 0, 0.035);
+  --bg-deep: #e2e8f1;
+  --bg-bottom: #e7edf4;
+
+  --surface: rgba(247, 249, 252, 0.9);
+  --surface-2: rgba(248, 250, 253, 0.92);
+  --surface-3: rgba(248, 250, 253, 0.92);
+  --surface-4: rgba(250, 251, 254, 0.97);
+  /* 浮层底色：选择面板、弹窗等盖在正文上的层，须不透明，避免透出背后文字。 */
+  --pop-bg: #f9fbfd;
+  --raise: #f7f9fc;
+  --env-bg: #e0f1e7;
+  --header-bg: rgba(246, 249, 252, 0.9);
+  --raise-2: rgba(238, 242, 248, 0.92);
+  --raise-3: rgba(233, 238, 246, 0.92);
+  --search: rgba(236, 240, 247, 0.95);
+
+  --line: #dbe3ee;
+  --line-2: #d5dee9;
+  --line-3: rgba(20, 32, 52, 0.08);
+  --line-soft: rgba(20, 32, 52, 0.12);
+  --fill-weak: rgba(20, 32, 52, 0.06);
+  --fill-line: rgba(20, 32, 52, 0.16);
+  --scrim: rgba(20, 32, 52, 0.06);
+  /* 浅色主题的遮罩仍用深色。 */
+  --veil: rgba(10, 16, 26, 0.5);
+  --on-veil: #ffffff;
+  --on-bad: #ffffff;
+
+  --t1: #0f1622;  --t2: #1b2433;
+  --t3: #2a3546;
+  --t4: #49556a;
+  --t5: #647084;
+  --t6: #667386;
+  --t7: #707d90;
+  --t8: #7f8b9c;
+  --t9: #8b97a7;
+  --t-sub: #6a7788;
+  --num-total: #101a28;
+  --t-row-on: #101a28;
+  --t-row-time: #7c8899;
+  --t-row-on-time: #2f4c7a;
+  --t-row-bad-name: #8f4a42;
+  --t-row-bad-time: #c93a28;
+  --t-capitalist-line: #2b3a52;
+  --idle: #6a7788;
+  --dim: #6a7788;
+
+  --accent: #4b5fe0;
+  --accent-2: #3a4fd0;
+  --on-accent: #ffffff;
+  --ok: #12855a;
+  --bad: #d33a2b;
+  --warn: #a96600;
+  --violet: #7757e0;
+  --orange: #c25a1e;
+
+  --select-bg: rgba(75, 95, 224, 0.14);
+  --select-line: #4b5fe0;
+  --bad-bg: rgba(255, 240, 238, 0.85);
+  --bad-line: #edc2bb;
+  --bad-bg-2: rgba(255, 240, 238, 0.9);
+  --note-bg: rgba(255, 243, 214, 0.9);
+  --note-line: #e7c98c;
+  --note-text: #8a5f00;
+  --note-soft: rgba(214, 158, 46, 0.14);
+  --info-bg: rgba(232, 240, 255, 0.95);
+  --info-line: #b9cbf5;
+  --info-text: #2f4aa0;
+
+  --user-grad: linear-gradient(90deg, #4b5fe0, #7a4bd0);
+  --human-bubble: #fff3dc;
+  --human-line: #e6c68a;
+  --user-text: #ffffff;
+  --user-time: #e3e7ff;
+  /* 用户气泡底色上的三档状态小字单独取值。 */
+  --user-ok: #a8f6d6;
+  --user-warn: #ffedad;
+  --user-bad: #ffc3b4;
+  --human-text: #5c4416;
+  --human-tail: #8a7448;
+
+  --sys-dot: #3a5fd0;
+  --sys-label: #4a6bb8;
+  --tool-label: #0f8a5f;
+  --bad-block: #fff2f0;
+  --bad-label: #c62f20;
+  --bad-time: #9b7a76;
+  --bad-body: #6b4a45;
+  --qcap-bg: rgba(228, 235, 244, 0.92);
+  --pill-queue: rgba(228, 235, 244, 0.92);
+
+  --chat-bg: rgba(247, 250, 253, 0.92);
+  --blk-bg: #f9fbfd;
+  --blk-line: #e3e9f2;
+  --blk-time: #7e8a9b;
+  --bub-bg: #f0f4f9;
+  --bub-line: #dce4ef;
+
+  --talk-bg: rgba(247, 250, 253, 0.96);
+  --talk-line: #dae2ec;
+  --talk-text: #2f3438;
+  --talk-sig: #68737d;
+  --cmd-chip-bg: #fff6e2;
+  --cmd-chip-line: #e2c07a;
+  --cmd-chip-text: #7a5410;
+  --status-bar: #f9fbfd;
+
+  --bar-track: #e2e9f2;
+  --bar-a: linear-gradient(90deg, #4b5fe0, #7a4bd0);
+  --bar-b: linear-gradient(90deg, #7a4bd0, #b04bc0);
+
+  --queue-name-done: #5a6678;
+  --queue-name-idle: #3d4a5e;
+  --queue-time-done: #7c8899;
+  --queue-run-halo: rgba(75, 95, 224, 0.14);
+
+  --warn-block: #fff7e4;
+  --warn-line: #e6cd96;
+  --warn-label: #996600;
+  --warn-time: #8f7c5e;
+  --warn-body: #5f4a22;
+  --warn-chip-bg: #fff0cf;
+
+  --glow-1: radial-gradient(circle at center, rgba(66, 133, 255, 0.16) 0%, rgba(66, 133, 255, 0.05) 42%, rgba(66, 133, 255, 0) 100%);
+  --glow-2: radial-gradient(circle at center, rgba(158, 87, 255, 0.14) 0%, rgba(158, 87, 255, 0.04) 42%, rgba(158, 87, 255, 0) 100%);
+  --glow-3: radial-gradient(circle at center, rgba(107, 56, 217, 0.1) 0%, rgba(107, 56, 217, 0.03) 50%, rgba(107, 56, 217, 0) 100%);
+  --glow-4: radial-gradient(circle at center, rgba(26, 158, 204, 0.1) 0%, rgba(26, 158, 204, 0.03) 50%, rgba(26, 158, 204, 0) 100%);
+  --scroll-thumb: rgba(75, 95, 224, 0.22);
+  --scroll-thumb-hover: rgba(75, 95, 224, 0.36);
+}

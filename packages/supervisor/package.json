@@ -1,0 +1,77 @@
+{
+  "name": "capitalist",
+  "version": "0.1.2",
+  "description": "Supervise long-running AI tasks from outside the model: contracts, stage gates, redlines, ledgers, and a review queue.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "sl1126497036",
+    "url": "https://github.com/sl1126497036"
+  },
+  "homepage": "https://github.com/sl1126497036/capitalist/tree/master/packages/supervisor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sl1126497036/capitalist.git",
+    "directory": "packages/supervisor"
+  },
+  "bugs": {
+    "url": "https://github.com/sl1126497036/capitalist/issues"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "agent-orchestration",
+    "supervisor",
+    "long-running",
+    "stage-gate",
+    "redline",
+    "hooks",
+    "cli",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "capitalist": "dist/cli/main.js",
+    "cap": "dist/cli/main.js",
+    "capitalist-hook": "dist/host/main.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "contracts",
+    "skill",
+    "scripts/vendor-skill.mjs",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD-PARTY-NOTICES"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/vendor-skill.mjs",
+    "build:web": "npm --prefix web run build",
+    "build:dist": "npm run build && npm run build:web && npm run verify:package",
+    "watch": "tsc -p tsconfig.json --watch",
+    "test": "npm run build && node scripts/run-tests.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "prepack": "npm run build:dist",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

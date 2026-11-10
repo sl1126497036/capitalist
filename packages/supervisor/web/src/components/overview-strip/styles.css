@@ -1,0 +1,49 @@
+/* 格子宽度不足时横向裁切，不折行撑高顶栏。 */
+.ovstrip {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s6);
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 var(--s6);
+}
+
+.ocell {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s4);
+  white-space: nowrap;
+}
+
+.ocell em {
+  font-style: normal;
+  font-size: var(--f-tiny);
+  color: var(--t8);
+}
+
+.ocell b {
+  font-size: var(--f-tiny);
+  font-weight: 600;
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+}
+
+.ocell.run b {
+  color: var(--accent-2);
+}
+.ocell.warn b {
+  color: var(--warn);
+}
+.ocell.bad b {
+  color: var(--bad);
+}
+.ocell.total b {
+  color: var(--t2);
+}
+
+.ocell + .ocell {
+  padding-left: var(--s6);
+  border-left: 1px solid var(--line);
+}

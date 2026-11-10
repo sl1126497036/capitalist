@@ -1,0 +1,17 @@
+<section ref="strip" class="strip" role="tablist" :aria-label="t18('监工实例')">
+  <button
+    v-for="(t, i) in tasks"
+    :key="t.root"
+    class="tab"
+    :class="{ on: t.root === current }"
+    type="button"
+    role="tab"
+    :aria-selected="t.root === current ? 'true' : 'false'"
+    @click="$emit('pick', t.root)"
+  >
+    <i class="dot" :class="tone(t)" aria-hidden="true" />
+    <span class="nm">{{ tabName(i) }}</span>
+  </button>
+
+  <div v-if="!tasks.length" class="none">{{ t18("没有监工实例") }}</div>
+</section>

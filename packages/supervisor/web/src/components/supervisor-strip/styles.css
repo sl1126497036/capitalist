@@ -1,0 +1,81 @@
+/* 监工 tab 条横向并列；超出可视宽度时由外层 header-bar 的 .hd-strip 滚动，不换行。 */
+.strip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s6);
+  height: 30px;
+  padding: 0 var(--s10);
+  border: 0;
+  /* 下划线常驻透明，激活时只换颜色，避免布局跳动。 */
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  font-family: var(--font);
+  font-size: var(--f-body);
+  line-height: 1.2;
+  color: var(--t6);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.tab:hover {
+  color: var(--t2);
+}
+
+.tab.on {
+  color: var(--t1);
+  border-bottom-color: var(--accent);
+}
+
+.nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--t8);
+}
+.dot.run {
+  background: var(--accent-2);
+}
+.dot.wait {
+  background: var(--warn);
+}
+.dot.bad {
+  background: var(--bad);
+}
+.dot.done {
+  background: var(--idle);
+}
+.dot.idle {
+  background: var(--idle);
+}
+
+.none {
+  font-size: var(--f-tiny);
+  color: var(--t9);
+  padding: var(--s8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab {
+    transition: none;
+  }
+}
