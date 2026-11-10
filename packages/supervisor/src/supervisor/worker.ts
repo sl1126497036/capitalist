@@ -819,7 +819,8 @@ export function launchWorker(opts: LaunchOptions): Launched {
    */
   writeWorkerBrief(opts.root, id, prompt);
 
-  const custom = opts.cmd ? parseWorkerCmd(opts.cmd, prompt) : null;  const located = custom?.bin || opts.bin || findBin(opts.host);
+  const custom = opts.cmd ? parseWorkerCmd(opts.cmd, prompt) : null;
+  const located = custom?.bin || opts.bin || findBin(opts.host);
   if (!located) throw new Error(`找不到 ${opts.host} 可执行文件：该宿主不能作为工作进程启动，改用 --worker-cmd`);
 
   // 宿主可以把 shim 换成直接可 spawn 的入口（Windows 的 .cmd 包装脚本在受限环境里会短路）；`--worker-cmd` 由调用方显式指定，不改写。

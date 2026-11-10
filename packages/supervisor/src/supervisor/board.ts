@@ -3810,7 +3810,8 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
               });
               if (!w.ok) {
                 /* 白名单清单属于内部信息，不进入用户可见文案。 */
-                const why = String(w.error || "动作未执行").split("白名单")[0].replace(/[：:，,]\s*$/, "");
+                const head = String(w.error || "动作未执行").split("白名单")[0] ?? "";
+                const why = head.replace(/[：:，,]\s*$/, "");
                 failNotes.push(`${String(act.action)}：${why}`);
                 continue;
               }

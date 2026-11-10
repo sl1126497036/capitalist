@@ -958,17 +958,19 @@ async function main(): Promise<number> {
       const { runInstall } = await import("../install/install");
       const { resolveAgents } = await import("../install/prompt");
       const root = flagString(p, "root") ?? process.cwd();
+      const dryRun = flagBool(p, "dry-run");
       const chosen = await resolveAgents({
         action: "install",
         explicit: agentList(p),
         all: flagBool(p, "all"),
-        interactive: !flagBool(p, "yes") && process.stdin.isTTY === true,
+        /* dry-run 只报计划、不改配置 */
+        interactive: !dryRun && !flagBool(p, "yes") && process.stdin.isTTY === true,
         root,
       });
       if (chosen === null) return 0;
       return runInstall({
         hosts: chosen,
-        dryRun: flagBool(p, "dry-run"),
+        dryRun,
         verbose: flagBool(p, "verbose"),
         root,
       });

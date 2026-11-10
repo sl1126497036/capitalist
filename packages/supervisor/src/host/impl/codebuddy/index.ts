@@ -14,7 +14,6 @@ const LABEL = "CodeBuddy";
 
 const POST_INSTALL_NOTICE =
   "CodeBuddy 在 Windows 上强制用 Git Bash 执行 hook（cmd/PowerShell 不支持）。路径已按 POSIX 写法生成；若未生效，先确认 Git Bash 可用。";
-
 const LOGIN_HINT =
   "本机未读取到宿主登录态。在 CodeBuddy 登录后可派单；工作进程沿用宿主登录态，不注入令牌。";
 
@@ -80,7 +79,8 @@ export const impl: HostImpl = {
   hook: new ClaudeStyleHook({ guessPriority: 30 }),
 
   install: settingsHookInstall("codebuddy", {
-    notice: () => POST_INSTALL_NOTICE,
+    /* 该提示只对 Windows 成立（Git Bash 执行 hook 的前置条件），其它平台不适用。 */
+    notice: () => (process.platform === "win32" ? POST_INSTALL_NOTICE : null),
     // hook 命令是 node 绝对路径的直调，cmd 与 PowerShell 都能执行。宿主若以 Git Bash
     // 为 hook 执行器，本机缺 bash 时条目仍在但不会触发，这种情形只有装完才能发现。
     preconditions: (ctx) =>

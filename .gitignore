@@ -27,3 +27,4 @@ dist/
 packages/supervisor/contracts/*.contract.json
 !packages/supervisor/contracts/minimal.contract.json
 /reports
+/packages/supervisor/.tmp-test

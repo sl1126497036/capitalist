@@ -1,6 +1,6 @@
 ---
 name: capitalist
-version: 0.1.2
+version: 0.1.3
 agent_created: true
 description: capitalist（监工进程）。监工是独立进程（capitalist supervise），工作进程由它拉起，各自独立；本会话只启动监工、读取状态、回报结论，不执行业务代码。适用于多阶段、跨会话、易偏离、有硬性红线、需持续核验进度的任务。触发词：capitalist、监督、盯着做、自动推进、别中断、开新进程、换进程、上下文太长、上下文压缩、会话一长就糊涂、多进程协调、一个进程执行一个监督、不想每一步都给指令、谁来把关、按流程走、照着流程走、监督这个任务、让它自己跑、装 capitalist、开监督、给我盯一下。
 ---
@@ -40,8 +40,8 @@ capitalist supervise "<目标>" --contract <契约名> --agent <宿主>
 
 监工由常驻任务持有，在后台运行。不使用 `--detach`，不使用前台运行。
 
-- 启动前确认子进程环境干净。宿主注入的 `ACC_PRODUCT_CONFIG_PATH` 会让 CLI 按桌面端身份认证，桌面端凭证与桌面进程绑定、不能转交，非交互调用返回 `Authentication required`。监工内部按前缀剔除 `ACC_PRODUCT_CONFIG*` 与 `SERVER__*`，工作进程与对话通道不受影响；手工调试 CLI 时须自行剔除。
-- 自检：`env -u ACC_PRODUCT_CONFIG -u ACC_PRODUCT_CONFIG_PATH -u ACC_PRODUCT_CONFIG_V2 -u ACC_PRODUCT_CONFIG_V3 -u SERVER__PORT codebuddy -p "reply ok"`。stdout 打出文本才算通；退出码 0 而 stdout 为空视为未通过，stderr 原样保留。污染环境下即为「退出码 0、零输出」，不要用退出码判定。
+- 子进程环境由监工自动处理：拉起工作进程、对话通道与判定通道时，均按前缀剔除 `ACC_PRODUCT_CONFIG*` 与 `SERVER__*`，启动命令不需要额外参数或环境处置。
+- 下面这条自检只用于人工诊断：宿主注入的 `ACC_PRODUCT_CONFIG_PATH` 会让直接调用的 CLI 按桌面端身份认证，返回 `Authentication required`。`env -u ACC_PRODUCT_CONFIG -u ACC_PRODUCT_CONFIG_PATH -u ACC_PRODUCT_CONFIG_V2 -u ACC_PRODUCT_CONFIG_V3 -u SERVER__PORT codebuddy -p "reply ok"`，stdout 打出文本才算通；退出码 0 而 stdout 为空按未通过处理。
 - 常驻任务由任务管理器持有，命令不占用用户会话，监工持续运行。
 - `--detach` 的自检窗口为 30 秒。宿主在约第 37 秒终止整棵进程树（Windows 上为 Job 对象），此时自检已输出「心跳已确认」。`detached` 使进程脱离控制台，不脱离 Job。
 - 前台运行占用用户会话，期间无法继续输入。
@@ -243,7 +243,7 @@ timeout 120 node --test test/rebuild-tree.test.js
 
 宿主启动子进程时会把 `ACC_PRODUCT_CONFIG_PATH` 一并传下去。子进程读到它即按桌面端身份认证；桌面端凭证与桌面进程绑定、不能转交，于是报 `Authentication required`。剔除该变量后 CLI 回到自身身份，用独立凭证即可通过。重新登录不解决这个问题。
 
-同一堵墙也挡住看板对话通道，对话层同样是子进程。
+看板对话通道与工作进程共用同一套环境构造，同样经剔除后调用 CLI。
 
 自检：`env -u ACC_PRODUCT_CONFIG -u ACC_PRODUCT_CONFIG_PATH -u ACC_PRODUCT_CONFIG_V2 -u ACC_PRODUCT_CONFIG_V3 -u SERVER__PORT codebuddy -p "reply ok"`，stdout 打出文本才算通。退出码 0 而 stdout 为空按未通过处理。
 
