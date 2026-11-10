@@ -1,0 +1,14 @@
+# 仓库级编辑器约定，由各编辑器读取同一份配置。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Markdown 行尾双空格表示换行，裁掉会改变渲染结果。
+[*.md]
+trim_trailing_whitespace = false
