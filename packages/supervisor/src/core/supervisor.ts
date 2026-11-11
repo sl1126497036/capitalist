@@ -55,16 +55,23 @@ export interface SupervisorRecord {
   max_workers: number;
   worker_host: string;
   /**
-   * 监工启动时声明的宿主（`supervise --agent`），决定对话通道用哪个 CLI、凭证取自哪一族。
+   * 监工启动时声明的宿主（`supervise --agent`），决定对话通道用哪个 CLI、登录态取自哪一族。
    * 空 = 未声明，按环境特征推断。落盘是为了让重启后的看板与独立进程读到同一份声明。
    */
   host?: string;
+  /**
+   * 监工进程是否持有宿主令牌（`supervise` 启动时读到）。
+   *
+   * 只记有无，不记值。监工取不到登录态时该值为假，此后每一单均以登录失败结束。
+   * 登录态检查按该字段区分“本次检查可通过”与“监工进程可通过”。
+   */
+  token_injected?: boolean;
   effort?: string;
   /**
    * 监工对话层的模型（`supervise --capitalist-model`）。
    *
    * 监工自己要跑模型：看板对话、申报判定、派单前检查。空 = 宿主默认。
-   * 看板指标条回答「监工跑在什么模型上」、对话通道选参，都读这一份。
+   * 看板指标条回答“监工跑在什么模型上”、对话通道选参，都读这一份。
    */
   supervisor_model?: string;
   /** 默认模型（`supervise --default-model`）：没有显式指定时用它。 */
@@ -78,7 +85,7 @@ export interface SupervisorRecord {
   /**
    * 监工对话上下文的配置上限（token，`supervise --capitalist-context`）。
    *
-   * 与模型实际上限取小：看板显示「上下文 135.0k / 300k」里的 300k 就是这个生效值，
+   * 与模型实际上限取小：看板显示“上下文 135.0k / 300k”里的 300k 就是这个生效值，
    * 超限重载的阈值也按它算。缺省见 `DEFAULT_SUPERVISOR_CONTEXT_LIMIT`；0 表示只按模型窗口。
    */
   supervisor_context_limit?: number;
@@ -116,10 +123,10 @@ export interface Dispatch {
   /** 插队标记。`fillSlots` 找下一张 open 单时先看它。 */
   urgent?: boolean;
   /**
-   * 手动置顶的时刻（ISO）。只有用户在看板上点「立即执行」/`capitalist promote` 才写。
+   * 手动置顶的时刻（ISO）。只有用户在看板上点“立即执行”/`capitalist promote` 才写。
    *
-   * 与 `urgent` 分开是因为两者语义不同：`urgent` 是「创建时就是插队单」，
-   * 会在一批插队单里按台账顺序排队；`promoted_at` 是「用户刚刚把它拎到队首」，
+   * 与 `urgent` 分开是因为两者语义不同：`urgent` 是“创建时就是插队单”，
+   * 会在一批插队单里按台账顺序排队；`promoted_at` 是“用户刚刚把它拎到队首”，
    * 调度层按这个时间倒序取单，后点的那张先上。没有这个字段的旧单不受影响。
    */
   promoted_at?: string;
@@ -131,8 +138,8 @@ export interface Dispatch {
   /**
    * 被让位的时刻（ISO）。
    *
-   * 「立即执行」要真插队就得腾出并发槽：正在跑的那一单会退回排队，排队中的单会被越过。
-   * 两类单都写这个字段，界面据此标「已让位」，它们既没失败也没被撤销，只是排在
+   * “立即执行”要真插队就得腾出并发槽：正运行中的那一单会退回排队，排队中的单会被越过。
+   * 两类单都写这个字段，界面据此标“已让位”，它们既没失败也没被撤销，只是排在
    * 那张立即执行单后面。立即执行单结束后由 `core/preempt.ts` 统一清掉。
    */
   yielded_at?: string;
@@ -142,7 +149,7 @@ export interface Dispatch {
   yield_rank?: number;
   /**
    * 暂停时刻（ISO）。非空表示该派单处于暂停：不派发、不被 `capitalist next` 领取，
-   * 但仍占用所属分片，避免被判定为「未派发」而重复建单。
+   * 但仍占用所属分片，避免被判定为“未派发”而重复建单。
    *
    * 与 `yielded_at` 的区别：让位是插队引起的临时排队，由调度自动恢复；
    * 暂停是用户的意图，只能由 `capitalist wake --user`（或看板唤醒）解除。
@@ -158,7 +165,7 @@ export interface Dispatch {
   attempt?: number;
   /**
    * 待确认截止时间（ISO）。只有 `status === "review"` 时有值：
-   * 到点还没人确认就自动结单，对应「3 分钟没动静就当他没别的要说了」。
+   * 到点还没人确认就自动结单，对应“3 分钟没动静就当他没别的要说了”。
    */
   review_until?: string;
   /** worker 报完成时写的说明，确认后转成正式结单 note。 */
@@ -171,7 +178,7 @@ export interface Dispatch {
 
   retry_context?: string;
 
-  /** 上报时刻（`markReported` 写）：监工据此判断「报了多久还没裁决」。 */
+  /** 上报时刻（`markReported` 写）：监工据此判断“报了多久还没裁决”。 */
   reported_at?: string;
   review_note?: string;
   /** 手动结项的时刻（ISO）。只有 `status === "closed"` 时有值。 */
@@ -215,8 +222,8 @@ export interface Dispatch {
 /**
  * 工作进程状态。
  *
- * `suspended` 是「让位」：进程已经结束，但这一单没失败，它接着排回队列，下一次
- * 拉起时续接同一条 AI 会话（见 `worker.ts` 的 `resolveSession`）。它既不算在跑
+ * `suspended` 是“让位”：进程已经结束，但这一单没失败，它接着排回队列，下一次
+ * 拉起时续接同一条 AI 会话（见 `worker.ts` 的 `resolveSession`）。它既不算运行中
  * （不占并发槽），也不算失败（不触发重派与退避）。
  *
  * `exited` 与 `failed` 都是终态，`done` 表示该单已成功结单。
@@ -227,9 +234,9 @@ export type WorkerStatus = "starting" | "running" | "suspended" | "exited" | "fa
 /**
  * 卡点类型。
  *
- * 四类对应四种不同的跳出办法，混成一句「卡住了」对处理没有帮助：
+ * 四类对应四种不同的跳出办法，混成一句“卡住了”对处理没有帮助：
  *
- *   idle       空转等待：没有新的工具调用，也没有新的输出；在等一个不会来的条件。
+ *   idle       空闲等待：没有新的工具调用，也没有新的输出；在等一个不会出现的条件。
  *   retry      重复无效重试：同一条命令/同一个改动反复做，结果没有变化。
  *   external   等外部条件：登录、授权、验证码、配额、目录信任这类必须由人解除的门槛。
  *   error_loop 报错循环：同一段报错反复出现，没有换输入也没有换路径。
@@ -291,10 +298,10 @@ export interface WorkerRecord {
    *
    * 与 `session` 字段必须分开看：`session` 是 worker 自己的记录 id（`W-xxxx`），
    * 由它自己续写心跳；`ai_session` 才是宿主那边的对话上下文标识，一个 ai_session
-   * 可以被多个 worker 先后复用。看板「与这个进程说话」要送到 ai_session，
-   * 调度层判断「这条车道还占着吗」也只认它。
+   * 可以被多个 worker 先后复用。看板“与这个进程说话”要送到 ai_session，
+   * 调度层判断“这条车道还占着吗”也只认它。
    *
-   * 老记录没有这一项：按「不知道」处理，不以 `session` 代入，两者语义不同。
+   * 老记录没有这一项：按“不知道”处理，不以 `session` 代入，两者语义不同。
    */
   ai_session?: string;
 }
@@ -308,8 +315,8 @@ export function supervisorPath(root: string): string {
 /**
  * 读监工记录。
  *
- * @returns 记录不存在、JSON 损坏、或缺 `heartbeat_ts` 时返回 null。调用方按「没有监工
- *   记录」处理，不要把它当成监工已停。
+ * @returns 记录不存在、JSON 损坏、或缺 `heartbeat_ts` 时返回 null。调用方按“没有监工
+ *   记录”处理，不要把它当成监工已停。
  */
 export function loadSupervisor(root: string): SupervisorRecord | null {
   const rec = readJson<SupervisorRecord | null>(supervisorPath(root), null);
@@ -328,10 +335,10 @@ export function saveSupervisor(root: string, rec: SupervisorRecord): void {
 }
 
 /**
- * 判活窗口，单位秒。取 3 个 tick 且不低于 30 秒。
+ * 判活窗口，单位秒。取 3 轮调度 且不低于 30 秒。
  *
- * 下限用于吸收 tick 抖动：tick 设得小时（调试常用 1 秒）窗口会短到把正常抖动读成死亡，
- * 于是 hook 在监工仍存活时误报「监工已停」。
+ * 下限用于吸收 调度抖动：调度轮次 设得小时（调试常用 1 秒）窗口会短到把正常抖动读成死亡，
+ * 于是 hook 在监工仍存活时误报“监工已停”。
  */
 export function supervisorStaleSec(rec: SupervisorRecord): number {
   return Math.max(Math.floor(rec.tick_sec * 3), 30);
@@ -356,7 +363,7 @@ export function isSupervisorAlive(root: string, nowSec = Date.now() / 1000): boo
 /**
  * 停止请求哨兵文件的绝对路径：`<root>/.capitalist/supervisor.stop`。
  *
- * 停止请求与心跳分文件存放。监工每 tick 写心跳，写在同一文件里会被下一次心跳覆盖回
+ * 停止请求与心跳分文件存放。监工每轮调度 写心跳，写在同一文件里会被下一次心跳覆盖回
  * `running`，停止请求就丢了。哨兵只写不删，由下一次启动清除，这样多个监工都能在同一次
  * 请求后退出。
  */
@@ -368,7 +375,7 @@ export function stopFlagPath(root: string): string {
  * 请求监工停止：写哨兵文件，并把监工记录的状态置为 `stopped`。
  *
  * @param note 停止原因，写进哨兵文件与监工记录的 `note`。
- * @returns 恒为 true。哨兵写入失败时不会抛错，下一次 tick 的 `stopRequested` 读不到哨兵，
+ * @returns 恒为 true。哨兵写入失败时不会抛错，下一次 调度轮次 的 `stopRequested` 读不到哨兵，
  *   停止请求不生效。
  */
 export function requestSupervisorStop(root: string, note = "stopped by user", force = false): boolean {
@@ -391,12 +398,12 @@ export function requestSupervisorStop(root: string, note = "stopped by user", fo
   return true;
 }
 
-/** 是否存在停止请求哨兵。监工每 tick 读一次，为真则退出。 */
+/** 是否存在停止请求哨兵。监工每轮调度 读一次，为真则退出。 */
 export function stopRequested(root: string): boolean {
   return existsSync(stopFlagPath(root));
 }
 
-/** 停止请求是否为强制；强制停止会结束在跑的工作进程。 */
+/** 停止请求是否为强制；强制停止会结束运行中的工作进程。 */
 export function stopForced(root: string): boolean {
   const raw = readJson<{ force?: boolean } | null>(stopFlagPath(root), null);
   return raw?.force === true;
@@ -474,7 +481,7 @@ export function newWorkerId(root: string): string {
   return `W-${Date.now().toString(36)}`;
 }
 
-/** 读 worker 记录；id 非法或记录缺失都返回 null，调用方按「没有这个 worker」处理。 */
+/** 读 worker 记录；id 非法或记录缺失都返回 null，调用方按“没有这个 worker”处理。 */
 export function loadWorker(root: string, id: string): WorkerRecord | null {
   if (!isSafeWorkerId(id)) return null;
   const rec = readJson<WorkerRecord | null>(workerPath(root, id), null);
@@ -581,7 +588,7 @@ export function pruneWorkers(
   }
   if (files.size === 0) return { removed: 0, kept: 0 };
 
-  /** 候选条目：启动时刻、是否还在跑、对应文件名。 */
+  /** 候选条目：启动时刻、是否还运行中、对应文件名。 */
   const entries: {
     id: string;
     startedTs: number;
@@ -660,7 +667,7 @@ export function archiveFinished(
   /*
    * 分档与界面使用同一套口径。
    *
-   * 手动取消的派单（`closed_by: "user"` 与固定 note）在看板归入「已完成」档，
+   * 手动取消的派单（`closed_by: "user"` 与固定 note）在看板归入“已完成”档，
    * 台账中的原始状态仍可能是 `failed`。后端的异常清理按同一分档过滤。
    */
   const rows0 = readDispatches(root);
@@ -758,7 +765,7 @@ export function archiveFinished(
 export interface PruneWorkersOptions {
   /** 按启动时间保留最近多少条（不论状态）。缺省 {@link DEFAULT_KEEP_RECENT_WORKERS}。 */
   keepRecent?: number | undefined;
-  /** 启动时间早于「现在减这个毫秒数」才进入候选。缺省 24 小时。 */
+  /** 启动时间早于“现在减这个毫秒数”才进入候选。缺省 24 小时。 */
   maxAgeMs?: number | undefined;
   /** 当前时刻，测试可注入。 */
   now?: number | undefined;
@@ -785,7 +792,7 @@ export function pidAlive(pid: number): boolean {
 }
 
 /**
- * 日志「还在写」的默认阈值：五分钟。
+ * 日志“还在写”的默认阈值：五分钟。
  *
  * 这是卡点判定的默认观察窗口，不是判死阈值。两个信号（心跳、日志）任一在此窗口内
  * 更新就算存活；两个都过期才进入卡点判定。可由 `--stuck-sec` / `CAPITALIST_STUCK_SEC` 覆盖。
@@ -808,7 +815,7 @@ export interface WorkerLiveness {
   via: "heartbeat" | "log" | "none";
 }
 
-/** 按「心跳或日志任一在阈值内」判活。 */
+/** 按“心跳或日志任一在阈值内”判活。 */
 export function workerLivenessOf(
   rec: WorkerRecord,
   opts: { heartbeatSec: number; logStallSec?: number; nowMs?: number },
@@ -878,7 +885,7 @@ export function readDispatches(root: string): Dispatch[] {
     const st = statSync(file);
     key = `${st.size}:${st.mtimeMs}`;
   } catch {
-    /* 台账还没建：空队列，不往缓存里塞（下次建了要能读到） */
+    /* 台账还没建：空队列，不写入缓存（建好后要能读到） */
     return [];
   }
   if (dispatchCache && dispatchCache.root === root && dispatchCache.key === key) {
@@ -894,8 +901,8 @@ export function readDispatches(root: string): Dispatch[] {
  *
  * 这是所有读取路径的底座：`/api/metrics`、`/api/threads`、`/api/thread`、`/api/capitalist-chat`、
  * 监工每拍的状态维护，每个请求都要读一次整份台账再逐行 parse。台账今天已经 1.4MB、
- * 一千多行，前端又按 2~5 秒轮询三四个接口，重复解析直接表现成「点哪儿都卡」，
- * 而监工是单线程，这些解析时间和调度抢同一个线程。
+ * 一千多行，前端又按 2~5 秒轮询三四个接口，重复解析直接表现成“点哪儿都卡”，
+ * 而监工是单线程，这些解析工作与调度竞争同一个线程。
  *
  * 台账只追加、不重写（改状态也是整份写回，size 会变），所以 `size + mtime` 一变就重读，
  * 不会给出旧数据。返回的是浅拷贝数组：调用方常常 `rows[idx] = next` 之后整份写回，
@@ -928,7 +935,7 @@ export function dispatchPaused(d: Pick<Dispatch, "paused_at"> | null | undefined
  * 暂停一张派单。
  *
  * 幂等：已有标记时保留原时刻与来源。重复启动不改写暂停时间。看板上的
- * 「暂停于」保留首次暂停的时刻。
+ * “暂停于”保留首次暂停的时刻。
  *
  * @returns 本次是否新写入标记。
  */
@@ -1029,7 +1036,7 @@ export function pausedDispatches(root: string): Dispatch[] {
 
 /** 同片上一张未结单的派单带过的附件，补到本单 action 末尾。 */
 function carryAttachments(rows: Dispatch[], d: Dispatch): Dispatch {
-  /** 只有「重派」才继承：同一片的活没干成，重发一单时不能把用户交的那张图弄丢。 */
+  /** 只有“重派”才继承：同一片的活没干成，重发一单时不能把用户交的那张图弄丢。 */
   if (d.source !== "requeue") return d;
   const stage = String(d.stage ?? "");
   const shard = String(d.shard ?? "");
@@ -1043,7 +1050,7 @@ function carryAttachments(rows: Dispatch[], d: Dispatch): Dispatch {
     if (chain && prevChain && chain !== prevChain) continue;
     /* 只看最近一张同片单：再往前的都被它继承过一次了，继续往前找会把陈年附件翻出来。 */
     if (prev.status === "done" || prev.status === "review") return d;
-    /** 只接「用户亲手交的」那一手：上一单自己继承来的图不再往下传。 */
+    /** 只接“用户亲手交的”那一手：上一单自己继承来的图不再往下传。 */
     const inheritedByPrev = new Set((prev.atts_inherited ?? []).map((p) => String(p)));
     const prevAtts = Array.isArray(prev.atts) ? prev.atts.map((p) => String(p)) : null;
     const source = prevAtts ?? attachmentsIn(String(prev.action ?? ""));
@@ -1062,7 +1069,7 @@ function carryAttachments(rows: Dispatch[], d: Dispatch): Dispatch {
 /** 全部还没了结的单：open（等着领）或 claimed（已领在干）。分片并行时会有多张。 */
 export function activeDispatches(root: string): Dispatch[] {
   /*
-   * `reported` 也算在途：工作进程说了「我完成了」，但关不关是监工裁决。
+   * `reported` 也算在途：工作进程说了“我完成了”，但关不关是监工裁决。
    * 裁决之前这一单不算完，也不能再派一张去做同一件事。
    */
   return readDispatches(root).filter(
@@ -1071,7 +1078,7 @@ export function activeDispatches(root: string): Dispatch[] {
 }
 
 /** 工作进程上报完成：只写事实，不改结论。 */
-/** 标记「已上报，等裁决」。 */
+/** 标记“已上报，等裁决”。 */
 export function markReported(
   root: string,
   id: string,
@@ -1087,7 +1094,7 @@ export function markReported(
   const next: Dispatch = {
     ...cur,
     status: "reported",
-    /* 记上报时刻：监工要靠它判断「报了多久还没人裁决」，见 sweepReported。 */
+    /* 记上报时刻：监工要靠它判断“报了多久还没人裁决”，见 sweepReported。 */
     reported_at: new Date().toISOString(),
     ...(note ? { review_note: note } : {}),
     ...(ev ? { report_evidence: ev.slice(0, 4000) } : {}),
@@ -1117,7 +1124,7 @@ export function sweepReported(root: string, maxAgeMs = 10 * 60_000): Dispatch[] 
   return hit;
 }
 
-/** 最后一张还没了结的单。只用于「有没有在途工作」这类整体判断，逐单处理请用 activeDispatches。 */
+/** 最后一张还没了结的单。只用于“有没有在途工作”这类整体判断，逐单处理请用 activeDispatches。 */
 export function activeDispatch(root: string): Dispatch | undefined {
   return activeDispatches(root).pop();
 }
@@ -1145,8 +1152,8 @@ export function claimDispatch(root: string, id: string, worker: string, session 
     claimed_at: new Date().toISOString(),
   };
   /*
-   * 让位标记到此为止：这一单已经被领走，恢复顺序与「已让位」都不再是它的事。
-   * 留着不清会让界面在它跑起来之后仍然标「已让位」，也会让下一次排队继续吃旧序号。
+   * 让位标记到此为止：这一单已经被领走，恢复顺序与“已让位”都不再是它的事。
+   * 留着不清会让界面在它跑起来之后仍然标“已让位”，也会让下一次排队继续吃旧序号。
    */
   delete next.yielded_at;
   delete next.yielded_by;
@@ -1159,7 +1166,7 @@ export function claimDispatch(root: string, id: string, worker: string, session 
 /**
  * 了这一单就再也没有下文的状态。
  *
- * `closed` 也在里面：结项是终态，`finishDispatch` 之类「改结论」的写入一律拒绝，
+ * `closed` 也在里面：结项是终态，`finishDispatch` 之类“改结论”的写入一律拒绝，
  * 否则一次晚到的 worker 上报能把人刚关掉的单重新打开。
  */
 function isSettled(status: DispatchStatus): boolean {
@@ -1205,7 +1212,7 @@ export function compareQueueOrder(a: Dispatch, b: Dispatch, ia = 0, ib = 0): num
   const fb = Date.parse(String(b.front_at ?? "")) || 0;
   const ya = yieldRankOf(a);
   const yb = yieldRankOf(b);
-  /* yieldRankOf 拿字段缺失当 MAX_SAFE_INTEGER，这里用它判断「有没有恢复序号」。 */
+  /* yieldRankOf 拿字段缺失当 MAX_SAFE_INTEGER，这里用它判断“有没有恢复序号”。 */
   const hasRankA = ya < Number.MAX_SAFE_INTEGER;
   const hasRankB = yb < Number.MAX_SAFE_INTEGER;
   /*
@@ -1262,7 +1269,7 @@ export function prerequisitesOf(d: {
 /**
  * 这张单挂的前置里，哪些编号在台账里根本找不到（孤儿前置）。
  *
- * {@link dependenciesSettled} 对孤儿前置按「已满足」放行（等一个不存在的编号就是永久
+ * {@link dependenciesSettled} 对孤儿前置按“已满足”放行（等一个不存在的编号就是永久
  * 等待），但放行必须留痕：调度层每拍拿这个函数核对，有孤儿就记
  * `dispatch_parent_missing` 事件，否则台账被归档/重写之后，依赖悄悄失效，
  * 顺序错了却没人知道是哪张单、缺了哪个编号。
@@ -1283,7 +1290,7 @@ function lineageOf(x: Dispatch): string {
 }
 
 /**
- * 一张单的「这是什么活」指纹：剥掉附件行、压平空白后的正文。
+ * 一张单的“这是什么活”指纹：剥掉附件行、压平空白后的正文。
  *
  * 台账里同一件事会有多条记录（每次重派一条），它们只有 `action` 尾部可能被追加
  * 插话/验收清单。做归组（重建树）和认亲（血缘匹配）都靠这个指纹，口径必须同一份。
@@ -1330,7 +1337,7 @@ export function pendingPrerequisites(
 
   const settled = rows.filter((x) => x.status === "done" || x.status === "closed");
   const settledIds = new Set(settled.map((x) => String(x.id)));
-  /* 血缘 → 已完成的那些记录。判据是「同一件事的后续尝试」，不是「同一条链上任一张」。 */
+  /* 血缘 -> 已完成的那些记录。判据是“同一件事的后续尝试”，不是“同一条链上任一张”。 */
   const settledByLineage = new Map<string, Dispatch[]>();
   for (const x of settled) {
     const k = lineageOf(x);
@@ -1360,7 +1367,7 @@ export function pendingPrerequisites(
 /**
  * 依赖判定：派单的前置是否都到终态。
  *
- * 判定逻辑在 {@link pendingPrerequisites}，此处为「无剩余前置」的简写；
+ * 判定逻辑在 {@link pendingPrerequisites}，此处为“无剩余前置”的简写；
  * 调度层与森林视图共用该判定。
  */
 export function dependenciesSettled(
@@ -1374,9 +1381,9 @@ export function dependenciesSettled(
 export interface DispatchForest {
   /** 没有父节点的节点（含父节点不在台账里的孤儿），按台账顺序。 */
   roots: string[];
-  /** 父 id → 直接子 id[]，按台账顺序。 */
+  /** 父 id -> 直接子 id[]，按台账顺序。 */
   children: Record<string, string[]>;
-  /** 节点 id → 层数（根为 0）；落在环上的节点为 -1。 */
+  /** 节点 id -> 层数（根为 0）；落在环上的节点为 -1。 */
   depth: Record<string, number>;
   /** 成环的节点组，每组从回边指向的那个节点开始。 */
   cycles: string[][];
@@ -1493,7 +1500,7 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
     return {
       ok: false,
       code: "missing_parent",
-      reason: `父派单「${p}」在台账里找不到：先派父节点，或核对编号后重发（依赖不落数据就不生效）`,
+      reason: `父派单“${p}”在台账里找不到：先派父节点，或核对编号后重发（依赖不落数据就不生效）`,
     };
   }
   if (parent.status === "closed") {
@@ -1523,7 +1530,7 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
       return {
         ok: false,
         code: "cycle",
-        reason: `成环：父节点 ${p} 的上溯链在 ${cur} 处重复（${[...walked].join(" → ")}），这条链上没有任何一单能启动`,
+        reason: `成环：父节点 ${p} 的上溯链在 ${cur} 处重复（${[...walked].join("、")}），这条链上没有任何一单能启动`,
       };
     }
     walked.add(cur);
@@ -1536,8 +1543,8 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
 /**
  * 手动插队：把一张排队中的单置顶。
  *
- * 只接受 `open`：`claimed` 的进程已经拿着启动 prompt 在跑，插队对它没有意义（也插不进去）；
- * 终态单更不该被叫醒，那是「重开」，走 `reopenDispatch` 或 `capitalist update … status open`。
+ * 只接受 `open`：`claimed` 的进程已经拿着启动 prompt 运行中，插队对它没有意义（也插不进去）；
+ * 终态单更不该被叫醒，那是“重开”，走 `reopenDispatch` 或 `capitalist update … status open`。
  *
  * 置顶不改台账顺序，只写 `promoted_at`，由 {@link compareQueueOrder} 参与调度排序。
  *
@@ -1555,7 +1562,7 @@ export function promoteDispatch(root: string, id: string, by = "user", at = new 
   return next;
 }
 
-/** 插队：把一张排队中的单放到排队队首，但不抢占正在跑的进程。 */
+/** 插队：把一张排队中的单放到排队队首，但不抢占正运行中的进程。 */
 export function frontDispatch(root: string, id: string, by = "user", at = new Date().toISOString()): Dispatch | null {
   const rows = readDispatches(root);
   const idx = rows.findIndex((d) => d.id === id);
@@ -1683,7 +1690,7 @@ export function requeueDispatch(root: string, id: string, note?: string): Dispat
   return next;
 }
 
-/** 把一张单挂成「待确认」。 */
+/** 把一张单挂成“待确认”。 */
 export function openReviewDispatch(
   root: string,
   id: string,
@@ -1707,7 +1714,7 @@ export function openReviewDispatch(
   return next;
 }
 
-/** 扫一遍到点的待确认单，自动结单。每 tick 调一次。 */
+/** 扫一遍到点的待确认单，自动结单。每轮调度 调一次。 */
 export function sweepReviews(root: string): Dispatch[] {
   const rows = readDispatches(root);
   const now = Date.now();
@@ -1732,7 +1739,7 @@ export function sweepReviews(root: string): Dispatch[] {
   }
   if (changed) {
     writeJsonl(dispatchPath(root), rows);
-    // 自动结单也是结单：任务池必须跟着走，否则「已验收」永远差这一批。
+    // 自动结单也是结单：任务池必须跟着走，否则“已验收”永远差这一批。
     for (const d of out) syncTaskForDispatch(root, d);
   }
   return out;

@@ -53,7 +53,7 @@ const FAIL_EVENTS = new Set([
   "tick_window", // 心跳稀疏，监工可能受阻
 ]);
 
-/** 待确认（琥珀）。第二列为块头标签文案，用「待确认 / 未达标 / 记欠账」，不写「错误」。 */
+/** 待确认（琥珀）。第二列为块头标签文案，用“待确认 / 未达标 / 记欠账”，不写“错误”。 */
 const PENDING_NOTE = new Map([
   ["redispatch_capped", "待确认"], // 重派达到上限，等待裁决
   ["stage_skipped", "记欠账"], // 跳过阶段，进度推进但该阶段未达标
@@ -100,7 +100,7 @@ export function toneOf(m) {
   /* 指令被拒（ok=false）为确定失败。 */
   if (evt === "supervisor_cmd" && m.ok === false) return { tone: "bad", note: "" };
 
-  /* 门槛评估未达标（ok=false）归琥珀，标签写「未达标」。 */
+  /* 门槛评估未达标（ok=false）归琥珀，标签写“未达标”。 */
   if (evt === "gate_eval") {
     return m.ok === false ? { tone: "warn", note: "未达标" } : { tone: "", note: "" };
   }

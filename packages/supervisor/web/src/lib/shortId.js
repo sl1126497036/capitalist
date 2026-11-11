@@ -1,6 +1,6 @@
 /**
  * 任务编号（`#01` 起）。后端 `/api/threads` 的 `no` 为权威；本模块仅在其缺失时提供回落编号，
- * 并维护「id → 号」查表供消息引用使用。
+ * 并维护“id -> 号”查表供消息引用使用。
  * 映射用普通对象：在 computed 中写入 reactive 映射会触发递归更新，导致渲染失败。
  */
 import { queueOrder } from "./queueOrder.js";

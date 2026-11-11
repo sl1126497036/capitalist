@@ -1,7 +1,7 @@
 /** 状态位 / 指示气泡文案表，动作与后端 activity.ts 枚举对应。 */
 import { t } from "./i18n.js";
 
-/** 工作进程动作 → 状态词。report 覆盖「已申报待回执」与「回执处理中」两阶段。 */
+/** 工作进程动作 -> 状态词。report 覆盖“已申报待回执”与“回执处理中”两阶段。 */
 export const WORKER_DOING_TEXT = {
   report: "执行回执",
   test: "运行测试",

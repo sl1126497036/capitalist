@@ -9,16 +9,35 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { DEFAULT_SUPERVISOR_CHAT_HOST } from "../host/impl/shared/hostHints";
-import { byId, currentHost, siblings } from "../host/registry";
+import { DEFAULT_SUPERVISOR_CHAT_HOST } from "../agent/impl/shared/hostHints";
+import { byId, currentHost, siblings } from "../agent/registry";
 import { recordEvent } from "../core/ledger";
 import { resolveModel } from "./modelPolicy";
 import { findBin, needsShell, quoteShellArg, workerEnv, workerImpl, type WorkerHost } from "./worker";
+import { officialAccessToken, tokenInjectionEnabled } from "./officialToken";
+
+/**
+ * 将宿主令牌写入子进程环境。
+ *
+ * 优先级：调用方传入的令牌 > 宿主登录态。宿主 CLI 见到该变量即以令牌认证，不再读取客户端
+ * 自身的登录态文件，桌面端启动的监工因此可以在受限环境中完成对话。
+ *
+ * 传入令牌为首选路径：监工进程读取登录态文件时通常被文件访问授权拦截，失败无报错，
+ * 仅表现为认证失败。宿主未声明变量名时两者均不写入，行为与改动前一致。
+ * 令牌仅进入本次子进程环境，不写日志、不落盘。
+ */
+function injectOfficialToken(env: NodeJS.ProcessEnv, host: WorkerHost, explicit?: string): void {
+  if (!tokenInjectionEnabled()) return;
+  const authVar = byId(host)?.worker?.authEnvVar;
+  if (!authVar) return;
+  const token = (explicit ?? "").trim() || officialAccessToken();
+  if (token) env[authVar] = token;
+}
 
 /**
  * 对话通道用哪个 CLI。
  *
- * 候选顺序：声明的宿主（`supervise --agent` 落盘值或 `--agent` 覆盖）→ 同族宿主 → 常量兜底。
+ * 候选顺序：声明的宿主（`supervise --agent` 落盘值或 `--agent` 覆盖）-> 同族宿主 -> 常量兜底。
  * 逐个验证本机存在可执行文件：桌面端没有非交互入口时，由同族 CLI 承担工作进程。
  * 显式声明找不到可执行文件时原样返回，由调用方报错，不跨族借用别家的登录态。
  *
@@ -39,7 +58,7 @@ export function resolveChatHost(explicit?: WorkerHost): WorkerHost {
   for (const key of chain) {
     if (findBin(key)) return key;
   }
-  /* 同族没有可用入口时回到常量兜底：由 askModel 按「找不到可执行文件」报错，不使用桌面端入口。 */
+  /* 同族没有可用入口时回到常量兜底：由 askModel 按“找不到可执行文件”报错，不使用桌面端入口。 */
   return chain[0] ?? (DEFAULT_SUPERVISOR_CHAT_HOST as WorkerHost);
 }
 
@@ -77,7 +96,7 @@ function entryOf(host: WorkerHost, located: string): { bin: string; preArgs: str
  *
  * 经 shell 启动时逐项转义；提示词含换行时返回 null：`cmd.exe` 与 PowerShell 都以换行作为
  * 命令分隔，换行无法在命令行内表达，转义也不能恢复。这类情形在启动前拦下并给出具体原因，
- * 不把「参数被截断」报告成「模型没有返回内容」。
+ * 不把“参数被截断”报告成“模型没有返回内容”。
  */
 function argvOf(entry: { preArgs: string[]; shell: boolean }, args: string[]): string[] | null {
   const raw = [...entry.preArgs, ...args];
@@ -189,6 +208,13 @@ export interface AskModelOptions {
   effort?: string;
   /** 监工对话模型（`supervise --capitalist-model` 写入 supervisor.json）；空表示宿主默认。 */
   model?: string | undefined;
+  /**
+   * 宿主令牌，由监工启动时一次性传入并常驻内存。
+   *
+   * 有值时直接写入子进程环境，不再读取登录态文件。监工进程通常无法获取该文件的读取权限，
+   * 回退到文件读取会静默返回空值，表现为“登录状态失效”。
+   */
+  token?: string | undefined;
 }
 
 /**
@@ -284,7 +310,7 @@ export const QUOTA_EXHAUSTED_TEXT = "额度已耗尽";
 /**
  * 进程静默退出时的说明。
  *
- * 与 {@link QUOTA_EXHAUSTED_TEXT} 分开：静默退出只是「没有任何诊断信息」，不等于额度耗尽。
+ * 与 {@link QUOTA_EXHAUSTED_TEXT} 分开：静默退出只是“没有任何诊断信息”，不等于额度耗尽。
  * 两者混用会让一次误判被写进 quota.json，而该状态不按时间过期，后续调用会直接短路。
  */
 export const NO_OUTPUT_TEXT = "模型进程无输出（code 0）：可能是登录失效、通道中断或上游拒绝";
@@ -295,7 +321,7 @@ export function isQuotaText(text: string): boolean {
 }
 
 /**
- * 额度耗尽特征：要求「额度 / 积分 / 余额」等词与状态后缀同时出现，或命中 429、quota、payment required 等协议标记；
+ * 额度耗尽特征：要求“额度 / 积分 / 余额”等词与状态后缀同时出现，或命中 429、quota、payment required 等协议标记；
  * 不单独匹配名词，避免正常回复被误判为上游拒绝。
  */
 const QUOTA_HINT =
@@ -311,7 +337,7 @@ const AUTH_HINT = /(\b401\b|\b403\b|unauthorized|invalid[_\s-]?api[_\s-]?key|aut
  * 中的令牌不是 CLI 可用形态。进程正常启动，模型调用返回 `Authentication required`，退出码
  * 为 0。不复述上游原文，账号信息只留在工作进程日志。
  */
-export const AUTH_REQUIRED_TEXT = "登录态不可用";
+export const AUTH_REQUIRED_TEXT = "登录状态无效";
 
 /**
  * 输出是否命中登录失效特征。
@@ -342,7 +368,7 @@ export function looksLikeQuota(text: string): boolean {
 
 /**
  * 判定正文是否为上游拒绝说明。额度耗尽时宿主把 429 说明作为 assistant 正文输出并以 code 0 退出，未识别会被当成模型回答。
- * 长度上限 400 字：拒绝说明很短，正常回答中提及「额度」不应被误判。
+ * 长度上限 400 字：拒绝说明很短，正常回答中提及“额度”不应被误判。
  */
 function quotaReplyOf(text: string): string {
   const t = String(text ?? "").trim();
@@ -378,7 +404,7 @@ export function emptyExitReason(err: string, code: number | null, signal: NodeJS
   /*
    * stderr 为空且 code 0 退出，只能说明进程没留下任何诊断信息，不能据此断言额度耗尽：
    * 登录失效、通道中断、上游拒绝都可能表现为该形态。若经 isQuotaText 写入 quota.json，
-   * 该状态不按时间过期，一次误判会使后续调用长期直接返回「额度已耗尽」，
+   * 该状态不按时间过期，一次误判会使后续调用长期直接返回“额度已耗尽”，
    * 不再请求模型。额度判定只认含额度字样或 429 的情形（见 looksLikeQuota）。
    */
   if (!tail && (code === 0 || (code === null && signal === null))) return NO_OUTPUT_TEXT;
@@ -386,16 +412,20 @@ export function emptyExitReason(err: string, code: number | null, signal: NodeJS
   return `模型进程退出（code ${code === null ? "null" : code}${signal ? `，${signal}` : ""}）`;
 }
 
-/** 认证类失败的统一提示。不读本机登录态，认证与续期由宿主 CLI 自行完成。 */
+/**
+ * 认证类失败的统一提示。
+ *
+ * 写现象与可执行的处置：登录状态失效后，重新登录或在授权弹窗中放行都能恢复。
+ */
 function authFailureText(): string {
-  return "登录状态失效，需要重新登录";
+  return "登录状态无效，请重新登录或授权";
 }
 
 /**
  * 从会话原始输出里取上游错误原因。
  *
  * 会话以上游拒绝结束时，`result` 行携带 `errors` 而正文为空；只按解析后的正文判断，
- * 会把「登录失效」退化成「无输出」。这里对原始行做特征匹配，返回文案不含上游原文：
+ * 会把“登录失效”退化成“无输出”。这里对原始行做特征匹配，返回文案不含上游原文：
  * 账号链接、request-id 与会话 id 属于账号信息，不进入界面。
  */
 export function upstreamErrorOf(raw: string): string {
@@ -423,17 +453,18 @@ export async function askModel(opts: AskModelOptions): Promise<AskModelResult> {
 
   /*
    * 与工作进程共用同一套环境构造：宿主注入的 `ACC_PRODUCT_CONFIG*` 会把 CLI 的身份指向
-   * 桌面端的产品形态，它据此去读加密凭据信封、判定「未登录」。对话通道
+   * 桌面端的产品形态，它据此去读加密凭据信封、判定“未登录”。对话通道
    * 与工作进程共用同一套环境构造。
    */
   const env: NodeJS.ProcessEnv = workerEnv();
+  injectOfficialToken(env, host, opts.token);
 
   /* 模型决策与工作进程侧共用同一策略：未指定用平台默认档，禁用模型回落默认档。 */
   const model = modelFor(host, opts);
   /*
    * prompt 走 argv，不走 stdin：CodeBuddy CLI 的 `-p` 只认紧随其后的位置参数，
    * stdin 留给首次进入目录的信任确认。走 stdin 时进程既不读 prompt 也不报错，
-   * 无输出持续到超时且退出码为 0 时，下游会误判为「登录状态失效」。
+   * 无输出持续到超时且退出码为 0 时，下游会误判为“登录状态失效”。
    */
   const args = [
     "-p",
@@ -579,10 +610,11 @@ export async function askModelStream(
 
   /*
    * 与工作进程共用同一套环境构造：宿主注入的 `ACC_PRODUCT_CONFIG*` 会把 CLI 的身份指向
-   * 桌面端的产品形态，它据此去读加密凭据信封、判定「未登录」。对话通道
+   * 桌面端的产品形态，它据此去读加密凭据信封、判定“未登录”。对话通道
    * 与工作进程共用同一套环境构造。
    */
   const env: NodeJS.ProcessEnv = workerEnv();
+  injectOfficialToken(env, host, opts.token);
 
   /* 模型决策与工作进程侧共用同一策略：未指定用平台默认档，禁用模型回落默认档。 */
   const model = modelFor(host, opts);
@@ -820,7 +852,7 @@ export async function askModelStream(
 /** 仅剥离 `ACTION:` 开头的一个已知动作词，不处理句中词，也不做语义判断。 */
 const LEGACY_VERB = /^\s*(pause|resume|concurrency|retry|skip|set-next|dispatch|ask|instruct|intervene)\s+/i;
 
-/** 监工会话的动作行：`DO: dispatch 查一下长列表卡顿` → `{action:"dispatch", arg:"查一下…"}`。只认行首（允许前导空白），避免误切正文。 */
+/** 监工会话的动作行：`DO: dispatch 查一下长列表卡顿` -> `{action:"dispatch", arg:"查一下…"}`。只认行首（允许前导空白），避免误切正文。 */
 const DO_LINE = /^\s*DO:\s*([a-zA-Z-]+)\s*([\s\S]*)$/;
 
 /**

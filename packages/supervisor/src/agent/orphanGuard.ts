@@ -15,7 +15,7 @@ const GUARD_SUFFIX = ".guard.json";
  * pid 是否还活着。
  *
  * 与 `core/supervisor.pidAlive` 的差别只在 `EPERM`：那表示进程在、只是没权限发信号
- * （Linux 上跨用户、Windows 上受保护进程）。对自检来说「在」就是「别自杀」。
+ * （Linux 上跨用户、Windows 上受保护进程）。对自检来说“在”就是“别自杀”。
  */
 export function supervisorPidAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;

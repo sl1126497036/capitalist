@@ -17,7 +17,7 @@ const FILE = "thread-no.json";
 interface ThreadNoFile {
   /** 下一个待分配的号。缺省时按已有最大值 +1 推出。 */
   next?: number;
-  /** 线程 id → 号。线程 id 是 `阶段/分片`（无分片为 `阶段/x血缘尾号`）。 */
+  /** 线程 id -> 号。线程 id 是 `阶段/分片`（无分片为 `阶段/x血缘尾号`）。 */
   ids?: Record<string, number>;
 }
 
@@ -56,7 +56,7 @@ function write(root: string, data: ThreadNoFile): void {
 
 /**
  * @param orderedIds 须按创建时刻升序排列；调用方为唯一且顺序稳定的入口（`buildThreadsPage` 末尾）。
- * @returns 线程 id → 号（正整数）；已有号原样返回，不改、不复用。
+ * @returns 线程 id -> 号（正整数）；已有号原样返回，不改、不复用。
  */
 export function assignThreadNos(root: string, orderedIds: readonly string[]): Map<string, number> {
   const data = read(root);
@@ -82,7 +82,7 @@ export function assignThreadNos(root: string, orderedIds: readonly string[]): Ma
   return out;
 }
 
-/** 号 → 显示串，至少两位；超过 99 时显示三位，不截断。 */
+/** 号 -> 显示串，至少两位；超过 99 时显示三位，不截断。 */
 export function threadNoLabel(n: number | undefined | null): string {
   const v = Number(n);
   if (!Number.isFinite(v) || v <= 0) return "";
@@ -95,7 +95,7 @@ export function threadNoOf(root: string, id: string): string {
   return threadNoLabel(data.ids?.[String(id ?? "").trim()] ?? NaN);
 }
 
-/** 号 → 线程键；按号定位的入口经此转换，本函数只查不建。 */
+/** 号 -> 线程键；按号定位的入口经此转换，本函数只查不建。 */
 export function threadIdByNo(root: string, no: number | string): string {
   const want = Number(no);
   if (!Number.isFinite(want) || want <= 0) return "";
@@ -107,7 +107,7 @@ export function threadIdByNo(root: string, no: number | string): string {
 }
 
 /**
- * 任务号 → 该线程上的在途单：先按号取线程键，血缘线程按 `lineage` 尾号匹配，分片线程按分片名匹配；不按队列顺序近似。
+ * 任务号 -> 该线程上的在途单：先按号取线程键，血缘线程按 `lineage` 尾号匹配，分片线程按分片名匹配；不按队列顺序近似。
  *
  * @param rows 传入已读的台账可省一次 IO；不传时自行读取。
  * @returns 在途（open/claimed/reported/review）的那张单；号不存在或已终结时为 undefined。
@@ -140,7 +140,7 @@ export function threadNoTable(root: string): Record<string, number> {
 }
 
 /**
- * 派单 id → 任务编号：派单先按 {@link laneKeyOf} 折到线程键再查 `thread-no.json`，同一任务重派过的派单共用同一个号。
+ * 派单 id -> 任务编号：派单先按 {@link laneKeyOf} 折到线程键再查 `thread-no.json`，同一任务重派过的派单共用同一个号。
  *
  * 只查不建，表里没有时返回空串；整表一次读完返回 Map。
  */

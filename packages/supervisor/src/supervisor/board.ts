@@ -46,7 +46,13 @@ import { attachmentsOfMessage, newMessageId, recentShots, recordUserMessage, typ
 import { mqPath, readPendingMq } from "../core/mq";
 import { supervisorDir } from "../core/paths";
 import { clearQuotaExhausted, markQuotaExhausted, readQuotaState } from "../core/quota";
-import { all, byId, detect, hostOverrideOf, workerHosts } from "../host/registry";
+import { all, byId, detect, hostOverrideOf, workerHosts } from "../agent/registry";
+import {
+  findHostCli,
+  helpModels as catalogHelpModels,
+  parseModelIdsFromHelp,
+  resetHelpModelsCacheForTest,
+} from "../agent/modelCatalog";
 import { assignThreadNos, dispatchNoTable, dispatchOfThreadNo, threadNoLabel, threadNoOf } from "./threadNo";
 import {
   chatVerdictOf,
@@ -268,7 +274,7 @@ export interface ThreadMessage {
   no?: string;
   duration_sec?: number;
   idle_sec?: number;
-  lines?: number;  /** 这一块里被过滤掉的引擎调试行数（页面上要说明「已隐藏 N 行」，不能静默丢弃） */
+  lines?: number;  /** 这一块里被过滤掉的引擎调试行数（页面上要说明“已隐藏 N 行”，不能静默丢弃） */
   hidden?: number;
   debug?: string[];
   event?: string;
@@ -796,6 +802,19 @@ function readTailText(file: string): string {
 }
 
 /** 返回空串表示事件没有可读正文，调用方整条跳过。 */
+/**
+ * 台账里可能夹着原始输出的字段。
+ *
+ * 判定与重试理由由模型或子进程产出，容易把 stderr、PID、退出码、JSON 片段整段抄进来。
+ * 界面只留能判断下一步的那一句：取首行、去掉明显的技术片段、超出上限截断。
+ */
+function brief(value: unknown, max = 120): string {
+  let t = String(value ?? "").split(/\r?\n/)[0] ?? "";
+  t = t.replace(/\{[\s\S]*$/, "").replace(/\s+(PID|PPID|Stderr|Exit Code|rawResponse)\s*[=:][\s\S]*$/i, "");
+  t = t.replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, Math.max(0, max - 1))}…` : t;
+}
+
 function describeEvent(e: Record<string, unknown>): string {
   const name = String(e.event ?? e.kind ?? "");
   const d = String(e.dispatch ?? "");
@@ -811,9 +830,9 @@ function describeEvent(e: Record<string, unknown>): string {
     case "dispatch_open":
       return `派发任务 ${d}（阶段 ${st}${shard ? ` · ${shard}` : ""}）：${String(e.action ?? "")}`;
     case "dispatch_done":
-      return `回报完成 ${d}：${String(e.note ?? "（无说明）")}`;
+      return `回报完成 ${d}：${brief(e.note) || "（无说明）"}`;
     case "dispatch_failed":
-      return `回报失败 ${d}：${String(e.note ?? "（无说明）")}`;
+      return `回报失败 ${d}：${brief(e.note) || "（无说明）"}`;
     case "dispatch_closed":
       return `手动结项 ${d}（原状态 ${zh.status(e.from) || "未知状态"}${e.worker ? "，执行中" : "，排队中"}${e.killed ? "，已中断" : ""}）：${String(e.reason ?? "")}`;
     case "dispatch_wake":
@@ -834,7 +853,7 @@ function describeEvent(e: Record<string, unknown>): string {
     case "worker_stopped":
       return `执行进程被用户中断${e.killed ? "（已发送终止信号）" : ""}${d ? `，${d} 按失败结单` : ""}`;
     case "worker_launch_failed":
-      return `进程启动失败：${String(e.error ?? "")}`;
+      return `进程启动失败：${brief(e.error)}`;
     case "dispatch_superseded":
       return `派单 ${d} 作废：不属于当前编排`;
     case "dispatch_reaped":
@@ -852,9 +871,18 @@ function describeEvent(e: Record<string, unknown>): string {
     case "direct_inject":
       return `用户插话已登记（${shardOf(e.shard) || "等待归属"}）：${String(e.text ?? "")}`;
     case "direct_deliver":
-      return `追加内容已送达执行中的进程（${d}）：${String(e.text ?? "")}`;
-    case "supervisor_advance":
-      return `阶段推进 ${String(e.from ?? "")} → ${String(e.to ?? "")}`;
+      /*
+       * 未开监工介入时的普通对话，投递结果由消息旁的“已送达”标签表达，这里不再单列一条
+       * 记录：同一条消息出现两处回执，会让人以为监工插了手。
+       */
+      return "";
+    case "supervisor_advance": {
+      const from = String(e.from ?? "");
+      const to = String(e.to ?? "");
+      /* 起止相同不是推进：界面出现 X -> X 只会让人以为流程在动。 */
+      if (!from || !to || from === to) return "";
+      return `阶段推进 ${from} 到 ${to}`;
+    }
     case "supervisor_done":
       return `任务完成（${st}）`;
     case "hook_error":
@@ -881,13 +909,13 @@ function describeEvent(e: Record<string, unknown>): string {
     case "retry_allowed":
     case "retry_refused": {
       const verdict = name === "retry_allowed" ? "可以再试" : "不再重试";
-      const why = String(e.why ?? "").trim();
+      const why = brief(e.why);
       const attempts = Number(e.attempts);
       return `重试判定：${verdict}（第 ${Number.isFinite(attempts) ? attempts : "?"} 次失败）${why ? `：${why}` : ""}`;
     }
     case "stuck_detected": {
       const label = String(e.label ?? "卡点");
-      const why = String(e.why ?? "").trim();
+      const why = brief(e.why);
       const worker = String(e.worker ?? "");
       return `派单 ${d} 判为${label}${worker ? `（${worker}）` : ""}${why ? `：${why}` : ""}`;
     }
@@ -1153,6 +1181,21 @@ interface ModelsView {
 const MODELS_TTL_MS = 5 * 60_000;
 let modelsCache: { host: string; at: number; view: ModelsView } | null = null;
 
+/**
+ * 通道失败时补一行处置。
+ *
+ * 授权只在启动监工时发生一次：拿到就是全树可用，拿不到则后续统一失败。因此这里的处置
+ * 是“重启监工并允许授权”，而不是让用户在发消息时再点一次授权。
+ */
+function chatAuthHint(root: string): string {
+  try {
+    if (String(loadSupervisor(root)?.host ?? "").trim() !== "workbuddy") return "";
+    return "\n启动监工时没有取得宿主登录态。重启监工并在弹窗中选择允许；启动日志会写明是未登录、被拒还是格式不支持。";
+  } catch {
+    return "";
+  }
+}
+
 function hostConfigModel(host: string): string {
   const dir = configDirOf(host);
   if (!dir) return "";
@@ -1167,88 +1210,17 @@ function hostConfigModel(host: string): string {
   }
 }
 
-export function parseModelIdsFromHelp(text: string): string[] {
-  const lines = String(text || "").split(/\r?\n/);
-  for (let i = 0; i < lines.length; i += 1) {
-    const head = lines[i] ?? "";
-    if (!/(?<![\w-])--model\b/.test(head)) continue;
-    let chunk = head;
-    if (!chunk.includes("(")) {
-      for (let j = i + 1; j < lines.length && j <= i + 12; j += 1) {
-        const next = lines[j] ?? "";
-        chunk += ` ${next}`;
-        if (next.includes(")")) break;
-      }
-    }
-    const body = chunk.match(/\(([^)]*)\)/)?.[1];
-    if (!body) continue;
-    const ids = body
-      .split(/[,，]/)
-      .map((s) => s.trim())
-      .filter((s) => /^[\w.:+-]{2,}$/.test(s));
-    if (ids.length >= 3) return [...new Set(ids)];
-  }
-  return [];
-}
+export { findHostCli, parseModelIdsFromHelp, resetHelpModelsCacheForTest };
 
-/** win32 的 PATH 上无扩展名包装脚本不能由 cmd 直接执行，需改用同目录同名 .cmd。 */
-export function findHostCli(host: string): string | null {
-  const names = cliBinsOf(host);
-  const win = process.platform === "win32";
-  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-    if (!dir) continue;
-    for (const name of names) {
-      try {
-        if (win && !extname(name)) {
-          for (const suf of [".cmd", ".exe"]) {
-            const p = join(dir, name + suf);
-            if (existsSync(p)) return p;
-          }
-        }
-        if (existsSync(join(dir, name))) return join(dir, name);
-      } catch {
-      }
-    }
-  }
-  return null;
-}
-
-let helpModelsCache: { host: string; at: number; models: string[] } | null = null;
-
-export function resetHelpModelsCacheForTest(): void {
-  helpModelsCache = null;
-}
-
-/** win32 一律带 shell；bin 路径含空格时手工加引号。 */
+/**
+ * 宿主模型清单，供看板下拉使用。
+ *
+ * 清单来源与派单轮换同一份（见 `host/modelCatalog`），本处只负责在清单变化后
+ * 让看板侧的模型视图缓存失效。
+ */
 export function helpModels(host: string): string[] {
-  if (helpModelsCache && helpModelsCache.host === host && Date.now() - helpModelsCache.at < MODELS_TTL_MS) {
-    return helpModelsCache.models;
-  }
-  let models: string[] = [];
-  const bin = findHostCli(host);
-  if (bin) {
-    try {
-      const win = process.platform === "win32";
-      const arg = win && /\s/.test(bin) ? `"${bin}"` : bin;
-      const r = spawnSync(arg, ["--help"], {
-        encoding: "utf8",
-        timeout: 10_000,
-        windowsHide: true,
-        shell: win,
-        maxBuffer: 4 * 1024 * 1024,
-      });
-      const out = `${r.stdout ?? ""}`;
-      models = parseModelIdsFromHelp(out);
-    } catch {
-      models = [];
-    }
-  }
-  if (models.length > 0) {
-    helpModelsCache = { host, at: Date.now(), models };
-    modelsCache = null;
-  } else {
-    helpModelsCache = null;
-  }
+  const models = catalogHelpModels(host);
+  if (models.length > 0) modelsCache = null;
   return models;
 }
 
@@ -1268,7 +1240,7 @@ function readModels(host: string): ModelsView {
       host,
       source: from,
       models,
-      /* 宿主配置的默认模型，用于「宿主默认」一行。 */
+      /* 宿主配置的默认模型，用于“宿主默认”一行。 */
       default_model: configured,
       at,
       reason: parsed.length ? "" : "未解析出宿主模型清单，以下为回退清单，可手填",
@@ -1480,7 +1452,7 @@ export function buildTaskSummaries(roots: string[]): TaskSummary[] {
       const running = snap.workers.filter((w) => w.status === "running" || w.status === "starting").length;
       const liveWorker = snap.workers.filter((w) => w.status === "running" || w.status === "starting").pop();
       const doing = liveWorker
-        ? `${liveWorker.id} 在跑 ${liveWorker.stage}${liveWorker.dispatch ? ` · ${liveWorker.dispatch}` : ""}`
+        ? `${liveWorker.id} 运行中 ${liveWorker.stage}${liveWorker.dispatch ? ` · ${liveWorker.dispatch}` : ""}`
         : snap.diagnosis.title;
       return {
         root,
@@ -1557,7 +1529,7 @@ function diagnose(i: DiagnoseInput): BoardDiagnosis {
       level: "warn",
       title: "监工已停",
       detail:
-        `最后一次心跳 ${ageSec(i.supervisor.heartbeat_ts)}s 前，进程 pid ${i.supervisor.pid} 不在跑。` +
+        `最后一次心跳 ${ageSec(i.supervisor.heartbeat_ts)}s 前，进程 pid ${i.supervisor.pid} 不运行中。` +
         (last ? ` 最近的工作进程 ${last.id} 为 ${last.status}；重启监工后该状态会重复出现。` : ""),
       fix: "capitalist supervise --force 重新接管（会清掉熔断计数）",
     };
@@ -1572,7 +1544,7 @@ function diagnose(i: DiagnoseInput): BoardDiagnosis {
       return {
         level: "bad",
         title: "工作进程缺认证",
-        detail: `worker ${last.id} 以「需要登录」退出。`,
+        detail: `worker ${last.id} 以“需要登录”退出。`,
         fix: "在宿主 CLI 里登录后再派单；工作进程沿用宿主登录态，项目不注入令牌",
       };
     }
@@ -1621,7 +1593,7 @@ function diagnose(i: DiagnoseInput): BoardDiagnosis {
   if (live.length > 0) {
     return {
       level: "ok",
-      title: `${live.length} 个 worker 在跑`,
+      title: `${live.length} 个 worker 运行中`,
       detail: `宿主 ${i.supervisor.worker_host}，并行度 ${i.supervisor.max_workers}。`,
       fix: "",
     };
@@ -1694,7 +1666,7 @@ function sendAsset(
 /**
  * 监工对话层最近一次实际使用的模型，单独落一个文件。
  *
- * 不写 `supervisor.json`：监工每 tick 用内存快照整份写回该文件，只同步 `supervisor_model`
+ * 不写 `supervisor.json`：监工每轮调度 用内存快照整份写回该文件，只同步 `supervisor_model`
  * 与上下文上限，别的字段会被抹掉。`supervisor_model` 为空时面板靠这份记录标出具体模型。
  */
 function supervisorModelUsedFile(root: string): string {
@@ -1705,7 +1677,7 @@ function noteSupervisorModelUsed(root: string, model: string): void {
   const m = String(model || "").trim();
   if (!m) return;
   try {
-    /* 显式指定了模型时跑的就是它，不是宿主默认，记了会把「宿主默认」标错行。 */
+    /* 显式指定了模型时跑的就是它，不是宿主默认，记了会把“宿主默认”标错行。 */
     if (String(loadSupervisor(root)?.supervisor_model ?? "").trim()) return;
     const cur = readJson<{ model?: string }>(supervisorModelUsedFile(root), {});
     if (String(cur?.model ?? "") === m) return;
@@ -1923,6 +1895,13 @@ export interface ServeOptions {  root: string;
   newKey?: boolean;
   /** 安全模式：校验访问 key。缺省关闭。 */
   secure?: boolean | undefined;
+  /**
+   * 宿主令牌，启动监工时一次性传入，仅在内存持有。
+   *
+   * 监工进程通常无法获取宿主登录态文件的读取权限（桌面端对本机文件访问单独授权）。
+   * 返回空值将导致对话通道与工作进程同时认证失败；由启动方传入时不再读取文件。
+   */
+  token?: string | undefined;
   out?: (line: string) => void;
   onMq?: () => void;
 }
@@ -2791,7 +2770,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
             : opts.root;
 
         if (input.action === "stop") {
-          /** 先写停止哨兵再结束进程；结束失败时监工下一 tick 仍会自行退出。 */
+          /** 先写停止哨兵再结束进程；结束失败时监工下一轮调度 仍会自行退出。 */
           const rec = loadSupervisor(targetRoot);
           requestSupervisorStop(targetRoot, "看板指标条：用户关停");
           let killedPid = 0;
@@ -3361,28 +3340,28 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
                 ...(readPause(opts.root) !== null
                   ? [
                       "",
-                      "【监工当前处于「暂停派单」】任何派单 / 插队 / 立即执行指令都不会执行。",
-                      "用户要推进任务，必须先恢复派单（看板指标条的「恢复调度」按钮，或 capitalist resume）。",
+                      "【监工当前处于“暂停派单”】任何派单 / 插队 / 立即执行指令都不会执行。",
+                      "用户要推进任务，必须先恢复派单（看板指标条的“恢复调度”按钮，或 capitalist resume）。",
                       "回答时先说明暂停状态，再回答该问题。",
                     ]
                   : []),
                 ...(via === "capitalist"
                   ? [
                       "",
-                      "【用户按了「监工介入」】提问发生在这个进程的会话里，携带上面的任务编号直接回答，",
+                      "【用户按了“监工介入”】提问发生在这个进程的会话里，携带上面的任务编号直接回答，",
                       "这句话不登记回该派单，也不转给该进程；由监工直接回复。",
-                      "他说的「这单」就是你现在看着的这单。回答只围绕它：什么状态、在做什么、还差什么。",
-                      "不对比其他派单，不解释其他在跑的派单，避免被理解为在描述当前派单。",
-                      "确实需要提到别的单时，先说一句「那是另一单，跟你问的这个无关」。",
+                      "他说的“这单”就是你现在看着的这单。回答只围绕它：什么状态、在做什么、还差什么。",
+                      "不对比其他派单，不解释其他运行中的派单，避免被理解为在描述当前派单。",
+                      "确实需要提到别的单时，先说一句“那是另一单，跟你问的这个无关”。",
                       talkNo
-                        ? `他说「插队 / 排到前面」：DO: queue #${talkNo}——只插到排队队首，正在跑的照跑。`
-                        : "他说「插队 / 排到前面」：先按【任务编号表】找号，再写 DO: queue #NN。",
+                        ? `他说“插队 / 排到前面”：DO: queue #${talkNo}——仅插入队首，运行中的派单不受影响。`
+                        : "他说“插队 / 排到前面”：先按【任务编号表】找号，再写 DO: queue #NN。",
                       talkNo
-                        ? `他说「立即执行 / 马上跑 / 别等」：DO: promote #${talkNo}——抢占槽位，正在跑的那条让位回排队队首，这一单执行结束后接着执行它。`
-                        : "他说「立即执行 / 马上跑」：DO: promote #NN——这才抢占槽位。",
-                      "要新建一单并立刻抢占槽位跑（不等排队）：DO: dispatch --now <内容>（--now 就是立即执行，会踢下正在跑的那条）。",
+                        ? `他说“立即执行 / 马上跑 / 别等”：DO: promote #${talkNo}——抢占槽位，运行中的派单退回队首，本单结束后继续执行。`
+                        : "他说“立即执行 / 马上跑”：DO: promote #NN——这才抢占槽位。",
+                      "要新建一单并立刻抢占槽位（不等排队）：DO: dispatch --now <内容>（--now 表示立即执行，会挂起运行中的派单）。",
                       "要重做这一单：还在排队就 queue 或 promote；已经终结就 DO: dispatch 并按原任务重写一遍。",
-                      "不要为了「让某一单跑起来」而新建一单去修机制——那是另一件事，除非他明确要求。",
+                      "不要为让某一单启动而新建一单改动机制：那是另一件事，除非用户明确要求。",
                       "不要用 retry：retry 的参数是分片 id，不是任务号，adhoc 单传进去会被拒。",
                     ]
                   : []),
@@ -3402,7 +3381,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
             /**
              * 这一单的派单记录。
              * 线程按血缘键组织时 `threadDispatch` 取不到，只能按线程上的派单 id 再查一次，
-             * 否则「排队中的单」会被当成「已结束的单」，用户的补充要求会答完就没了。
+             * 否则“排队中的单”会被当成“已结束的单”，用户的补充要求会答完就没了。
              */
             const disp = ((): Dispatch | null => {
               if (threadDispatch) return threadDispatch;
@@ -3459,7 +3438,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
             const ranWorker = targetDispatch
               ? [...listWorkers(opts.root)].reverse().find((w) => String(w.dispatch ?? "") === targetDispatch)
               : undefined;
-            /** 消息并入派单的条件：进程在跑、派单在排队，或派单尚未启动。 */
+            /** 消息并入派单的条件：进程运行中、派单在排队，或派单尚未启动。 */
             const justQueued = String(me?.status ?? "") === "queued";
             const neverLaunched = !me && String(disp?.status ?? "") === "open";
             if (onDuty || justQueued || neverLaunched) {
@@ -3527,7 +3506,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
               `它这一单的标题：${taskTitle || "(未记录)"}`,
               `它最近输出的一句话：${String(me?.last ?? "").slice(0, 300) || "(还没输出)"}`,
               ...(readPause(opts.root) !== null
-                ? ["", "【监工当前处于「暂停派单」】需要发新单或续跑的动作都不会执行。"]
+                ? ["", "【监工当前处于“暂停派单”】需要发新单或续跑的动作都不会执行。"]
                 : []),
               "",
               "【怎么回答】",
@@ -3536,7 +3515,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
               "- 只依据本会话已有的上下文和下面这条消息回答；不知道就说不知道，不许编造",
               "- 这一单已经结束：只回答问题，不要改文件、不要改派单；需要继续动手时，说明需要在队列里重开这一单",
               "- 不要用任何 Markdown：不用粗体星号、不用井号标题、不用三反引号，行首不加列表符号",
-              "- 不要提内部文件名和路径（以 .capitalist/ 开头的那种），也不要提任务列表、分片这类内部词",
+              "- 不要提内部文件名和路径（以 .capitalist/ 开头的那种），也不要提任务列表、分片、收工条件、闸门判据、阻塞编号这类内部词",
               "",
               `用户消息：${text}`,
               ...(quote
@@ -3562,6 +3541,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
               ...(chatHost ? { host: chatHost } : {}),
               effort: loadSupervisor(opts.root)?.effort ?? "high",
               model: dispatchModel(disp ?? undefined) || undefined,
+              ...(opts.token ? { token: opts.token } : {}),
               onDelta: (d) => sse(d),
             }).finally(() => {
               clearInterval(beat);
@@ -3572,9 +3552,9 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
               if (quota) markQuotaExhausted(opts.root, r.text);
               /*
                * 通道拒绝要落成一条回复：只写 applied 时它仅进状态行，
-               * 这一轮结束后状态行随即被完成文案覆盖，用户看到的就是「发了没回」。
+               * 这一轮结束后状态行随即被完成文案覆盖，用户看到的就是“发了没回”。
                */
-              const hurt = quota ? r.text : `对话通道不可用：${r.text}`;
+              const hurt = quota ? r.text : `对话通道不可用：${r.text}${chatAuthHint(opts.root)}`;
               finish({ reply: hurt, applied: "", error: hurt });
               return;
             }
@@ -3612,7 +3592,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
                 : [];
             })(),
             ...settledLines(opts.root),
-            `并行度：${capitalist.parallel ?? "?"} ｜ 在跑 ${running.length} 个${
+            `并行度：${capitalist.parallel ?? "?"} ｜ 运行中 ${running.length} 个${
               running.length
                 ? `（${running.map((t) => `#${t.no} ${t.title || t.shard || t.id}${t.worker ? ` · ${t.worker}` : ""}`).join("、")}）`
                 : ""
@@ -3641,20 +3621,20 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
             "【怎么回答】",
             "- 用中文，简短直接，一到三句，不要客套、不要重复用户的话",
             "- 思考过程也用中文写：界面会把推理过程原样展开给用户看，用英文写用户看不懂",
-            "- 陈述语气：写明对象与结果。不用第二人称「你」，不用「已记这一单，没打断它」这类口语化说法，",
+            "- 陈述语气：写明对象与结果。不用第二人称“你”，不用“已记这一单，没打断它”这类口语化说法，",
             "  不拟人、不承诺、不表功。",
-            "- 只依据上面的状态回答；状态里没有的信息就说「不知道」，不许编造",
-            "- 心跳流水（supervisor_tick）不是信息，别拿它当状态来源；但用户问「为什么没动 / 卡在哪 / 是不是坏了」，",
+            "- 只依据上面的状态回答；状态里没有的信息就说“不知道”，不许编造",
+            "- 心跳流水（supervisor_tick）不是信息，别拿它当状态来源；但用户问“为什么没动 / 卡在哪 / 是不是坏了”，",
             "  就该去读台账和日志查明白——那是对话层的职责，派出去只会让答案晚到、且大概率已经过时",
-            "- 但「对谁做」必须落到具体对象：以用户所指的那个东西为准（哪个、哪一处），不按类别推断。",
+            "- 但“对谁做”必须落到具体对象：以用户所指的那个东西为准（哪个、哪一处），不按类别推断。",
             "  写派单前先确认是**哪一个**、能把它的位置指出来；指不出来、或者能指到两个以上，就 capitalist ask，不许猜",
             "- 用户输入按指令执行；不纠正用户表述，不解释识别规则",
             "",
             "【格式硬要求，逐条照做】",
             "1. 不要用任何 Markdown 语法：不用粗体星号、不用井号标题、不用三反引号代码块、不用行首列表符号。",
             "   这个界面只显示纯文本，星号会原样显示出来，看起来像乱码。",
-            "2. 不要提内部文件名和路径（以 .capitalist/ 开头的那种），也不要提任务列表、分片 id 这类内部词。",
-            "   用户要听的是「什么情况、该怎么办」。【可用截图】里的路径供挑图使用，回复里同样不要写出来。",
+            "2. 不要提内部文件名和路径（以 .capitalist/ 开头的那种），也不要提任务列表、分片 id、收工条件、",
+            "   闸门判据、阻塞编号这类内部词。用户要听的是“什么情况、该怎么办”。【可用截图】里的路径供挑图使用，回复里同样不要写出来。",
             "3. 最长三句。说完就停，不要总结、不要追问、不要列举选项。",
             "4. DO: 行与 ATT: 行各占单独一行，写在正文最后；它们不会显示给用户，写在正文中间会把话切断。",
             "",
@@ -3714,6 +3694,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
             ...(chatHost ? { host: chatHost } : {}),
             effort: loadSupervisor(opts.root)?.effort ?? "high",
             model: loadSupervisor(opts.root)?.supervisor_model || undefined,
+            ...(opts.token ? { token: opts.token } : {}),
             onDelta: (d) => sse(d),
           }).finally(() => {
             clearInterval(beat);
@@ -3732,7 +3713,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
           if (!r.ok) {
             const quota = isQuotaText(r.text);
             if (quota) markQuotaExhausted(opts.root, r.text);
-            const hurt = quota ? r.text : `对话通道不可用：${r.text}`;
+            const hurt = quota ? r.text : `对话通道不可用：${r.text}${chatAuthHint(opts.root)}`;
             settleChat(opts.root, {
               msg_id: userMsg.id,
               verdict: "answered_only",
@@ -3791,7 +3772,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
               const arg = bindAttachments(act.arg, chosen).text;
               /*
                * 推翻说明随单进入正文：工作进程与验收需要知道本次是刻意推翻旧口径，
-               * 否则会按「两套并存」处理。回执仍用原文，不把该行带进气泡。
+               * 否则会按“两套并存”处理。回执仍用原文，不把该行带进气泡。
                */
               const directiveArg = act.revoke ? `${arg}\n\n本次作废：${act.revoke}` : arg;
               /** skip 把整个阶段记成欠账跳过，不代为确认。 */
@@ -3839,7 +3820,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
                   : `已执行 ${settleAction}${okTexts[0] ? `：${okTexts[0].slice(0, 60)}` : ""}`;
             }
             if (failNotes.length) {
-              /* 失败原因只进「被拒」行，不并入回复正文。 */
+              /* 失败原因只进“被拒”行，不并入回复正文。 */
               settleError = `未执行：${failNotes.join("；")}`;
             }
             if (okIds.length > 1) multiDirectiveIds = okIds;
@@ -4507,8 +4488,8 @@ function yieldedOf(d: Dispatch): { yielded_at?: string; yielded_by?: string } {
 function yieldedReason(d: Dispatch): string {
   const by = String(d.yielded_by ?? "").trim();
   return by
-    ? `已让位给立即执行单 ${by}，该单结束后按原顺序恢复`
-    : "已让位给立即执行单，该单结束后按原顺序恢复";
+    ? `已为立即执行派单 ${by} 让出槽位，该单结束后按原顺序恢复`
+    : "已为立即执行派单让出槽位，该单结束后按原顺序恢复";
 }
 
 const WORKER_ACTION_TAIL_BYTES = 256 * 1024;
@@ -4576,7 +4557,7 @@ function buildThreadsPageUncached(
 
   /**
    * 派单对应的线程状态。暂停优先：暂停的派单既不等待槽位，也不在运行，
-   * 界面需与「排队」「运行中」区分，以显示该单处于等待唤醒状态。
+   * 界面需与“排队”“运行中”区分，以显示该单处于等待唤醒状态。
    */
   const threadStatusOf = (d: Dispatch): string => {
     if (dispatchPaused(d)) return "paused";
@@ -5469,7 +5450,10 @@ function threadMessages(
       cmd: "",
       status: r.consumed
         ? (() => {
-            const viaHook = String((r as { consumed_via?: string }).consumed_via ?? "") === "hook";
+            const via = String((r as { consumed_via?: unknown }).consumed_via ?? "");
+            /* 无进程领走的记录不能显示成“已并入派单”，否则用户会以为内容已进入执行。 */
+            if (via === "dropped") return "未投递 · 所属单已随阶段推进作废";
+            const viaHook = via === "hook";
             const base = viaHook ? "已送达执行中的进程" : "已并入派单";
             const outcome = String((r as { outcome?: unknown }).outcome ?? "");
             const tail =
@@ -5667,11 +5651,11 @@ function supervisorPolicy(opts: {
     "",
     "判定依据为以下三项：",
     "  一、区分陈述 / 询问与指出问题 / 提出要求。",
-    "     · 陈述、询问：进度、原因、意见与闲聊 → 直接回答，不写动作。",
-    "     · 指出问题：「这个不对」「太丑了」「又坏了」「点不动」「一直没反应」→ 需派单。",
+    "     · 陈述、询问：进度、原因、意见与闲聊 -> 直接回答，不写动作。",
+    "     · 指出问题：“这个不对”“太丑了”“又坏了”“点不动”“一直没反应”-> 需派单。",
     "     · 带图询问按指出问题处理，图作为证据。",
-    "     · 提出要求：改、做、加、删、换、执行验证 → 需派单。",
-    "  二、需派单时区分在跑派单的追加要求与新事项：同一事项写 amend，新事项写 dispatch。",
+    "     · 提出要求：改、做、加、删、换、执行验证 -> 需派单。",
+    "  二、需派单时区分运行中派单的追加要求与新事项：同一事项写 amend，新事项写 dispatch。",
     "  三、判定不明确时：带图按指出问题处理；纯文字先问是否需要改动，不直接派单。",
     "     派错会产生两个进程改同一处、互相覆盖。",
     "",
@@ -5679,18 +5663,18 @@ function supervisorPolicy(opts: {
     "  · 几件事就写几个 `DO: dispatch` 行，每行一张单，按消息里的顺序标 1. 2. 3.；界面上各成一张卡。",
     "  · 一张单只放一件事。同一块地方但验收方式不同，也算两件事：一个看视觉、一个看元素在不在，",
     "    分两单派；揉进一单，工作进程做完第一件就可能报完成，剩下的没人做。",
-    "  · 出现「另外 / 还有 / 顺便 / 第二个 / 再」时按新事项另起一行，不并入上一单。",
-    "  · 不许把第 2、3 件写进第 1 件的参数里。每张单的正文都自含：只说这一件，不写「同上」「接着第 1 点」。",
+    "  · 出现“另外 / 还有 / 顺便 / 第二个 / 再”时按新事项另起一行，不并入上一单。",
+    "  · 不许把第 2、3 件写进第 1 件的参数里。每张单的正文都自含：只说这一件，不写“同上”“接着第 1 点”。",
     "  · 顺序写在参数开头的 `1.` `2.` `3.` 里，那是给人看的编号，不是把几件事串成一张单。",
     "  · 图号按用户发图顺序固定，不重排。",
     "  · 图跟单走：`ATT:` 写在它自己那张单的 `DO:` 行下面。写了 ATT 的单按它取图，未写 ATT 的单不带图。",
     "  · 正文里每提到一张图，必须附带它的内容特征，让编号和内容当场对上：",
-    "    正确：「图1 那条 `上下文 ≈50.3k/600.0k` 的长串」「图2 那条带竖线和三个按钮的指标条」；",
-    "    错：「图1 是参照样式」——没有内容特征，编号安错了也无从核对。",
-    "  · 句子的方向别反：「A 的样式参考 B」＝ B 是参照物（目标长这样），A 是要改的（现在不对）。",
-    "    「参照」这个角色只能挂在 B 那张图上，挂在 A 上就是把方向做反了。",
-    "  · 每张图须逐张核对；正文引用它只写「图1」「图2」，不直接引用用户消息里的 `[附件] 路径` 行。",
-    "  · 示例。用户发「这里不对（图1），照那边改（图2），另外把标题减小」，你写三张单：",
+    "    正确：“图1 那条 `上下文 ≈50.3k/600.0k` 的长串”“图2 那条带竖线和三个按钮的指标条”；",
+    "    错：“图1 是参照样式”——没有内容特征，编号安错了也无从核对。",
+    "  · 句子的方向别反：“A 的样式参考 B”＝ B 是参照物（目标长这样），A 是要改的（现在不对）。",
+    "    “参照”这个角色只能挂在 B 那张图上，挂在 A 上就是把方向做反了。",
+    "  · 每张图须逐张核对；正文引用它只写“图1”“图2”，不直接引用用户消息里的 `[附件] 路径` 行。",
+    "  · 示例。用户发“这里不对（图1），照那边改（图2），另外把标题减小”，你写三张单：",
     "      DO: dispatch 1. <这里>：<要它变成什么样>",
     "      ATT: 1",
     "      DO: dispatch 2. <那边>：<照图2 改哪里>",
@@ -5700,26 +5684,26 @@ function supervisorPolicy(opts: {
     "  · 派单正文需给出每张图的内容特征；缺少特征时不派单。",
     "",
     "【不设计工序】派单就是任务本身：一件事建一张单，不要先拆成阶段",
-    "  （「盘点→实现→验收」这种）。验收标准就在单里，由产出物证据判定；契约里只有一个空的",
+    "  （“盘点->实现->验收”这种）。验收标准就在单里，由产出物证据判定；契约里只有一个空的",
     "  执行阶段，它不代表任何工序，也不要照着它派活。需要领域约束（红线、手法）时，",
     "  由用户指定某个 skill，读取该 skill 执行；领域规则不写进契约。",
     "",
-    "【要「知道」的自己查，要「改」的才派】",
-    "  · 「为什么不动 / 怎么回事 / 卡在哪 / 是不是坏了 / 查一下」属查询，不生成待办。",
+    "【要“知道”的自己查，要“改”的才派】",
+    "  · “为什么不动 / 怎么回事 / 卡在哪 / 是不是坏了 / 查一下”属查询，不生成待办。",
     "    状态、台账、日志与代码均可直接读取，读取后直接回答；派出的进程读取同一份内容。",
-    "  · 只有「要落地改动（代码 / 数据 / 文件 / 配置 / 文档）、需要长时间运行、需要独立上下文」才开进程。",
+    "  · 只有“要落地改动（代码 / 数据 / 文件 / 配置 / 文档）、需要长时间运行、需要独立上下文”才开进程。",
     "    diagnose 仅用于对话层无法完成、需要长时间排查的任务；能自行回答的不派单。",
     "  · 派单需排队，轮到执行时单内所述现状可能已变化。派单正文写**目标**，不写**现状对比**：",
-    "    · 不写「核查 #29 是否已过期，逐条给出作废/改写/保留」——该写法属代读台账。",
-    "    · 写「把 <文件> 的 <行为> 改成 <目标行为>，验收读改动点确认」——现状由工作进程按目标核对。",
+    "    · 不写“核查 #29 是否已过期，逐条给出作废/改写/保留”——该写法属代读台账。",
+    "    · 写“把 <文件> 的 <行为> 改成 <目标行为>，验收读改动点确认”——现状由工作进程按目标核对。",
     "",
     "【动作面】判定依据为台账与派单状态。可用动作：",
     "  · 派单 / 补单（往已有单追加要求）/ 置顶立即执行 / 暂停调度与恢复 /",
     "    重试失败单 / 调并行度 / 重载上下文 / 重开（reload）。",
-    "  · 启动时被暂停的旧派单只能由用户唤醒（看板「已暂停」筛选下逐单唤醒，或 capitalist wake --user）。",
+    "  · 启动时被暂停的旧派单只能由用户唤醒（看板“已暂停”筛选下逐单唤醒，或 capitalist wake --user）。",
     "    对话层不代为唤醒：这些单可能已过时，是否继续执行由用户判断。",
     "  · 结果检验：工作进程报完成后，读取报告中的完成项与改动位置，与派单要求比对。",
-    "    报告声明「已完成」但改动对象与派单不一致时，按未完成处理。",
+    "    报告声明“已完成”但改动对象与派单不一致时，按未完成处理。",
     "    接受、打回重做或换派单重派按判定结果选择。",
     "  · 调度本身也是任务：任务树怎么长、哪几单并行、哪单等哪单、并行度设几，由对话层判定。",
     "",
@@ -5728,7 +5712,7 @@ function supervisorPolicy(opts: {
     "  · `.capitalist/inbox/dispatch.jsonl` 派单正文、附件、状态、时间；",
     "  · `.capitalist/workers/*.log` 进程输出；`.capitalist/events.jsonl` 事件流水；",
     "  · 现成命令：`capitalist tasks`（每单要求与状态）、`capitalist worker <进程号>`（某个进程执行过什么）、",
-    "    `capitalist status`（全局在跑/排队/异常）。查「为什么没动」时先执行这三条命令。",
+    "    `capitalist status`（全局运行中/排队/异常）。查“为什么没动”时先执行这三条命令。",
     "  · 任务根下的内容不只代码：也可能是资产清单、数据集、报告、笔记或脚本。判断作用对象前不预设项目类型，",
     "    依据随内容而定：挖洞项目看站点与接口，代码项目看文件与组件，数据项目看表与字段。",
     "  · 凭这些能答：某单卡在哪、为什么没动、下一步怎么排；某条要求是否已实现、两份口径是否冲突；",
@@ -5738,7 +5722,7 @@ function supervisorPolicy(opts: {
     "",
     "【进程之间不共享上下文】每张单的工作进程只拿到自己这一单的说明与自己这条会话。",
     "  同一个任务根是运行条件，不是信息通道：它没有理由、也不该去读别的单的正文、",
-    "  别人的日志与会话。回复时不提及「工作进程能看见别的单 / 独立的是进程不是访问范围」；",
+    "  别人的日志与会话。回复时不提及“工作进程能看见别的单 / 独立的是进程不是访问范围”；",
     "  被问到时按上面这句回答。",
     "",
     "【边界两条，不作为免责条款】",
@@ -5750,15 +5734,15 @@ function supervisorPolicy(opts: {
     "  DO: dispatch [分类] <要做什么>   加一件新活。分类按**作用面**打一个词（组件 / 文件 / 脚本 / 数据 / 接口 / 配置），",
     "      同一块东西共用一个词、不同东西用不同的词——同词即同车道，工作进程会复用上一单的上下文。",
     "      分类**必须**用方括号包住，紧跟在 dispatch 后面：`dispatch [queue-card] 把第二行改成标签加数值`。",
-    "      不写方括号，这个词就成了正文的第一个字——界面上这一单的标题会变成「ui 把顶部那行指标」，",
+    "      不写方括号，这个词就成了正文的第一个字——界面上这一单的标题会变成“ui 把顶部那行指标”，",
     "      而且它不会和其它同类活共用上下文。宁可写 [misc] 也不要省掉括号。",
-    "  DO: amend #<编号> <补充或更正的内容>     这句话是在改已经开始的那一单（见下面「改口」）",
+    "  DO: amend #<编号> <补充或更正的内容>     这句话是在改已经开始的那一单（见下面“改口”）",
     "      编号就是上面【任务编号表】里的号，**必须写**，且写在正文最前面。不写号会被拒绝，",
     "      系统不代为推断目标单。",
     "      例：`DO: amend #02 顶栏不许再渲染状态徽章`。",
     "  DO: diagnose <查什么>  /  DO: fix <卡在哪>   查根因 / 查完直接修",
     "  DO: pause  /  DO: resume  /  DO: retry <分片>  /  DO: concurrency <数字>  /  DO: reload",
-    "  DO: promote #<编号>   把这张排队中的单置顶并立刻执行（槽满时挂起一张在跑的任务腾槽）",
+    "  DO: promote #<编号>   把这张排队中的单置顶并立刻执行（槽满时挂起一张运行中的任务腾槽）",
     "  没写成动作行就没有执行。不要声称已追加或已派单，回执由系统在动作执行后给出。",
     "",
     "【重派前先核对卡点】retry 一个失败过（或中途被结）的任务之前，必须先核对原任务的卡点：",
@@ -5779,7 +5763,7 @@ function supervisorPolicy(opts: {
     "  · 【一件活一张单】作用对象不同，或验收方式不同，即为两件事：各写一条 `DO: dispatch`。",
     "    合并为一张时，工作进程无法确定执行顺序，可能只完成其中一部分即申报完成，验收阶段也无法判定未达标项。",
     "  · 【按消息里的顺序编号】一条消息拆成几单时，按消息里的先后给 1、2、3……，每单正文以**它自己的号**",
-    "    开头（第 2 件就写「2. 」），号跟着这件事走、拆单后不重排；只有一件事时不写号。",
+    "    开头（第 2 件就写“2. ”），号跟着这件事走、拆单后不重排；只有一件事时不写号。",
     "    编号用于对齐工作进程与用户：缺少编号时无法判断当单对应第几件事。",
     "  · 【顺序就是用户发的顺序】他连发几条，就按第 1、2、3 条的顺序判断与派单，后一条不许抢到前一条前面。",
     "  · 【相关就复用同一个工作进程，避免每单重新读取】分类标签不只是分类，它是**工作车道**：",
@@ -5788,31 +5772,31 @@ function supervisorPolicy(opts: {
     "    上下文余量由车道自己卡（占窗口六成就自动换新代），你不用自己算，也不用为了省上下文拆标签。",
     "    要真正复用上，给它写 `PARENT: #<前一张>`：等前一张做完、车道空出来，它启动时直接续接同一会话。",
     "    两单同时拉起反而各自换新代——同一条车道一次只允许一个进程，冲突时会换代并丢失上下文。",
-    "    所以同一个对象有多单时默认串成链（后一单挂前一单）：同一个站的子域枚举 → 越权 → SSRF → 出报告。",
+    "    所以同一个对象有多单时默认串成链（后一单挂前一单）：同一个站的子域枚举 -> 越权 -> SSRF -> 出报告。",
     "    什么时候不建链：几件事互不依赖、更看重速度、或者前一张已经把上下文用掉大半——那就并行，代价是各自重读一遍。",
     "    跨对象永远并行：两个不同的站、两只不同的票，是两条链同时跑。",
     "  · 【上下文一定会换，结论必须落盘】车道到窗口六成就换代，新进程看不到上一单说过什么。",
     "    所以要求工作进程把**已经确认的结论写进文件**（清单、scope、笔记、报告草稿），别只留在对话里；",
     "    后一单的第一件事是读这些文件。尤其在长链里（一个站十几个面），靠上下文接力一定会断，靠文件不会。",
-    "  · 【标签第一维永远是「对象」，不是动作或类型】对象 = 这件事作用在**哪一个**东西上（那个站、那个项目、",
+    "  · 【标签第一维永远是“对象”，不是动作或类型】对象 = 这件事作用在**哪一个**东西上（那个站、那个项目、",
     "    那份数据、那个主题）。同对象的多单必须同标签（同车道＝共享已经读过的东西）；",
     "    不同对象换标签（不同车道才能并行，也不会互相污染）。",
     "    第二维（漏洞面 / 改动类型 / 当前阶段）写进正文，**不进标签**。按类型拆标签的后果：同一个站的两个面",
     "    落到两条车道，侦察成果、登录态、已知接口清单全部作废，第二条从零再来一遍。",
     "    例：挖洞项目同一个站的几件事（子域枚举、越权、SSRF、出报告）全用 `[host-example-com]`，",
     "    不要写成 `[recon]` `[api]` `[ssrf]` `[doc]`；同一个组件全用 `[queue-card]`，不按 ui/fix 分；",
-    "    同一只票的几次分析全用 `[600519]`，不按「财报 / 技术面 / 复盘」分。",
-    "    另一种极端是把所有站都打成一个标签，形成「全网一个工作进程」——上下文耗尽、各站互相干扰。",
+    "    同一只票的几次分析全用 `[600519]`，不按“财报 / 技术面 / 复盘”分。",
+    "    另一种极端是把所有站都打成一个标签，形成“全网一个工作进程”——上下文耗尽、各站互相干扰。",
     "  · 【复用不等于合并】编号、验收、状态各记各的，只是落在同一个工作进程的上下文里。",
-    "    只有「后一条是对前一条同一对象的补充或更正」才写 amend（把要求追加进那张单）；",
+    "    只有“后一条是对前一条同一对象的补充或更正”才写 amend（把要求追加进那张单）；",
     "    是另一件事就各自成单、共用标签，别去改前一张单的要求。",
     "  · 【先想清楚，再用书面语写】派单正文是转述给一个刚接手的人的一段话。写之前先答四个问题：",
-    "    ① 对什么做——就是**哪一个东西**：他说的是哪个、在哪能找到它。不要停在类别上（「那个样式」「那个站」）；",
+    "    ① 对什么做——就是**哪一个东西**：他说的是哪个、在哪能找到它。不要停在类别上（“那个样式”“那个站”）；",
     "    ② 要它变成什么样——用户要的结果，不是工序；",
     "    ③ 不许碰什么——边界；",
     "    ④ 怎么算做完——他要的那个结果怎么确认。",
     "    ① 答不出来、或者能落到两个东西上，就是还没懂：先自己查，查不出来就问用户（capitalist ask），不凭推断派单。",
-    "    指认对象须落到具体位置：「任务消息栏」指聊天区的消息框，不等于任务卡第二行。",
+    "    指认对象须落到具体位置：“任务消息栏”指聊天区的消息框，不等于任务卡第二行。",
     "  · 【正文要短：只负责把要求说得没有歧义】四个问题想清楚，写出来的只是一段话（多件事时每件一段）：",
     "    落在哪个东西上、要它变成什么样。**怎么改、改哪几行、用什么写法、分几步做，一个字都不要写**——",
     "    那是工作进程的任务。对话层不设计方案，只把有歧义的要求改成不会看错的一段话。",
@@ -5824,16 +5808,16 @@ function supervisorPolicy(opts: {
     "    · `ATT:` 只写这一单要用的那几张，不把整条消息的图全部带入；",
     "    · 每张图一行，行末括号里写**它是哪一张、干什么用的**：",
     "      `（图1 · 现状：任务面板现在这条空格长串）` / `（图2 · 参照：顶栏指标条，目标样式照这个）`。",
-    "      只写「现状」「参照」不够——工作进程得知道拿它干什么；",
-    "    · 正文里引用图**只许写「图1」「图2」**，不许写「附图一 / 附图二 / 第一张」：",
-    "      中文数字与顺序容易写反：正文写「附图一为目标样式」时，",
+    "      只写“现状”“参照”不够——工作进程得知道拿它干什么；",
+    "    · 正文里引用图**只许写“图1”“图2”**，不许写“附图一 / 附图二 / 第一张”：",
+    "      中文数字与顺序容易写反：正文写“附图一为目标样式”时，",
     "      第一张可能是任务面板现状、第二张才是监工指标条，会把现状当成目标；",
     "    · 角色**必须逐张核对图片之后写**，不许按顺序推：先发的未必是现状、后发的未必是目标；",
     "    · 图片顺序按用户发图的顺序排，不要重排；",
     "    · 绝不许把图统一列在正文末尾让工作进程自己配对——它不知道哪张对应哪段。",
     "  · 【同一处不等于一件事】两件事作用在同一块地方，但**验收方式不同**，也要拆开派：",
     "    验收方式不同的两件事合并成一单时，工作进程做完一件就可能报完成；",
-    "    判据是作用对象不同或验收方式不同，不是「改的地方」不同才拆。",
+    "    判据是作用对象不同或验收方式不同，不是“改的地方”不同才拆。",
     "    格式照这个写（换行是硬要求，不许压成一行）：",
     "      1. <对象>：<要做什么、做到什么程度算完>",
     "      [附件] .capitalist/attachments/<这一件的图>（图1 · 现状：<这是什么、现在什么样>）",
@@ -5843,9 +5827,9 @@ function supervisorPolicy(opts: {
     "    只有一件事时去掉号，正文第一句照样指认对象；没有配图的那一段写 `[附件] 无`，不要留空。",
     "    多件事共用同一张图时，那张图在每一单里都写一次（各单独立，不跨单引用）。",
     "",
-    "【验收要求不写测试与截图门槛】参数里的「做到什么程度算完」按行为写，不按证据形式写：",
-    "  · 不要要求「跑通全量测试」「构建加全量校验」「端到端长跑」——耗时流程不作为阶段门槛；",
-    "  · 不要要求截图或截图核对。验收就写「他要的那个结果怎么确认」——能看到那个结果出现就算过，",
+    "【验收要求不写测试与截图门槛】参数里的“做到什么程度算完”按行为写，不按证据形式写：",
+    "  · 不要要求“跑通全量测试”“构建加全量校验”“端到端长跑”——耗时流程不作为阶段门槛；",
+    "  · 不要要求截图或截图核对。验收就写“他要的那个结果怎么确认”——能看到那个结果出现就算过，",
     "    不要写成流程（跑通测试、构建完成）或者材料清单（交截图、交文档）。",
     "    那个结果长什么样由这件事决定：一个数值、一段输出、一个能复现的现象、一份能打开的文件。",
     "  · 只有用户明确点名要看截图时，才在参数里写截图。",
@@ -5853,53 +5837,53 @@ function supervisorPolicy(opts: {
     "【派单顺序是多节点，不是一条队】每张派单是树上一个节点：最多一个父节点（做完它才能开始），",
     "  同父的节点是兄弟（可以同时跑），没有父节点的节点自成一棵树，树与树之间互不影响。",
     "  派单时先判断这一单属于哪一种，判断写进数据，不写在参数里：",
-    "  · 要先等某一单做完 → 动作行下面写两行：",
+    "  · 要先等某一单做完 -> 动作行下面写两行：",
     "      PARENT: #<编号>",
     "      PARENT_REASON: <为什么必须先做它，一两句，写清等的是它的哪个产出>",
     "    例：",
     "      DO: dispatch [ui] 重做顶栏布局",
     "      PARENT: #03",
     "      PARENT_REASON: 新顶栏按 #03 定稿的栅格尺寸排版，提前做会全部返工",
-    "  · 可以同时做 → 写 `PARENT: none`。先后关系不成立就不要挂父节点：为了整齐建立 A→B→C",
+    "  · 可以同时做 -> 写 `PARENT: none`。先后关系不成立就不要挂父节点：为了整齐建立 A->B->C",
     "    的长链，会把本来能并行的活压成单列。",
-    "  · 兄弟由「同父」自动形成：两张单都写 `PARENT: #03`，父节点完成后两张一起进队列。",
+    "  · 兄弟由“同父”自动形成：两张单都写 `PARENT: #03`，父节点完成后两张一起进队列。",
     "  · 父节点编号必须出现在【任务编号表】里。父节点不存在、已被结项（closed）、或成环时，",
     "    该派单会被拒绝并给出原因；不挂父节点重新提交，不会静默降级为无依赖。",
     "  · 老写法 `AFTER: #<编号>` 仍然有效（多个编号 = 多个前置；收尾单写 `AFTER: *`）。",
     "    只有确实要同时等多个单时才用它，单条先后关系写 PARENT。",
-    "  · 【红线】参数里绝不许出现「等…完成再做…」「先做 X 再改 Y」这类顺序句。工作进程看不到别的单、",
+    "  · 【红线】参数里绝不许出现“等…完成再做…”“先做 X 再改 Y”这类顺序句。工作进程看不到别的单、",
     "    也没法等：它只会空转，同时占着并发槽，被等的那一单永远排不上——两边互相等死。",
     "    顺序一律用 `PARENT:` 表达：挂着父节点的单在父节点完成前不会启动，也就不占槽。",
     "    参数含顺序句时，工作进程会占住并发槽等待另一单完成，两条派单互相阻塞。",
     "    顺序关系一律写入数据，不写进参数。",
     "",
-    "【他说「立即做」「最高优先级」是什么意思】他要的不是「排到队首」，是「马上跑」：",
-    "  · 先 `DO: dispatch` 建单，正文只写要做什么——不要把「最高优先级」这几个字写进参数，",
+    "【他说“立即做”“最高优先级”是什么意思】他要的不是“排到队首”，是“马上跑”：",
+    "  · 先 `DO: dispatch` 建单，正文只写要做什么——不要把“最高优先级”这几个字写进参数，",
     "    那是给人看的表态，不是工作内容；",
     "  · 紧跟着写一行 `DO: promote #<这一单的编号>`。只写 dispatch 不写 promote，",
-    "    它就只是一张普通排队单，前面还有单在跑时它照样得等；",
+    "    它就只是一张普通排队单，前方存在运行中的派单时仍须排队；",
     "  · 只认明确说法：立即 / 马上 / 现在就 / 最高优先级 / 插队 / 别排队。",
-    "    「优先」「尽快」「注意一下」不算——那些是普通措辞，标成立即执行会把真正的急事挤掉；",
+    "    “优先”“尽快”“注意一下”不算——那些是普通措辞，标成立即执行会把真正的急事挤掉；",
     "  · 同一时刻只允许一张立即执行单。已经有一张在抢槽时，如实告诉用户",
-    "    「#N 正在执行，这一单排在它之后」，不要两张都标；",
-    "  · 他说的是一件**已经在跑**的单要插队，那就只写 promote，不要再 dispatch 一张。",
+    "    “#N 正在执行，这一单排在它之后”，不要两张都标；",
+    "  · 用户说的是**运行中**的派单要插队，那就只写 promote，不要再 dispatch 一张。",
     "",
     "【改口不是新增任务】一条消息可能分两次发送，后一条更正前一条：",
-    "  · 他要的结果变了，而这件事已经在跑 → DO: amend，进那一单；不要新开一张去做同一件事。",
-    "  · 他在补充同一个要求（说得更细、把错字改了、把口径收紧）→ 同样走 amend。",
+    "  · 他要的结果变了，而这件事已经运行中 -> DO: amend，进那一单；不要新开一张去做同一件事。",
+    "  · 他在补充同一个要求（说得更细、把错字改了、把口径收紧）-> 同样走 amend。",
     "  · 前后冲突时以**后收到的**为准；后一条往往用于推翻前一条。",
-    "  · **引用某一条说「不对 / 应该是…」**：那是他对已经派出去的那一单做修正，不是重提、也不是新活。",
-    "    引用消息时会看到「这条消息已派成 #N」，就写 `DO: amend #N …` 落回同一单；",
-    "    找不到对应单（那句只是聊天、没派单）才 dispatch，并在回复里说明「没找到它对应的单，已新开 #N」。",
+    "  · **引用某一条说“不对 / 应该是…”**：那是他对已经派出去的那一单做修正，不是重提、也不是新活。",
+    "    引用消息时会看到“这条消息已派成 #N”，就写 `DO: amend #N …` 落回同一单；",
+    "    找不到对应单（那句只是聊天、没派单）才 dispatch，并在回复里说明“没找到它对应的单，已新开 #N”。",
     "    这一步错了代价最大：他不是在提新要求，你新开一单，就是两个进程改同一处、互相覆盖。",
-    "  · 【判「同一件事」比两样：作用的对象 + 要它变成什么样】两样都对得上才算同一件；只差措辞不算两件，",
-    "    但**对象不同就一定不是同一件**——哪怕两个标题里都有「标题行」三个字。",
-    "    判「与 #N 同一件事」须比对作用对象与验收方式：只差措辞仍算同一件，",
+    "  · 【判“同一件事”比两样：作用的对象 + 要它变成什么样】两样都对得上才算同一件；只差措辞不算两件，",
+    "    但**对象不同就一定不是同一件**——哪怕两个标题里都有“标题行”三个字。",
+    "    判“与 #N 同一件事”须比对作用对象与验收方式：只差措辞仍算同一件，",
     "    对象不同则不是同一件，不能因标题相近就作废其中一单。",
-    "  · 【说「与 #N 同一件事」之前，先读那一单的正文】编号只是索引，不是内容。",
+    "  · 【说“与 #N 同一件事”之前，先读那一单的正文】编号只是索引，不是内容。",
     "    指错号比判错更伤：用户会以为派单被误作废。读一行正文就能避免。",
     "",
-    "【推翻已定的口径要写明】「以后说的为准」只管**同一次对话里的改口**，不管历史派单：",
+    "【推翻已定的口径要写明】“以后说的为准”只管**同一次对话里的改口**，不管历史派单：",
     "  · 新要求与【最近派过的单】里任何一条相反时，动作行下面单独写一行 `REVOKE: <被作废的那条口径>`，",
     "    例：",
     "      DO: dispatch [ui] 指令卡改多行展示",
@@ -5908,7 +5892,7 @@ function supervisorPolicy(opts: {
     "  · 没有 REVOKE 却要恢复一个已经撤掉的东西，就是两套并存（旧的不拆、新的又加），",
     "    界面上会同时出现两条互斥的实现。这种情况先 `capitalist ask` 问清是推翻还是并存，不推断。",
     "  · 【红线】同一件事的两次要求在字面上互斥、又都没写 REVOKE 时，不许直接派：",
-    "    指出「这一条与 #N 已验收的做法相反」，并给出两个选项。",
+    "    指出“这一条与 #N 已验收的做法相反”，并给出两个选项。",
     "",
     "【是否带图按相关性判定】",
     "  派单或 amend 时，在动作行后单独一行写 ATT: <编号，逗号分隔>，只带真正相关的那几张。",
@@ -5918,16 +5902,16 @@ function supervisorPolicy(opts: {
     ...(opts.viaSupervisor
       ? [
           "",
-          "【用户按了「监工介入」】提问发生在某个进程的会话里，携带那个任务编号直接回答；",
+          "【用户按了“监工介入”】提问发生在某个进程的会话里，携带那个任务编号直接回答；",
           "不要把这句话登记回那一单，也不要转给那个进程——他要的就是监工自己来说。",
         ]
       : []),
     "",
     "【别做的事】",
     "· 不要把问句翻成待办：每翻一个就多一张单、多一个进程，还要有人做完它。",
-    "  典型误判：「查一下为什么没动」被写成 dispatch——等那单排到，要查的状态已经变了。",
+    "  典型误判：“查一下为什么没动”被写成 dispatch——等那单排到，要查的状态已经变了。",
     "  问句的答案只能你当场给，外面的进程给不了。",
-    "· 不要写「已登记」「我记住了」「已派发」——那是系统执行完自己会说的话，写了会与系统回显重复。",
+    "· 不要写“已登记”“我记住了”“已派发”——那是系统执行完自己会说的话，写了会与系统回显重复。",
     "· 不解释判断规则，不纠正用户表述。",
     "· 自己查的时候只看不改：可以读台账、日志、代码，不要改文件、不要跑部署或删除类命令，",
     "  也不要执行 capitalist advance / capitalist adopt / capitalist supervise——那些是流程动作，不是查问题。",
@@ -5988,7 +5972,7 @@ function workerRuntimeLines(root: string, max = 5): string[] {
   }
   return [
     "",
-    "【在跑的进程】一行一个：编号 · 车道 · 余量 · 这一单要做什么 · 已经做到哪。判断「这句话该不该发给它」：",
+    "【运行中的进程】一行一个：编号 · 车道 · 余量 · 这一单要做什么 · 已经做到哪。判断“这句话该不该发给它”：",
     "  车道＝是不是同类任务；余量＝装不装得下；要做什么＝与当前消息是不是同一件事；做到哪＝还差多少。",
     "  这几样不够判断时不推断：`capitalist worker <进程号>` 看它的动作时间线，再不够就读 `.capitalist/workers/<进程号>.log`。",
     ...rows,
@@ -6415,10 +6399,10 @@ export function runCommand(root: string, raw: unknown): CommandResult {
           ...(r.behind ? { behind: r.behind } : {}),
           detail: `越过 ${r.ahead} 张排队单${r.already ? "（重复置顶，已刷新到队首）" : ""}`,
           effective: r.behind
-            ? `已置顶 · 立即执行单 ${r.behind} 仍在跑，这一单排在它之后`
+            ? `已置顶 · 立即执行单 ${r.behind} 仍运行中，这一单排在它之后`
             : willRun
               ? `已置顶 · 当前 ${live}/${cap} 槽有空，下一轮拉起`
-              : `已置顶 · 下一轮挂起一个在跑的任务腾出槽位；被让位的任务显示「已让位」，这一单结束后按原顺序恢复`,
+              : `已置顶 · 下一轮挂起一个运行中的任务腾出槽位；被让位的任务显示“已让位”，这一单结束后按原顺序恢复`,
         },
       };
     }
@@ -6447,7 +6431,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
           dispatch: r.id,
           from: r.from,
           to: r.to,
-          detail: r.from === r.to ? "已唤醒" : `${r.from} → ${r.to}`,
+          detail: r.from === r.to ? "已唤醒" : `${r.from} 改为 ${r.to}`,
           effective: "下一 tick 起按队列顺序参与调度",
         },
       };
@@ -6480,7 +6464,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
       if (!thread && !shard) return cBad("id 必填");
       const wid = workerOfThread(root, thread, shard);
       if (!wid) {
-        return { status: 409, body: { error: "该线程当前没有在跑的进程，无法中断", action, thread } };
+        return { status: 409, body: { error: "该线程当前没有运行中的进程，无法中断", action, thread } };
       }
       const r = runCli(["stop-worker", wid, "--root", root]);
       if (r.code !== 0) return { status: 400, body: { error: r.stderr || r.stdout || "中断失败", action } };
@@ -6500,7 +6484,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
       const model = String(body.model ?? "").trim();
       const wid = workerOfThread(root, thread, shard);
       if (!wid) {
-        return { status: 409, body: { error: "该线程当前没有在跑的进程，无法切换模型", action, thread } };
+        return { status: 409, body: { error: "该线程当前没有运行中的进程，无法切换模型", action, thread } };
       }
       const rec = loadWorker(root, wid);
       const sh = String(rec?.shard ?? shard ?? "").trim();
@@ -6515,7 +6499,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
       if (pick.model) {
         setWorkerModel(root, sh, pick.model);
       } else {
-        /** 选「默认」即不再指定，回到契约或启动参数里的模型。 */
+        /** 选“默认”即不再指定，回到契约或启动参数里的模型。 */
         try {
           unlinkSync(workerModelPath(root));
         } catch {
@@ -6597,7 +6581,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
       if (!threadStatusTerminal(st) && !abnormal) {
         return {
           status: 409,
-          body: { error: "只有已完成（已验收）、已关闭或异常的任务卡能清除，在跑与排队的单仍由监工调度", action, key },
+          body: { error: "只有已完成（已验收）、已关闭或异常的任务卡能清除，运行中与排队的单仍由监工调度", action, key },
         };
       }
       let closedBit = "";
@@ -6850,7 +6834,7 @@ export interface SupervisorStatusView {
   /**
    * 上一轮的收尾状态（done / exited / stopped 等），仅在 status 为 stopped 时有值。
    *
-   * status 将所有非 running 状态归为 stopped，仅凭该字段无法区分「已执行完毕」和「从未启动」，
+   * status 将所有非 running 状态归为 stopped，仅凭该字段无法区分“已执行完毕”和“从未启动”，
    * 两者对应不同操作：前者继续执行，后者需要启动监工。
    */
   last_status: string;
@@ -6994,7 +6978,7 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
     context: buildSupervisorContextView(root),
     /*
      * 最近一次派单的模型优先；没有派单时用监工对话上一次实际跑的模型。
-     * 前端靠它把「宿主默认」标到具体那一行，不再出现抽象的「宿主默认」条目。
+     * 前端靠它把“宿主默认”标到具体那一行，不再出现抽象的“宿主默认”条目。
      */
     model: lastModel || readSupervisorModelUsed(root),
     model_version: lastVersion,
@@ -7167,7 +7151,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
   switch (name) {
     case "mq_message": {
       const kind = String(e.kind ?? "");
-      /** 未知申报类型收口成「申报」。 */
+      /** 未知申报类型收口成“申报”。 */
       const label = MQ_KIND_LABEL[kind] ?? "申报";
       /** 给全 id，不给四位短号，便于前端渲染成任务号。 */
       const from = String(e.from ?? "");
@@ -7204,7 +7188,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       return `指令 ${action}${arg ? ` ${arg}` : ""}：${ok ? "已执行" : "被拒"}${tail ? `（${tail}）` : ""}`;
     }
     case "supervisor_answer":
-      return `回答「${String(e.question ?? "")}」：${String(e.answer ?? "")}`;
+      return `回答“${String(e.question ?? "")}”：${String(e.answer ?? "")}`;
     case "context_compacted": {
       /** 压缩来源有两处：重载是确定事实，读数骤降是推断，正文标 inferred。 */
       const scope = String(e.scope ?? "capitalist");
@@ -7216,9 +7200,9 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       const next = String(e.next_session ?? "");
       const move =
         before && after
-          ? `${before} → ${after} token`
+          ? `${before} -> ${after} token`
           : before
-            ? `${before} token → 新会话${next ? ` ${next}` : ""}`
+            ? `${before} token -> 新会话${next ? ` ${next}` : ""}`
             : after
               ? `压缩后 ${after} token`
               : "压缩前后均无读数";
@@ -7234,7 +7218,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       return supervisorReplyView(e);
     }
     case "stage_skipped":
-      return `跳过阶段 ${String(e.from ?? "")} → ${String(e.to ?? "")}（记欠账，不算达标）`;
+      return `跳过阶段 ${String(e.from ?? "")} -> ${String(e.to ?? "")}（记欠账，不算达标）`;
     case "contract_reload":
       return `任务列表热加载：阶段 ${String(e.next_stages ?? "")}，分片 ${String(e.next_shards ?? "?")}`;
     case "contract_change":
@@ -7262,7 +7246,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
   }
 }
 
-/** 监工流与工作线程的 /api/thread 并列，tick 不在这里合并。 */
+/** 监工流与工作线程的 /api/thread 并列，调度轮次 不在这里合并。 */
 /** /api/capitalist-events 结果缓存键含文件指纹、参数与 root，避免多根切换串数据。 */
 let supervisorLogCache: { root: string; key: string; value: ReturnType<typeof buildSupervisorLog> } | null = null;
 
@@ -7275,7 +7259,7 @@ export function buildSupervisorLog(
   since_hours: number;
   main: number;
   log: number;
-  /** 时间窗之外仍有事件，或被 limit 截断；界面据此决定是否提供「展开更早的消息」。 */
+  /** 时间窗之外仍有事件，或被 limit 截断；界面据此决定是否提供“展开更早的消息”。 */
   has_older: boolean;
   messages: ThreadMessage[];
 } {
@@ -7288,7 +7272,7 @@ export function buildSupervisorLog(
   /**
    * 结果缓存键用 5 秒时间桶。
    *
-   * 不用文件 mtime/size：监工每 5 秒写一条 tick，带了就等于永远不命中，
+   * 不用文件 mtime/size：监工每 5 秒写一条 调度轮次，带了就等于永远不命中，
    * 每次轮询都要重读整份台账（几千行）。桶内复用，代价是最迟 2 秒看到新事件，
    * 与看板 2 秒轮询叠加仍在可接受范围；写接口进来时会直接置空，不必等桶过期。
    */
@@ -7510,8 +7494,8 @@ export function buildSupervisorLog(
     main,
     log: msgs.length - main,
     /*
-     * 「还有更早的」只有两种来源：窗口内被 limit 截断，或时间窗之外仍有事件。
-     * hours=0 时 cutTs 为 0，第二个条件恒为假，仅保留 limit 截断，符合「已经展开到不限」的语义。
+     * “还有更早的”只有两种来源：窗口内被 limit 截断，或时间窗之外仍有事件。
+     * hours=0 时 cutTs 为 0，第二个条件恒为假，仅保留 limit 截断，符合“已经展开到不限”的语义。
      */
     has_older:
       msgs.length > limit ||
@@ -7793,7 +7777,7 @@ let lastCpuTimes: { idle: number; total: number } | null = null;
 
 /**
  * 整机内存压力百分比（0-100，越高越紧张），与活动监视器同一口径：
- * macOS 取 memory_pressure 的「System-wide memory free percentage」取反；
+ * macOS 取 memory_pressure 的“System-wide memory free percentage”取反；
  * Linux 用 /proc/meminfo 的 MemAvailable 折算；Windows 用 (总量 − 空闲) / 总量。
  * 读不到时返回 null，不以其它值代入。
  */

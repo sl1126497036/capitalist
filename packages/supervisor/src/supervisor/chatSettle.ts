@@ -122,7 +122,7 @@ export function settleChat(
   return { unhandled: true, hints };
 }
 
-/** 标记「已答复，不需要动作」的发言，不再列入未建单列表。 */
+/** 标记“已答复，不需要动作”的发言，不再列入未建单列表。 */
 export function dismissChat(root: string, input: { msg_id: string; reason?: string }): boolean {
   const msgId = String(input.msg_id ?? "").trim();
   if (!msgId) return false;

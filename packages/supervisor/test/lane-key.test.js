@@ -1,4 +1,4 @@
-/** 线程键不能把「没有血缘」的派单折成 `阶段/main`。 */
+/** 线程键不能把“没有血缘”的派单折成 `阶段/main`。 */
 
 const test = require("node:test");
 const assert = require("node:assert");

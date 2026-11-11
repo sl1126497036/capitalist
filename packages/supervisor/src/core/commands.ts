@@ -19,7 +19,7 @@ function sleepSync(ms: number): void {
   Atomics.wait(sleepBuf, 0, 0, ms);
 }
 
-/** 过一会儿再收掉一棵进程树（不阻塞调用方）。 */
+/** 延迟回收整棵进程树（不阻塞调用方）。 */
 function reapTreeLater(pid: number, delayMs = 2500): void {
   if (!Number.isInteger(pid) || pid <= 0) return;
   const t = setTimeout(() => {
@@ -43,7 +43,7 @@ function reapTreeLater(pid: number, delayMs = 2500): void {
 /** 锁目录超过这个年龄即视为持锁进程已崩溃留下的残留。 */
 const LOCK_STALE_MS = 10_000;
 
-/** 锁目录的年龄是否已超过可判定残留的阈值；stat 失败按「不旧」处理，不去删别人的锁。 */
+/** 锁目录的年龄是否已超过可判定残留的阈值；stat 失败按“不旧”处理，不去删别人的锁。 */
 function lockIsStale(lock: string): boolean {
   try {
     return Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS;
@@ -90,6 +90,14 @@ export interface Directive {
   at: string;
   at_ts: number;
   type: "direct";
+  /**
+   * 在 `direct.jsonl` 中的行号（从 1 开始）。
+   *
+   * 对外一律用 `#行号` 指代一条插话：`M-` 开头的消息号是内部标识，既长又无法口头复述，
+   * 让 worker 在派单正文里看到它、再原样抄进回报，只会制造对不上号的错误。行号在文件里
+   * 稳定（只追加不重排），注入正文与回报解析用它即可对上同一条记录。
+   */
+  no?: number;
   /** 发起这条话的进程（`W-…`）。 */
   thread?: string;
   /**
@@ -111,15 +119,15 @@ export interface Directive {
    * 这句话自带的附件路径（一行一个的 `[附件]` 行解析出来的）。
    *
    * 落库时就把归属钉死在这里：看板读消息时按这条记录自己的 atts 画图，
-   * 不再靠「正文里恰好有一行 [附件]」去猜，更不碰上一条消息或全局暂存。
+   * 不再靠“正文里恰好有一行 [附件]”去猜，更不碰上一条消息或全局暂存。
    */
   atts?: string[];
   /**
    * 这句话来自哪条用户消息（`M-…`）。
    *
    * 附件归属靠它回查：派单建单时按这个标识去 `supervisor_chat_ask` 事件里取那条消息自己的
-   * `atts`，而不是从 action 正文里重新解析。老记录没有这个字段，读侧按「只认自己的
-   * 正文」兼容。
+   * `atts`，而不是从 action 正文里重新解析。老记录没有这个字段，读侧按“只认自己的
+   * 正文”兼容。
    */
   msg_id?: string;
   /**
@@ -140,16 +148,21 @@ export interface Directive {
   consumed_at?: string;
   consumed_by?: string;
   consumed_via?: string;
+  /**
+   * `consumed_via = "dropped"` 时的原因：说明这条追加为什么没有投递出去。
+   * 与 `consumed_by` 分开记录，避免把“没有任何进程领走”显示成“已并入派单”。
+   */
+  dropped_reason?: string;
   delivered?: boolean;
   delivered_at?: string;
-  /** 送达它的派单 id（与 consumed_by 同值，单独立名以便按「本单送过哪些」批量取） */
+  /** 送达它的派单 id（与 consumed_by 同值，单独立名以便按“本单送过哪些”批量取） */
   delivered_by?: string;
   /**
    * 落实结论，由执行侧（worker）在 `capitalist report --outcome` 里逐条回报。
    *
    * - `done`     已按这条改完（要说清改在哪）
    * - `not_mine` 判定不属本单（必须说清该归哪一单，否则等于丢弃）
-   * - `blocked`  做不了（说清卡在哪；不许拿来做「懒得做」的出口）
+   * - `blocked`  做不了（说清卡在哪；不许拿来做“懒得做”的出口）
    */
   outcome?: DirectiveOutcome;
   outcome_note?: string;
@@ -179,6 +192,15 @@ export function directiveRef(r: Directive): string {
 }
 
 /**
+ * 对外的短号：`#行号`。老记录没有行号时回落到 {@link directiveRef}。
+ *
+ * 派单正文与回报都用它，worker 不必抄一串 `M-…`。
+ */
+export function directiveShortRef(r: Directive): string {
+  return r.no ? `#${r.no}` : directiveRef(r);
+}
+
+/**
  * 按编号找插话。`ref` 可以是 `msg_id`，也可以是落盘时间（见 {@link directiveRef}）。
  */
 export function directiveByRef(root: string, ref: string): Directive | undefined {
@@ -192,17 +214,49 @@ export function directPath(root: string): string {
   return join(supervisorDir(root), "direct.jsonl");
 }
 
+/**
+ * 把指向同一张派单的未消费追加标记为不再投递。
+ *
+ * 用于目标单已终结、且其所属阶段已推进的情形：这类追加无法随任何派单带入执行，
+ * 保持未消费会让每轮调度重复尝试投递。记录保留在队列文件内，只置消费位并写明原因，
+ * 供看板与会话流回溯。
+ *
+ * 与 {@link claimDirectives} 的差别：这里不设 delivered，也不写 consumed_by，
+ * 因为内容没有送达任何进程。
+ */
+export function dropDirectivesFor(root: string, target: string, reason: string): Directive[] {
+  const id = String(target ?? "").trim();
+  if (!id) return [];
+  const file = directPath(root);
+  const got = withFileLock(file, () => {
+    const fresh = readJsonl<Directive>(file);
+    const dropped: Directive[] = [];
+    for (const r of fresh) {
+      if (r.consumed === true) continue;
+      if (String(r.target ?? "").trim() !== id) continue;
+      r.consumed = true;
+      r.consumed_at = new Date().toISOString();
+      r.consumed_via = "dropped";
+      r.dropped_reason = reason;
+      dropped.push(r);
+    }
+    if (dropped.length > 0) writeJsonl(file, fresh);
+    return dropped;
+  });
+  return got.ok ? got.value : [];
+}
+
 export function isWorkerRef(v: string): boolean {
   const s = String(v ?? "").trim();
   return /^W-/i.test(s) || /^\d+$/.test(s);
 }
 
 /**
- * 派单 → 它所属线程的键（`阶段/分片`；无分片时 `阶段/x血缘尾号`）。
+ * 派单 -> 它所属线程的键（`阶段/分片`；无分片时 `阶段/x血缘尾号`）。
  *
  * 线程键是任务的身份，比分单和进程都长寿：同一任务重派出来的几张单、拉起的几个
- * 进程共用同一个键，编号表（thread-no.json）也按它发行号。所以「用户在哪条线程里说
- * 的这句话」必须落到这个键上，落到派单 id 或进程 id 上，一次重派就换一代身份，
+ * 进程共用同一个键，编号表（thread-no.json）也按它发行号。所以“用户在哪条线程里说
+ * 的这句话”必须落到这个键上，落到派单 id 或进程 id 上，一次重派就换一代身份，
  * 这句话跟着那代一起作废。
  *
  * 规则与看板的 `taskKeyOf` 逐字一致（那边已改为调用本函数）。两处各写一遍必然漂，
@@ -261,7 +315,7 @@ export function appendDirective(
     shard: input.shard ? input.shard : null,
     consumed: false,
   };
-  /* 附件按「这条记录自己的」落盘：调用方给了就用它，没给就从自己的正文里解一次。 */
+  /* 附件按“这条记录自己的”落盘：调用方给了就用它，没给就从自己的正文里解一次。 */
   const atts = input.atts?.length ? input.atts.map(String) : attachmentsIn(text);
   if (atts.length) rec.atts = [...new Set(atts)];
   if (input.msgId) rec.msg_id = input.msgId;
@@ -271,7 +325,21 @@ export function appendDirective(
   if (input.lineage) rec.lineage = input.lineage;
   if (input.target) rec.target = input.target;
   if (input.via === "capitalist" || input.via === "user") rec.via = input.via;
-  if (!appendJsonl(directPath(root), rec)) return null;
+  /*
+   * 时间戳精度到毫秒：同一毫秒内连发两条时，`directiveRef` 会指向同一行，结项落到相邻记录上。
+   * 与前一条相同或更早（时钟回拨）则顺延 1ms，保证引用唯一，落盘格式不变。
+   */
+  const file = directPath(root);
+  const prev = readJsonl<Directive>(file);
+  const lastAt = String(prev[prev.length - 1]?.at ?? "");
+  if (lastAt && lastAt >= rec.at) {
+    const next = new Date(new Date(lastAt).getTime() + 1);
+    if (Number.isFinite(next.getTime())) {
+      rec.at = next.toISOString();
+      rec.at_ts = next.getTime() / 1000;
+    }
+  }
+  if (!appendJsonl(file, rec)) return null;
   recordEvent(root, "direct_inject", {
     thread: input.thread ?? "",
     shard: input.shard ?? "",
@@ -291,7 +359,7 @@ export function listDirectives(root: string): Directive[] {
 }
 
 /**
- * 一条插话的目标范围：谁在问「这行话是不是给我的」。
+ * 一条插话的目标范围：谁在问“这行话是不是给我的”。
  *
  * 四个字段就是判定所需的全部事实：这一单是哪个阶段、哪个分片、哪张单、哪条链，
  * 以及问话的是哪个进程（执行中的送达只有它有值）。
@@ -312,7 +380,7 @@ export interface DirectiveScope {
    * 那类话永远匹配不上。
    */
   lane?: string;
-  /** 派单 id → 它所属链的链首 id。给了才做链归并。 */
+  /** 派单 id -> 它所属链的链首 id。给了才做链归并。 */
   lineageOf?: (dispatchId: string) => string;
 }
 
@@ -425,10 +493,12 @@ export function claimDirectives(
       .map((r, i) => ({ r, i }))
       .filter(({ r }) => !r.consumed && typeof r.text === "string" && directiveMatches(r, scope));
     candidates.sort((a, b) => claimRank(a.r, scope) - claimRank(b.r, scope) || a.i - b.i);
-    for (const { r } of candidates) {
+    for (const { r, i } of candidates) {
       if (taken.length >= limit) break;
-      /* 字数上限只约束「第二条起」：单条自己超长也得送，否则它会永远卡在队首。 */
+      /* 字数上限只约束“第二条起”：单条自己超长也得送，否则它会永远卡在队首。 */
       if (taken.length > 0 && maxChars > 0 && chars + r.text.length > maxChars) continue;
+      /* 行号随记录一起带走：注入正文与回报都用它，见 `Directive.no`。 */
+      r.no = i + 1;
       r.consumed = true;
       r.consumed_at = new Date().toISOString();
       r.consumed_by = input.dispatchId;
@@ -456,10 +526,10 @@ export function spliceDirectives(action: string, directives: Directive[]): strin
      */
     const files = Array.isArray(d.atts) ? d.atts.map((p) => String(p)) : attachmentsIn(d.text);
     /*
-     * 每条前面挂编号：收工闸要求 worker 逐条回报结论，回报时按这个编号指认是哪一条
+     * 每条前置编号：收工闸要求工作进程逐条回报结论，回报时按这个编号指认是哪一条
      * （见 `capitalist report --outcome`）。编号优先取消息号，老记录退回落盘时间。
      */
-    const head = body ? `- [${directiveRef(d)}] ${body}` : `- [${directiveRef(d)}]`;
+    const head = body ? `- [${directiveShortRef(d)}] ${body}` : `- [${directiveShortRef(d)}]`;
     const quoteLine = d.quote
       ? `  [引用 #${d.quote}] ${d.quote_text || "（原文未取回，仅编号）"}`
       : "";
@@ -476,7 +546,7 @@ export function spliceDirectives(action: string, directives: Directive[]): strin
 /**
  * 给一条插话写落实结论。
  *
- * 这是「送达」与「落实」之间的那一笔：`claimDirectives` 只记送到了哪一单，做没做由执行侧
+ * 这是“送达”与“落实”之间的那一笔：`claimDirectives` 只记送到了哪一单，做没做由执行侧
  * 在这里回报。没有这一步，队列里只剩一个 consumed 布尔值，做没做永远无从查证。
  *
  * 只管一个编号，不做批量解析（调用方按 `capitalist report --outcome` 的格式拆好再逐条调）。
@@ -511,12 +581,20 @@ export function markDirectiveOutcome(
   const got = withFileLock(file, () => {
     const rows = readJsonl<Directive>(file);
     let hit = -1;
-    for (let i = rows.length - 1; i >= 0; i -= 1) {
-      const r = rows[i];
-      if (!r || typeof r.text !== "string") continue;
-      if (directiveRef(r) !== key) continue;
-      hit = i;
-      break;
+    const byNo = /^#(\d+)$/.exec(key);
+    if (byNo) {
+      /* 短号：行号（从 1 开始）直接定位，与注入正文里的 [#N] 同一口径。 */
+      const idx = Number(byNo[1]) - 1;
+      const row = rows[idx];
+      if (row && typeof row.text === "string") hit = idx;
+    } else {
+      for (let i = rows.length - 1; i >= 0; i -= 1) {
+        const r = rows[i];
+        if (!r || typeof r.text !== "string") continue;
+        if (directiveRef(r) !== key) continue;
+        hit = i;
+        break;
+      }
     }
     if (hit < 0) return { ok: false as const, reason: `找不到编号 ${key} 的插话（编号见派单正文里的 [方括号]）` };
     const rec = rows[hit] as Directive;
@@ -545,8 +623,8 @@ export function markDirectiveOutcome(
 /**
  * 某张单送出、但还没有结论的插话。
  *
- * 收工闸与验收判定共用这一份：一处回答「还差哪几条没做」，一处回答「这些要求到底落实了没」。
- * 两边各算一遍必然漂，漂了之后就会出现「收工闸放行、验收说没做」这种谁也说不清的状态。
+ * 收工闸与验收判定共用这一份：一处回答“还差哪几项未完成”，一处回答“这些要求是否落实”。
+ * 两处各算一遍必然产生偏差，偏差会导致收工闸放行而验收判定未完成，且无法判断以哪一处为准。
  */
 export function openDirectivesOf(root: string, dispatchId: string): Directive[] {
   const id = String(dispatchId ?? "");
@@ -640,7 +718,7 @@ function writeTakeover(root: string, items: TakeoverItem[]): void {
 /**
  * 接管某片（`shard` 为空 = 整个任务根）。
  *
- * 接管只改变监工行为：下次 tick 起该片不再自动重派、也不再自动验收。它不终止已在跑的
+ * 接管只改变监工行为：下次 轮调度起该片不再自动重派、也不再自动验收。它不终止已运行中的
  * 进程，要停进程用 {@link stopWorker}。重复接管同一片时更新原因与时间，不叠加条目，
  * 否则 release 一次会留下一条仍在生效的残留。
  *
@@ -709,7 +787,7 @@ export function activeTakeover(root: string): TakeoverView {
 }
 
 /**
- * 该片是否被接管。传空分片时只看「整根接管」。
+ * 该片是否被接管。传空分片时只看“整根接管”。
  */
 export function isHeld(root: string, shard?: string | null): boolean {
   const v = activeTakeover(root);
@@ -752,7 +830,7 @@ export function stopWorker(root: string, id: string, opts: StopWorkerOptions = {
   /*
    * 状态要分两种：换模型重启时这一单没失败，记 `failed` 会让它进异常档、
    * 计入失败次数，看板上还多一条红账。记 `exited`，进程正常退出，调度层
-   * 只把它当「这个进程不在了」，单还在队列里。
+   * 只把它当“这个进程不在了”，单还在队列里。
    */
   saveWorker(root, {
     ...rec,
@@ -794,7 +872,7 @@ export interface CloseTaskResult {
 }
 
 /**
- * 找一张「还开着」的单：结项只对没结论的单有意义。
+ * 找一张“还开着”的单：结项只对没结论的单有意义。
  *
  * 目标可能是三种写法，按顺序试：
  *   1. 派单 id（`D-…`）；
@@ -860,11 +938,11 @@ export function closeTask(
   /*
    * 结项后冻住这一片。
    *
-   * 只把这一张单改成 closed 不够：阶段门槛仍未达标，监工下一 tick 会重新建一张单派出去，
-   * 用户看到的就是「说了停，它还在派」。接管态是现成的抑制开关，loop 的 held() 会跳过
+   * 只把这一张单改成 closed 不够：阶段门槛仍未达标，监工下一轮调度 会重新建一张单派出去，
+   * 用户看到的就是“说了停，它还在派”。接管态是现成的抑制开关，loop 的 held() 会跳过
    * 该片的派单与自动验收。要恢复自动调度，用户执行 `capitalist release <片>`。
    *
-   * 只在「这一片已经没有别的活单」时冻：一片上还有别的在跑，冻住会误伤那些单。
+   * 只在“这一片已经没有别的活单”时冻：一片上还有别的运行中，冻住会误伤那些单。
    */
   let held = false;
   if (d.shard) {
@@ -910,13 +988,13 @@ export interface PromoteTaskResult {
   ahead: number;
   already: boolean;
   /**
-   * 这一单会不会真的插队（挂起一个在跑的进程腾槽）。
+   * 这一单会不会真的插队（挂起一个运行中的进程腾槽）。
    *
-   * 只有「当前没有别的立即执行在跑」才是 true。回执要按它说话：说「腾槽」却没腾，
+   * 只有“当前没有别的立即执行运行中”才是 true。回执要按它说话：说“腾槽”却没腾，
    * 用户下一眼看队列就会发现它还在等，比不置顶更伤信任。
    */
   preempt: boolean;
-  /** 已经有立即执行在跑时，挡在前面的那张派单 id；否则为空串。 */
+  /** 已经有立即执行运行中时，挡在前面的那张派单 id；否则为空串。 */
   behind: string;
 }
 

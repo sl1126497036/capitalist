@@ -47,9 +47,9 @@ function strList(v: unknown): string[] {
 /**
  * 取字符串数组字段；字段存在但不是数组时 fail closed。
  *
- * 「读不懂配置」与「没有这条要求」不能同义：按空数组放过去，等于把一条写错的检查变成
+ * “读不懂配置”与“没有这条要求”不能同义：按空数组放过去，等于把一条写错的检查变成
  * 永远达标，阶段会在没有证据的情况下被判完成。缺省（字段不存在）仍按空数组处理，
- * 那时语义确实是「没要求」。
+ * 那时语义确实是“没要求”。
  */
 function strListOrFail(spec: Spec, key: string, label: string): { list: string[] } | { error: CheckResult } {
   const v = spec[key];
@@ -63,10 +63,10 @@ function strListOrFail(spec: Spec, key: string, label: string): { list: string[]
 /**
  * `all_of` / `any_of` 的子检查。
  *
- * `checks` 与 `of` 两种写法都在用；写成非数组时按「未配置」处理而不是抛出，
+ * `checks` 与 `of` 两种写法都在用；写成非数组时按“未配置”处理而不是抛出，
  * 判定路径上抛错会让整个 gate 变成异常，而上层只能记一条 error，等于把一条配置错误
  * 变成一次不明原因的不达标。元素不是对象的用空对象占位，交给 {@link runCheck} 判成
- * 「没有配置 done 条件」，同样是 fail closed。
+ * “没有配置 done 条件”，同样是 fail closed。
  */
 function subChecks(spec: Spec): Spec[] {
   const raw = Array.isArray(spec.checks) ? spec.checks : Array.isArray(spec.of) ? spec.of : [];
@@ -151,9 +151,9 @@ function assertionsOf(spec: Spec): Assertion[] | null {
 }
 
 /**
- * 单条断言的判定说明。满足返回 null，不满足返回一行「期望 / 实际」。
+ * 单条断言的判定说明。满足返回 null，不满足返回一行“期望 / 实际”。
  *
- * 未知 `op` 与类型不匹配（要数的位置给了字符串）都判不满足：这类配置读成「通过」
+ * 未知 `op` 与类型不匹配（要数的位置给了字符串）都判不满足：这类配置读成“通过”
  * 等于让门槛静默失效，方向性错误。
  */
 function checkAssertion(data: unknown, a: Assertion, rel: string): string | null {
@@ -163,7 +163,7 @@ function checkAssertion(data: unknown, a: Assertion, rel: string): string | null
     return a.op === "truthy"
       ? `${head}：期望 truthy，实际 缺失`
       : a.op === "falsy"
-        ? null // 缺字段按「没有这个元素」处理
+        ? null // 缺字段按“没有这个元素”处理
         : `${head}：期望 ${a.op || "(空)"} ${show(a.value)}，实际 缺失`;
   }
 
@@ -217,12 +217,12 @@ function checkAssertion(data: unknown, a: Assertion, rel: string): string | null
 
 const CHECKS: Record<string, Checker> = {
   /*
-   * 显式「无验收条件」。
+   * 显式“无验收条件”。
    *
-   * 与「没写 done」区分开：`runCheck` 对空 spec 是 fail closed（判不达标），因为漏配
+   * 与“没写 done”区分开：`runCheck` 对空 spec 是 fail closed（判不达标），因为漏配
    * 门槛通常是写错了。但有些阶段确实不需要验收条件，比如只按派单台账执行的任务根，
-   * 阶段不代表一段有产出物的工序。这类阶段写 `{"type":"none"}`，明确表示「本阶段
-   * 没有门槛」，而不是留空让人猜是漏配还是故意不配。
+   * 阶段不代表一段有产出物的工序。这类阶段写 `{"type":"none"}`，明确表示“本阶段
+   * 没有门槛”，而不是留空让人猜是漏配还是故意不配。
    */
   none: () => ({ ok: true, missing: [] }),
   file_exists: (spec, root) => {
@@ -300,7 +300,7 @@ const CHECKS: Record<string, Checker> = {
     if ("error" in keysRes) return keysRes.error;
     const keys = keysRes.list;
     const data = readJson<Record<string, unknown> | null>(resolveListFile(root, rel), null);
-    // 文件缺失按「所有键都缺」处理，不按「检查无法执行」处理。
+    // 文件缺失按“所有键都缺”处理，不按“检查无法执行”处理。
     if (!data) return failKeys(spec, rel, keys);
 
     const lack = keys.filter((k) => !(k in data));
@@ -328,7 +328,7 @@ const CHECKS: Record<string, Checker> = {
       return { ok: false, missing: ["report_assert 的 assert 是空数组（没有断言无从判定）"] };
     }
 
-    // 报告本身读不到时整条不达标：一份没生成出来的量测结果不能当作「数值都对」。
+    // 报告本身读不到时整条不达标：一份没生成出来的量测结果不能当作“数值都对”。
     const data = readJson<unknown>(resolveListFile(root, rel), null);
     if (data === null || typeof data !== "object") {
       return fail(spec, `${rel} 不存在或不是合法 JSON（无从断言实测值）`);
@@ -465,7 +465,7 @@ const CHECKS: Record<string, Checker> = {
 
   script: (spec) => {
     // 不支持：在 hook 必经路径上执行任意命令会把一次判定变成又一次执行，并与红线判定
-    // 抢先后。等价能力由内置检查类型的组合提供。
+    // 判优先级。等价能力由内置检查类型的组合提供。
     const cmd = String(spec.cmd ?? "");
     return { ok: false, missing: [`script 检查未在 TS 版实现（${cmd.slice(0, 60)}），请改用内置检查类型`] };
   },

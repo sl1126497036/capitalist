@@ -41,7 +41,7 @@ const TEXTS: Record<BriefLang, Texts> = {
     fallbackHead: "▸ 通用任务列表 · 无领域判据（不阻断，但别当它有）",
     fallbackBody: [
       "  未指定领域任务列表，跑的是通用三阶段：通用红线（破坏性删除 / SQL 清库 / 凭据）生效，",
-      "  但「这个领域什么算做完、哪些动作绝对禁」没有定义。",
+      "  但“这个领域什么算做完、哪些动作绝对禁”没有定义。",
       "  若这是明确领域任务：capitalist adopt --contract <任务列表名>",
     ],
     mode: (m) => `▸ 权限档位：${m}（非默认，动作被拦可能由档位导致，而非任务列表红线）`,
@@ -114,8 +114,8 @@ export function buildBrief(input: BriefInput): string {
   }
 
   // 只列本阶段的提问：旧阶段的提问已失效，继续显示会让每一轮都重复催同一件已了结的事。
-  // 走校验读取：缺 id / 空 text / status 越界的记录不参与，它们连「问的是什么」都说不清，
-  // 却足以让监工判定「有待裁决」而停派。
+  // 走校验读取：缺 id / 空 text / status 越界的记录不参与，它们连“问的是什么”都说不清，
+  // 却足以让监工判定“有待裁决”而停派。
   const open = openInboxAsks(root).filter((q) => !q.stage || q.stage === state.stage);
   if (open.length > 0) {
     lines.push(t.asks(open.length));

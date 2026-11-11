@@ -1,10 +1,10 @@
 /**
  * 监工消息术语表：服务端与看板前端共用本文件的常量，不在别处另写一份。
  *
- * 未知事件、指令、状态回落到「其他事件」/「其他指令」/「未知状态」，不回落到英文枚举。
+ * 未知事件、指令、状态回落到“其他事件”/“其他指令”/“未知状态”，不回落到英文枚举。
  */
 
-/** 事件名 → 标签；分类标签与消息正文共用。 */
+/** 事件名 -> 标签；分类标签与消息正文共用。 */
 export const EVENT_ZH: Readonly<Record<string, string>> = Object.freeze({
   dispatch_open: "派发任务",
   dispatch_done: "任务完成",
@@ -61,7 +61,7 @@ export const EVENT_ZH: Readonly<Record<string, string>> = Object.freeze({
 /** 未知事件的回落标签，不回落到原始事件名。 */
 export const EVENT_ZH_FALLBACK = "其他事件";
 
-/** 调度指令动作 → 界面上的中文名。 */
+/** 调度指令动作 -> 界面上的中文名。 */
 export const CMD_ZH: Readonly<Record<string, string>> = Object.freeze({
   pause: "暂停调度",
   resume: "恢复调度",
@@ -91,7 +91,7 @@ export const CMD_ZH: Readonly<Record<string, string>> = Object.freeze({
 /** 未知指令的回落名。 */
 export const CMD_ZH_FALLBACK = "其他指令";
 
-/** 台账状态 → 中文；消息引用状态时不用原始枚举。 */
+/** 台账状态 -> 中文；消息引用状态时不用原始枚举。 */
 export const STATUS_ZH: Readonly<Record<string, string>> = Object.freeze({
   open: "待执行",
   queued: "排队",
@@ -113,7 +113,7 @@ export const STATUS_ZH: Readonly<Record<string, string>> = Object.freeze({
 /** 未知状态的回落词。 */
 export const STATUS_ZH_FALLBACK = "未知状态";
 
-/** 任务列表被拒的原因 → 中文。 */
+/** 任务列表被拒的原因 -> 中文。 */
 export const CONTRACT_KIND_ZH: Readonly<Record<string, string>> = Object.freeze({
   requirement_violation: "需求层被删除或降低标准",
 });
@@ -128,32 +128,32 @@ export const WORD_ZH: Readonly<Record<string, string>> = Object.freeze({
   SIGTERM: "终止信号",
 });
 
-/** 事件名 → 中文标签；未知回落到「其他事件」。 */
+/** 事件名 -> 中文标签；未知回落到“其他事件”。 */
 export function zhEvent(name: unknown): string {
   const key = String(name ?? "");
   return EVENT_ZH[key] ?? EVENT_ZH_FALLBACK;
 }
 
-/** 指令动作 → 中文名；未知回落到「其他指令」。 */
+/** 指令动作 -> 中文名；未知回落到“其他指令”。 */
 export function zhCommand(action: unknown): string {
   const key = String(action ?? "");
   return CMD_ZH[key] ?? CMD_ZH_FALLBACK;
 }
 
-/** dispatch 带 `urgent` 时显示「插队派单」，其余显示「已派单」；只认调用方传入的标记，不做推断。 */
+/** dispatch 带 `urgent` 时显示“插队派单”，其余显示“已派单”；只认调用方传入的标记，不做推断。 */
 export function zhCommandLabel(action: unknown, urgent?: unknown): string {
   if (String(action ?? "") === "dispatch") return urgent === true ? "插队派单" : "已派单";
   return zhCommand(action);
 }
 
-/** 台账状态 → 中文；空值回空串，未知值回落到「未知状态」。 */
+/** 台账状态 -> 中文；空值回空串，未知值回落到“未知状态”。 */
 export function zhStatus(status: unknown): string {
   const key = String(status ?? "");
   if (!key) return "";
   return STATUS_ZH[key] ?? STATUS_ZH_FALLBACK;
 }
 
-/** 契约拒绝原因 → 中文；未知原因原样保留。 */
+/** 契约拒绝原因 -> 中文；未知原因原样保留。 */
 export function zhContractKind(kind: unknown): string {
   const key = String(kind ?? "");
   if (!key) return "";

@@ -69,7 +69,7 @@ test("立即执行（promote）压过插队单", () => {
   assert.equal(preempt.isImmediate(read(root, "D-now")), true);
 });
 
-test("正在跑的单不能插队：要抢跑得用立即执行", () => {
+test("正运行中的单不能插队：要抢跑得用立即执行", () => {
   const root = sandbox();
   put(root, "D-run", { status: "claimed" });
   assert.equal(capitalist.frontDispatch(root, "D-run"), null, "claimed 的单插不进去");

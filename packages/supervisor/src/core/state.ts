@@ -45,7 +45,7 @@ export function saveState(root: string, state: TaskState): void {
  *
  * 场景：hook 每个工具调用起一个进程，CLI 与它并行改同一份 state。无条件覆盖时，
  * 后写的进程会把先写的字段整块抹掉，文件仍是合法 JSON，丢掉的更新不留痕迹，
- * 表现为「刚才明明切了只读档，怎么又回去了」。
+ * 表现为“刚才明明切了只读档，怎么又回去了”。
  *
  * 做法是乐观并发：读到 rev=n 就记下，写回前再读一次；磁盘上不是 n 说明中间有人写过，
  * 重读再改。重试三次仍冲突就放弃并返回 null，写不进去好过写错。
@@ -148,7 +148,7 @@ export function supervisorDisplayState(root: string): SupervisorDisplayInfo {
     return { state: "online", pid: rec.pid, detail: `心跳 ${age}s 前更新`, heartbeat_age_sec: age };
   }
 
-  // 运行中、进程仍在、但心跳已超时：归为「心跳超时」而非「已停」。进程还在，按已停处理会
+  // 运行中、进程仍在、但心跳已超时：归为“心跳超时”而非“已停”。进程还在，按已停处理会
   // 让使用者以为可以安全重启。
   return {
     state: "timeout",

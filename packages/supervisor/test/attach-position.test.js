@@ -23,7 +23,7 @@ test("附件行原地保留：位置与角色标注都不动", () => {
   assert.equal(r.kept.length, 2);
 });
 
-test("不属于本单的附件行整行删掉，不补「丢弃了哪些」", () => {
+test("不属于本单的附件行整行删掉，不补“丢弃了哪些”", () => {
   const text = ["正文一段", `[附件] ${A}（现状）`, `[附件] ${OLD}（上一单的图）`].join("\n");
   const r = bindAttachments(text, [A]);
   assert.ok(!r.text.includes(OLD), "别的单的图不能跟着走");

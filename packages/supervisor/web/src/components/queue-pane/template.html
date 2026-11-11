@@ -60,7 +60,7 @@
       </button>
     </span>
     <span class="refresh">
-      <!-- 清空只作用于当前筛选档，归档记录而不结束在跑进程；运行中的进程完成后会重新出现。 -->
+      <!-- 清空只作用于当前筛选档，归档记录而不结束运行中进程；运行中的进程完成后会重新出现。 -->
       <button
         v-if="canClear"
         class="qbtn danger"
@@ -238,7 +238,7 @@
               role="button"
               tabindex="0"
               :aria-label="`${t('立即执行')} ${r.title}`"
-              :data-tip="t('提到队首，必要时让在跑的单让位')"
+              :data-tip="t('提到队首，必要时让运行中的单让位')"
               @click.stop="promoteTap(r)"
               @keydown.enter.stop.prevent="promoteTap(r)"
             >
@@ -390,7 +390,7 @@
   <Teleport to="body">
     <div v-if="clearAsk" class="askwrap" @click.self="clearAsk = false">
       <div class="askbox" role="dialog" aria-modal="true" :aria-label="`${t('清空')}${curFilter.label}`">
-        <div class="askhd">{{ t("清空「{label}」", { label: curFilter.label }) }}</div>
+        <div class="askhd">{{ t("清空“{label}”", { label: curFilter.label }) }}</div>
         <div class="askbd">
           <p>{{ clearBody }}</p>
         </div>

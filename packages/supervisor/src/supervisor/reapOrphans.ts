@@ -119,7 +119,7 @@ function identityOf(
 }
 
 /**
- * 在 tick 循环之前调用一次，先回收再派单；返回被回收的记录供启动日志汇总。
+ * 在 调度循环之前调用一次，先回收再派单；返回被回收的记录供启动日志汇总。
  *
  * 只处理后台模式。`opts.onlySupervisorPid` 限定只回收该监工 pid 拉起的记录，避免监工重启后误收新起的进程。
  */
@@ -137,7 +137,7 @@ export function reapOrphans(
     if (only != null && w.supervisor_pid !== only) continue;
     // 本进程拉起的记录不归这一层处理。
     if (w.supervisor_pid === process.pid) continue;
-    if (!pidAlive(w.pid)) continue; // 进程已不在：交给 tick 里的 reap 结单
+    if (!pidAlive(w.pid)) continue; // 进程已不在：交给调度轮次中的 reap 结单
 
     const ident = describePid(w.pid);
     if (!ident) {

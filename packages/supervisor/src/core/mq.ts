@@ -1,4 +1,4 @@
-/** 申报队列（`.capitalist/mq/reports.jsonl`）：工作进程 → 监工的单向事件流。 */
+/** 申报队列（`.capitalist/mq/reports.jsonl`）：工作进程 -> 监工的单向事件流。 */
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
@@ -105,7 +105,7 @@ export function commitCursor(root: string, offset: number): void {
 /**
  * 读尚未消费的申报，并给出新的消费位置。
  *
- * 逐行解析：坏行跳过但不阻断后面的行，同时把「跳过了几行」报出来，一条写坏的记录
+ * 逐行解析：坏行跳过但不阻断后面的行，同时把“跳过了几行”报出来，一条写坏的记录
  * 不该让整批申报都读不到，也不该被静默吞掉。
  */
 export function readPendingMq(root: string): {
@@ -155,7 +155,7 @@ export function readPendingMq(root: string): {
   return { messages, nextOffset, skipped };
 }
 
-/** 推送唤醒：告诉监工「有新的申报，现在就看」。 */
+/** 推送唤醒：告诉监工“有新的申报，现在就看”。 */
 export function wakeSupervisor(root: string, timeoutMs = 1200): Promise<boolean> {
   return new Promise((resolve) => {
     let base = "";

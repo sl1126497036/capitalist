@@ -60,7 +60,7 @@ import MsgText from "../msg-text";
 const props = defineProps({
   /** "capitalist" 或线程 id */
   sel: {type: String, default: "capitalist"},
-  /** 监工在线状态；离线时空态显示「没有消息」。 */
+  /** 监工在线状态；离线时空态显示“没有消息”。 */
   offline: {type: Boolean, default: false},
   root: {type: String, default: ""},
   title: {type: String, default: ""},
@@ -101,7 +101,7 @@ const props = defineProps({
 });
 const emit = defineEmits(["send", "capitalist", "handback", "interject", "pick", "toggleQueue", "close", "loadOlder", "refresh", "pause", "locate"]);
 
-/* 会话标题取任务根目录最后一段；根不可用时退回「监工」，不拼出「-监工」。 */
+/* 会话标题取任务根目录最后一段；根不可用时退回“监工”，不拼出“-监工”。 */
 const supervisorTitle = computed(() => {
   const p = String(props.root || "").replace(/[\\/]+$/, "");
   const name = p.split(/[\\/]/).pop() || "";
@@ -147,7 +147,7 @@ const obeyFollow = ref(true);
 const pending = ref(0);
 const live = reactive({text: "", tone: "", final: false});
 
-/* 介入状态随回执推进「介入中 → 已介入 → 已结束」，状态词并入底部状态条，不复述派单正文。 */
+/* 介入状态随回执推进“介入中 -> 已介入 -> 已结束”，状态词并入底部状态条，不复述派单正文。 */
 const supervisorAct = ref(""); // "" 无 | ing 介入中 | on 已介入 | end 已结束
 let supervisorActTimer = 0;
 const supervisorActText = computed(() =>
@@ -425,7 +425,7 @@ const isSupervisorSessionEvent = (m) => {
   if (!e) return true;
   if (HEARTBEAT_EVENTS.has(e)) return false;
   if (!CAPITALIST_SESSION_EVENTS.has(e)) return false;
-  /* 指令回执只保留「被拒」；「已执行」已由指令气泡上的状态标表达。 */
+  /* 指令回执只保留“被拒”；“已执行”已由指令气泡上的状态标表达。 */
   return e !== "supervisor_cmd" || m?.ok === false;
 };
 
@@ -439,7 +439,7 @@ function isRedispatch(m) {
   return REDISPATCH_VERDICT.test(String(m?.text || "").trim());
 }
 
-/* 调度指令卡的认定条件为 id 以 SC- 开头且正文以「调度指令：」开头；该前缀是服务端内部标记，上屏前剥掉，卡片按普通消息保留。 */
+/* 调度指令卡的认定条件为 id 以 SC- 开头且正文以“调度指令：”开头；该前缀是服务端内部标记，上屏前剥掉，卡片按普通消息保留。 */
 const DISPATCH_ECHO_PREFIX = "调度指令：";
 
 function isDispatchEcho(m) {
@@ -732,7 +732,7 @@ const stateRowBase = computed(() => {
   }
   if (isSupervisor.value) {
     if (!props.root) return null;
-    /* 对话回执未到时状态行持续占位：有过程文案就用过程，否则显示「已发出 模型在想」。 */
+    /* 对话回执未到时状态行持续占位：有过程文案就用过程，否则显示“已发出 模型在想”。 */
     if (props.sending) {
       return {text: note || tr("已发出 模型在想"), bad: false, warn: false, run: true, dots: true};
     }
@@ -740,7 +740,7 @@ const stateRowBase = computed(() => {
     if (note && !live.final) {
       return {text: note, bad: false, warn: false, run: true, dots: true};
     }
-    /* 指示气泡按监工真实动作出词：处理申报与回执为「回执中」，其余动作或有未完成任务时为「监管中」。 */
+    /* 指示气泡按监工真实动作出词：处理申报与回执为“回执中”，其余动作或有未完成任务时为“监管中”。 */
     if (kind === "receipt" || kind === "supervising") {
       return {text: supervisorActivityText(act), bad: false, warn: false, run: true, dots: true};
     }
@@ -759,7 +759,7 @@ const stateRowBase = computed(() => {
       /* 异常条显示状态；`why` 为工作进程末行消息。 */
       : {text: tr("进程异常"), bad: true, warn: false, dots: true};
   }
-  /* 在跑时状态行按 thread.doing 报当前动作，不复述思考内容；有工具调用时直接显示调用内容并替换动作词。 */
+  /* 运行中时状态行按 thread.doing 报当前动作，不复述思考内容；有工具调用时直接显示调用内容并替换动作词。 */
   if (s === "running" || s === "starting" || s === "claimed" || props.typing) {
     return {
       text: activity.value || workerDoingText(props.thread?.doing),
@@ -769,7 +769,7 @@ const stateRowBase = computed(() => {
       dots: true,
     };
   }
-  /* 排队态不占用状态条；仅在进程在跑或异常时显示。 */
+  /* 排队态不占用状态条；仅在进程运行中或异常时显示。 */
   if (s === "queued") return null;
   /* 暂停态与左栏任务卡共用同一词条：暂停单既未运行也未退出，气泡显示等待唤醒状态。 */
   if (s === "paused") return {text: tr("已暂停"), bad: false, warn: true, dots: false};
@@ -781,7 +781,7 @@ const stateRowBase = computed(() => {
   return {text: endedWord(props.thread) || tr("进程已退出"), bad: false, warn: false, dots: false};
 });
 
-/* 「思考中 <后缀>」只保留「思考中」标签，后缀整段移除；进行态由动态点表达，文案不带省略号。 */
+/* “思考中 <后缀>”只保留“思考中”标签，后缀整段移除；进行态由动态点表达，文案不带省略号。 */
 const stateRow = computed(() => {
   const r = stateRowBase.value;
   if (!r) return r;
@@ -913,7 +913,7 @@ function stat(v) {
   const s = String(v.m.status || "");
   if (s === "pending") return tr("等待下一轮调度");
   if (s === "executed") return v.m.no ? tr("已执行 #{no}", { no: v.m.no }) : tr("已执行");
-  /* 被拒尾标按 reason 优先、回落 detail，两者皆空只显示「被拒」；字段由 supervisor_cmd 事件与 SC- 指令卡下发。 */
+  /* 被拒尾标按 reason 优先、回落 detail，两者皆空只显示“被拒”；字段由 supervisor_cmd 事件与 SC- 指令卡下发。 */
   if (s === "rejected") {
     const tail = rejectTail(v.m.reason, v.m.detail);
     return tail ? `${tr("被拒")} · ${tail}` : tr("被拒");
@@ -1025,7 +1025,7 @@ function armZoomTimer() {
   }, 8000);
 }
 
-const zoomScale = ref(1); // 用户缩放倍率（1 = 初始「半屏」档）
+const zoomScale = ref(1); // 用户缩放倍率（1 = 初始“半屏”档）
 const zoomBase = ref(1); // 初始半屏档相对原图的倍率
 const zoomPct = computed(() => Math.round(zoomBase.value * zoomScale.value * 100));
 
@@ -1146,7 +1146,7 @@ const stageIds = computed(() =>
       shards: typeof s.shards === "number" ? s.shards : Array.isArray(s.shards) ? s.shards.length : null,
       total: all.size,
       doneCount: ok.size,
-      leftTip: left.length ? tr("未完成：{list}", { list: left.join(tr("、")) }) : tr("这个阶段的分片都收工了"),
+      leftTip: left.length ? tr("未完成：{list}", { list: left.join(tr("、")) }) : tr("本阶段分片均已完成"),
       gate: Boolean(s.gate_passed ?? s.gate_ok ?? s.done),
       done: Boolean(s.done) || i < props.stageIndex,
       cur: i === props.stageIndex,
@@ -1323,14 +1323,14 @@ function supervisorCtxText(c) {
   return fmtCtx(c.used, lim, c.over === true);
 }
 
-/* 上下文与累计拆成「小标签 + 数值」，由 MetricBar 的 end 插槽渲染，排在流量类读数之后。 */
+/* 上下文与累计拆成“小标签 + 数值”，由 MetricBar 的 end 插槽渲染，排在流量类读数之后。 */
 const supervisorUsageCells = computed(() => {
   if (!isSupervisor.value) return [];
   const s = props.capitalist || {};
   const u = s.usage || {};
   const ctx = supervisorCtxText(s.context);
 
-  /* 按 `credit_unit` 显示累计读数；`total_credit` 为 null 时显示「—」。 */
+  /* 按 `credit_unit` 显示累计读数；`total_credit` 为 null 时显示“—”。 */
   const unit = String(u.credit_unit || "").trim();
   const isCredit = unit !== "";
   const raw = u.total_credit;
@@ -1572,12 +1572,12 @@ async function memDelete(entry) {
 const FEATURE_HINTS = [
   "已结束的派单可在原会话中回复，也可由监工介入唤醒",
   "拖动输入框上沿可调整输入框高度，双击上沿恢复默认高度",
-  "通过「图片/路径」选择文件后，任务根内的相对路径会插入输入框",
+  "通过“图片/路径”选择文件后，任务根内的相对路径会插入输入框",
   "截图可直接粘贴或拖入输入框，上传完成后随消息一并发送",
-  "在工作进程会话中开启「监工介入」，消息将转由监工处理，工作进程不会收到",
-  "在监工会话中选择「派单模型」，新派出的单都用它，直到再次更换或清除",
-  "点击消息操作区的「#」按钮可引用该消息，引用内容随下一次输入一并发送",
-  "「中断」会结束当前进程并由监工重派；同时登记阻塞时改为等待外部条件解除",
+  "在工作进程会话中开启“监工介入”，消息将转由监工处理，工作进程不会收到",
+  "在监工会话中选择“派单模型”，新派出的单都用它，直到再次更换或清除",
+  "点击消息操作区的“#”按钮可引用该消息，引用内容随下一次输入一并发送",
+  "“中断”会结束当前进程并由监工重派；同时登记阻塞时改为等待外部条件解除",
 ];
 const HINT_INTERVAL_MS = 15000;
 const hintIdx = ref(0);
@@ -1864,7 +1864,7 @@ const hostModels = ref([]);
 const modelNote = ref("");
 const modelLoading = ref(false);
 
-/** 切换在途态：值为正在切换的那一行（"" 为宿主默认），null 为空闲；期间弹层显示「切换中…」并禁用其它行。 */
+/** 切换在途态：值为正在切换的那一行（"" 为宿主默认），null 为空闲；期间弹层显示“切换中…”并禁用其它行。 */
 const modelBusy = ref(null);
 
 const curModel = computed(() => String(props.thread?.usage?.model || props.thread?.model || ""));
@@ -1893,7 +1893,7 @@ async function toggleModel() {
 
 async function pickModel(m) {
   const val = String(m || "");
-  /* 请求在途时记录所点行并显示「切换中…」、禁用其它行；返回后按钮立即显示新模型，不等下一轮轮询。 */
+  /* 请求在途时记录所点行并显示“切换中…”、禁用其它行；返回后按钮立即显示新模型，不等下一轮轮询。 */
   if (modelBusy.value !== null) return;
   modelBusy.value = val;
   try {
@@ -1941,7 +1941,7 @@ watch(
 );
 
 /*
- * 按钮文案：已设定时显示所选模型；未设定表示「宿主默认」，显示宿主默认模型名。
+ * 按钮文案：已设定时显示所选模型；未设定表示“宿主默认”，显示宿主默认模型名。
  * 两者都取不到（监工未报模型）时显示占位文案，避免按钮显示不存在的模型名。
  */
 const nextLabel = computed(() => {
@@ -2057,7 +2057,7 @@ watch(
     if (!v?.text) return;
     /* 带 thread 的回执只落在发起它的会话，不带 thread 的全局回执处处可见。 */
     if (v.thread && String(v.thread) !== String(props.sel)) return;
-    /* 介入状态只认带本会话 thread 的对话回执；失败直接收口，最终回执改报「已介入」并开始收口计时。 */
+    /* 介入状态只认带本会话 thread 的对话回执；失败直接收口，最终回执改报“已介入”并开始收口计时。 */
     if (supervisorAct.value && v.thread && String(v.thread) === String(props.sel)) {
       if (v.bad) supervisorActClose();
       else if (v.final === true) supervisorActAnswered();
@@ -2248,8 +2248,8 @@ async function uploadOne(file, gen = draftGen) {
     /* 超时、断网与后端异常按可重试失败处理并给出重试入口。 */
     pushLive(
       timedOut
-        ? tr("上传超时（{n} 秒） 图片未上传，点击「重试」重新上传", { n: UPLOAD_TIMEOUT_MS / 1000 })
-        : tr("上传中断 连接已断开，点击「重试」重新上传"),
+        ? tr("上传超时（{n} 秒） 图片未上传，点击“重试”重新上传", { n: UPLOAD_TIMEOUT_MS / 1000 })
+        : tr("上传中断 连接已断开，点击“重试”重新上传"),
       "bad",
     );
     if (gen === draftGen) uploadFails.value = [...uploadFails.value, {file, name: file.name || "clipboard.png"}];
@@ -2314,7 +2314,7 @@ function dropAttachment(i) {
 }
 
 
-/* 浏览器拖入只提供 File，取不到完整路径：图片走上传，其它文件仅在有 file.path（Electron）时插路径，否则提示改用「图片/路径」；文本与 URI 直接插入草稿。 */
+/* 浏览器拖入只提供 File，取不到完整路径：图片走上传，其它文件仅在有 file.path（Electron）时插路径，否则提示改用“图片/路径”；文本与 URI 直接插入草稿。 */
 const dragging = ref(false);
 
 function dragCarriesSomething(dt) {
@@ -2369,7 +2369,7 @@ async function onDrop(e) {
       insertText(paths);
       return;
     }
-    insertText([tr("（拖入的 {list} 拿不到本机路径，请用「图片/路径」选）", { list: files.map((f) => f.name).join(tr("、")) })]);
+    insertText([tr("（拖入的 {list} 拿不到本机路径，请用“图片/路径”选）", { list: files.map((f) => f.name).join(tr("、")) })]);
     return;
   }
 
@@ -2424,7 +2424,7 @@ function submit() {
     via: viaSupervisor.value && !isSupervisor.value ? "capitalist" : "",
   };
   const fire = () => {
-    /* 提交介入动作时立即亮「介入中」；仅本会话进程存活才交给监工，已退出时不亮该状态。 */
+    /* 提交介入动作时立即亮“介入中”；仅本会话进程存活才交给监工，已退出时不亮该状态。 */
     if (meta.via === "capitalist" && ["running", "starting"].includes(String(props.thread?.status || ""))) supervisorActBegin();
     if (ref) sentQuotes[payload] = ref;
     emit("send", payload, quoteOut, meta);
@@ -2503,9 +2503,9 @@ const placeholder = computed(() => {
     if (st === "queued") return tr("这一单在排队 此时发送的内容会并入这一单，启动时一并带入");
     if (!["running", "starting"].includes(st))
       return tr("派单已结束，消息在原会话中回复");
-    return tr("描述要修改的内容 执行中的进程会在下一个动作间隙收到，不打断当前执行");
+    return tr("给执行中的进程发消息 会在下一个动作间隙收到，不打断当前执行");
   }
-  return tr("描述要修改的内容");
+  return tr("给监工派单或发送消息");
 });
 
 const emptyState = computed(() => {
@@ -2579,7 +2579,7 @@ const truncNote = computed(() => {
   const shown = props.messages.length;
   const total = Math.max(shown, Number(props.total) || 0);
   if (!props.truncated || total <= shown) return "";
-  return tr("只显示最近 {a} 条（共 {b} 条），更早的在 .capitalist 台账里", { a: shown, b: total });
+  return tr("仅显示最近 {a} 条（共 {b} 条），更早记录见任务目录", { a: shown, b: total });
 });
 
 const bubblePlacement = (c) => (c === "user" || c === "human" ? "end" : "start");

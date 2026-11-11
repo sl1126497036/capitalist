@@ -1,7 +1,7 @@
 /**
  * worker facet 里跨宿主一致的机制。
  *
- * 判定只与「Windows 上 npm 安装的 CLI 长什么样」有关，claude-code / codebuddy /
+ * 判定只与“Windows 上 npm 安装的 CLI 长什么样”有关，claude-code / codebuddy /
  * workbuddy 三家共用。文件内不出现产品名，产品名由调用方作为 `<name>` 传入。
  */
 
@@ -35,7 +35,7 @@ export function winBinNames(platform: NodeJS.Platform, name: string): string[] {
  * 不含管道、重定向、变量与通配符，cmd.exe 与 PowerShell 都能执行。bash 不是本项目的前置依赖。
  *
  * 需要这个判断的是宿主侧：部分宿主以自己的 shell 执行 hook，若取的是 Git Bash，缺 bash 时
- * 条目照样写得进去却从不触发，表现为「配置在、注入行不出现」。三个默认安装位置之外也认
+ * 条目照样写得进去却从不触发，表现为“配置在、注入行不出现”。三个默认安装位置之外也认
  * PATH 里的 bash.exe，便携版安装不写默认目录。非 Windows 恒为 true。
  */
 export function gitBashAvailable(

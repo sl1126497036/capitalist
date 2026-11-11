@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { supervisorDir } from "./paths";
 
 export interface QuotaState {
-  /** 是否处于「额度耗尽」判定中 */
+  /** 是否处于“额度耗尽”判定中 */
   exhausted: boolean;
   /** 判定时间（ISO）；未知为空串 */
   at: string;
@@ -20,10 +20,10 @@ function statePath(root: string): string {
 }
 
 /**
- * 读当前额度状态；没写过或读坏了返回「未耗尽」。
+ * 读当前额度状态；没写过或读坏了返回“未耗尽”。
  *
  * 不按时间过期。额度是否恢复，唯一可信的证据是一次成功的模型调用（成功路径会
- * 调 clearQuotaExhausted）。用「多久以前记的」推断恢复，等于拿时间冒充证据：
+ * 调 clearQuotaExhausted）。用“多久以前记的”推断恢复，等于拿时间冒充证据：
  * 中间什么都没跑过，就没有任何理由认为额度回来了。
  */
 export function readQuotaState(root: string): QuotaState {
@@ -43,11 +43,11 @@ export function readQuotaState(root: string): QuotaState {
   return { exhausted: true, at: String(j.at ?? ""), text: String(j.text ?? "") };
 }
 
-/** 记下「额度耗尽」。同一秒内重复调用只写一次，避免看板每轮失败都刷盘。 */
+/** 记下“额度耗尽”。同一秒内重复调用只写一次，避免看板每轮失败都刷盘。 */
 export function markQuotaExhausted(root: string, text: string): void {
   const cur = readQuotaState(root);
   if (cur.exhausted) {
-    /* 已经标过：只更新说明，不动 at（时间代表「什么时候开始耗尽的」）。 */
+    /* 已经标过：只更新说明，不动 at（时间代表“什么时候开始耗尽的”）。 */
     try {
       writeFileSync(statePath(root), JSON.stringify({ ...cur, text: text || cur.text }), "utf8");
     } catch {

@@ -44,7 +44,7 @@ export function disposeAll(reason: string): string[] {
   return failures;
 }
 
-/** 测试用：清空登记并复位「已清理」标记。 */
+/** 测试用：清空登记并复位“已清理”标记。 */
 export function __resetDisposers(): void {
   entries.length = 0;
   disposed = false;

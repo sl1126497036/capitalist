@@ -69,7 +69,7 @@ function readCache(local: string): UpdateStatus | null {
     if (!existsSync(f)) return null;
     const d = JSON.parse(readFileSync(f, "utf8")) as Partial<UpdateStatus>;
     if (typeof d.latest !== "string" || typeof d.checkedAt !== "string") return null;
-    // 缓存里的判断只对同一下载版本有效：升级之后旧的「有新版本」可能已经不成立。
+    // 缓存里的判断只对同一下载版本有效：升级之后旧的“有新版本”可能已经不成立。
     if (d.local !== local) return null;
     return {
       local,
@@ -96,7 +96,7 @@ function writeCache(status: UpdateStatus): void {
  * 向注册表问一次最新版本。
  *
  * @returns 版本号；包尚未发布（404）返回空串；网络或解析失败返回 `null`，由调用方
- *   区分「没有这个包」与「问不到」。
+ *   区分“没有这个包”与“问不到”。
  */
 function fetchLatestVersion(timeoutMs: number): Promise<string | null> {
   return new Promise((resolve) => {

@@ -2,7 +2,7 @@
  * JSON 与 JSONL 保存。
  *
  * 整份写入走临时文件加 rename。多个进程会同时写同一个任务根（每次工具调用一个 hook
- * 进程、监工、CLI），写到一半的文件解析为非法 JSON，调用方会当作「文件缺失」处理，
+ * 进程、监工、CLI），写到一半的文件解析为非法 JSON，调用方会当作“文件缺失”处理，
  * 静默丢弃状态。JSONL 只追加，不需要这一套。
  */
 
@@ -46,7 +46,7 @@ const readCache = new Map<string, { at: number; value: unknown }>();
  *
  * 同一个文件在一轮请求里常被多个模块读到（上下文窗口配置、任务编号表、
  * 积分台账），每次都是一次同步读盘；这里按路径缓存解析结果，写路径统一
- * 走 {@link writeJson} 会立即失效，所以「写完马上读」仍看到新值。
+ * 走 {@link writeJson} 会立即失效，所以“写完马上读”仍看到新值。
  */
 export function readJson<T>(file: string, fallback: T): T {
   const hit = readCache.get(file);

@@ -4,7 +4,7 @@
  * 契约 title 原样保留不截断，标题写入台账后截掉的部分无法补回；显示宽度由前端渐隐省略处理。
  */
 
-/** 分片 id → 中文短名；覆盖历史分片，用于老记录没有 `title` 时回落补名。 */
+/** 分片 id -> 中文短名；覆盖历史分片，用于老记录没有 `title` 时回落补名。 */
 export const SHARD_TITLES: Readonly<Record<string, string>> = Object.freeze({
   "api-latency": "首屏提速",
   "api-trim": "接口限长",
@@ -107,7 +107,7 @@ export function cjkCount(text: string): number {
   return n;
 }
 
-/** 分片 id → 中文短名；查不到时返回空串。 */
+/** 分片 id -> 中文短名；查不到时返回空串。 */
 export function shardTitle(shard: unknown): string {
   const id = String(shard ?? "").trim();
   if (!id) return "";

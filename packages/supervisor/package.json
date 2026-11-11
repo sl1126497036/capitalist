@@ -1,6 +1,6 @@
 {
   "name": "capitalist",
-  "version": "0.1.3",
+  "version": "0.1.31",
   "description": "Supervise long-running AI tasks from outside the model: contracts, stage gates, redlines, ledgers, and a review queue.",
   "license": "Apache-2.0",
   "author": {
@@ -44,7 +44,7 @@
   "bin": {
     "capitalist": "dist/cli/main.js",
     "cap": "dist/cli/main.js",
-    "capitalist-hook": "dist/host/main.js"
+    "capitalist-hook": "dist/agent/main.js"
   },
   "files": [
     "dist",
@@ -53,6 +53,7 @@
     "skill",
     "scripts/vendor-skill.mjs",
     "README.md",
+    "README.en.md",
     "LICENSE",
     "NOTICE",
     "THIRD-PARTY-NOTICES"
@@ -68,7 +69,8 @@
     "test": "npm run build && node scripts/run-tests.mjs",
     "verify:package": "node scripts/verify-package.mjs",
     "prepack": "npm run build:dist",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "postinstall": "node dist/cli/postinstall.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

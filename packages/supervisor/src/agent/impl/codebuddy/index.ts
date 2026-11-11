@@ -22,7 +22,7 @@ const LOGIN_HINT =
  * 实时输出开关。
  *
  * 默认的 `--output-format text` 只在会话结束吐一段总结：跑 70 分钟的 worker，日志里只有宿主
- * 的运维行，看板因此「看不到它在做什么」，人也没法判断它是真在推进还是卡住了。
+ * 的运维行，看板因此“看不到它在做什么”，人也没法判断它是真在推进还是卡住了。
  * `stream-json` 把每个 assistant 消息、每次工具调用按行实时打出来，看板才有过程可看。
  *
  * 设 `CAPITALIST_WORKER_STREAM=0` 可关闭流式输出；解析侧无法识别格式时回到纯文本。
@@ -44,7 +44,7 @@ function streamArgs(): string[] {
   return process.env.CAPITALIST_WORKER_STREAM === "0" ? [] : ["--output-format", "stream-json"];
 }
 
-/** 推理强度参数。空值不传，交给 CLI 默认（而不是塞一个猜出来的档位）。 */
+/** 推理强度参数。空值不传，使用 CLI 默认值（而不是写入推测的档位）。 */
 function effortFlags(effort?: string): string[] {
   const lv = String(effort ?? "").trim().toLowerCase();
   return lv ? ["--effort", lv] : [];
@@ -71,6 +71,11 @@ export const impl: HostImpl = {
   hostEnv: [{ name: "CODEBUDDY_HOST" }],
   settingsFile: "settings.json",
   projectLocal: true,
+  /*
+   * hook 写用户级。WorkBuddy 在项目目录里看到 `.codebuddy` 就转受限模式，bash 不可用，
+   * 插件装上也不起作用；把这份配置留在家目录，项目里只保留 `.workbuddy`。
+   */
+  userLevelHook: true,
   knownModels: ["fast-model", "deepseek-v4.1-flash", "glm-5.3-flash"],
   cliBins: ["codebuddy", "codebuddy.cmd"],
   /* 平台模型策略：默认档与禁用名单，阻止宿主自行回落（见 shared/modelPolicy.ts）。 */
@@ -94,10 +99,12 @@ export const impl: HostImpl = {
     detectPriority: 30,
     // 只剔宿主 HTTP 服务的端口变量；整个前缀剔除会连 CLI 的启动配置一起削掉。
     //
-    // 另剔 `ACC_PRODUCT_CONFIG*` 与 `CODEBUDDY_HOST`：宿主把产品配置注入成「桌面端身份」，
+    // 另剔 `ACC_PRODUCT_CONFIG*` 与 `CODEBUDDY_HOST`：宿主把产品配置注入成“桌面端身份”，
     // CLI 按该身份认证，与自身登录态不一致，非交互调用返回 `Authentication required`。
     // 剔除后 CLI 按自身 product.json 声明的身份认证，非交互调用恢复。该失败源于宿主注入的
     // 身份覆盖了 CLI 身份，与用户登录状态无关。
+    /* CLI 认这个变量作为 Bearer 令牌：设置后不再读客户端保存的凭证文件。 */
+    authEnvVar: "CODEBUDDY_AUTH_TOKEN",
     envDropPrefixes: ["SERVER__", "ACC_PRODUCT_CONFIG"],
     envDropNames: [
       "CODEBUDDY_HOST",
@@ -153,6 +160,8 @@ export const impl: HostImpl = {
 
   workspace: createWorkspaceFacet({
     configDir: ".codebuddy",
+    /* 项目里出现 `.codebuddy` 会让 WorkBuddy 转受限模式，而工作进程用 `bypassPermissions` 起，不需要项目级档位。 */
+    projectConfigDir: null,
     label: LABEL,
     ...TRUST_PRESET,
   }),

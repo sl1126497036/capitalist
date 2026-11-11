@@ -35,7 +35,7 @@ function entryFor(id: string, event: string, ctx: InstallContext, withMatcher: b
       {
         type: "command",
         command: commandFor(id, event, ctx),
-        timeout: 20,
+        timeout: 5,
         statusMessage: `supervisor: ${ctx.marker}`,
       },
     ],
@@ -66,7 +66,7 @@ export const SETTINGS_HOOK_EVENTS = ["PreToolUse", "UserPromptSubmit", "Stop", "
  * 同协议宿主的 install facet。
  *
  * 挂载动作逐字相同：同一组生命周期点、同一条命令串、同一个幂等标记。差异只有 id 与
- * 「装完还要用户做哪一步」，后者由 `extra` 给出。
+ * “装完还要用户做哪一步”，后者由 `extra` 给出。
  */
 export function settingsHookInstall(
   id: string,

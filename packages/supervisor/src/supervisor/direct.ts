@@ -1,7 +1,7 @@
 /**
  * 监工调度指令通道（`.capitalist/supervisor-direct.jsonl`）。与 `direct.jsonl` 是两条独立通道：
  * 后者承载派单内容，前者承载调度动作，合并会导致动作与内容互相误判。
- * 只接受白名单动作，未知动作落已消费的拒绝记录；本模块只写不执行，状态变更由 `loop.ts` 的 tick 完成，写入来源由调用方校验。
+ * 只接受白名单动作，未知动作落已消费的拒绝记录；本模块只写不执行，状态变更由 `loop.ts` 的 调度轮次完成，写入来源由调用方校验。
  */
 
 import { join } from "node:path";
@@ -44,7 +44,7 @@ export interface SupervisorResult {
   ok: boolean;
   /** 被拒原因；成功时为空串 */
   reason: string;
-  /** 成功时的界面回显文本（例如「已重派 supervisor-entry」） */
+  /** 成功时的界面回显文本（例如“已重派 supervisor-entry”） */
   detail: string;
   /** 插队标记，仅 `dispatch` 建插队单时置真；随 result 落盘供界面回显。 */
   urgent?: boolean;
@@ -123,7 +123,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
 
   const pick = (): SupervisorAction | null => {
     if (/^(pause|暂停|暂停派单)$/.test(head)) return "pause";
-    /* 「继续」不并入 resume：该表述可能指向其他任务，并入后会使对话层自行启动派单。 */
+    /* “继续”不并入 resume：该表述可能指向其他任务，并入后会使对话层自行启动派单。 */
     if (/^(resume|恢复|恢复派单)$/.test(head)) return "resume";
     if (/^(set-next|setnext|next|下一步|设置下一步)$/.test(head)) return "set-next";
     if (/^(amend|追加|补充|更正|改口)$/.test(head)) return "amend";
@@ -147,7 +147,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     const looksChinese = /[\u4e00-\u9fa5]/.test(raw) && raw.length >= 6;
     if (looksChinese) return { action: "instruct" as SupervisorAction, arg: raw, confirm: false };
     return {
-      error: `未知动作「${head || raw}」。白名单：${CAPITALIST_ACTIONS.join(" / ")}（中文同义词同样可用；整句自然语言会按 instruct 解析）`,
+      error: `未知动作“${head || raw}”。白名单：${CAPITALIST_ACTIONS.join(" / ")}（中文同义词同样可用；整句自然语言会按 instruct 解析）`,
     };
   }
 
@@ -172,7 +172,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     };
   }
   if (action === "instruct" && !rest) {
-    return { error: "instruct 缺少内容：请写明要执行的操作，例如「把 UI 相关的任务都停掉」" };
+    return { error: "instruct 缺少内容：请写明要执行的操作，例如“把 UI 相关的任务都停掉”" };
   }
   if (action === "ask" && !rest) {
     return { error: "ask 缺少问题：写成 ask <一句话>" };
@@ -213,7 +213,7 @@ export function appendSupervisorDirective(
 
   if (explicit) {
     if (!(CAPITALIST_ACTIONS as readonly string[]).includes(explicit)) {
-      return { ok: false, error: `未知动作「${explicit}」。白名单：${CAPITALIST_ACTIONS.join(" / ")}` };
+      return { ok: false, error: `未知动作“${explicit}”。白名单：${CAPITALIST_ACTIONS.join(" / ")}` };
     }
     action = explicit as SupervisorAction;
   } else {
@@ -306,7 +306,7 @@ export function pendingSupervisorDirectives(root: string): SupervisorDirective[]
 
 /**
  * 标记指令已消费并写入结果。读改写必须带锁：看板进程与监工循环并发写入，不加锁会丢失指令。
- * 拿不到锁返回 false，下一轮重试；同一 tick 内的去重由调用方按 id 负责。
+ * 拿不到锁返回 false，下一轮重试；同一 同一轮调度内的去重由调用方按 id 负责。
  */
 export function markSupervisorDirective(root: string, id: string, result: SupervisorResult): boolean {
   const file = supervisorDirectPath(root);

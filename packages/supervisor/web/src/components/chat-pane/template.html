@@ -353,7 +353,7 @@
 
       <div v-if="isSupervisor && paused" class="pausecard" role="status">
         <span class="pctitle">{{ t("调度已暂停") }}</span>
-        <span class="pcdesc">{{ t("点击右上角「恢复调度」继续") }}</span>
+        <span class="pcdesc">{{ t("点击右上角“恢复调度”继续") }}</span>
       </div>
 
       <div v-if="isSupervisor && logOpen && logRows.length" class="logpane" role="list" :aria-label="t('过程日志')">
@@ -949,7 +949,7 @@
         v-if="zoomCount > 1"
         class="znav prev"
         type="button"
-        :aria-label="t('上一张（←）')"
+        :aria-label="t('上一张')"
         @click.stop="stepZoom(-1)"
       >
         <LeftOutlined aria-hidden="true"/>
@@ -958,7 +958,7 @@
         v-if="zoomCount > 1"
         class="znav next"
         type="button"
-        :aria-label="t('下一张（→）')"
+        :aria-label="t('下一张')"
         @click.stop="stepZoom(1)"
       >
         <RightOutlined aria-hidden="true"/>

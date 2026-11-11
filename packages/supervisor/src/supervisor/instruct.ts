@@ -1,6 +1,6 @@
 /**
  * 自然语言调度解析（`instruct`），已废弃，因看板入口仍引用而保留，不新增能力。
- * 确定性解析：词典 + 子串匹配 + 打分，只产出动作计划，不执行；执行在 `loop.ts` 的 tick 中完成。
+ * 确定性解析：词典 + 子串匹配 + 打分，只产出动作计划，不执行；执行在 `loop.ts` 的 调度循环中完成。
  * 一次只出一个动作，只作用于当前阶段，不改写契约与派单内容；识别不出时返回候选清单。
  */
 
@@ -88,13 +88,13 @@ function stageHaystack(stage: Stage, shards: { id: string; action: string }[]): 
 }
 
 /**
- * 解析自然语言为单个动作计划。判定优先级：pause → resume → set-next → skip → clarify；
+ * 解析自然语言为单个动作计划。判定优先级：pause -> resume -> set-next -> skip -> clarify；
  * 前一条命中即停止。仅能唯一定位到当前阶段时才产出 skip，否则返回候选清单。
  */
 export function planInstruct(input: InstructInput): InstructPlan {
   const text = String(input.text ?? "").trim();
   if (!text) {
-    return { kind: "clarify", reason: "内容为空", detail: "请写明要执行的操作，例如「把 UI 相关的任务都停掉」", candidates: [] };
+    return { kind: "clarify", reason: "内容为空", detail: "请写明要执行的操作，例如“把 UI 相关的任务都停掉”", candidates: [] };
   }
 
   const byStage = new Map<string, { id: string; action: string }[]>();
@@ -123,7 +123,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "concurrency",
       arg: conc[1] as string,
-      reason: "识别到「并行度 + 数字」",
+      reason: "识别到“并行度 + 数字”",
       detail: `并行度调为 ${conc[1]}（下一次派单的槽位数以此计算）`,
     };
   }
@@ -134,7 +134,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "retry",
       arg: hit ? hit.id : "",
-      reason: hit ? `识别到「重派」+ 分片 ${hit.id}` : "识别到「重派」，但未指明分片",
+      reason: hit ? `识别到“重派”+ 分片 ${hit.id}` : "识别到“重派”，但未指明分片",
       detail: hit ? `重派分片 ${hit.id}` : "重派：未指明分片，请补充分片名",
     };
   }
@@ -156,7 +156,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
   if (isResume && !isStop) {
     return {
       kind: "resume",
-      reason: "识别到「继续/恢复」",
+      reason: "识别到“继续/恢复”",
       detail: "恢复派单：下一轮起重新开单",
     };
   }
@@ -169,12 +169,12 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "set-next",
       arg: text,
-      reason: "识别到「接下来/改成」（原话登记，派单前由对话层整理）",
+      reason: "识别到“接下来/改成”（原话登记，派单前由对话层整理）",
       detail:
         `原话已登记：${text}。派单前对话层要把它整理成结构完整、无歧义的提示词，` +
         "理解不透先向用户澄清，不许原样转发；排序、依赖等调度说明由对话层自己执行，不写入单子。" +
         "组单时在任务说明末尾追加语言一致性要求：以用户当前使用的语言写作，语言跟随用户实际语言，不固定为某一种。" +
-        "该设置只影响整阶段补派的派单，有分片的阶段不受影响——要停止某类任务用「停掉…」",
+        "该设置只影响整阶段补派的派单，有分片的阶段不受影响——要停止某类任务用“停掉…”",
     };
   }
 
@@ -187,10 +187,10 @@ export function planInstruct(input: InstructInput): InstructPlan {
     };
   }
 
-  // 「全部 / 都停」且未指向具体阶段时暂停派单。
+  // “全部 / 都停”且未指向具体阶段时暂停派单。
   const allScope = /全部|所有|一切|统统|都停|全停|全都/.test(text);
   if (allScope && wanted.length === 0) {
-    return { kind: "pause", reason: "识别到「全部停」", detail: "暂停派单：运行中的进程停止并退回排队，不再派发新单" };
+    return { kind: "pause", reason: "识别到“全部停”", detail: "暂停派单：运行中的进程停止并退回排队，不再派发新单" };
   }
 
   // 命中当前阶段时跳过该阶段。
@@ -201,7 +201,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
       kind: "skip",
       stage: cur.stage.id,
       stageName: cur.stage.name,
-      reason: `「${why}」命中了当前阶段 ${cur.stage.id} ${cur.stage.name}`,
+      reason: `“${why}”命中了当前阶段 ${cur.stage.id} ${cur.stage.name}`,
       detail:
         `跳过 ${cur.stage.id} ${cur.stage.name}` +
         (shards.length ? `（该阶段有 ${shards.length} 个分片，按整阶段处理——本通道只支持阶段粒度）` : "") +
@@ -215,7 +215,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "clarify",
       reason: "命中的不是当前阶段",
-      detail: `当前阶段为 ${input.currentStage}。该输入更接近指定 ${names}——它们不在当前阶段，未做变更。停止当前阶段请指明阶段名，或使用「全部停掉」`,
+      detail: `当前阶段为 ${input.currentStage}。该输入更接近指定 ${names}——它们不在当前阶段，未做变更。停止当前阶段请指明阶段名，或使用“全部停掉”`,
       candidates: candidates(),
     };
   }
@@ -225,8 +225,8 @@ export function planInstruct(input: InstructInput): InstructPlan {
     kind: "clarify",
     reason: "没有识别出具体对象",
     detail:
-      `当前阶段为 ${input.currentStage}。无法识别「${text}」指向的阶段。` +
-      "可改用阶段 id，或使用「全部停掉」",
+      `当前阶段为 ${input.currentStage}。无法识别“${text}”指向的阶段。` +
+      "可改用阶段 id，或使用“全部停掉”",
     candidates: cur ? [{ id: cur.stage.id, name: cur.stage.name, hits: [] }] : [],
   };
 }

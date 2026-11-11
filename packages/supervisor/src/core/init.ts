@@ -3,7 +3,7 @@
  *
  * 未指定领域契约时回落到 `minimal`，并在状态里记 `contract_fallback`。
  * 调用方需要把该字段展示出来：跑的是通用红线而没有领域判据是一种合法状态，
- * 但必须显式可见，不能被当成「已有领域判据」。
+ * 但必须显式可见，不能被当成“已有领域判据”。
  */
 
 import { existsSync, mkdirSync } from "node:fs";

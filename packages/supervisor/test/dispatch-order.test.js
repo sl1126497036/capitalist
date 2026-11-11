@@ -44,7 +44,7 @@ function setStatus(root, id, status) {
 
 /**
  * 重启后的队列：与 fillSlots 同一条判定（open + 依赖满足），按 compareQueueOrder 排。
- * 「重启」在这个测试里的含义是：一切排序输入只从台账文件来，进程内存里什么都不留。
+ * “重启”在这个测试里的含义是：一切排序输入只从台账文件来，进程内存里什么都不留。
  */
 function queueAfterRestart(root) {
   const rows = capitalist.readDispatches(root);
@@ -88,7 +88,7 @@ test("前置是契约分片单：分片重派另起新血缘，重派完成后�
   assert.deepStrictEqual(queueAfterRestart(root), ["S2"], "重派单先进队列，B 仍等");
   capitalist.finishDispatch(root, "S2", "done", "重派完成");
   assert.deepStrictEqual(queueAfterRestart(root), ["B"], "同一片活有了完成单，B 解锁");
-  /* 反向确认：别的分片完成不算数，按 stage+shard 认，不按「有分片就行」认。 */
+  /* 反向确认：别的分片完成不算数，按 stage+shard 认，不按“有分片就行”认。 */
   const root2 = sandbox();
   put(root2, "T1", { shard: "s1", lineage: "T1" });
   put(root2, "T2", { shard: "s2", lineage: "T2", status: "done" });
@@ -124,7 +124,7 @@ test("场景：异常中断与关机——重启后队列顺序与启动前一�
   put(root, "D2r", { lineage: "D2" });
   const after = queueAfterRestart(root);
   assert.deepStrictEqual(after, ["D1", "D3", "D2r"]);
-  /* 再「重启」一次：顺序必须原样复原，不能有任何一拍发生漂移。 */
+  /* 再“重启”一次：顺序必须原样复原，不能有任何一拍发生漂移。 */
   assert.deepStrictEqual(queueAfterRestart(root), after, "二次重启顺序不变");
 });
 
@@ -143,7 +143,7 @@ test("场景：插队——urgent 与手动置顶都写在台账上，重启后�
   assert.deepStrictEqual(queueAfterRestart(root), ["P4", "P3", "P2", "P1"], "再重启仍一致");
 });
 
-test("场景：被拒——closed 是终态，重启后不回队列；依赖它的单按「前置已结」处理", () => {
+test("场景：被拒——closed 是终态，重启后不回队列；依赖它的单按“前置已结”处理", () => {
   const root = sandbox();
   put(root, "R1", { status: "closed" });
   put(root, "R2", { after: ["R1"] });
@@ -202,7 +202,7 @@ test("AFTER 行解析：编号进解析结果，不进气泡正文；AFTER: none
   assert.deepStrictEqual(star.after, ["*"]);
 });
 
-test("dispatch 指令把依赖写进台账 after 字段（编号 → 派单 id 落数据）", async () => {
+test("dispatch 指令把依赖写进台账 after 字段（编号 -> 派单 id 落数据）", async () => {
   const root = sandbox();
   const a = put(root, "A");
   /* 编号表：A 的线程键（阶段 / x+血缘尾 6 位）拿 1 号。 */
@@ -290,20 +290,20 @@ test("场景：立即执行——让位不改台账行序，恢复后与重启�
   put(root, "C");
   put(root, "NOW", { promoted_at: "2026-11-03T10:00:00.000Z", promoted_by: "user" });
 
-  /* 让位前 A 在跑，不在 open 队列里；B、C 排队。 */
+  /* 让位前 A 运行中，不在 open 队列里；B、C 排队。 */
   assert.deepStrictEqual(queueAfterRestart(root).filter((id) => id !== "NOW"), ["B", "C"]);
 
-  /* 让位：在跑的 A 与排队的 B、C 都退回排队，顺序记在台账上。 */
+  /* 让位：运行中的 A 与排队的 B、C 都退回排队，顺序记在台账上。 */
   preempt.markYielded(root, ["A", "B", "C"], "NOW");
   assert.deepStrictEqual(
     capitalist.readDispatches(root).map((d) => d.id),
     ["A", "B", "C", "NOW"],
     "让位不搬台账行（行序就是建单时间线）",
   );
-  /* 让位期间「重启」：队列里立即执行排最前，让位的按原顺序跟在后面。 */
+  /* 让位期间“重启”：队列里立即执行排最前，让位的按原顺序跟在后面。 */
   assert.deepStrictEqual(queueAfterRestart(root), ["NOW", "A", "B", "C"]);
 
-  /* 立即执行结束 → 恢复：顺序回到让位前，重启再算一遍也不能漂移。 */
+  /* 立即执行结束 -> 恢复：顺序回到让位前，重启再算一遍也不能漂移。 */
   capitalist.finishDispatch(root, "NOW", "done", "做完了");
   preempt.releaseYielded(root, "NOW");
   assert.deepStrictEqual(queueAfterRestart(root), ["A", "B", "C"]);

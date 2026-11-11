@@ -25,7 +25,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { dirs } from "../host/registry";
+import { dirs } from "../agent/registry";
 import { hhmmOf } from "../core/clock";
 import { runCheck, type CheckResult } from "../core/checks";
 import { listDirectives } from "../core/commands";
@@ -86,7 +86,7 @@ function historyDir(root: string): string {
   return join(reloadDir(root), "history");
 }
 
-/** 「重载进行中」标记的失效时间；重载是秒级动作，残留 active 说明写它的进程已退出。 */
+/** “重载进行中”标记的失效时间；重载是秒级动作，残留 active 说明写它的进程已退出。 */
 export const RELOAD_STALE_MS = 3 * 60_000;
 
 /** 一张单在快照里的状态。 */
@@ -109,7 +109,7 @@ export interface ReloadDispatchRef {
   attempt: number;
   at: string;
   note: string;
-  /** 复验单标记：这类单本身不是业务产出，不参与「业务是否完成」的判定 */
+  /** 复验单标记：这类单本身不是业务产出，不参与“业务是否完成”的判定 */
   reverify: boolean;
 }
 
@@ -126,7 +126,7 @@ export interface ReloadItem {
   /**
    * 这一片是否仍在当前阶段的契约里。
    *
-   * false 来自已删分片或上一阶段遗留的 review 单，只作记录、不进复验清单：阶段推进后 `supersedeStaleDispatches` 会把旧阶段的在途单作废，派复验单只会每 tick 被作废一次。
+   * false 来自已删分片或上一阶段遗留的 review 单，只作记录、不进复验清单：阶段推进后 `supersedeStaleDispatches` 会把旧阶段的在途单作废，派复验单只会每轮调度 被作废一次。
    */
   in_contract: boolean;
   /** 需求原文，不压缩。 */
@@ -180,7 +180,7 @@ export interface ReloadDecision {
   text: string;
 }
 
-/** 快照的统计，报告里的「前后对比」直接用这份数。 */
+/** 快照的统计，报告里的“前后对比”直接用这份数。 */
 export interface ReloadMetrics {
   /** 重载前，几份台账的原始字符数合计 */
   before_chars: number;
@@ -298,7 +298,7 @@ export interface ReloadSnapshot {
   /**
    * 未完成条目的恢复顺序（item key）。
    *
-   * 按「这片第一张派单在台账里的行序」排；从没派过的片按契约顺序排在后面。
+   * 按“这片第一张派单在台账里的行序”排；从没派过的片按契约顺序排在后面。
    * 恢复计划（buildResumePlan）的 reverify / pending 数组按它排序。
    */
   resume_order: string[];
@@ -312,7 +312,7 @@ export interface ResumeReverifyItem {
   shard: string;
   title: string;
   action: string;
-  /** 判成「已做但未验证」的依据。 */
+  /** 判成“已做但未验证”的依据。 */
   why: string;
 }
 
@@ -435,7 +435,7 @@ function evidenceComplete(e: LedgerEntry): boolean {
 }
 
 /**
- * 台账里有没有「这一片已确认」的记录。
+ * 台账里有没有“这一片已确认”的记录。
  * 台账结论不绑分片，按 claim 中是否出现分片 id 或派单 id 匹配；阶段 id 是短串，易误匹配，不用于匹配。
  */
 function confirmedFor(ledger: readonly LedgerEntry[], shard: string, dispatchIds: readonly string[]): LedgerEntry | null {
@@ -496,7 +496,7 @@ function stageShards(contract: Contract, stageId: string): Array<{ id: string; t
 /**
  * 把一段 done 规格展开成逐条验收项。
  *
- * `runCheck` 只回答整体过没过、缺什么；而「已达标的验收项」要逐条说得出是哪一条。
+ * `runCheck` 只回答整体过没过、缺什么；而“已达标的验收项”要逐条说得出是哪一条。
  * 这里对 all_of / any_of 的每个子检查单独跑一次，不改变判定，只补明细。
  */
 function gateItems(stage: Stage, root: string): ReloadGateItem[] {
@@ -511,7 +511,7 @@ function gateItems(stage: Stage, root: string): ReloadGateItem[] {
     const r = runCheck(sub, root);
     const type = String(sub.type ?? "检查");
     const target = String(sub.path ?? sub.file ?? "");
-    /* 达标项用「类型:目标」，未达标用检查里写的 msg。 */
+    /* 达标项用“类型:目标”，未达标用检查里写的 msg。 */
     const label = r.ok || !sub.msg ? oneLine(target ? `${type}:${target}` : type) : oneLine(String(sub.msg));
     return { stage: stage.id, label, ok: r.ok, missing: r.missing };
   });
@@ -535,7 +535,7 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
 
   /*
    * 需求原文：契约 context（判据与禁止事项的大本营）+ 当前阶段的 next + 每个分片的 action。
-   * 全部逐字保存。压缩只针对「过程」，不针对「要求」。
+   * 全部逐字保存。压缩只针对“过程”，不针对“要求”。
    */
   const requirements: ReloadRequirement[] = [];
   const freshness = contractFreshness(root);
@@ -584,7 +584,7 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
   }
   for (const d of rows) {
     if (d.status !== "review") continue;
-    // 旧阶段的 review 单不过滤：它们进快照是「已做未验证」的记录，本来就不派复验。
+    // 旧阶段的 review 单不过滤：它们进快照是“已做未验证”的记录，本来就不派复验。
     if (d.stage === stageId) continue;
     const key = `${d.stage}/${d.shard || "-"}`;
     if (seen.has(key)) continue;
@@ -631,7 +631,7 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
   for (const e of events) {
     const kind = String(e.event ?? e.kind ?? "");
     if (kind === "supervisor_advance") {
-      addDecision(String(e.at ?? ""), "advance", `${String(e.from ?? "?")} → ${String(e.to ?? "?")}`);
+      addDecision(String(e.at ?? ""), "advance", `${String(e.from ?? "?")} -> ${String(e.to ?? "?")}`);
     } else if (kind === "supervisor_instruct") {
       addDecision(String(e.at ?? ""), "instruct", String(e.text ?? ""));
     }
@@ -658,7 +658,7 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
     const key = `${String(d.stage ?? "")}/${String(d.shard ?? "") || "-"}`;
     if (seenResume.has(key)) continue;
     const item = items.find((i) => i.key === key);
-    // 只排「重开后要继续」的条目；已完成的不占恢复次序。
+    // 只排“重开后要继续”的条目；已完成的不占恢复次序。
     if (!item || item.state === "done_verified") continue;
     seenResume.add(key);
     resumeOrder.push(key);
@@ -720,7 +720,7 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
 /**
  * 判定一片的状态。
  * 顺序即优先级：在途 > 失败 > 报完成待确认 > done(有证据) > done(无证据) > 未开始。
- * 「done 但无证据」是复验的输入，不落成 done_verified。
+ * “done 但无证据”是复验的输入，不落成 done_verified。
  */
 function classifyItem(
   state: TaskState | null,
@@ -864,7 +864,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
       String(snap.at ?? "").slice(0, 16).replace("T", " ") +
       "）。",
   );
-  L.push("> 它们不是「现在要立刻做的事」：当前要做的活以派单台账为准。与下面的「未完成」冲突时，以派单为准；");
+  L.push("> 它们不是“现在要立刻做的事”：当前要做的活以派单台账为准。与下面的“未完成”冲突时，以派单为准；");
   L.push("> 台账里 done / closed 的派单是历史，不要按它们恢复任何东西。");
   L.push("");
   if (snap.requirements.length === 0) L.push("(无)");
@@ -918,7 +918,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
 
   L.push("## 未裁决提问（等人回填，不要自行拍板）");
   if (snap.asks.length === 0) L.push("(无)");
-  /* 提问编号用「问N」：`#N` 保留给任务编号（`thread-no.json`），避免与任务号混淆。 */
+  /* 提问编号用“问N”：`#N` 保留给任务编号（`thread-no.json`），避免与任务号混淆。 */
   for (const a of snap.asks) L.push(`- 问${a.id} ${a.shard ? `[${a.shard}] ` : ""}${a.text}`);
   L.push("");
 
@@ -955,11 +955,11 @@ export function buildResumePlan(snap: ReloadSnapshot): ResumePlan {
       skip.push({ key: i.key, stage: i.stage, shard: i.shard, title: i.title, why: i.why });
     } else if (i.state === "done_unverified") {
       /*
-       * 只有「本阶段 + 仍在契约里」的片能派复验单。
+       * 只有“本阶段 + 仍在契约里”的片能派复验单。
        *
-       * 其余两种派了也活不过一个 tick：旧阶段的在途单会被 supersedeStaleDispatches
+       * 其余两种派了也活不过一个 调度轮次：旧阶段的在途单会被 supersedeStaleDispatches
        * 作废，契约里删掉的分片不在本案集合里同样被作废。所以它们进 deferred，
-       * 留着信息、不制造一张每 tick 生一次的假单。
+       * 留着信息、不制造一张每轮调度 生一次的假单。
        */
       if (i.stage === snap.stage && i.in_contract) {
         reverify.push({ key: i.key, stage: i.stage, shard: i.shard, title: i.title, action: i.action, why: i.why });
@@ -1000,19 +1000,19 @@ export function readResumePlan(root: string): ResumePlan | null {
   return p && Array.isArray(p.reverify) ? p : null;
 }
 
-/** 复验单正文须写明「复验不是重做」，避免工作进程按原要求重新实现、改回已通过的实现。 */
+/** 复验单正文须写明“复验不是重做”，避免工作进程按原要求重新实现、改回已通过的实现。 */
 function reverifyAction(item: ResumeReverifyItem): string {
   return [
     `复验（不是重做）：${item.stage}/${item.shard || "整阶段"} ${item.title}`,
     `上一轮已报完成，但没有可核对的确认（${item.why}），不能直接当完成。`,
     "做三件事：1) 按下面的原要求逐条核对是否真的做到；2) 每条给出证据（命令输出、文件与行号、截图路径），结论用 capitalist ledger add 入账；",
-    "3) 成立就在回报里写「已验证」，不重写已经通过的实现，不动别的分片的文件；不成立就说清缺哪条。",
+    "3) 成立就在回报里写“已验证”，不重写已经通过的实现，不动别的分片的文件；不成立就说清缺哪条。",
     `原要求：${clip(oneLine(item.action), 1200)}`,
   ].join("\n");
 }
 
 /**
- * 应用恢复计划：为「已做但未验证」的条目补派复验单。
+ * 应用恢复计划：为“已做但未验证”的条目补派复验单。
  * 幂等：同一条目已有在途复验单时不再新建；复验单 done 后条目标 verified。只处理当前阶段，避免占满并发槽。
  * @param currentStage 当前阶段 id；为空时处理全部。
  * @returns 新建的复验单数量。
@@ -1102,7 +1102,7 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
     st.verify_dispatch = id;
     st.state = "verifying";
     made += 1;
-    out(`[监工] 重载后复验：${item.key} → 派单 ${id}（不重做，只核对并给证据）`);
+    out(`[监工] 重载后复验：${item.key}，派单 ${id}（不重做，只核对并给证据）`);
   }
 
   if (plan.applied_at === undefined) plan.applied_at = new Date().toISOString();
@@ -1165,7 +1165,7 @@ export interface SupervisorContextRecord {
  * 按宿主会话记录估算监工对话的上下文已用 token。
  * 宿主 stream-json 不报 contextUsed；会话记录（`<配置目录>/projects/<项目>/<会话 id>.jsonl`）存有本会话全部消息与工具结果，
  * 按与工作进程同一条 {@link estimateContextTokens} 折算：中文 3 字符/token、其余 4 字符/token。
- * 无可估算记录时返回 null，由调用方按「未上报」处理。
+ * 无可估算记录时返回 null，由调用方按“未上报”处理。
  */
 interface SessionEstimate {
   size: number;
@@ -1323,8 +1323,8 @@ export function readSupervisorContext(root: string): SupervisorContextRecord | n
 /**
  * 监工配置的上下文上限（supervisor.json 的 `supervisor_context_limit`）。
  *
- * 未配置时取 {@link DEFAULT_SUPERVISOR_CONTEXT_LIMIT}；显式写 0 表示「只按模型窗口」。
- * 返回值 0 就是「没有配置上限」。
+ * 未配置时取 {@link DEFAULT_SUPERVISOR_CONTEXT_LIMIT}；显式写 0 表示“只按模型窗口”。
+ * 返回值 0 就是“没有配置上限”。
  */
 export function supervisorContextConfigLimit(root: string): number {
   const raw = loadSupervisor(root)?.supervisor_context_limit;
@@ -1385,7 +1385,7 @@ export function effectiveSupervisorContextLimit(configLimit: number, modelWindow
 }
 
 /**
- * 看板「监工 · 上下文」一格的视图（GET /api/supervisor 的 `context`）。
+ * 看板“监工 · 上下文”一格的视图（GET /api/supervisor 的 `context`）。
  * 只反映监工自身对话的用量与上限，与工作进程的上下文分开；上限按 {@link effectiveSupervisorContextLimit} 算。
  * 重载换代后旧读数不作为当前值，显示为空并给出原因。
  */
@@ -1418,7 +1418,7 @@ export function buildSupervisorContextView(root: string): SupervisorContextView 
   const limit = effectiveSupervisorContextLimit(configLimit, window, readCtxWindowChosen(root, "supervisor"));
   const fresh = Boolean(rec && rec.gen === gen);
   const rawUsed = fresh ? rec?.used ?? null : null;
-  /* 已用夹到生效上限，避免估算值超出窗口显示为「1.2M / 600k」；夹取后保留 `over` 供界面标超限。 */
+  /* 已用夹到生效上限，避免估算值超出窗口显示为“1.2M / 600k”；夹取后保留 `over` 供界面标超限。 */
   const over = rawUsed !== null && limit > 0 && rawUsed > limit;
   const used = rawUsed !== null && limit > 0 ? Math.min(rawUsed, limit) : rawUsed;
   const ratio = used !== null && limit > 0 ? used / limit : null;
@@ -1491,7 +1491,7 @@ export function shouldAutoReload(root: string): SupervisorCtxCheck {
   };
 }
 
-/** 读重载状态。过期（进程崩在中途）的标记会被清掉，避免看板永久显示「重载中」。 */
+/** 读重载状态。过期（进程崩在中途）的标记会被清掉，避免看板永久显示“重载中”。 */
 export function reloadStatus(root: string): ReloadStatus {
   const sess = readJson<SessionRecord | null>(sessionPath(root), null);
   const gen = Number(sess?.gen ?? 0);
@@ -1501,7 +1501,7 @@ export function reloadStatus(root: string): ReloadStatus {
   }
   const started = String(marker.started_at ?? "");
   const phase = String(marker.phase ?? "snapshot");
-  /* `done` 表示重载已完成、仅收尾删标记失败，按已结束处理，否则看板会持续显示「上下文优化中」。 */
+  /* `done` 表示重载已完成、仅收尾删标记失败，按已结束处理，否则看板会持续显示“上下文优化中”。 */
   if (phase === "done") {
     return { active: false, phase: "done", gen: Number(marker.gen ?? gen), started_at: started, age_sec: 0, trigger: "" };
   }
@@ -1790,7 +1790,7 @@ function sleep(ms: number): Promise<void> {
 
 /** `capitalist reload` 的入参。 */
 export interface ReloadOptions {
-  /** 让「监工重载中」多停几秒，便于人/脚本观察到这个状态；0 表示不停。 */
+  /** 让“监工重载中”多停几秒，便于人/脚本观察到这个状态；0 表示不停。 */
   holdSec?: number;
   out?: (s: string) => void;
   /** 触发来源：manual（默认）| context_overflow（上下文超限自动重载）。进事件与 active 标记。 */
@@ -1820,7 +1820,7 @@ export interface ReloadSummary {
 
 /**
  * 执行一次重载。
- * 顺序不可调换：先落盘快照 → 压缩 → 换会话 → 写恢复计划。任一步失败保留 active 标记，由 {@link reloadStatus} 超时清理。
+ * 顺序不可调换：先落盘快照 -> 压缩 -> 换会话 -> 写恢复计划。任一步失败保留 active 标记，由 {@link reloadStatus} 超时清理。
  * @throws 已有重载进行中时抛出（并发重载会互相覆盖快照）。
  */
 export async function beginReload(root: string, contract: Contract, opts: ReloadOptions = {}): Promise<ReloadSummary> {
@@ -1838,7 +1838,7 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
   const startedAt = new Date().toISOString();
   const trigger = String(opts.trigger ?? "manual");
   /*
-   * 重载前的读数与被换掉的会话 id：压缩事件要写清「从哪条会话、多少占用」开始。
+   * 重载前的读数与被换掉的会话 id：压缩事件要写清“从哪条会话、多少占用”开始。
    * 这两份必须在换 session.json 之前取，否则读到的已经是新会话。
    */
   const ctxBefore = readSupervisorContext(root);
@@ -1885,7 +1885,7 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
   const holdMs = Math.max(0, Math.min(60, Number(opts.holdSec ?? 0))) * 1000;
   if (holdMs > 0) await sleep(holdMs);
 
-  /* 收尾：撤掉「重载进行中」标记。删除失败不判重载失败：此时快照、压缩、换会话均已落盘。 */
+  /* 收尾：撤掉“重载进行中”标记。删除失败不判重载失败：此时快照、压缩、换会话均已落盘。 */
   let cleaned = false;
   try {
     rmSync(activePath(root), { force: true });
@@ -1932,7 +1932,7 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
 
   out(
     `[监工] 重载完成 gen ${gen}：快照 ${snap.items.length} 片｜` +
-      `${doCompress ? `上下文 ${snap.metrics.before_chars} → ${afterChars} 字（移除 ${snap.metrics.events_dropped} 条心跳/tick/已完成明细）` : "未压缩（交给宿主）"}｜` +
+      `${doCompress ? `上下文 ${snap.metrics.before_chars} -> ${afterChars} 字（移除 ${snap.metrics.events_dropped} 条心跳/tick/已完成明细）` : "未压缩（交给宿主）"}｜` +
       `不重派 ${plan.skip.length}｜待复验 ${plan.reverify.length}` +
       (plan.deferred.length ? `｜只记录 ${plan.deferred.length}` : "") +
       `｜继续 ${plan.pending.length}`,

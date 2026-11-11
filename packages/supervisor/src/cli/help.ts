@@ -13,7 +13,7 @@ import { modeNames } from "../core/permission";
 /**
  * 版本号唯一来源：包根的 `package.json`。
  *
- * 发布号由 `package.json` 决定；CLI 的 `--version`、帮助文本抬头、看板「关于」都从这里
+ * 发布号由 `package.json` 决定；CLI 的 `--version`、帮助文本抬头、看板“关于”都从这里
  * 派生，不再各自维护一份字面量。读不到时返回空串，只影响展示，不阻断命令执行。
  */
 function readVersion(): string {
@@ -54,7 +54,7 @@ export const HELP = `capitalist ${VERSION} 长流程任务监工
   ledger <add|list|assert> [--claim ... --verdict confirmed --baseline ... --probe ... --diff ... --repro ...]
                         证据台账；confirmed 且证据不全时自动降级
   justify <路径> <理由> [--ttl 秒]
-                        登记越界理由，有有效期并列入事后复查
+                        登记越界理由；有效期内该路径放行，放行时记入待复核
 
 问答
   ask "<问题>" [--id X] 登记待裁决问题，登记后收工闸放行
@@ -68,7 +68,7 @@ export const HELP = `capitalist ${VERSION} 长流程任务监工
   tasks [--json]        任务池汇总与清单；未完成 = 总数 - 已验收 - 已关闭
   tasks --backfill      把历史派单投影成任务项，可重复执行
                         每张派单登记一项，同一分片的重派归并到同一项
-                        状态：待派 → 进行中 → 待确认 → 已验收 ／ 失败 ／ 已关闭
+                        状态：待派 -> 进行中 -> 待确认 -> 已验收 ／ 失败 ／ 已关闭
 
 派单树
   tree                  输出树结构与节点状态
@@ -96,20 +96,20 @@ export const HELP = `capitalist ${VERSION} 长流程任务监工
             [--worker-cmd "<模板含 {prompt}>"] [--worker-timeout <秒>]
             [--stuck-sec <秒>]
             [--no-spawn] [--no-board] [--secure] [--board-quiet-ms N] [--board-min-gap-ms N]
-            [--force] [--detach] [--auto-start]
+            [--force] [--detach]
                         创建任务根并常驻：派单、验收、回收重派。--detach 后台运行；
                         --no-spawn 只写派单，由另一个会话执行 capitalist next 领取；--force 接管并清除熔断。
                         启动后不执行上次未完成的派单：这些单逐张标为暂停，队列原样保留；
                         新派入的单不受暂停影响，可立即执行。队列无待办时转入待命。
-                        两种状态都保持在线，不退出进程。唤醒暂停单：capitalist wake --user，
-                        或在看板按「已暂停」筛选后逐单唤醒。
+                        监工不自行生成派单：阶段门槛通过只推进状态，不建单。
+                        派单入口：看板、capitalist dispatch、capitalist say（追加要求）。
+                        待命与执行期间均保持在线，不退出进程。唤醒暂停单：capitalist wake --user，
+                        或在看板按“已暂停”筛选后逐单唤醒。
                         --agent 显式声明监工运行所在的宿主（workbuddy / codebuddy / claude-code），
                         优先级高于环境特征与配置目录：CodeBuddy CLI 仅注入 CLAUDE_*，不注入
                         CODEBUDDY_HOST，环境变量特征与 Claude Code 相同；未声明时按 claude-code 判定。
                         工作进程宿主按监工所在宿主判定：WorkBuddy 与 CodeBuddy 取 codebuddy，
                         Claude Code 取 claude-code。
-                        --auto-start 跳过确认并派单，包含上次未完成的派单。--auto-dispatch 按契约补齐分片派单。
-                        默认不认领契约分片，只处理用户写入的派单。
                         并行度 = --workers 上限（缺省 3），不按阶段分片数取小。
                         --stuck-sec 是卡点观察窗口（缺省 300 秒，环境变量 CAPITALIST_STUCK_SEC）：
                         心跳与日志都超过该窗口未更新时判为卡点，任一在窗口内更新即视为存活。
@@ -126,13 +126,21 @@ export const HELP = `capitalist ${VERSION} 长流程任务监工
                         或 CAPITALIST_BOARD_RELOAD_QUIET_MS / CAPITALIST_BOARD_RELOAD_MIN_GAP_MS 覆盖。
                         --no-board 不启动看板。
                         --secure 校验访问 key；缺省不校验，地址不带 key。
-                        工作进程沿用宿主登录态，项目不注入令牌、不保存凭证；
+                        令牌不由本项目保存。令牌下发缺省关闭，工作进程与对话通道使用宿主 CLI
+                        自身的登录态；置 CAPITALIST_TOKEN_INJECT=1 时启动命令读取一次宿主登录态
+                        并注入子进程，宿主对该次访问弹一次确认，选择“本次会话内始终允许”后
+                        覆盖监工与全部工作进程。未授权时启动日志输出“未下发宿主令牌”。
                         --worker-visible 为每个工作进程打开独立控制台窗口
   supervise-stop        请求监工退出（下一 tick 生效）
+  auth                 已移除：插件不把令牌写入磁盘，认证只用宿主自身的登录态
+  auth-check [--agent <id>] [--no-probe] [--json]
+                      检查宿主能否正常调用模型。输出探测结果与令牌来源，
+                      登录被拒时给出下一步动作。--agent 缺省取该任务的工作进程宿主；
+                      --no-probe 跳过探测，只报告令牌来源。可用时退出码 0，其余 1。
   pause ["<原因>"]      写 .capitalist/pause.json：下一 tick 起不派新单，运行中的进程被停止，对应派单退回排队
   resume [--user]       删除 .capitalist/pause.json：下一 tick 起恢复派单。属用户动作：
                         非交互终端（宿主会话代执行）默认拒绝，须加 --user 表示用户已明确要求；
-                        看板「恢复调度」按钮不经过本命令。暂停的旧派单由 capitalist wake --user 唤醒
+                        看板“恢复调度”按钮不经过本命令。暂停的旧派单由 capitalist wake --user 唤醒
   next [--session <名>] 领取一张派单（外部会话作为工作进程时使用）
   wake [<派单id|分片>] [--user]
                         唤醒暂停的派单；省略目标时唤醒本任务根全部暂停单。
@@ -141,10 +149,10 @@ export const HELP = `capitalist ${VERSION} 长流程任务监工
   workers [--json]      各工作进程的 pid / 宿主 / 派单 / 状态
   reload [--status] [--hold <秒>] [--json]
                         上下文重载：写入进度快照（阶段/已达标验收项/每片状态/未处理插话/
-                        未裁决提问/重派计数）→ 压缩心跳、tick 与已完成明细 →
-                        切换对话会话 → 写出恢复计划。已做但未验证的条目由监工下一 tick
+                        未裁决提问/重派计数）-> 压缩心跳、tick 与已完成明细 ->
+                        切换对话会话 -> 写出恢复计划。已做但未验证的条目由监工下一 tick
                         派复验单；已完成且证据齐全的条目不重派。
-                        --status 输出状态；--hold 延长看板「监工重载中」的显示时间
+                        --status 输出状态；--hold 延长看板“监工重载中”的显示时间
   report <派单id> --status done|failed --note "..." [--outcome "<编号>=<结论>;…"]
                         工作进程上报，由工作进程内部调用
                         --outcome 为派单正文中的每条用户插话给出结论，编号取正文里的 [方括号]；
@@ -198,7 +206,10 @@ export const HELP = `capitalist ${VERSION} 长流程任务监工
                         本机边界预检
   hosts [--json]        列出所有宿主 impl 的 id / 别名 / 能力
   install [--agent <宿主…>] [--all] [--yes] [--dry-run] [--verbose]
-                        安装 hook 与手册；省略 --agent 时进入选择菜单，支持分批安装
+                        安装 hook 与手册。必须指定宿主：--agent 取值见宿主表，--all 安装到
+                        全部已检测宿主；交互终端下省略时进入选择菜单。hook 写入当前项目的
+                        <配置目录>/settings.local.json，手册写入用户目录；换项目时在该项目
+                        目录再执行一次
   uninstall [--agent <宿主…>] [--all] [--keep-skill] [--verbose]
                         卸载 hook 与手册；省略 --agent 时进入选择菜单，保留任务数据
   check-update [--force]
@@ -260,6 +271,6 @@ export const COMMAND_HELP: Record<string, string> = {
   - 切换监工对话会话（capitalist-chat-r<gen>），原会话中的工具输出不再读取
   - 写 .capitalist/reload/resume.json：done_verified 不重派；done_unverified（已做但未验证）
     由监工下一 tick 派 source=reverify 的复验单，不按完成处理
-  - 重载期间看板监工面板显示「监工重载中」，结束后隐藏（.capitalist/reload/active.json）
+  - 重载期间看板监工面板显示“监工重载中”，结束后隐藏（.capitalist/reload/active.json）
   - 生效时机：复验单在下一 tick 由监工补出；阶段推进与门槛判定不受影响`,
 };

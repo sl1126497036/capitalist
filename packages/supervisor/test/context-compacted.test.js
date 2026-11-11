@@ -65,7 +65,7 @@ test("骤降判定：刚好腰斩才算，稍高于一半不算", () => {
 });
 
 
-test("同代同口径骤降 → 一条 inferred 事件，字段齐全", () => {
+test("同代同口径骤降 -> 一条 inferred 事件，字段齐全", () => {
   const root = sandbox();
   recordSupervisorContext(root, 240_000, 600_000, "model-a");
   recordSupervisorContext(root, 120_000, 600_000, "model-a");
@@ -135,7 +135,7 @@ function reloadSandbox() {
   return { root, contract: loadContract(contractPath) };
 }
 
-test("重载 → reload 来源的压缩事件，进入监工流并显示「已压缩」", async () => {
+test("重载 -> reload 来源的压缩事件，进入监工流并显示“已压缩”", async () => {
   const { root, contract } = reloadSandbox();
   recordSupervisorContext(root, 520_000, 600_000, "model-a");
 
@@ -160,12 +160,12 @@ test("重载 → reload 来源的压缩事件，进入监工流并显示「已�
   assert.ok(card, "压缩卡片必须进入监工流");
   assert.equal(card.tier, "main", "压缩是会话层事实，不收进过程日志");
   assert.match(card.text, /监工对话上下文已压缩/);
-  assert.match(card.text, /520k token → 新会话/);
+  assert.match(card.text, /520k token -> 新会话/);
   assert.match(card.text, /来源：上下文重载/);
   assert.doesNotMatch(card.text, /推断/, "重载是事实，不能写成推断");
 });
 
-test("推断事件进监工流：正文标明「读数骤降推断，不是宿主事件」", () => {
+test("推断事件进监工流：正文标明“读数骤降推断，不是宿主事件”", () => {
   const root = sandbox();
   recordSupervisorContext(root, 240_000, 600_000, "model-a");
   recordSupervisorContext(root, 90_000, 600_000, "model-a");
@@ -173,12 +173,12 @@ test("推断事件进监工流：正文标明「读数骤降推断，不是宿�
   const log = buildSupervisorLog(root, { limit: 50, hours: 1 });
   const card = log.messages.find((m) => m.event === "context_compacted");
   assert.ok(card, "推断出来的压缩同样上屏");
-  assert.match(card.text, /240k → 90k token/);
+  assert.match(card.text, /240k -> 90k token/);
   assert.match(card.text, /读数骤降推断，不是宿主事件/, "推断不能被写成已确认的事实");
 });
 
 
-test("状态气泡：重载中 compacting → 「压缩中」，结束后回到原口径", async () => {
+test("状态气泡：重载中 compacting -> “压缩中”，结束后回到原口径", async () => {
   assert.deepStrictEqual(supervisorActivityOf({ reloading: true }), { kind: "compacting", action: "reload" });
   assert.deepStrictEqual(supervisorActivityOf({ reloading: true, action: "chat", running: 2 }), {
     kind: "compacting",

@@ -1,4 +1,4 @@
-/** 空转时的「任务完成」不上任何用户可见的入口。 */
+/** 空转时的“任务完成”不上任何用户可见的入口。 */
 
 const test = require("node:test");
 const assert = require("node:assert");
@@ -68,7 +68,7 @@ test("单阶段契约：空转的 supervisor_done 不进监工流", () => {
     assert.deepStrictEqual(done, [], "单阶段契约没有收工这一刻，不许上屏");
     assert.ok(
       !log.messages.some((m) => String(m.text ?? "").includes("任务完成")),
-      "更不许出现「任务完成」气泡",
+      "更不许出现“任务完成”气泡",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -72,7 +72,7 @@ function durText(node) {
       </div>
 
       <p v-if="item.node.state === 'failed'" class="fv-nreason">
-        {{ t("失败原因：{why}", { why: item.node.reason || t("台账未记录") }) }}
+        {{ t("失败原因：{why}", { why: item.node.reason || t("未记录") }) }}
       </p>
       <p v-if="item.node.state === 'failed'" class="fv-nflag">
         {{ item.node.childCount ? t("断链 其下子树无法推进") : t("断链") }}

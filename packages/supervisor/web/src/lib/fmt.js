@@ -9,7 +9,7 @@ import { rejectTail } from "./rejectTail.js";
 /* 时间格式随界面语言：英文用 en-GB（24 小时制、日/月顺序），中文用 zh-CN。 */
 const locale = () => (lang.value === "en" ? "en-GB" : "zh-CN");
 
-/** 回落标签（「其他事件」）。正文与该标签相同的消息按空消息移除。 */
+/** 回落标签（“其他事件”）。正文与该标签相同的消息按空消息移除。 */
 export const BLANK_LABEL = EVENT_ZH_FALLBACK;
 
 export function clock(iso) {
@@ -26,7 +26,7 @@ export function hhmm(iso) {
   return d.toLocaleTimeString(locale(), { hour12: false, hour: "2-digit", minute: "2-digit" });
 }
 
-/** 秒 → 12:34 / 1:02:03，用于进程行右侧时长（等宽数字）。 */
+/** 秒 -> 12:34 / 1:02:03，用于进程行右侧时长（等宽数字）。 */
 export function dur(sec) {
   const n = Math.max(0, Math.floor(Number(sec) || 0));
   const h = Math.floor(n / 3600);
@@ -36,7 +36,7 @@ export function dur(sec) {
   return h > 0 ? `${h}:${p2(m)}:${p2(s)}` : `${p2(m)}:${p2(s)}`;
 }
 
-/** 线程状态 → 左栏状态点色号与右侧文案。 */
+/** 线程状态 -> 左栏状态点色号与右侧文案。 */
 export function rowState(t) {
   const s = String(t?.status || "");
   const alive = s === "running" || s === "starting";
@@ -88,14 +88,14 @@ export function msgRef(m) {
 
 
 /**
- * 监工事件类型 → 界面标签。事件名经 src/supervisor/terms.ts 转换，不直接上屏。
- * 未收录的事件显示「监工记录」，不套用「其他事件」回落词。
+ * 监工事件类型 -> 界面标签。事件名经 src/supervisor/terms.ts 转换，不直接上屏。
+ * 未收录的事件显示“监工记录”，不套用“其他事件”回落词。
  */
 export function evtTag(m) {
   return t(EVENT_ZH[String(m?.event || "")] || "监工记录");
 }
 
-/** 指令动作 → 中文名。dispatch 依据事件的 urgent 字段区分「插队派单」与「已派单」，不二次推断。 */
+/** 指令动作 -> 中文名。dispatch 依据事件的 urgent 字段区分“插队派单”与“已派单”，不二次推断。 */
 export function cmdLabel(action, urgent) {
   if (String(action || "") === "dispatch") {
     return urgent === true ? t("插队派单") : t("已派单");
@@ -170,7 +170,7 @@ function clip(s, n) {
 
 /**
  * 折叠块头行：摘要 + 行数 + 隐藏行数。三类块共用同一头行，使高度与对齐一致；
- * 隐藏的调试行须标出「隐藏 N 行」。
+ * 隐藏的调试行须标出“隐藏 N 行”。
  */
 export function blockParts(m) {
   const rows = String(m?.text || "").split("\n").filter((x) => x.trim() !== "");

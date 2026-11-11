@@ -20,7 +20,7 @@ import {
 import { findRoot, supervisorDir } from "../core/paths";
 import { decide } from "../core/permission";
 import { resolveModeFor } from "../core/state";
-import { skillDirs } from "../host/locations";
+import { skillDirs } from "../agent/locations";
 import { flagBool, flagString, type Parsed } from "./args";
 import { loadOrDie, rootOrDie } from "./context";
 import { die, write } from "./output";
@@ -46,7 +46,7 @@ export function cmdGate(p: Parsed): number {
   gate.mode = mode;
   gate.tightened = false;
 
-  // 删除类红线带 defer：它们只标识「这是一次删除」，判定归更具体的路径检查，
+  // 删除类红线带 defer：它们只标识“这是一次删除”，判定归更具体的路径检查，
   // 路径检查先跑。
   if (gate.hits.some((h) => h.defer === "local_delete")) {
     const del = localDeleteCheck(contract, root, text);
@@ -121,6 +121,10 @@ export function cmdJustify(p: Parsed): number {
     ttl,
     session: process.env.CAPITALIST_SESSION_ID ?? "",
   });
-  write(`已登记理由：${path}\n  有效期：${ttl} 秒（同路径）\n  已排入待复核队列。\n`);
+  write(
+    `已登记理由：${path}\n` +
+      `  有效期：${ttl} 秒，对登记路径及其子项生效。\n` +
+      "  重试原命令即放行；放行时记入待复核队列（capitalist review 查看）。\n",
+  );
   return 0;
 }

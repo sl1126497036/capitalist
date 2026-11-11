@@ -2993,7 +2993,7 @@
   color: var(--bad);
 }
 
-/* 删除确认态须整枚按钮转实心警示色并写出「确认删除」，首次点击即有明显变化。 */
+/* 删除确认态须整枚按钮转实心警示色并写出“确认删除”，首次点击即有明显变化。 */
 .memicon.danger.armed {
   width: auto;
   padding: 0 var(--s6);
@@ -3440,7 +3440,7 @@
 }
 
 .composer.dragging::after {
-  content: "松手：图片→附件 文本→插入";
+  content: "松手：图片存为附件，文本插入编辑器";
   position: absolute;
   right: var(--s10);
   top: calc(var(--s8) + 2px);

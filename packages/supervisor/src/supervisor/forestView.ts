@@ -27,7 +27,7 @@ function clearedDispatches(root: string): Set<string> {
 /**
  * 从派单行里摘掉被清除的任务。
  *
- * 同一血缘的尝试一起摘：清掉的是「这条任务」，不是某一次重派。被摘节点的子节点改判为根，
+ * 同一血缘的尝试一起摘：清掉的是“这条任务”，不是某一次重派。被摘节点的子节点改判为根，
  * 否则 `dispatchForest` 会把它们记成孤立前置，树上看不出它们只是父节点被隐藏了。
  */
 function dropCleared(rows: Dispatch[], cleared: Set<string>): Dispatch[] {
@@ -60,7 +60,7 @@ export interface ForestNodeView {
   status: string;
   /** 派单记录里的模型 id；老记录没有这一项时为空串。 */
   model: string;
-  /** 启动时刻（ISO）：取认领时刻，未被认领时取建单时刻；与左栏任务卡的「启动」同义。 */
+  /** 启动时刻（ISO）：取认领时刻，未被认领时取建单时刻；与左栏任务卡的“启动”同义。 */
   started_at: string;
   /** 结束时刻（ISO）：终态的完成或关闭时刻；非终态为空串，由前端计算时长。 */
   ended_at: string;
@@ -361,7 +361,7 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
   }
 
   /*
-   * 启动时刻取认领时刻，未被认领时取建单时刻；与左栏「启动」同义。
+   * 启动时刻取认领时刻，未被认领时取建单时刻；与左栏“启动”同义。
    * 结束时刻仅取终态时间，非终态留空，由前端计算时长。
    */
   const infoOf = (d: Dispatch): { model: string; started_at: string; ended_at: string } => {
@@ -439,7 +439,7 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
   const parts: string[] = [];
   if (forest.cycles.length > 0) {
     const groupText = forest.cycles.map((g) => g.map((id) => id).join(" ↔ ")).join("；");
-    parts.push(`台账存在成环的父节点关系（${groupText}），这些节点收进「脏数据」树，调度侧不会推动它们。`);
+    parts.push(`台账存在成环的父节点关系（${groupText}），这些节点收进“脏数据”树，调度侧不会推动它们。`);
   }
   if (forest.orphans.length > 0) parts.push(`${forest.orphans.length} 个节点的父节点不在台账里，按独立树处理。`);
 

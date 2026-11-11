@@ -1,12 +1,12 @@
 /**
  * 监工上下文重载的回归测试。
  *
- * 钉住四件事，任何一条破了都会让「重载」变成「失忆」：
+ * 钉住四件事，任何一条破了都会让“重载”变成“失忆”：
  *
  * 1. 快照里该有的都在：阶段、已达标验收项、每片状态、未消费插话、未裁决提问、重派计数；
  * 2. 压缩真的在压：心跳/tick 不进简报，需求原文一字不改地留下；
  * 3. done_verified 不重派，done_unverified 必须派复验，且重复调用不重复派；
- * 4. 重载标记会自己清掉（进程崩了不能把看板永久钉在「重载中」）。
+ * 4. 重载标记会自己清掉（进程崩了不能把看板永久钉在“重载中”）。
  */
 
 const test = require("node:test");
@@ -99,9 +99,9 @@ function makeRoot() {
 
   /*
    * 三片三种状态：
-   *   shard-a  done 但台账里没有确认 → done_unverified
-   *   shard-b  done 且有四项证据齐全的 confirmed → done_verified
-   *   shard-c  review（报完成待确认）→ done_unverified
+   *   shard-a  done 但台账里没有确认 -> done_unverified
+   *   shard-b  done 且有四项证据齐全的 confirmed -> done_verified
+   *   shard-c  review（报完成待确认）-> done_unverified
    */
   const rows = [
     { id: "D-a1", at: "2026-01-01T00:00:00.000Z", stage: "S1", shard: "shard-a", action: "改 src/a.ts", status: "done", attempt: 1, note: "改好了" },
@@ -170,10 +170,10 @@ test("快照：阶段、验收项、每片状态、插话、提问、重派计�
   assert.ok(snap.gates.some((g) => g.stage === "S1" && g.label === "缺 a" && !g.ok), "S1 缺 a 应未达标");
 
   const byKey = Object.fromEntries(snap.items.map((i) => [i.key, i]));
-  assert.equal(byKey["S1/shard-a"].state, "done_unverified", "done 但无台账确认 → 未验证");
-  assert.equal(byKey["S1/shard-b"].state, "done_verified", "有四项证据的 confirmed → 已验证");
-  assert.equal(byKey["S1/shard-c"].state, "done_unverified", "review → 未验证");
-  assert.equal(byKey["S1/shard-a"].retries, 2, "派过三次 → 重派两次");
+  assert.equal(byKey["S1/shard-a"].state, "done_unverified", "done 但无台账确认 -> 未验证");
+  assert.equal(byKey["S1/shard-b"].state, "done_verified", "有四项证据的 confirmed -> 已验证");
+  assert.equal(byKey["S1/shard-c"].state, "done_unverified", "review -> 未验证");
+  assert.equal(byKey["S1/shard-a"].retries, 2, "派过三次 -> 重派两次");
   assert.equal(byKey["S1/shard-a"].failures, 0, "最后一张 done 后连续失败清零");
 
   // 只留未消费的插话；已消费的不再带过去
@@ -185,7 +185,7 @@ test("快照：阶段、验收项、每片状态、插话、提问、重派计�
   assert.equal(snap.asks[0].id, "Q1");
 
   // 决策结论里有阶段推进
-  assert.ok(snap.decisions.some((d) => d.kind === "advance" && d.text === "S0 → S1"));
+  assert.ok(snap.decisions.some((d) => d.kind === "advance" && d.text === "S0 -> S1"));
 
   // 文件边界与禁止事项（原文行）
   assert.ok(snap.boundaries.some((b) => b.includes("禁止删除文件")));
@@ -216,7 +216,7 @@ test("恢复计划：已验证跳过，未验证必派复验，且不重复派",
   mkdirSync(join(root, ".capitalist", "reload"), { recursive: true });
   writeFileSync(join(root, ".capitalist", "reload", "resume.json"), JSON.stringify(plan), "utf8");
   const first = applyResumePlan(root, "S1", () => {});
-  assert.equal(first, 2, "两片未验证 → 两张复验单");
+  assert.equal(first, 2, "两片未验证 -> 两张复验单");
 
   const rows = readDispatches(root);
   const reverify = rows.filter((d) => d.source === "reverify");
@@ -252,7 +252,7 @@ test("复验结单后，新一次重载把它记为已验证（不重复复验�
 
   const snap2 = buildReloadSnapshot(root, contract, 2);
   const byKey = Object.fromEntries(snap2.items.map((i) => [i.key, i]));
-  assert.equal(byKey["S1/shard-a"].state, "done_verified", "复验单结单 → 已验证");
+  assert.equal(byKey["S1/shard-a"].state, "done_verified", "复验单结单 -> 已验证");
   assert.equal(byKey["S1/shard-c"].state, "done_verified");
   const plan2 = buildResumePlan(snap2);
   assert.equal(plan2.reverify.length, 0, "已验证的不得再进复验清单");

@@ -45,7 +45,7 @@ export interface HookDecision {
  * - `dispatch` 整体 fail-open：hook 位于用户必经路径上，自身故障不阻断工作。
  */
 export interface HookFacet {
-  /** 原生事件名 → 生命周期点。无法映射返回 null（该事件不处理）。 */
+  /** 原生事件名 -> 生命周期点。无法映射返回 null（该事件不处理）。 */
   pointFor(native: string): LifecyclePoint | null;
   /** 解析原生 payload。字段缺失一律给空值，不抛。 */
   parse(payload: NativePayload, native: string): UnifiedEvent;
@@ -55,8 +55,8 @@ export interface HookFacet {
   /**
    * 手工配置（`--agent` 缺失）时被猜中的优先级，越大越先。
    *
-   * 这张表决定「用户当前在哪个宿主里」。`WorkerFacet.detectPriority` 决定「哪些 impl 可作为
-   * 工作进程」，两者互不影响：桌面端能跑 hook，但不能当工作进程。猜错时判定会挂到另一个
+   * 这张表决定“用户当前在哪个宿主里”。`WorkerFacet.detectPriority` 决定“哪些 impl 可作为
+   * 工作进程”，两者互不影响：桌面端能跑 hook，但不能当工作进程。猜错时判定会挂到另一个
    * impl 的事件映射上。
    */
   readonly guessPriority?: number;
@@ -68,7 +68,7 @@ export interface HookFacet {
 
 /** 安装上下文：由顶层安装器准备，impl 只读。 */
 export interface InstallContext {
-  /** hook 入口绝对路径（dist/host/main.js） */
+  /** hook 入口绝对路径（dist/agent/main.js） */
   entry: string;
   /** 当前 node 绝对路径 */
   node: string;
@@ -104,7 +104,7 @@ export interface InstallFacet {
    */
   notice?(): string | null;
   /**
-   * 不满足则视为「装了但没生效」的前置条件，由安装器强制提示。
+   * 不满足则视为“装了但没生效”的前置条件，由安装器强制提示。
    *
    * 返回空数组表示没有前置条件。
    */
@@ -117,7 +117,7 @@ export interface InstallFacet {
  * 续载信息。
  *
  * worker 是一次性进程，但宿主会话可以续：同一分片重派时接上上一次的会话，模型不必重新
- * 通读项目、不必重新理解这一单要做的事。反复「从头开始」是 token 的主要浪费点，一个
+ * 通读项目、不必重新理解这一单要做的事。反复“从头开始”是 token 的主要浪费点，一个
  * 三十分钟的活被中断三次，就等于把项目读了三遍。
  */
 export interface WorkerSession {
@@ -153,9 +153,9 @@ export interface WorkerFacet {
   /**
    * 把推理强度翻译成该宿主的启动参数。
    *
-   * 不声明的宿主表示没有这个能力：顶层不会给它塞任何猜测出来的参数。宿主之间的
+   * 不声明的宿主表示没有这个能力：顶层不会为它写入任何推测参数。宿主之间的
    * 写法不一样（`--effort` / 环境变量 / 根本不存在），把这个差异留在 impl 里，
-   * 顶层只负责把「想要多深的思考」这个意图传下来。
+   * 顶层只负责把“想要多深的思考”这个意图传下来。
    *
    * @returns 需要追加的参数；返回空数组表示该档位这个宿主不支持。
    */
@@ -175,16 +175,24 @@ export interface WorkerFacet {
    *
    * Windows 上经 npm 安装的 CLI 是 .cmd 包装脚本，脚本主体形如
    * `goto #_undefined_# 2>NUL || title %COMSPEC% & node <entry> %*`。受限环境里这条
-   * 重定向会被拒，整行短路，CLI 无法启动，日志里只有「拒绝访问」。改走 node 加真实
+   * 重定向会被拒，整行短路，CLI 无法启动，日志里只有“拒绝访问”。改走 node 加真实
    * 入口可以绕开这层脚本。
    */
   program?(ctx: { bin: string; dir: string; platform: NodeJS.Platform }): { bin: string; args: string[] } | null;
   /**
    * 宿主自己会注入、不能传给工作进程的环境变量前缀。
    *
-   * 前缀内容属于宿主协议，由 impl 声明。顶层只执行「声明过的前缀一律不继承」。
+   * 前缀内容属于宿主协议，由 impl 声明。顶层只执行“声明过的前缀一律不继承”。
    */
   envDropPrefixes?: readonly string[];
+  /**
+   * 承载访问令牌的环境变量名。
+   *
+   * 声明后，顶层把宿主登录态中的令牌写进这个变量交给子进程，宿主 CLI 据此认证，不再依赖
+   * 客户端自身的登录态文件。不声明表示该宿主没有这条通道，顶层不注入任何令牌。
+   * 变量名由 impl 给出：不同宿主的认证变量不同，写错等于没注入。
+   */
+  authEnvVar?: string;
   /**
    * 需要按完整变量名剔除的条目，全大写。
    *
@@ -210,7 +218,7 @@ export interface WorkspaceFacet {
  */
 export interface HostEnvHint {
   readonly name: string;
-  /** 取值必须包含的关键字。省略表示「变量非空即命中」。 */
+  /** 取值必须包含的关键字。省略表示“变量非空即命中”。 */
   readonly contains?: string;
 }
 
@@ -234,6 +242,14 @@ export interface HostImpl {
    * 没有项目级落点的宿主显式缺省，安装器据此跳过，不猜。
    */
   readonly projectLocal?: boolean;
+
+  /**
+   * hook 写到用户级配置（`~/<configDir>/<settingsFile>`），项目内不建配置目录。
+   *
+   * 用于“项目里出现该目录会改变宿主自身行为”的宿主：WorkBuddy 在项目里看到 `.codebuddy`
+   * 就转受限模式，连 bash 都不再执行，届时插件装上了也跑不动。这类宿主的 hook 只能写用户级。
+   */
+  readonly userLevelHook?: boolean;
 
   /**
    * 已知支持的模型 ID（宿主 CLI 帮助文本解析不出来时的回退清单，按界面展示顺序）。
@@ -265,7 +281,7 @@ export interface HostImpl {
    * 环境变量比配置目录更可靠：同一台机器可能安装多个宿主，但只有发起本次进程的宿主会注入
    * 该变量。变量名与取值关键字均由 impl 声明，注册表按声明匹配。
    *
-   * 同族宿主可能共用同一个变量（以一处配置区分产品形态），因此 `contains` 比「存在即命中」
+   * 同族宿主可能共用同一个变量（以一处配置区分产品形态），因此 `contains` 比“存在即命中”
    * 更具体，判定时优先采信。
    */
   readonly hostEnv?: readonly HostEnvHint[];
@@ -295,7 +311,7 @@ export interface Capabilities {
   workspacePrepare: boolean;
 }
 
-/** 能力探测用的空上下文：只关心「有没有前置条件」，不关心具体路径。 */
+/** 能力探测用的空上下文：只关心“有没有前置条件”，不关心具体路径。 */
 const PROBE_CTX: InstallContext = { entry: "", node: "", marker: "", platform: process.platform };
 
 /**

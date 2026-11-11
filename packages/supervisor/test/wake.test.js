@@ -54,7 +54,7 @@ test("没有尾巴时续跑提示词照样带正文，不出现空的插话段",
   });
   assert.match(p, /改 A/, "没有尾巴时正文就是全部依据，必须重发");
   assert.ok(!p.includes("【用户插话"), "没有插话就不该有插话段");
-  assert.ok(!p.includes("追加了新要求"), "没有新要求就不该说「追加了新要求」");
+  assert.ok(!p.includes("追加了新要求"), "没有新要求就不该说“追加了新要求”");
 });
 
 test("首次启动提示词照旧带整段 action（含尾巴）", () => {
@@ -74,7 +74,7 @@ const WAKE_CONTRACT = {
   name: "minimal",
   data: {},
   stages: [
-    // 当前阶段是 S1：S0 的在途单按「阶段已推进」本应作废
+    // 当前阶段是 S1：S0 的在途单按“阶段已推进”本应作废
     { id: "S1", name: "下一阶段", next: "做点事", parallel: [{ id: "b", action: "改 B" }] },
   ],
 };

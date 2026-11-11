@@ -40,7 +40,7 @@ export interface IgnoredInboxRow {
 export interface InboxRead {
   /** 通过校验的记录，保持文件顺序。 */
   rows: InboxRecord[];
-  /** 畸形记录。条数即「已忽略 N 条」。 */
+  /** 畸形记录。条数即“已忽略 N 条”。 */
   ignored: IgnoredInboxRow[];
   /** 因为不是 `qa.jsonl` 而被跳过的同目录文件（`.tmp` 之类）。 */
   skipped: string[];
@@ -79,8 +79,8 @@ export function validateInboxRecord(row: unknown): string | null {
 /**
  * 同目录下哪些文件不是台账。
  *
- * 显式枚举而不是「只拼路径读一次」：并发写遗留的临时文件必须以可观测的方式被跳过。
- * 读不到目录（inbox 还没建）时返回空数组，调用方按「没有台账」处理。
+ * 显式枚举而不是“只拼路径读一次”：并发写遗留的临时文件必须以可观测的方式被跳过。
+ * 读不到目录（inbox 还没建）时返回空数组，调用方按“没有台账”处理。
  */
 export function skippedInboxFiles(root: string): string[] {
   let names: string[];
@@ -99,7 +99,7 @@ export function skippedInboxFiles(root: string): string[] {
  * 不参与解析，名字记进 `skipped` 供调用方提示。
  *
  * 坏行不抛：单行脏数据不该让整份台账不可用，也不能让监工因为一行解析不了就停摆，
- * 但必须被计数，让「忽略了多少」可被看见。
+ * 但必须被计数，让“忽略了多少”可被看见。
  */
 export function readInbox(root: string): InboxRead {
   const rows: InboxRecord[] = [];
@@ -139,7 +139,7 @@ export function readInbox(root: string): InboxRead {
 /**
  * 未裁决的问题。
  *
- * 这是监工「要不要暂停派单」的唯一依据，因此必须走 {@link readInbox} 的校验：
+ * 这是监工“要不要暂停派单”的唯一依据，因此必须走 {@link readInbox} 的校验：
  * 一条 id 缺失的记录不该让整条流水线停下来。
  */
 export function openInboxAsks(root: string): InboxRecord[] {
@@ -147,9 +147,9 @@ export function openInboxAsks(root: string): InboxRecord[] {
 }
 
 /**
- * 畸形记录的稳定签名，用于「同一批坏行只报一次」。
+ * 畸形记录的稳定签名，用于“同一批坏行只报一次”。
  *
- * 每 tick 都写一条 warn 会把真正的派单事件挤出窗口；签名变化（新坏行、坏行被清理）
+ * 每轮调度 都写一条 warn 会把真正的派单事件挤出窗口；签名变化（新坏行、坏行被清理）
  * 才值得再记一条。
  */
 export function ignoredSignature(ignored: readonly IgnoredInboxRow[]): string {

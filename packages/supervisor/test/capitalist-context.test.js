@@ -46,7 +46,7 @@ test("看板视图：已用与生效上限同源，缺失字段为 null", () => 
   assert.equal(empty.source, "none");
   assert.match(empty.reason, /还没和监工对话/);
 
-  // 模型 300K、配置 1M → 显示 300K
+  // 模型 300K、配置 1M -> 显示 300K
   recordSupervisorContext(root, 135_000, 300_000, "model-a");
   const small = buildSupervisorContextView(root);
   assert.equal(small.used, 135_000);
@@ -70,7 +70,7 @@ test("超限判定用的分母就是面板显示的生效上限", () => {
   assert.equal(hit.hit, true, "260k / 300k = 86.7%，应触发");
   assert.ok(hit.reason.includes("300000"));
 
-  // 同样的已用量，模型 2M → 生效上限 1M，占比 26%，不触发
+  // 同样的已用量，模型 2M -> 生效上限 1M，占比 26%，不触发
   recordSupervisorContext(root, 260_000, 2_000_000, "model-b");
   const miss = shouldAutoReload(root);
   assert.equal(miss.hit, false);
@@ -82,7 +82,7 @@ test("重载换代后旧读数不再触发，也不会显示成当前占用", ()
   recordSupervisorContext(root, 280_000, 300_000, "model-a");
   assert.equal(shouldAutoReload(root).hit, true);
 
-  // 模拟 beginReload：会话代次 +1（gen 0 → 1），旧读数仍躺在文件里
+  // 模拟 beginReload：会话代次 +1（gen 0 -> 1），旧读数仍躺在文件里
   mkdirSync(join(root, ".capitalist", "reload"), { recursive: true });
   writeFileSync(
     join(root, ".capitalist", "reload", "session.json"),

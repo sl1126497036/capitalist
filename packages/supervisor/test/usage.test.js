@@ -1,7 +1,7 @@
 /**
  * 用量台账：从 worker 日志里读真实 token / 成本 / 耗时 / 模型，并按三个维度汇总。
  *
- * 这一组测的都是「读出来的数对不对、缺数据时是不是真的空着」：
+ * 这一组测的都是“读出来的数对不对、缺数据时是不是真的空着”：
  *   - assistant 行按 message.id 去重（流式分片会重复下发同一条消息）；
  *   - 有 `type=result` 时以官方汇总为准，不叠加逐条求和（否则会翻倍）；
  *   - 没有 usage 的日志必须是 null + 原因，不能是 0；
@@ -150,7 +150,7 @@ test("result 行是官方汇总：同一消息的流式分片只算一次，且�
   assert.equal(r.context_window, 200000);
   assert.equal(r.model, "deepseek-v4.1-flash");
   assert.equal(r.model_version, "v4.1-flash");
-  assert.equal(r.billing_unit, "token", "total_cost_usd=0 → 按 token 计费");
+  assert.equal(r.billing_unit, "token", "total_cost_usd=0 -> 按 token 计费");
   assert.equal(r.cost_usd, 0);
 });
 
@@ -205,7 +205,7 @@ test("追写日志：增量解析只读新增的整行，数继续上涨且不�
   assert.equal(usage.collectWorkerUsage(root)[0].output_tokens, 50);
 });
 
-test("三个维度的合计对得上：by_worker → by_dispatch → by_stage → totals", () => {
+test("三个维度的合计对得上：by_worker -> by_dispatch -> by_stage -> totals", () => {
   usage.__resetUsageCache();
   const root = makeRoot([
     { id: "W-1", dispatch: "D-1", stage: "U1", shard: "a", log: assistant("m1", 100, 10, 0) },

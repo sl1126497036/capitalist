@@ -20,7 +20,7 @@
     {
       "id": "S0",
       "name": "需求确认",
-      "goal": "把目标拆成「要做什么 / 不要做什么 / 怎么算做完」，复述后确认",
+      "goal": "把目标拆成“要做什么 / 不要做什么 / 怎么算做完”，复述后确认",
       "next": "写需求要点进 memory.md，然后 capitalist record req '{\"item\":\"...\",\"acceptance\":\"...\"}'",
       "done": {
         "type": "all_of",

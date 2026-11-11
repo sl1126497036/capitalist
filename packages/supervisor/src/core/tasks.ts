@@ -1,4 +1,4 @@
-/** 任务池台账（`.capitalist/tasks.jsonl`）：一件「要做的活」而不是「一次执行尝试」。 */
+/** 任务池台账（`.capitalist/tasks.jsonl`）：一件“要做的活”而不是“一次执行尝试”。 */
 
 import { join } from "node:path";
 
@@ -132,7 +132,7 @@ export function syncTaskForDispatch(root: string, d: Dispatch): void {
   writeAll(root, rows);
 }
 
-/** 汇总：这是「派了几项、验收了几项、还剩几项」的唯一出口。 */
+/** 汇总：这是“派了几项、验收了几项、还剩几项”的唯一出口。 */
 export interface TaskSummary {
   total: number;
   /** 已派出（含重试中）。 */
@@ -216,9 +216,9 @@ export function summaryLine(s: TaskSummary): string {
 /**
  * 标题规范化：只留中英文与数字。
  *
- * 用户同一件事会用不同说法反复追加（「把 X 改一下」「X 还是要改」「X 改了吗」），
- * 区别常常只在标点、空格、语气词。规范化之后这些噪声不参与比较，剩下的才是「说的
- * 是不是同一件事」。
+ * 用户同一件事会用不同说法反复追加（“把 X 改一下”“X 还是要改”“X 改了吗”），
+ * 区别常常只在标点、空格、语气词。规范化之后这些噪声不参与比较，剩下的才是“说的
+ * 是不是同一件事”。
  */
 function normTitle(s: string): string {
   return String(s ?? "")
@@ -238,7 +238,7 @@ function bigrams(s: string): Set<string> {
 function similarity(a: string, b: string): number {
   if (!a || !b) return 0;
   if (a === b) return 1;
-  /* 一方完整包含另一方（且够长）：这是「同一件事的详写与略写」，直接判同义。 */
+  /* 一方完整包含另一方（且够长）：这是“同一件事的详写与略写”，直接判同义。 */
   const [shortOne, longOne] = a.length <= b.length ? [a, b] : [b, a];
   if (shortOne.length >= 8 && longOne.includes(shortOne)) return 0.95;
   const A = bigrams(a);
@@ -264,7 +264,7 @@ export interface MergeGroup {
   title: string;
 }
 
-/** 状态优先级：越靠后越「有进展」，归并时保留进展最多的那条当代表。 */
+/** 状态优先级：越靠后越“有进展”，归并时保留进展最多的那条当代表。 */
 const STATE_RANK: Record<TaskState, number> = {
   void: 0,
   pending: 1,

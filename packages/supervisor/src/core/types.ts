@@ -123,7 +123,7 @@ export interface Mistake {
  * 任务根状态。
  *
  * `contract_fallback` 标记该任务未指定领域契约，跑的是通用契约。该字段出现在每份简报里，
- * 使「当前无领域判据」这一状态显式可见，而不是被默认成有判据。
+ * 使“当前无领域判据”这一状态显式可见，而不是被默认成有判据。
  */
 export interface TaskState {
   version: number;

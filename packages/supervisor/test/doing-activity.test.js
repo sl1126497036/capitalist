@@ -18,13 +18,13 @@ const line = (ev) => JSON.stringify(ev);
 const assistant = (content) => line({ type: "assistant", message: { role: "assistant", content } });
 const toolResult = () => line({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] } });
 
-test("模型正在写正文 → reply", () => {
+test("模型正在写正文 -> reply", () => {
   const parts = parseWorkerLog([assistant([{ type: "text", text: "这一单已经改完。" }])], { stream: true });
   assert.deepStrictEqual(parts.lastAction, { phase: "reply", tool: "", command: "" });
   assert.strictEqual(doingOfAction(parts.lastAction), "reply");
 });
 
-test("命令类工具正在跑 → command，并按命令区分测试 / 构建", () => {
+test("命令类工具正运行中 -> command，并按命令区分测试 / 构建", () => {
   const run = (cmd) =>
     parseWorkerLog(
       [assistant([{ type: "tool_use", id: "t1", name: "Bash", input: { command: cmd } }])],
@@ -42,7 +42,7 @@ test("命令类工具正在跑 → command，并按命令区分测试 / 构建",
   assert.strictEqual(doingOfAction(plain), "command");
 });
 
-test("联网 / 子代理类工具 → waiting", () => {
+test("联网 / 子代理类工具 -> waiting", () => {
   const parts = parseWorkerLog(
     [assistant([{ type: "tool_use", id: "t1", name: "WebFetch", input: { url: "https://example.com" } }])],
     { stream: true },
@@ -60,7 +60,7 @@ test("本地读写工具不硬塞动作：判不出来就回空，交给界面�
   assert.strictEqual(doingOfAction(parts.lastAction), "");
 });
 
-test("工具结果已回 / 本回合已 result → 明确没有在跑的动作（null），不沿用旧命令", () => {
+test("工具结果已回 / 本回合已 result -> 明确没有运行中的动作（null），不沿用旧命令", () => {
   const afterTool = parseWorkerLog(
     [assistant([{ type: "tool_use", id: "t1", name: "Bash", input: { command: "npm test" } }]), toolResult()],
     { stream: true },
@@ -118,7 +118,7 @@ test("正在执行的动作可重入，计数归零才退出", () => {
   const leaveB = enterSupervisorAction("chat");
   assert.strictEqual(currentSupervisorAction(), "chat");
   leaveA();
-  assert.strictEqual(currentSupervisorAction(), "chat", "还有一个同名动作在跑，不能提前退出");
+  assert.strictEqual(currentSupervisorAction(), "chat", "还有一个同名动作运行中，不能提前退出");
   leaveB();
   assert.strictEqual(currentSupervisorAction(), "");
   leaveB();

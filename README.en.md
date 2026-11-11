@@ -8,19 +8,18 @@
 
 </div>
 
-An AI-driven multi-task scheduling plugin: each task has its own context, and a resident supervisor process schedules them all.
-Designed and tested by humans, implemented by Deepseek-V4.1-Flash.
+An AI multi-task scheduling plugin: every task keeps its own context, while a supervisor process coordinates them and maintains a separate in-process context and memory for each. Designed and tested by hand, coded with Deepseek-V4.1-Flash.
 
 ## What it does
 
-`capitalist` is a cross-agent AI plugin that automates AI process scheduling and helps the user complete task acceptance.
+`capitalist` is a cross-agent AI plugin that schedules AI processes and verifies the results on the user's behalf.
 
 | Agent pain point | What this plugin does |
 |---|---|
-| Long tasks getting interrupted | The supervisor takes the user's role, adjudicates long tasks on its own, and performs release, interception, reporting and acceptance |
-| Long contexts getting polluted | Each worker holds its own pid, session and context, with no sharing between them; `capitalist reload` writes a progress snapshot, compacts heartbeats and completed details, switches session and produces a resume plan |
-| Parallel work colliding | Parallel file operations are locked; for tasks that carry a contract, each `parallel` shard maps to one worker process and the files it touches are isolated per shard |
-| Instructions having to be repeated | The host hook injects the current stage, unmet gate items and the next action at prompt submission. No user intervention is needed |
+| Long tasks getting interrupted | The supervisor acts as the user: it adjudicates long tasks, lets work proceed, blocks violations, and reports on acceptance |
+| Long contexts getting polluted | Every work process holds its own pid, session and context, sharing nothing; `capitalist reload` writes a progress snapshot, compacts heartbeats and completed items, switches session and produces a resume plan |
+| Parallel work colliding | Parallel file operations are locked; for tasks with a contract, each `parallel` shard maps to one work process and changes are isolated per shard |
+| Instructions having to be repeated | The host hook injects the current stage, unmet items and the next action at prompt submission. No user intervention is needed |
 
 ## Install
 
@@ -28,66 +27,84 @@ npm commands:
 
 ```bash
 npm i -g capitalist
-capitalist install          # pick the agents to wire up, write hook entries, place the skill
+capitalist install --agent <host>   # choose a host; writes the hook and the supervisor manual
 ```
 
-Requirements: Node.js ≥ 18.17; macOS / Linux / Windows; the worker host needs a non-interactive entry point (`claude -p`, `codebuddy -p`).
+For `--agent` values see the "Supported hosts" table. Installation items are written for the selected host and nothing is written when none is given; on an interactive terminal the flag may be omitted and the installer shows a menu.
 
-### Combined installation of WorkBuddy and CodeBuddy
+`capitalist install` must be run once after `npm i -g`: the hook and the manual are written in that step, and hosts do not load the plugin without it.
 
-Session processes depend on CodeBuddy's `-p` mode, so WorkBuddy and CodeBuddy are currently installed together. The plugin remains usable in the WorkBuddy desktop app, but the account credentials ultimately come from CodeBuddy.
+Requirements: Node.js ≥ 18.17; macOS / Linux / Windows; the work-process host must offer a non-interactive entry point (`claude -p`, `codebuddy -p`).
 
-## Quick use in a host
+### Install troubleshooting
 
-With the skill installed, say this directly in the host:
+| Symptom | Action |
+|---|---|
+| `npm i -g capitalist` reports `EEXIST .../bin/capitalist` | A file with the same name already exists, from a manual symlink or an older install. Run `npm uninstall -g capitalist`; if it remains, move the file away and reinstall |
+| Reports `EISDIR` or `ENOTEMPTY .../lib/node_modules/capitalist` | The directory is an older install or a symlink to the source, which npm cannot overwrite. Move the directory (`$(npm prefix -g)/lib/node_modules/capitalist`) and reinstall; it holds no task data |
+| Reports `Your cache folder contains root-owned files` | The npm cache has a wrong owner. Run `sudo chown -R $(id -u):$(id -g) ~/.npm` and reinstall |
+| `capitalist` points to the source directory after install | An earlier `npm link` or manual symlink. Check with `readlink -f $(which capitalist)`, move the symlink away and reinstall |
+| The command disappears after install, or `command not found` | An older package with the same name exists globally (`package.json` has `name` set to `capitalist` as well) and npm removes the new link when it reshuffles `bin`. List `$(npm prefix -g)/lib/node_modules` and `$(npm prefix -g)/bin`, move the stale entry away and reinstall |
 
-- Start a supervisor process and finish the billing service migration.
+### Notes for WorkBuddy
+
+- 1. Without a terminal the host runs in "restricted mode". Clear it first, otherwise neither install nor startup can run.
+- 2. Starting the supervisor requires `--detach`. The host moves a long command to the background and returns immediately; the login state is read while that command runs, which is when the authorization prompt can be shown. Without it, or without authorization, the chat channel and dispatch are unavailable.
+- 3. WorkBuddy and CodeBuddy are installed together: the plugin runs in the WorkBuddy desktop app, work processes are carried by the CodeBuddy CLI, and the account credentials come from CodeBuddy.
+- 4. WorkBuddy restricts file access to the credential directory (Settings → Security → File security). Failing to allow it can break chat and dispatch.
+
+## Quick use from a host
+
+Send these to a host with the plugin installed (selecting the `capitalist` skill manually is recommended):
+
+- Start a supervisor process and leave it on standby.
+- Start a supervisor process and finish the billing service refactor.
 - Add a login-page integration task to the supervisor.
-- Start a supervisor for this project and create a contract following the "xxx" skill flow.
+- Open a supervisor for this project and create a contract following the "xxx" skill workflow.
 
-The host runs `capitalist supervise`, which creates a task root in the current directory and starts the resident supervisor. "Add a task" requests go through `capitalist say`: folded into a dispatch that has not started, or delivered by the hook before the next tool call for one already running. The trigger list is in `skill/SKILL.md`.
+The host runs `capitalist supervise`, which creates the task root in the current directory and starts a resident supervisor; "add task" requests are appended with `capitalist say` and merged into the existing dispatch when work has not started, or delivered by the hook before the next tool call while it runs. See `skill/SKILL.md` for the trigger table.
 
-The supervisor board works as well: the startup log prints a board address, in the form `http://127.0.0.1:7788/`, and the same address appears as `board_url` in `capitalist status`. The board resumes dispatching, shows stages and in-flight workers, accepts new instructions and adjudicates questions. The access key is not checked by default; with `--secure` the printed address carries a `?key=`, which changes on every start.
+The supervisor panel is also available: the startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address appears in `board_url` from `capitalist status`. From the panel you can resume dispatch, inspect stages and running work processes, write new instructions and adjudicate questions. The access key is not checked by default; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
 
 ## Scenarios
 
-Tasks can be issued directly in the host or through the supervisor board.
+Tasks can be issued from the host directly or from the supervisor panel.
 
 ### 1. Coding tasks: frontend and backend in parallel
 
-In a coding task, the supervisor can let the frontend and backend proceed independently according to the project requirements, then create integration and automated test processes once both sides finish coding.
+For coding tasks the supervisor can let frontend and backend proceed independently and start integration and automated-test processes once both are done.
 
-You can: create a custom contract that writes the frontend and backend as two `parallel` shards, one dispatch and one worker process per shard; put integration and automated tests in a later stage, and create those dispatches once the preceding stage's `done` gate is met. The bundled `minimal` contract has only three stages (requirements, execution, pre-delivery review) and carries no domain split, so this layout needs a separate contract.
+You can: write a custom contract with frontend and backend as two `parallel` shards, one dispatch and one work process each; put integration and automated tests in later stages, which only produce dispatches after the previous stage's `done` gate passes. The built-in `minimal` contract has three stages only (requirement confirmation, execution, pre-delivery review) without domain split, so such orchestration needs a separate contract.
 
-### 2. Security tasks: batch dispatch and per-domain splits
+### 2. Security tasks: batch dispatch and split by domain
 
-In a security task, a skill can be combined to dispatch vulnerability research across multiple sites in one request, with the supervisor enforcing redlines and accepting results as the skill requires; a single site can also be split per subdomain and dispatched to multiple processes once asset collection finishes.
+For security tasks a skill can drive vulnerability hunting across several sites in one dispatch, with the supervisor enforcing redlines and accepting results as the skill requires; alternatively, split by site and dispatch by subdomain once asset collection is done.
 
-You can: split multiple sites into per-site shards, and split one site into subdomain shards in a later stage. Destructive commands are intercepted by the `BLOCK` rules in the contract's `redlines`, matched against command text; hits go to `violations.jsonl`, and already-allowed out-of-boundary actions can be reviewed later with `capitalist review`. Acceptance is based on evidence written by `capitalist record` and `capitalist ledger`. Contract fields and gate types are in section 8 of `skill/SKILL.md`.
+You can: split multiple sites into shards per site, and split a single site into later-stage shards per subdomain. Destructive commands are blocked by the `BLOCK` rules in the contract's `redlines` based on command text, and hits are written to `violations.jsonl`; actions already allowed can be reviewed afterwards with `capitalist review`. Acceptance relies on the evidence written by `capitalist record` and `capitalist ledger`. Contract fields and gate types are covered in section 8 of `skill/SKILL.md`.
 
 ## Details
 
 ### Process model
 
-| Role | Started by | Responsibility |
+| Role | How it starts | Responsibility |
 |---|---|---|
-| Supervisor process | `capitalist supervise`, resident | Create the task root, select a contract, dispatch, verify, recycle and requeue |
-| Worker process | Independent host process (`claude -p` / `codebuddy -p`) | Execute the current dispatch; each holds its own pid, session and context |
-| Host hook | Called by the host at session lifecycle points | Inject state and judge commands against contract redlines and the filesystem boundary |
+| Supervisor process | `capitalist supervise`, resident | Creates the task root, selects the contract, dispatches, accepts, reclaims and re-dispatches |
+| Work process | Separate host process (`claude -p` / `codebuddy -p`) | Executes the current dispatch; holds its own pid, session and context |
+| Host hook | Called by the host at session lifecycle points | Injects state, judges commands against contract redlines and local boundaries |
 
-`capitalist` provides three executables: the main command `capitalist`, the short name `cap`, and the hook entry `capitalist-hook`. `capitalist board` serves a local board on `127.0.0.1:7788` (moving to the next free port when taken, local machine only).
+`capitalist` ships three executables: the main command `capitalist`, the short alias `cap`, and the hook entry `capitalist-hook`. `capitalist board` serves a local board on `127.0.0.1:7788` (the port shifts when occupied, loopback only).
 
-### One task, end to end
+### Lifecycle of one task
 
-1. Run `capitalist supervise "<goal>" --contract minimal` in the project directory. The command creates `.capitalist/`, writes `state.json` and `inbox/`, and starts the resident supervisor and the local board.
-2. Click "Resume dispatching" on the board, run `capitalist resume`, or start with `--auto-start`. The supervisor writes dispatches from the current stage's `next` / `parallel` definitions and spawns one independent worker process per dispatch.
-3. Inside a worker session, the host calls the hook at prompt submission to inject the current stage, unmet gate items and the next action. Before each tool call, the hook matches the command against contract redlines and the filesystem boundary; a `BLOCK` hit denies execution.
-4. The worker writes evidence with `capitalist record` and closes its dispatch with `capitalist report`. The supervisor verifies against the stage's `done` checks; a stage advances when its gate is met and the dispatch is requeued otherwise.
-5. State remains on disk after a session ends or a process exits. Running `capitalist supervise` again reuses the same task root; `capitalist reload` produces a snapshot and a resume plan, and the next tick adds re-verification dispatches.
+1. In the project directory run `capitalist supervise "<target>" --contract minimal`. The command creates `.capitalist/`, writes `state.json` and `inbox/`, and starts the resident supervisor and the local board.
+2. Click "resume dispatch" on the board or run `capitalist resume`. The supervisor writes dispatches from the current stage's `next` / `parallel`, and each dispatch starts a separate work process.
+3. In the work process session the host calls the hook on input submission, injecting the current stage, unmet items and the next action; before each tool call it judges the command against contract redlines and local boundaries and rejects it on a `BLOCK` hit.
+4. The work process writes evidence with `capitalist record` and closes the dispatch with `capitalist report`. The supervisor accepts against the stage's `done`; only when the gate passes does it advance, otherwise it re-dispatches.
+5. State stays on disk after the session ends or the process exits. Running `capitalist supervise` again reuses the same task root; `capitalist reload` produces a snapshot and a resume plan, and the next scheduling round adds re-verification dispatches.
 
-### Contracts
+### Contract
 
-A contract is a JSON file defining stages, gates, redlines and the filesystem boundary. `packages/supervisor/contracts/minimal.contract.json` ships with the repository and provides a three-stage flow with no domain assumptions.
+A contract is a plain JSON file defining stages, gates, redlines and local boundaries. The repository ships `packages/supervisor/contracts/minimal.contract.json`, a three-stage flow with no assumed domain knowledge.
 
 ```json
 {
@@ -98,8 +115,8 @@ A contract is a JSON file defining stages, gates, redlines and the filesystem bo
       "done": { "type": "file_exists", "path": "docs/plan.md" } }
   ],
   "redlines": [
-    { "id": "R1", "level": "BLOCK", "label": "prohibited action",
-      "pattern": "regex", "skip_if": "^(?:grep|rg)\\b", "fix": "correct approach" }
+    { "id": "R1", "level": "BLOCK", "label": "forbidden",
+      "pattern": "regex", "skip_if": "^(?:grep|rg)\\b", "fix": "the right way" }
   ],
   "local_guard": {
     "sensitive_paths": ["~/.ssh", "/etc"],
@@ -108,80 +125,83 @@ A contract is a JSON file defining stages, gates, redlines and the filesystem bo
 }
 ```
 
-A stage declaring `parallel` runs one dispatch and one worker process per shard. A stage without `parallel` has a fixed parallelism of 1; `--workers > 1` does not increase it. `--contract` takes a bundled name or a path to a contract JSON. When a new task root is created without `--contract`, `supervise` generates a contract from the goal and falls back to the bundled contract if generation fails.
+A stage that declares `parallel` runs by shard; stages without it have a fixed parallelism of 1, and `--workers > 1` does not raise it. `--contract` accepts a built-in name or a path to a contract JSON; when a task root is created without one, a contract is generated from the target and the built-in contract is used if generation fails.
 
 ### Task root and data
 
 `capitalist supervise` creates `.capitalist/` in the task directory. Main files:
 
-| File | Contents |
+| File | Content |
 |---|---|
-| `state.json` | Goal, contract, current stage, next action |
-| `inbox/dispatch.jsonl` / `inbox/qa.jsonl` | Dispatch queue / open questions |
-| `events.jsonl` / `tasks.jsonl` / `review.jsonl` | Event ledger / task pool / items awaiting review |
-| `violations.jsonl` / `justify.jsonl` | Redline hits / registered exceptions |
-| `supervisor.json` / `workers/` | Supervisor heartbeat and board URL / worker records and logs |
-| `sessions.json` / `reload/` | Session registry / snapshots, compacted context, resume plans |
+| `state.json` | Target, contract, current stage, next action |
+| `inbox/dispatch.jsonl` / `inbox/qa.jsonl` | Dispatch queue / pending questions |
+| `events.jsonl` / `tasks.jsonl` / `review.jsonl` | Event log / task pool / items awaiting review |
+| `violations.jsonl` / `justify.jsonl` | Redline hits / registered out-of-bound reasons |
+| `supervisor.json` / `workers/` | Supervisor heartbeat and board address / work process records and logs |
+| `sessions.json` / `reload/` | Session registry / snapshots, compacted context and resume plans |
 
-The repository `.gitignore` excludes this directory, so task data does not enter version control.
+The directory is ignored by the repository `.gitignore`, so task data never enters version control.
 
 ### Common commands
 
-| Purpose | Commands |
+| Purpose | Command |
 |---|---|
-| Start and stop | `capitalist supervise "<goal>" --contract minimal`, `capitalist supervise-stop` |
+| Start and stop | `capitalist supervise "<target>" --contract minimal`, `capitalist supervise-stop` |
 | Pause and resume | `capitalist pause`, `capitalist resume` |
-| Wake old dispatches | `capitalist wake [<dispatch id\|shard>]` (add `--user` in a non-interactive terminal) |
+| Wake old dispatches | `capitalist wake [<dispatch id\|shard>]` (add `--user` on a non-interactive terminal) |
 | Inspect state | `capitalist status`, `capitalist workers`, `capitalist board` |
 | Advance and adjudicate | `capitalist advance`, `capitalist ask "<question>"`, `capitalist answer <id> "<guidance>"` |
 | Intervene in running work | `capitalist say "<text>"`, `capitalist takeover [shard]`, `capitalist promote <target>` |
-| Evidence and pre-checks | `capitalist record <name> <json>`, `capitalist ledger <add\|list\|assert>`, `capitalist gate --text '<cmd>'` |
+| Evidence and pre-checks | `capitalist record <name> <json>`, `capitalist ledger <add\|list\|assert>`, `capitalist gate --text '<command>'` |
 | Context reload | `capitalist reload` |
-| Install and uninstall | `capitalist install`, `capitalist uninstall`, `capitalist hosts` |
+| Install and remove | `capitalist install --agent <host>`, `capitalist uninstall`, `capitalist hosts` |
+| Login state | `capitalist auth-check`, `capitalist auth status` (token source and expiry) |
 
-`capitalist --help` lists every subcommand and its arguments; the division between supervisor-side and worker-side commands is section 4 of `skill/SKILL.md`.
+All subcommands and flags are listed in `capitalist --help`; the split of duties between supervisor side and work-process side is in section 4 of `skill/SKILL.md`.
 
 ### Terms
 
 | Term | Meaning |
 |---|---|
-| Host / hook | Agent CLI providing model calls and sign-in; the hook is its judgement entry point at session lifecycle points |
-| Task root | Project directory containing `.capitalist/state.json`; commands search upward for the nearest one |
-| Contract | JSON file defining stages, gates, redlines and the filesystem boundary |
-| Stage / gate | Ordered steps in the contract and their `done` checks; `capitalist advance` is refused while a gate is unmet |
-| Dispatch / shard | Work unit written to `inbox/dispatch.jsonl`; each `parallel` shard maps to one worker process |
-| Redline / filesystem boundary | Regular expressions over command text and path ranges defined in the contract; levels are `BLOCK` / `NEED_USER` / `WARN` |
-| Permission mode | `plan` / `default` / `accept_edits` / `bypass`; adjusts how strictly rules are applied |
-| Evidence ledger | JSONL files under `.capitalist/` recording requirements, changes, verdicts and violations |
-| Board | Local HTTP page showing stages, dispatches, worker processes and report feed |
+| Host / hook | The agent CLI providing model calls and login state; the hook is the judging entry point it calls at session lifecycle points |
+| Task root | A project directory containing `.capitalist/state.json`; commands search upward for the nearest one |
+| Contract | A JSON file defining stages, gates, redlines and local boundaries |
+| Stage / gate | Ordered steps in a contract and their `done` judgement; `capitalist advance` is rejected while a gate is unmet |
+| Dispatch / shard | A work unit written by the supervisor to `inbox/dispatch.jsonl`; each `parallel` shard maps to one work process |
+| Redline / local boundary | Command-text regex rules and path scope in a contract; levels are `BLOCK` / `NEED_USER` / `WARN` |
+| Permission mode | `plan` / `default` / `accept_edits` / `bypass`, changing how strict rule judging is |
+| Evidence ledger | JSONL files under `.capitalist/` recording requirements, changes, conclusions and violations |
+| Board | A local HTTP page showing stages, dispatches, work processes and report history |
 
 ### Supported hosts
 
 | Host | Config location | Notes |
 |---|---|---|
-| Claude Code | `~/.claude/settings.json` | Applies immediately |
-| CodeBuddy | `~/.codebuddy/settings.json` | Unavailable as a worker host in restricted environments |
-| WorkBuddy | `~/.workbuddy/settings.json` | Same `hooks` schema as Claude Code; commands run through a POSIX shell |
-| generic | — | POSIX exit-code path when no host is detected |
+| Claude Code | `~/.claude/settings.json` | Effective immediately |
+| CodeBuddy | `~/.codebuddy/settings.json` | Unavailable in restricted environments when used as the work-process host |
+| WorkBuddy | `~/.workbuddy/settings.json` | Same `hooks` structure as Claude Code; commands run through a POSIX shell |
+| generic | — | Exit-code path when no host is detected |
 
-### Scope and limitations
+### Scope and limits
 
-Applies to: coding tasks spanning several sessions; tasks with stages and acceptance criteria; tasks whose changes and verdicts need to be retained; tasks that modify different files in parallel shards; agent sessions that need a common interception rule for destructive commands.
+Applicable: coding tasks spanning several sessions; tasks with stages and acceptance criteria; tasks that must retain changes and conclusions; tasks that change different files in parallel shards; agent sessions that need uniform blocking of destructive commands.
 
-Does not apply to: single-turn questions and one-off scripts; commands run directly in a terminal; assessment of work content. Hooks cover only agent sessions where they are installed, and redlines judge command text.
+Not applicable: single-turn Q&A and one-off scripts; actions run directly in a terminal; judging the quality of the work. The hook only covers agent sessions that have it installed, and redlines only judge command text.
 
-### Project structure
+### Project layout
 
 ```
-packages/supervisor/    npm package: engine, host impls, CLI, installer
-  src/core/             contracts, redlines, filesystem boundary, modes, gates, ledgers
-  src/host/             interface + registry + dispatch; impl/<id>/ per agent
-  src/cli/              `capitalist` command line
-  src/supervisor/       resident supervisor process: dispatch loop, workers, board
-  contracts/            bundled contract: minimal
-skill/                  agent skill (installed into each host's skills directory)
+packages/supervisor/    npm package: engine, host implementations, CLI, installer
+  src/core/             contracts, redlines, local boundaries, permission modes, stage gates, ledger
+  src/agent/            interfaces + registry + dispatch; impl/<id>/ one directory per host
+  src/cli/              capitalist command line
+  src/supervisor/       resident supervisor: dispatch loop, work processes, board
+  contracts/            built-in contracts: minimal
+skill/                  agent manual (installed into each host's skills directory)
 ```
 
 ### License
 
-Apache License 2.0. Copyright 2026 sl1126497036 (https://github.com/sl1126497036). See [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party notices are in [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES).
+Apache License 2.0. Copyright 2026 sl1126497036 (https://github.com/sl1126497036).
+
+See [LICENSE](LICENSE) for the full text, [NOTICE](NOTICE) for attribution, and [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES) for third-party licenses.

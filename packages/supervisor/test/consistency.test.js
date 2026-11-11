@@ -84,7 +84,7 @@ test("Python 与 TS 的红线结论逐条一致", { skip: !hasPython() && "未�
     const py = pythonDecision(root, text);
     const ts = tsDecision(root, text);
     if (py.decision !== ts.decision) {
-      mismatches.push(`「${text}」Python=${py.decision} TS=${ts.decision}`);
+      mismatches.push(`“${text}”Python=${py.decision} TS=${ts.decision}`);
     }
   }
 
@@ -106,7 +106,7 @@ test("命中的红线 id 集合一致（不只看结论，也看理由）", { sk
         .join(",");
     const a = idsOf(py);
     const b = idsOf(ts);
-    if (a !== b) mismatches.push(`「${text}」Python=[${a}] TS=[${b}]`);
+    if (a !== b) mismatches.push(`“${text}”Python=[${a}] TS=[${b}]`);
   }
 
   assert.deepEqual(mismatches, [], `命中集合分歧：\n${mismatches.join("\n")}`);
@@ -144,7 +144,7 @@ test("Python 与 TS 抽出的本机路径一致", { skip: !hasPython() && "未�
   PATH_SAMPLES.forEach((text, i) => {
     const a = JSON.stringify(extractLocalPaths(text, "/tmp/root"));
     const b = JSON.stringify(py[i]?.[1] ?? null);
-    if (a !== b) mismatches.push(`「${text}」Python=${b} TS=${a}`);
+    if (a !== b) mismatches.push(`“${text}”Python=${b} TS=${a}`);
   });
 
   assert.deepEqual(mismatches, [], `路径抽取分歧：\n${mismatches.join("\n")}`);

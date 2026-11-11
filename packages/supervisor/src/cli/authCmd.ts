@@ -2,7 +2,7 @@
  * `capitalist auth` 入口。
  *
  * 命令已移除：认证与续期由宿主 CLI 完成，插件不读取、不保存登录态，
- * 也不访问宿主的凭证目录。
+ * 也不访问宿主的登录态目录。
  */
 
 import type { Parsed } from "./args";

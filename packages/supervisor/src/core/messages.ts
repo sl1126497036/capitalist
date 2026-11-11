@@ -31,11 +31,11 @@ export function recordUserMessage(
   root: string,
   input: { text: string; thread?: string; atts?: string[]; quote?: string; quoteText?: string },
 ): UserMessage {
-  /** 图在这里编一次号（`[附件] x.png` → `[图1] x.png`），之后所有环节照抄这一套。 */
+  /** 图在这里编一次号（`[附件] x.png` -> `[图1] x.png`），之后所有环节照抄这一套。 */
   let text = numberAttachmentLines(String(input.text ?? ""));
   const id = newMessageId();
   /*
-   * 附件按「消息 id + 序号」另存一份（`<msgId>-1.png`）：这张图属于哪条消息、是第几张，
+   * 附件按“消息 id + 序号”另存一份（`<msgId>-1.png`）：这张图属于哪条消息、是第几张，
    * 写进文件名，往下任何环节想拿错都能当场看出来。原文里的路径同步换成新路径。
    */
   const own = input.atts?.length

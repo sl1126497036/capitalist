@@ -1,4 +1,4 @@
-/** 判定通道不可用时，不能把「已报完成」的单悬空。 */
+/** 判定通道不可用时，不能把“已报完成”的单悬空。 */
 
 const test = require("node:test");
 const assert = require("node:assert");

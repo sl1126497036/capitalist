@@ -10,7 +10,7 @@ import { supervisorDir } from "./paths";
 /** 一条待裁决问题（ask）最多能让阶段停多久。 */
 export const ASK_BLOCK_MS = 15 * 60 * 1000;
 
-/** 一条插话/指令挂了多久之后不再挡「报完成」。 */
+/** 一条插话/指令挂了多久之后不再挡“报完成”。 */
 export const DIRECTIVE_STALE_MS = 30 * 60 * 1000;
 
 export const DIRECTIVE_OUTCOME_GUARD_MS = 45 * 60 * 1000;
@@ -18,16 +18,16 @@ export const DIRECTIVE_OUTCOME_GUARD_MS = 45 * 60 * 1000;
 /** 一次插话最多多少字。 */
 export const MAX_SAY_CHARS = 8000;
 
-/** 一张单「已上报、等监工裁决」期间，最多还能占住并发槽位多久。 */
+/** 一张单“已上报、等监工裁决”期间，最多还能占住并发槽位多久。 */
 export const VERDICT_HOLD_MS = 10 * 60 * 1000;
 
-/** 被用户消息唤醒的派单，多久之内不因「阶段已推进」被作废。 */
+/** 被用户消息唤醒的派单，多久之内不因“阶段已推进”被作废。 */
 export const WAKE_GRACE_MS = 30 * 60 * 1000;
 
 /** 监工对话上下文的配置上限（token），缺省 600k；面板显式设置的值优先。 */
 export const DEFAULT_SUPERVISOR_CONTEXT_LIMIT = 600_000;
 
-/** 模型 → 上下文窗口默认表（token）。 */
+/** 模型 -> 上下文窗口默认表（token）。 */
 export const MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   "deepseek-v4.1-flash": 1_000_000,
 };
@@ -35,7 +35,7 @@ export const MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
 /**
  * 宿主对未收录模型回落的占位窗口。
  *
- * 300000 不是任何模型的真实窗口，是宿主的默认值，遇到就当「没报」。用清单而不是
+ * 300000 不是任何模型的真实窗口，是宿主的默认值，遇到就当“没报”。用清单而不是
  * 单个常量。新增宿主时按宿主回落值增加一项。
  */
 export const HOST_PLACEHOLDER_CONTEXT_WINDOWS: readonly number[] = [300_000];
@@ -114,7 +114,7 @@ function writeConfigFile(root: string, c: CtxWindowConfig): boolean {
   }
 }
 
-/** 该作用域真的设过的值；没设过返回 null（不返回默认值，用于区分「未设置」）。 */
+/** 该作用域真的设过的值；没设过返回 null（不返回默认值，用于区分“未设置”）。 */
 export function readCtxWindowChosen(root: string, scope: CtxScope = "default"): number | null {
   const c = readConfigFile(root);
   if (scope === "supervisor") return c.supervisor;
@@ -145,8 +145,8 @@ export function writeCtxWindow(root: string, w: number, scope: CtxScope = "defau
 /**
  * 模型真实窗口：宿主读数优先，没有读数才查默认表。
  *
- * 宿主报的是这次会话真正生效的额度，比表更可信；表只用来填补「宿主什么都没报」的情况。
- * 宿主对未收录模型常回一个占位值，那些值当「不知道」处理，不参与判断。
+ * 宿主报的是这次会话真正生效的额度，比表更可信；表只用来填补“宿主什么都没报”的情况。
+ * 宿主对未收录模型常回一个占位值，那些值当“不知道”处理，不参与判断。
  */
 export function modelRealWindow(model: string, reported?: number | null): number | null {
   const host = Number(reported);
@@ -174,7 +174,7 @@ export function effectiveCtxWindow(model: string, reported: number | null | unde
 /**
  * 这个模型撑不撑得住用户选的窗口。
  *
- * 判据：模型在默认表里登记过就用表；没登记看宿主报的读数（占位 300000 当「不知道」，
+ * 判据：模型在默认表里登记过就用表；没登记看宿主报的读数（占位 300000 当“不知道”，
  * 按不支持处理）。返回 `supported` 与一句能直接给用户看的理由。
  */
 export function ctxWindowSupported(
@@ -191,12 +191,12 @@ export function ctxWindowSupported(
  * 生效上下文窗口（token）：宿主上报 + 默认表，唯一的换算入口。
  *
  * 规则：
- * 1. 宿主没报、或报的是占位值 → 用默认表；
- * 2. 宿主报了别的值 → 用它（比表大不压低，比表小也当作该模型的真实配额）；
- * 3. 两边都没有 → null：没有可依据的上限，界面只显示已用，不编一个。
+ * 1. 宿主没报、或报的是占位值 -> 用默认表；
+ * 2. 宿主报了别的值 -> 用它（比表大不压低，比表小也当作该模型的真实配额）；
+ * 3. 两边都没有 -> null：没有可依据的上限，界面只显示已用，不编一个。
  *
  * 看板读数、会话车道的换道闸门、监工上下文的超限判定都调这个函数。各算一套的后果是
- * 「界面说还有一半、闸门却已经换了道」，而这种事不会报错。
+ * “界面说还有一半、闸门却已经换了道”，而这种事不会报错。
  */
 export function resolveContextWindow(model: string, reported?: number | string | null): number | null {
   const host = Number(reported);

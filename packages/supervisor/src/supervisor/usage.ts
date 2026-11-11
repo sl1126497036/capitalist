@@ -1,7 +1,7 @@
 /**
  * 用量台账：从工作进程日志读取 token / 成本 / 耗时 / 模型，按进程、派单、阶段三个维度汇总。
  *
- * 无读数的字段为 null，前端显示「未上报」。`contextUsed` 缺失时按会话消息文本估算并标 `context_estimate`，不按日志体积或时长折算。
+ * 无读数的字段为 null，前端显示“未上报”。`contextUsed` 缺失时按会话消息文本估算并标 `context_estimate`，不按日志体积或时长折算。
  */
 
 import { closeSync, openSync, readSync, statSync } from "node:fs";
@@ -34,7 +34,7 @@ export interface UsageFigures {
   credit: number | null;
   /** 积分单位；无来源时为空串 */
   credit_unit: string;
-  /** 宿主是否按积分计费，属账号级事实；积分读数缺失时界面按「积分未上报」显示，不以 token 代替。 */
+  /** 宿主是否按积分计费，属账号级事实；积分读数缺失时界面按“积分未上报”显示，不以 token 代替。 */
   credit_metered: boolean;
   /** 最后一次请求时上下文已用 token（`_meta` 里以 contextUsed 结尾的键） */
   context_used: number | null;
@@ -120,10 +120,10 @@ export const SCAN_RULES: readonly string[] = [
   "R1 assistant 行 = 一次模型请求；同一 message.id 重复出现（流式分片）只算第一次。",
   "R2 有 type=result 行时以它为唯一口径（source=result），usage 字段照抄，不再叠加 assistant 行，避免重复计数。",
   "R3 没有 result（运行中 / 被 kill）时用去重后的 assistant 行求和（source=stream），标为不完整。",
-  "R4 日志里没有 usage（纯文本输出或进程在写 result 前死掉）→ source=none，数值全为 null，界面显示「未上报」。",
+  "R4 日志里没有 usage（纯文本输出或进程在写 result 前死掉）-> source=none，数值全为 null，界面显示“未上报”。",
   "R5 模型取 message.model；版本取 id 的厂商后段（CLI 只给模型 id，没有单独构建号）。",
   "R6 上下文已用优先取 _meta 里以 /contextUsed 结尾的键；宿主没报时按本会话消息文本估算（含工具结果与 thinking，中文 3 字符/token、其余 4 字符/token），估算值标 context_estimate、界面加 ≈；已用一律夹到生效上限，超过时按上限显示并标 context_over。上限取 modelUsage[model].contextWindow，宿主没报或只报 300k 占位值时按模型默认表补（deepseek-v4.1-flash 为 600k），宿主报更大的值时以宿主为准。",
-  "R7 时长优先 result.duration_ms；没有则用 started_at→结束时刻，结束时刻取 result 时间戳、最后一条带时间戳的行、派单 done_at 依次回落。",
+  "R7 时长优先 result.duration_ms；没有则用 started_at->结束时刻，结束时刻取 result 时间戳、最后一条带时间戳的行、派单 done_at 依次回落。",
   "R8 金额取 total_cost_usd；为 0 表示该模型不走美元计价，billing_unit=token，界面按 token 显示。",
   "R9 逐次运行的积分日志里没有：credit 取积分台账（.capitalist/credits.json，把计费接口账号级已用积分的增量按时间窗分摊给窗口内活跃的工作进程；账号级读数含同账号宿主侧对话与监工自身调用）；无活跃进程期间的增量记入 capitalist 独立行（不属于任何工作进程），台账没有该工作进程的摊算记录（面板没开、没拿到快照）时为 null，界面回落按 token 显示，不拿 0 冒充。",
   `R10 模型读数不露路由别名：${FAST_MODEL_ALIAS} 在日志里出现具体模型后改显具体模型，一次都没落时展示层标注它实际对应的两个模型（${FAST_MODEL_TARGETS.join(" / ")}）。`,
@@ -300,7 +300,7 @@ export function estimateTextTokens(text: unknown): number {
   return estimateContextTokens(acc);
 }
 
-/** 从模型 id 取版本段：`deepseek-v4.1-flash` → `v4.1-flash`。 */
+/** 从模型 id 取版本段：`deepseek-v4.1-flash` -> `v4.1-flash`。 */
 export function modelVersion(model: string): string {
   const s = model.trim();
   if (!s) return "";
@@ -439,7 +439,7 @@ function consumeTail(scan: Scan): void {
 /** 增量读日志：只解析新追加的整行，缓存按文件路径留存。 */function scanLog(file: string): Scan | null {
   /*
    * 这里直接 stat，不走缓存：日志由工作进程在另一个进程里追加，
-   * 缓存住文件大小会让「刚写的行」读不到，表现为用量长时间不涨。
+   * 缓存住文件大小会让“刚写的行”读不到，表现为用量长时间不涨。
    * 单次 stat 的成本已经在扫描增量里摊掉了。
    */
   let size = 0;
@@ -592,7 +592,7 @@ export function workerUsage(w: WorkerRecord, dispatches: readonly Dispatch[] = [
     cache_write_tokens: cacheWrite,
     total_tokens: input + output,
     cost_usd: costUsd,
-    // R8：金额为 0 / 缺失 → 不走美元计价；有积分摊算读数 → 按积分计费。
+    // R8：金额为 0 / 缺失 -> 不走美元计价；有积分摊算读数 -> 按积分计费。
     billing_unit: credit !== null ? "credit" : costUsd !== null && costUsd > 0 ? "usd" : "token",
     credit,
     credit_unit: credit !== null ? creditUnitStr || "积分" : "",
@@ -608,7 +608,7 @@ export function workerUsage(w: WorkerRecord, dispatches: readonly Dispatch[] = [
     started_at: startedAt,
     ended_at: endedAt,
     source: res ? "result" : "stream",
-    /* 有 assistant 行不等于有读数：usage 未落盘时按「未上报」处理，不记为 0。 */
+    /* 有 assistant 行不等于有读数：usage 未落盘时按“未上报”处理，不记为 0。 */
     ...(input + output + cacheRead + cacheWrite > 0 || res
       ? { reported: true, unavailable_reason: "" }
       : {
@@ -787,7 +787,7 @@ function supervisorUsageRow(root: string): UsageRow | null {
     shard: "",
     workers: ["capitalist"],
     dispatches: 1,
-    /* 这一行只有积分读数，没有日志可解析 token；按有读数处理，避免界面判成「未上报」。 */
+    /* 这一行只有积分读数，没有日志可解析 token；按有读数处理，避免界面判成“未上报”。 */
     reported: true,
     credit,
     credit_unit: unit,

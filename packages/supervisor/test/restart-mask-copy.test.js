@@ -28,12 +28,12 @@ function sourceFiles(dir, acc = []) {
   return acc;
 }
 
-test("蒙版标题是「重启中...」，不再说压缩中", () => {
+test("蒙版标题是“重启中…”，不再说压缩中", () => {
   const block = maskBlock();
-  assert.ok(block.includes('t("重启中...")'), "标题走「重启中...」");
-  assert.ok(block.includes('t(\'重启中...\')'), "aria-label 同口径");
-  assert.ok(!block.includes('t("压缩中")'), "蒙版标题不再复用气泡的「压缩中」");
-  assert.ok(!block.includes("上下文优化中"), "旧标题「上下文优化中」不再出现");
+  assert.ok(block.includes('t("重启中…")'), "标题走“重启中…”");
+  assert.ok(block.includes('t(\'重启中…\')'), "aria-label 同口径");
+  assert.ok(!block.includes('t("压缩中")'), "蒙版标题不再复用气泡的“压缩中”");
+  assert.ok(!block.includes("上下文优化中"), "旧标题“上下文优化中”不再出现");
 });
 
 test("副标题讲重启期间的暂停与自动恢复，不提压缩上下文", () => {
@@ -45,10 +45,10 @@ test("副标题讲重启期间的暂停与自动恢复，不提压缩上下文",
   assert.ok(!/压缩|重建会话/.test(text), "不提压缩上下文与重建会话");
 });
 
-test("副标题给出重启失败时的终端命令", () => {
+test("副标题给出重启失败时的处理动作", () => {
   const block = maskBlock();
   assert.ok(block.includes("capitalist supervise"), "命令行要写具体命令，不写占位符");
-  assert.ok(/宿主|终端/.test(block), "说明从哪里执行（宿主唤起或终端）");
+  assert.ok(/重新执行|重新启动/.test(block), "说明未恢复时如何处置");
 });
 
 test("蒙版不挂等待光标，全站没有 wait / progress 光标残留", () => {
@@ -62,7 +62,7 @@ test("蒙版不挂等待光标，全站没有 wait / progress 光标残留", () 
 });
 
 test("英文条目齐全，旧蒙版词条已摘掉", () => {
-  assert.ok(i18nSrc.includes('"重启中...": "Restarting..."'), "标题英文条目");
+  assert.ok(i18nSrc.includes('"重启中…": "Restarting…"'), "标题英文条目");
   assert.ok(
     i18nSrc.includes("The UI is paused while the supervisor restarts"),
     "副标题英文条目",

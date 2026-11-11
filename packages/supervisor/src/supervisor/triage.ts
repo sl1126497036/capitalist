@@ -50,13 +50,13 @@ export interface TriageInput {
   recent: string[];
   /** 工作进程在报告中承认的执行期间新增/更正要求（`capitalist report --added`），供按最新口径审查。 */
   addedReqs?: string[];
-  /** 报告证据（`capitalist report --evidence`）；优先取 `msg.evidence`，两者都无时按「只有自述」处理。 */
+  /** 报告证据（`capitalist report --evidence`）；优先取 `msg.evidence`，两者都无时按“只有自述”处理。 */
   evidence?: string;
   /** 代码采集的工作区版本控制变动；非版本控制目录下为空数组，段不占位。 */
   workspace?: string[];
   /** 用户针对这一单的定向插话，时间正序。 */
   userWords?: string[];
-  /** 逐条对账材料：系统按送达记录列全的每条要求及执行侧结论，与 {@link addedReqs} 的自行申报不同；未给结论记为「未给结论」。 */
+  /** 逐条对账材料：系统按送达记录列全的每条要求及执行侧结论，与 {@link addedReqs} 的自行申报不同；未给结论记为“未给结论”。 */
   directiveLedger?: string[];
 }
 
@@ -75,14 +75,14 @@ function buildPrompt(input: TriageInput): string {
     ...(m.evidence ? ["", "【它给的证据】", String(m.evidence).slice(0, 1600)] : []),
     "",
     "【当前局面】",
-    `阶段：${input.state.stage} ｜ 在跑 ${input.live}/${input.capacity} 个进程 ｜ 这一片已失败 ${input.failures} 次`,
+    `阶段：${input.state.stage} ｜ 运行中 ${input.live}/${input.capacity} 个进程 ｜ 这一片已失败 ${input.failures} 次`,
     `门槛还缺：${input.gateMissing.length ? input.gateMissing.join("；") : "(无)"}`,
     ...(input.recent.length ? ["最近失败：", ...input.recent.slice(-3).map((x) => `  - ${x}`)] : []),
     "",
     "【可选动作，只能选一个】",
     "continue    不影响推进（误报、已知问题、可自行解决）",
     "nudge       方向或做法偏了，无需重开：给出简要纠正，继续执行",
-    "requeue     这一单的做法走不通，需要重开（问题出在「要求本身做不到」时，",
+    "requeue     这一单的做法走不通，需要重开（问题出在“要求本身做不到”时，",
     "            选 escalate 而不是 requeue，重开只会再撞一次）",
     "pause_shard 继续做下去代价更大（正在改错地方、正在扩大破坏面），先停这一片",
     "escalate    必须由人拍板：红线风险、权限、需求自相矛盾、代价不可逆",
@@ -90,8 +90,8 @@ function buildPrompt(input: TriageInput): string {
     "reject      只用于类型 done：报告撑不住结单（没证据、只做了表面、和原要求不符）",
     "",
     "【判断要求】",
-    "- 先看证据，不要只看它怎么说。它说「已全部完成」但证据里没有产出，那是 reject，不是 accept。",
-    "- 它说卡住了，先分清是「不会做」还是「要求有问题」。前者 nudge，后者 escalate 或 requeue。",
+    "- 先看证据，不要只看它怎么说。它说“已全部完成”但证据里没有产出，那是 reject，不是 accept。",
+    "- 它说卡住了，先分清是“不会做”还是“要求有问题”。前者 nudge，后者 escalate 或 requeue。",
     "- 它报的是 progress（只是告知），几乎总是 continue。",
     "- 沉默也是成本：不需要干预就不要干预，nudge 误判一次会让它多做一小时无效功。",
     "",
@@ -150,12 +150,12 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
       "",
       "【这一单送达过的要求，逐条核对：未给结论的按未完成处理】",
       ...ledger.map((x) => `  - ${x}`),
-      "判定口径：出现「未给结论」，或结论写 not_mine 但内容明显属于本单 → 不许 accept，按 reject 打回并点明是哪一条；",
-      "结论写 done 但证据里找不到对应改动 → 同样 reject。只有每条都有可信结论时才 accept。",
+      "判定口径：出现“未给结论”，或结论写 not_mine 但内容明显属于本单 -> 不许 accept，按 reject 打回并点明是哪一条；",
+      "结论写 done 但证据里找不到对应改动 -> 同样 reject。只有每条都有可信结论时才 accept。",
     );
   }
   facts.push(
-    `当前阶段 ${input.state.stage}：在跑 ${input.live}/${input.capacity} 个进程；这一片已失败 ${input.failures} 次`,
+    `当前阶段 ${input.state.stage}：运行中 ${input.live}/${input.capacity} 个进程；这一片已失败 ${input.failures} 次`,
     `门槛还缺：${input.gateMissing.length ? input.gateMissing.join("；") : "（无）"}`,
   );
   for (const r of input.recent.slice(-3)) facts.push(`最近一次失败：${r}`);
@@ -172,7 +172,7 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
       { name: "nudge", desc: "方向或做法偏了但不用重开：参数里写明纠正内容（二十字以内）" },
       {
         name: "requeue",
-        desc: "这一单的做法走不通要重开（如果问题出在「要求本身做不到」，选 escalate 而不是这个）",
+        desc: "这一单的做法走不通要重开（如果问题出在“要求本身做不到”，选 escalate 而不是这个）",
       },
       { name: "pause_shard", desc: "继续执行代价更大（正在改错地方、在扩大破坏面），先停这一片" },
       { name: "escalate", desc: "必须人拍板：红线风险、权限、需求自相矛盾、代价不可逆" },

@@ -11,7 +11,7 @@ const CONTROL_LINE_RE = /^\s*(?:DO|ACTION|ATT|PARENT_REASON|PARENT|AFTER)\s*[:�
 const INLINE_CONTROL_RE =
   /[ \t]*(?:DO|ACTION)\s*[:：]\s*(?:dispatch|amend|pause|resume|concurrency|retry|skip|set-next|ask|instruct|intervene)\b[^\n]*/gi;
 
-/** 只复述派单动作的短句；「追加 / 改口」为 amend 的动作词。 */
+/** 只复述派单动作的短句；“追加 / 改口”为 amend 的动作词。 */
 const DISPATCH_ECHO_RE =
   /(调度指令|加入队列|已登记|登记为下一步|已执行|已派|已开|开一单|派发|发出|安排了|重派|已追加|追加到|追加给|改口|下一[轮次拍]生效|待执行|插队)/;
 

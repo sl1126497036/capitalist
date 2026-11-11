@@ -76,12 +76,12 @@ test("重复置顶：刷新时间而不是报错", () => {
   assert.ok(capitalist.readDispatches(root).find((d) => d.id === "D-a").promoted_at > "2026-11-01T09:00:00.000Z");
 });
 
-test("在跑的单不接受插队：给出原因，不改台账", () => {
+test("运行中的单不接受插队：给出原因，不改台账", () => {
   const root = sandbox();
   put(root, "D-run", { status: "claimed", worker: "W-1" });
   const r = promoteTask(root, "D-run");
   assert.strictEqual(r.ok, false);
-  assert.match(r.reason, /已在执行|已经在跑/);
+  assert.match(r.reason, /已在执行|已经运行中/);
   assert.strictEqual(capitalist.readDispatches(root).find((d) => d.id === "D-run").urgent, undefined);
 });
 
@@ -111,7 +111,7 @@ test("看板接口：promote 走同一套原语，回执说清越过了几张", 
 
 const preempt = require("../dist/core/preempt");
 
-test("立即执行回执：没有别的立即执行在跑时说会腾槽，有的话说排在谁后面", () => {
+test("立即执行回执：没有别的立即执行运行中时说会腾槽，有的话说排在谁后面", () => {
   const root = sandbox();
   put(root, "D-run", { status: "claimed", worker: "W-run" });
   put(root, "D-now");
@@ -137,7 +137,7 @@ test("立即执行回执：没有别的立即执行在跑时说会腾槽，有�
   assert.strictEqual(third.preempt, true, "上一张结束后，租约不再挡路");
 });
 
-test("让位：在跑的单退回排队，排队单按原顺序编号，且都不是失败", () => {
+test("让位：运行中的单退回排队，排队单按原顺序编号，且都不是失败", () => {
   const root = sandbox();
   put(root, "D-run", { status: "claimed", worker: "W-run" });
   put(root, "D-2");

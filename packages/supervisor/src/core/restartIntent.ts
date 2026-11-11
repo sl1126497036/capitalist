@@ -1,9 +1,9 @@
-/** 「这张派单要做的事就是重启监工」的判据。 */
+/** “这张派单要做的事就是重启监工”的判据。 */
 
 /** 首段的判定范围。再往后的内容当背景说明处理，不参与判断。 */
 const HEAD_CHARS = 160;
 
-/** 三种「要求重启」的句式。 */
+/** 三种“要求重启”的句式。 */
 const RESTART_FORMS: RegExp[] = [
   /* 动宾：重启监工 / 重启 supervisor / 重启一下监工 */
   /重启\s*(?:一下\s*)?(?:监工|supervisor)/gi,
@@ -23,7 +23,7 @@ const IMPERATIVE_BEFORE =
 /** 命中位置之后是名词时按定语处理：重启监工的按钮／重启监工蒙版文案… */
 const NOUN_AFTER = /^\s*(?:的|按钮|文案|蒙版|提示|图标|遮罩|流程|逻辑|机制|事件|记录|状态|入口)/;
 
-/** 这一单是不是「要求重启监工」的动作单。 */
+/** 这一单是不是“要求重启监工”的动作单。 */
 export function isRestartSupervisorDispatch(action: string): boolean {
   const head = String(action ?? "").split(/\r?\n/)[0] ?? "";
   const text = head.slice(0, HEAD_CHARS).trim();

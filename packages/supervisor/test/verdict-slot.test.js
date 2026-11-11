@@ -1,4 +1,4 @@
-/** 「已上报、等裁决」的单要占住并发槽位。 */
+/** “已上报、等裁决”的单要占住并发槽位。 */
 
 const test = require("node:test");
 const assert = require("node:assert");

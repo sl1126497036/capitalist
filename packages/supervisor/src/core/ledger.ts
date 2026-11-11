@@ -83,8 +83,8 @@ export function recordEventThrottled(
     return false;
   }
   /*
-   * 窗口到期后的第一条把攒下的次数一起写上：`repeat: 12` 读作「这件事又发生了 12 次」，
-   * 而不是「这是第 12 条记录」。没有攒过就不写这个字段，老读侧不受影响。
+   * 窗口到期后的第一条把攒下的次数一起写上：`repeat: 12` 读作“这件事又发生了 12 次”，
+   * 而不是“这是第 12 条记录”。没有攒过就不写这个字段，老读侧不受影响。
    */
   const merged = cur && cur.n > 0 ? { ...extra, repeat: cur.n + 1 } : extra;
   throttleState.set(k, { at: now, n: 0 });
@@ -109,7 +109,7 @@ type Sessions = Record<string, SessionEntry>;
 /**
  * 读全部会话记录。
  *
- * @returns 会话 id → 记录。文件不存在或内容不是对象时返回空对象。
+ * @returns 会话 id -> 记录。文件不存在或内容不是对象时返回空对象。
  */
 export function loadSessions(root: string): Sessions {
   const d = readJson<Sessions>(sessionsPath(root), {});
@@ -128,7 +128,7 @@ export function saveSessions(root: string, data: Sessions): void {
 /**
  * 登记或更新一个会话。
  *
- * 多进程下这是判断「哪些会话仍在运行」的唯一依据：hook 每次运行都 touch 一次，
+ * 多进程下这是判断“哪些会话仍在运行”的唯一依据：hook 每次运行都 touch 一次，
  * `capitalist sessions` 据此判断哪个会话还活着、哪个已经交接出去。
  *
  * @param patch 要更新的字段。`tokens` 只增不减；`compact` 为 true 时压缩计数加一。
@@ -233,7 +233,7 @@ export function loadViolations(root: string): ViolationRecord[] {
 }
 
 /**
- * 某规则在本会话的累计次数。已消解的记录也计入：次数用于判断「第几次犯」，与是否已清账无关。
+ * 某规则在本会话的累计次数。已消解的记录也计入：次数用于判断“第几次犯”，与是否已清账无关。
  *
  * @returns 命中条数；未写 `session` 的历史记录不计入任何会话。
  */
@@ -412,7 +412,7 @@ export function resolveReviews(root: string, match: string): number {
   const raw = String(match ?? "").trim();
   const idx = Number(raw);
   const byIndex = raw !== "" && Number.isInteger(idx) && idx >= 0;
-  // 空匹配是任何字符串的子串：不挡住就会把整个队列一次消完，且看起来像「匹配成功」。
+  // 空匹配是任何字符串的子串：不挡住就会把整个队列一次消完，且看起来像“匹配成功”。
   const needle = normEvidence(raw);
   if (!byIndex && !needle) return 0;
 

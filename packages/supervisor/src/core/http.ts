@@ -12,9 +12,9 @@ export interface Envelope {
 /**
  * 解服务端信封。
  *
- * 只认「对象且 code 是数字」这一种形状：合法 JSON 但形状不对（裸字符串、数组、
+ * 只认“对象且 code 是数字”这一种形状：合法 JSON 但形状不对（裸字符串、数组、
  * 网关的 `null`）同样按协议错误处理，并把原文前 200 字符带回，否则下游拿到
- * `code: undefined`，只能打印一句「code=undefined」，看不出响应到底是什么。
+ * `code: undefined`，只能打印一句“code=undefined”，看不出响应到底是什么。
  *
  * @param fallbackCode 形状不符时使用的错误码。
  */

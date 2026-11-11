@@ -12,7 +12,7 @@ const { tmpdir } = require("node:os");
 const PKG = resolve(__dirname, "..");
 const { detectWorkerHost } = require(join(PKG, "dist/supervisor/worker.js"));
 const { currentHost, siblings } = require(
-  join(PKG, "dist/host/registry.js"),
+  join(PKG, "dist/agent/registry.js"),
 );
 
 /** 造一个只含指定可执行文件名的临时目录，用作受控 PATH。 */

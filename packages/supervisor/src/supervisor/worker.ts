@@ -34,8 +34,8 @@ import {
   touchWorker,
   workerLogPath,
 } from "../core/supervisor";
-import type { HostImpl, WorkerSession } from "../host/contract";
-import { byId, currentHost, siblings, workerByKey, workerHosts } from "../host/registry";
+import type { HostImpl, WorkerSession } from "../agent/contract";
+import { byId, currentHost, siblings, workerByKey, workerHosts } from "../agent/registry";
 import { laneOfWorker, pickLane } from "./sessionLane";
 import { closeOutRules } from "./closeOut";
 import { buildPreflightBlock, hasPreflight, preflightAtOf } from "./preflight";
@@ -65,6 +65,13 @@ export interface LaunchOptions {
   effort?: string | undefined;
   /** 自定义启动命令模板（含 {prompt}）。给了就不按 host 拼参数。 */
   cmd?: string | undefined;
+  /**
+   * 宿主登录态中的访问令牌。
+   *
+   * 只用于写进子进程环境，变量名由 impl 的 `authEnvVar` 声明；不写日志、不写工作进程记录。
+   * 缺省不传表示沿用宿主登录态。
+   */
+  token?: string | undefined;
 }
 
 
@@ -80,7 +87,7 @@ export interface Launched {
 }
 
 /**
- * 按「当前宿主的族」探测可用工作进程宿主。
+ * 按“当前宿主的族”探测可用工作进程宿主。
  *
  * 监工运行于宿主进程内，工作进程必须与宿主同族：同族共用客户端登录态，跨族会借用另一个
  * 产品线的账号。判定不出当前宿主时（纯命令行环境）才退回按 `detectPriority` 选取，
@@ -173,6 +180,8 @@ export function workerEnv(extra?: Record<string, string | undefined>): Record<st
   for (const [k, v] of Object.entries(process.env)) {
     if (typeof v !== "string" || v === "") continue;
     if (isDropped(k)) continue;
+    /* 宿主令牌仅以宿主声明的认证变量名出现在子进程中，该内部传递变量不传递给下游进程。 */
+    if (k === "CAPITALIST_HOST_TOKEN") continue;
     env[k] = v;
   }
 
@@ -301,7 +310,7 @@ export const BLOCKER_MAX_CHARS = 300;
 export interface BlockerInfo {
   /** 该单自报的失败原因（`capitalist report … failed --note`）。 */
   note?: string;
-  /** 监工对这条链「还能不能试」的判断理由（`retry_why`）。 */
+  /** 监工对这条链“还能不能试”的判断理由（`retry_why`）。 */
   retry_why?: string;
   /** 上报或审阅留下的记录（`review_note`）。 */
   review_note?: string;
@@ -315,7 +324,7 @@ function squashBlocker(text: unknown, max: number): string {
 
 /**
  * 把台账上的一张单压成卡点素材。
- * 取不到原因时返回空对象，由 {@link buildSkipBlocker} 写成「上一轮没留下失败原因」，让工作进程先复现再动手。
+ * 取不到原因时返回空对象，由 {@link buildSkipBlocker} 写成“上一轮没留下失败原因”，让工作进程先复现再动手。
  */
 export function blockerInfoOf(d: Partial<Dispatch> | undefined | null): BlockerInfo {
   if (!d) return {};
@@ -379,7 +388,7 @@ export function retryContextOf(d: Partial<Dispatch> | null | undefined): string 
 }
 
 /**
- * 重派时的「本次验收」段，按上次未通过的项动态生成；卡点段走独立字段 `retry_context`，二者都不写进 action 以免改动会话指纹、断掉续接。
+ * 重派时的“本次验收”段，按上次未通过的项动态生成；卡点段走独立字段 `retry_context`，二者都不写进 action 以免改动会话指纹、断掉续接。
  * 卡点在重派建单时生成整段存入 `retry_context`，发车时由 `buildPrompt` / `buildResumePrompt` 拼进提示词（见 `retryContextOf`）。
  */
 export function buildAcceptBlock(d: Dispatch): string[] {
@@ -389,7 +398,7 @@ export function buildAcceptBlock(d: Dispatch): string[] {
     "",
     "【本次验收 · 上一轮没过的地方优先，其余按原验收清单，不降低标准】",
     accept,
-    "报告时逐条说明这一条现在怎么满足的；没做到的照实写，不要用「已优化」这类无法核对的说法。",
+    "报告时逐条说明这一条现在怎么满足的；没做到的照实写，不要用“已优化”这类无法核对的说法。",
     "核对方式按下面的结单口径：以代码证据与相关单元测试为准。",
   ];
 }
@@ -400,7 +409,7 @@ export function buildCloseOutRules(heading?: string): string[] {
 }
 
 /**
- * 「动手前先核对现状」约束，合并 `preflight.ts` 与本地的两份同义条目为一份五条。
+ * “动手前先核对现状”约束，合并 `preflight.ts` 与本地的两份同义条目为一份五条。
  * `at` 可用时写入第 4 条供工作进程比较 mtime；修复单与续跑共用本导出。
  */
 export function buildGroundingBlock(d?: { at?: string } | null, heading = "【二、动手前先核对现状】"): string[] {
@@ -431,10 +440,10 @@ function buildBoundaryBlock(id: string): string[] {
     "【三、边界】",
     `  1. 只认这一单：需要复查要求时读 .capitalist/brief/${id}.md；不读 .capitalist/tasks.jsonl、`,
     "     .capitalist/inbox/*.jsonl、别的 .capitalist/workers/* 或别的 brief —— 那些是别人的单。",
-    "     别人的日志、别人的报告都不算证据；也不许拿「上一轮同口径的单已经实现过」当自己的产出，",
+    "     别人的日志、别人的报告都不算证据；也不许拿“上一轮同口径的单已经实现过”当自己的产出，",
     "     本单没做就是没做。",
     "  2. 台账里 done / closed 的派单是历史，不是待办：读台账、日志排查时，不要按历史派单的描述",
-    "     「恢复」或「实现」任何东西。界面现状以代码为准，不以截图、旧日志、旧派单正文为准；",
+    "     “恢复”或“实现”任何东西。界面现状以代码为准，不以截图、旧日志、旧派单正文为准；",
     "     历史描述与本单冲突时以本单为准，并在报告里写明冲突点。",
     "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件——",
     "     那三项属于监工，工作进程代做会使执行与验收不分。",
@@ -460,29 +469,29 @@ function buildHelpBlock(dispatchId: string): string[] {
     `  完成：capitalist report ${dispatchId} done --note "<做了什么>" --evidence "<改了哪几处 / 跑了什么 / 结果>"`,
     `  做不成：capitalist report ${dispatchId} failed --note "<卡在哪>"`,
     `  执行中收到用户追加的消息、你判断属于这一单：报告里加 --added "<新增/更正了什么>"。`,
-    `  这只是回报，不改变「这一单现在要做什么」的判断权——要求是否成立由判定层确认。`,
+    `  这只是回报，不改变“这一单现在要做什么”的判断权——要求是否成立由判定层确认。`,
   ];
 }
 
-/** 「改完必须生效」约束：改动须重启承载进程才会生效。工作进程不直接结束监工，走既有安全流程（确认空闲 → 外部拉起 / `capitalist reload` + 外部重起）。 */
+/** “改完必须生效”约束：改动须重启承载进程才会生效。工作进程不直接结束监工，走既有安全流程（确认空闲 -> 外部拉起 / `capitalist reload` + 外部重起）。 */
 export function buildApplyBlock(): string[] {
   return [
     "【五、改完要生效】只改文件、不重启承载进程，等于没有交付：",
     "  1. 改动涉及前端界面：构建后重启面板服务（只重启面板，不动监工），重启后确认页面加载的是新构建产物。",
-    "  2. 改动涉及监工主进程逻辑（调度、派单、提示词等）：先确认没有在跑的任务，再按现有安全流程重启监工使其生效。",
+    "  2. 改动涉及监工主进程逻辑（调度、派单、提示词等）：先确认没有运行中的任务，再按现有安全流程重启监工使其生效。",
     "     工作进程不直接杀监工进程：走外部拉起，或先 capitalist reload 落盘再由外部重起；重启后用新的进程号与启动时间核对。",
-    "  3. 收尾报告写「已重启生效：<面板 / 监工>」及重启对象；没有重启的不算完成，不要报 done。",
+    "  3. 收尾报告写“已重启生效：<面板 / 监工>”及重启对象；没有重启的不算完成，不要报 done。",
   ];
 }
 
 /**
  * 续跑提示词必须自包含：宿主换会话、上下文压缩或进程重启后仍可独立执行。
- * 本单要求原样重发，补上上一轮卡点与本次验收；只有「改过的文件不要重做」这类续跑语义依赖会话。
+ * 本单要求原样重发，补上上一轮卡点与本次验收；只有“改过的文件不要重做”这类续跑语义依赖会话。
  */
 export function buildResumePrompt(opts: { root: string; target: string; id: string; dispatch: Dispatch }): string {
   const d = opts.dispatch;
   const raw = String(d.action ?? "");
-  /* 正文与追加段分开：追加段各自带标题，混在一起会使引导语与「不是新要求，别重做」自相矛盾。 */
+  /* 正文与追加段分开：追加段各自带标题，混在一起会使引导语与“不是新要求，别重做”自相矛盾。 */
   const tailText = actionTail(raw);
   const fullTail = tailText.trim();
   const baseAction = (tailText ? raw.slice(0, raw.length - tailText.length) : raw).trim();
@@ -548,11 +557,11 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
   const tailText = actionTail(rawAction);
   const baseAction = (tailText ? rawAction.slice(0, rawAction.length - tailText.length) : rawAction).trim();
   const extra = tailText.trim();
-  /* 块序随角色变化：诊断进程只读，没有「核对现状」一步，后续序号整体前移一位，由变量计算。 */
+  /* 块序随角色变化：诊断进程只读，没有“核对现状”一步，后续序号整体前移一位，由变量计算。 */
   const CN = ["一", "二", "三", "四", "五", "六", "七", "八"];
-  /** 「怎么查」的序号：诊断=3、修复=4。 */
+  /** “怎么查”的序号：诊断=3、修复=4。 */
   const n = readonly ? 3 : 4;
-  /* 与业务单同一套块序：卡点 → 只做一件事 → 核对现状 → 怎么查 → 边界 → 算做完 → 收尾。 */
+  /* 与业务单同一套块序：卡点 -> 只做一件事 -> 核对现状 -> 怎么查 -> 边界 -> 算做完 -> 收尾。 */
   return [
     `你是${readonly ? "诊断进程" : "修复进程"}，不是业务执行进程。`,
     `任务根：${opts.root}`,
@@ -582,7 +591,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     `     不要读 .capitalist/tasks.jsonl、.capitalist/inbox/*.jsonl 里别人的单，也不要读别的工作进程的日志与会话。`,
     `  2. 再看代码：走真正执行的那条调用链，不是注释里写的设计——注释可能已经过期。`,
     `  3. 能复现的必须复现一次（跑那条命令或脚本），把真实输出留下。`,
-    `  4. 根因要能解释「为什么每次都这样」；只解释表面现象不算根因。`,
+    `  4. 根因要能解释“为什么每次都这样”；只解释表面现象不算根因。`,
     ``,
     `【${CN[n]}、边界】`,
     `  1. 不执行 capitalist advance / capitalist adopt / capitalist supervise，也不手改 .capitalist/ 下的台账；`,
@@ -723,14 +732,14 @@ export function buildPrompt(opts: {
     : "";
   /*
    * 附件按本单 `atts` 字段重建，不按张数裁剪。判据只有 `atts` 字段：
-   *   · 为数组（含空数组）→ 移除正文里的附件行，只按字段补回；空数组表示本单明确不带图；
-   *   · 缺失（老单）→ 原样保留正文，不清除老单的图。
+   *   · 为数组（含空数组）-> 移除正文里的附件行，只按字段补回；空数组表示本单明确不带图；
+   *   · 缺失（老单）-> 原样保留正文，不清除老单的图。
    * 发车时 `loop.ts` 已重建一次，这里再处理旧台账 action 里残留的正文路径。
    */
   const actionText = String(d.action ?? "");
   const ownAtts = Array.isArray(d.atts) ? d.atts.map((p) => String(p ?? "").trim()).filter(Boolean) : null;
   /*
-   * 按本单 `atts` 重建附件行时保留其在正文中的位置：`（现状）`「（参照）」等角色标注随行保留，`bindAttachments` 只移除不属于本单的行。
+   * 按本单 `atts` 重建附件行时保留其在正文中的位置：`（现状）`“（参照）”等角色标注随行保留，`bindAttachments` 只移除不属于本单的行。
    * 老单没有 `atts` 字段时不重建，否则按空数组处理会删掉正文里的图。
    */
   const attPayload = {
@@ -739,7 +748,7 @@ export function buildPrompt(opts: {
   /* 卡点段只在发车时拼进提示词，不写入 action（见 `retry_context` 字段说明）；放在正文之后、执行要求之前。 */
   const retryCtx = retryContextOf(d);
   /*
-   * 提示词分七块，顺序即工作进程的执行顺序：一 做什么 → 二 动手前核对 → 三 边界 → 四 怎么算做完 → 五 改完要生效 → 六 卡住怎么申报 → 七 完成/失败。
+   * 提示词分七块，顺序即工作进程的执行顺序：一 做什么 -> 二 动手前核对 -> 三 边界 -> 四 怎么算做完 -> 五 改完要生效 -> 六 卡住怎么申报 -> 七 完成/失败。
    * 每块只出现一次，块内编号从 1 起，块外用中文序号标识阅读路径。
    */
   const accept = buildAcceptBlock(d);
@@ -755,7 +764,7 @@ export function buildPrompt(opts: {
     attPayload.text,
     /* 卡点段只在发车时拼进提示词，不写入 action；放在正文之后、其余约束之前。 */
     ...(retryCtx ? ["", retryCtx] : []),
-    /* 本次验收（重派时才有）：属于「这一单要做什么」的一部分，不另起一块。 */
+    /* 本次验收（重派时才有）：属于“这一单要做什么”的一部分，不另起一块。 */
     ...(accept.length ? ["", ...accept.slice(1)] : []),
     ``,
     /* 执行前核对现状：老单正文里可能已内联这一段，此时不重复拼接。 */
@@ -860,6 +869,15 @@ export function launchWorker(opts: LaunchOptions): Launched {
     CAPITALIST_SUPERVISOR_PID: String(process.pid),
   };
 
+  /*
+   * 令牌只进子进程环境，变量名由 impl 声明。宿主 CLI 见到该变量即用它认证，不再去读
+   * 客户端保存的登录态文件；未声明的宿主不注入，行为与之前一致。
+   */
+  if (opts.token) {
+    const authVar = byId(opts.host)?.worker?.authEnvVar;
+    if (authVar) extraEnv[authVar] = opts.token;
+  }
+
   const banner = [
     `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} stage=${opts.dispatch.stage}`,
     `[launch] bin=${bin}${shell ? "（经 shell）" : ""}${viaStdin ? " prompt=stdin" : " prompt=argv"}`,
@@ -902,7 +920,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
       if (viaStdin) {
         child.stdin.write(prompt.endsWith("\n") ? prompt : `${prompt}\n`);
       } else if (workerImpl(opts.host)?.workspace) {
-        // 声明了 workspace 的宿主会先问「是否信任这些文件」，非交互模式没有 TTY，
+        // 声明了 workspace 的宿主会先问“是否信任这些文件”，非交互模式没有 TTY，
         // 一个回车就是默认确认；否则进程会一直等。
         child.stdin.write("\n");
       }
@@ -931,7 +949,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
   };
   /*
    * 每段输出后补一次心跳，不依赖宿主 hook（配置丢失或宿主升级时 hook 可能整段不触发，而输出正常）。
-   * 落盘间隔取 2 秒：每块输出都改写工作进程记录会拖慢 tick，并与 hook 的写入互相覆盖；判活阈值是分钟级。首次输出把状态从 starting 置为 running。
+   * 落盘间隔取 2 秒：每块输出都改写工作进程记录会拖慢 调度轮次，并与 hook 的写入互相覆盖；判活阈值是分钟级。首次输出把状态从 starting 置为 running。
    */
   let lastBeat = 0;
   const beatFromOutput = (): void => {
@@ -1099,6 +1117,12 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
     // 监工 pid：窗口模式下工作进程同样是独立进程，父进程被强杀后的自保走同一套。
     CAPITALIST_SUPERVISOR_PID: String(process.pid),
   };
+
+  /* 与后台模式同口径：令牌只进子进程环境，不写进上面那个 .cmd 脚本。 */
+  if (opts.token) {
+    const authVar = byId(opts.host)?.worker?.authEnvVar;
+    if (authVar) extraEnv[authVar] = opts.token;
+  }
 
   // 首条消息保持单行，只指向派单文件；模型随后自行读取全文。
   const firstMessage = `读取 ${promptFile} 并严格按其中内容执行，这是该派单的说明。`;

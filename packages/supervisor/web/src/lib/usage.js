@@ -1,6 +1,6 @@
 /**
  * 用量读数格式化出口。数据取自 `/api/threads` 每条线程的 `usage`，由服务端解析工作进程日志。
- * 字段缺失写「未上报」而不补 0；左栏与右侧面板共用本模块，组件只负责排版。
+ * 字段缺失写“未上报”而不补 0；左栏与右侧面板共用本模块，组件只负责排版。
  */
 
 import { t } from "./i18n.js";
@@ -13,7 +13,7 @@ const MODEL_ALIAS = {
   "fast-model": { name: "fast-model", ver: "", note: t("轮换") },
 };
 
-/** 模型 id → `{ name, ver, raw }`；非别名原样展示，连字符与大小写属于 id 本身，不拆分。 */
+/** 模型 id -> `{ name, ver, raw }`；非别名原样展示，连字符与大小写属于 id 本身，不拆分。 */
 export function modelOf(raw) {
   const s = String(raw || "").trim();
   if (!s) return null;
@@ -55,7 +55,7 @@ export function totalUsageText(usage) {
 }
 
 /**
- * 上下文读数格式化：有分母时把已用夹到分母以内，`over` 为真仍标「超限」。
+ * 上下文读数格式化：有分母时把已用夹到分母以内，`over` 为真仍标“超限”。
  * 显示层不加 `≈` 前缀；本模块是唯一的上下文格式化来源。
  */
 export function fmtCtx(used, win, over = false) {
@@ -71,7 +71,7 @@ export function fmtCtx(used, win, over = false) {
 }
 
 /**
- * 额度按「数值 + 单位」格式化，顶栏与左栏共用。单位随宿主而异（积分、token、现金），
+ * 额度按“数值 + 单位”格式化，顶栏与左栏共用。单位随宿主而异（积分、token、现金），
  * 现金保留两位小数；格式化只在本模块进行。返回 `{ text, num, unit }`。
  */
 export function billParts(n, unit) {
@@ -124,7 +124,7 @@ export function spendOf(usage) {
   if (Number.isFinite(Number(u.total_tokens))) {
     /*
      * `credit_metered` 下的积分读数由计费接口增量摊算；接口返回 0 时 `credit` 为 null，
-     * 此时不回落 token（token 为会话累计），按「未上报」处理。
+     * 此时不回落 token（token 为会话累计），按“未上报”处理。
      */
     if (u.credit_metered) {
       return {

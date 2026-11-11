@@ -161,7 +161,7 @@ function unwrapTimeout(seg: string): string {
 /**
  * 取 shell 命令的首段有效命令：跳过 `cd`、变量准备与等待段，并剥离 `timeout` 外壳。
  *
- * `waiting` 为真表示整条命令只有等待或空转段，调用方按「等待」显示。
+ * `waiting` 为真表示整条命令仅含等待或空闲段，调用方按“等待”显示。
  */
 export function summarizeCommand(cmd: string): { intent: string; waiting: boolean } {
   const flat = String(cmd ?? "").split(/\r?\n/).join(" ").replace(/\s+/g, " ").trim();
@@ -228,7 +228,7 @@ export function toolArgBrief(toolName: string, input: unknown): string {
       return `读取 ${parts.slice(-2).join("/")}`;
     }
 
-    /* 取首段有效命令，跳过 cd、变量准备与等待段并剥离 timeout；整条仅等待时显示「等待」。 */
+    /* 取首段有效命令，跳过 cd、变量准备与等待段并剥离 timeout；整条仅等待时显示“等待”。 */
     const { intent, waiting } = summarizeCommand(flat);
     if (intent !== "") return `执行 ${clip(intent, 32)}`;
     return waiting ? "等待" : "执行命令";

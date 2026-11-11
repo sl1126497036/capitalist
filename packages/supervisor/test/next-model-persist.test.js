@@ -39,7 +39,7 @@ test("没有设定 / 坏文件都回落到空串，不抛错", () => {
 test("/api/supervisor 载荷带 next_model：刷新后按钮能回填", () => {
   const root = sandbox();
   const view = board.buildSupervisorStatus(root);
-  assert.equal(view.next_model, "", "没有设定时为空串（按钮回到「派单模型」）");
+  assert.equal(view.next_model, "", "没有设定时为空串（按钮回到“派单模型”）");
 
   writeFileSync(
     join(root, ".capitalist", "next_model.json"),

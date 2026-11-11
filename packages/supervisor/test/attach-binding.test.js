@@ -1,4 +1,4 @@
-/** 附件只属于「带它的那条消息」。 */
+/** 附件只属于“带它的那条消息”。 */
 
 const test = require("node:test");
 const assert = require("node:assert");
@@ -166,7 +166,7 @@ test("dispatch 组单只注入选中的图：未选中的路径不进正文、�
     assert.deepStrictEqual(d.atts, [MINE], "字段只记选中的那张");
     assert.ok(String(d.action).includes(`[附件] ${MINE}`), "选中的图写进正文");
     assert.ok(!String(d.action).includes(OTHER), "模型抄进来的未选路径不进正文");
-    assert.ok(!eventNames(root).includes("attachments_foreign_dropped"), "不再记「丢弃附件」事件");
+    assert.ok(!eventNames(root).includes("attachments_foreign_dropped"), "不再记“丢弃附件”事件");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

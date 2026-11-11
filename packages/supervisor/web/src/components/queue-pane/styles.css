@@ -579,7 +579,7 @@
   align-items: center;
   margin-top: var(--s8);
   gap: var(--s4);
-  /* 底行补 5px + var(--s5)，与标题行「#编号」文字共用左起点。 */
+  /* 底行补 5px + var(--s5)，与标题行“#编号”文字共用左起点。 */
   padding-left: calc(5px + var(--s5));
   font-family: var(--num);
   font-size: var(--f-tiny);
@@ -654,7 +654,7 @@
   opacity: 1;
 }
 
-/* 「已让位」用弱色，不画成失败色。 */
+/* “已让位”用弱色，不画成失败色。 */
 .nm em.yield {
   color: var(--t4);
   border: 1px solid var(--line);

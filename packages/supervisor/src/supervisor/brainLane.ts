@@ -154,12 +154,12 @@ export function recentVerdicts(root: string, max = 6): string[] {
     const why = String(o.why ?? "").replace(/\s+/g, " ").slice(0, 70);
     const at = hhmmOf(o.at);
     if (name === "mq_triage" && decision) {
-      out.push(`- ${at} 判 ${String(o.kind ?? "申报")} → ${decision}${why ? `：${why}` : ""}`);
+      out.push(`- ${at} 判 ${String(o.kind ?? "申报")} -> ${decision}${why ? `：${why}` : ""}`);
       continue;
     }
     if (name === "retry_allowed" || name === "retry_refused" || name === "retry_held") {
       const label = name === "retry_allowed" ? "可以再试" : name === "retry_refused" ? "不再重试" : "暂不重派";
-      out.push(`- ${at} 重派 → ${label}${why ? `：${why}` : ""}`);
+      out.push(`- ${at} 重派 -> ${label}${why ? `：${why}` : ""}`);
     }
   }
   return out.reverse();

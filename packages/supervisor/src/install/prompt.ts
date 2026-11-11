@@ -10,8 +10,8 @@
 
 import { createInterface } from "node:readline/promises";
 
-import type { HostId } from "../host/contract";
-import { all, normalize } from "../host/registry";
+import type { HostId } from "../agent/contract";
+import { all, normalize } from "../agent/registry";
 import { hostInstalled } from "./install";
 
 /** 大号标识。只在交互安装 / 卸载时打印，管道与 CI 的输出里不出现。 */
@@ -76,7 +76,7 @@ function installableIds(): HostId[] {
  * 解析一行输入。
  *
  * 接受编号、逗号或空格分隔的多个编号，以及 `all` / `全部`。空输入按取消处理。
- * 直接回车与「取消」输入均按取消处理。
+ * 直接回车与“取消”输入均按取消处理。
  */
 function parseSelection(raw: string): Selection {
   const text = raw.trim().toLowerCase();
@@ -165,14 +165,14 @@ export interface ResolveAgentsOptions {
 /**
  * 确定目标宿主列表。
  *
- * 优先级：显式 `--agent` > `--all` > 交互菜单 > 交给安装器自动探测。
+ * 优先级：显式 `--agent` > `--all` > 交互菜单。三者都没有时不做选择，直接返回 null：
+ * 自动装到所有已检测宿主会让用户失去选择权，也可能把 hook 写进并不使用的宿主。
  *
- * @returns 宿主 id 列表；用户取消返回 null；返回 undefined 表示没有指定过，
- * 由安装器按「已安装的宿主」自动探测，与无参调用的行为保持一致。
+ * @returns 宿主 id 列表；未选择或用户取消时返回 null。
  */
 export async function resolveAgents(
   opts: ResolveAgentsOptions,
-): Promise<string[] | null | undefined> {
+): Promise<string[] | null> {
   const explicit = opts.explicit?.trim();
   if (explicit) {
     // 取值原样传给安装器；未知取值由安装器报错，当前层不丢弃。
@@ -183,8 +183,13 @@ export async function resolveAgents(
     if (ids.length > 0) return ids;
   }
   if (opts.all === true) return installableIds();
-  if (!opts.interactive) return undefined;
-  return pickAgents({ action: opts.action, root: opts.root });
+  if (opts.interactive) return pickAgents({ action: opts.action, root: opts.root });
+
+  const names = AGENT_GROUPS.flatMap((group) => [...group.ids]);
+  process.stderr.write(
+    `未指定宿主：用 --agent 指定（${names.join(" / ")}），或 --all 安装到全部已检测宿主。\n`,
+  );
+  return null;
 }
 
 /** 把宿主 id 归一成注册表键，供输出与去重使用。 */

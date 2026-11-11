@@ -103,7 +103,7 @@ const menuBox = ref(null);function onDocClickMenu(e) {
   if (menuBox.value && !menuBox.value.contains(e.target)) acctOpen.value = false;
 }
 
-/** 暂停按「在线 + 暂停」两条件成立判定；仅在线为假时才是真的不在线。 */
+/** 暂停按“在线 + 暂停”两条件成立判定；仅在线为假时才是真的不在线。 */
 const pausedOnline = computed(() => props.online && paused.value);
 const abnormal = computed(
   () => !props.online || pausedOnline.value || connBad.value || connState.value === "degraded",

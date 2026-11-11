@@ -4,7 +4,7 @@
       <header class="fv-head">
         <div class="fv-hl">
           <h2 id="fvTitle">{{ tr("工作树看板") }}</h2>
-          <p class="fv-sub">{{ summary || tr("正在读取派单台账…") }}</p>
+          <p class="fv-sub">{{ summary || tr("正在读取派单记录…") }}</p>
         </div>
         <div class="fv-actions">
           <button type="button" class="fv-ghost" :disabled="loading" @click="load">{{ tr("刷新") }}</button>
@@ -22,16 +22,16 @@
           <i class="fv-dot" :class="l.k" />{{ l.text }}
         </span>
         <span class="fv-lg">
-          <i class="fv-dot failed" />{{ tr("失败节点带「断链」标记，其下整棵子树降亮并注明受影响的单号") }}
+          <i class="fv-dot failed" />{{ tr("失败节点带“断链”标记，其下整棵子树降亮并注明受影响的单号") }}
         </span>
       </div>
 
       <p v-if="degraded" class="fv-degraded" role="alert">{{ degraded }}</p>
-      <p v-if="error" class="fv-err" role="alert">{{ tr("台账读取失败：{e}", { e: error }) }}</p>
+      <p v-if="error" class="fv-err" role="alert">{{ tr("读取失败：{e}", { e: error }) }}</p>
 
       <div class="fv-body">
-        <p v-if="loading && !view" class="fv-hint">{{ tr("正在读取派单台账…") }}</p>
-        <p v-else-if="empty" class="fv-empty">{{ tr("台账中没有派单，森林为空。") }}</p>
+        <p v-if="loading && !view" class="fv-hint">{{ tr("正在读取派单记录…") }}</p>
+        <p v-else-if="empty" class="fv-empty">{{ tr("没有派单记录") }}</p>
         <template v-else>
           <section
             v-for="(t, i) in trees"

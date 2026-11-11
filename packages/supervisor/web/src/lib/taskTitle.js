@@ -1,5 +1,5 @@
 /**
- * 任务标题取值链：接口 `title` → 分片映射 → 正文摘要，不回落到分片 id。
+ * 任务标题取值链：接口 `title` -> 分片映射 -> 正文摘要，不回落到分片 id。
  * 映射表与服务端 supervisor/taskTitle.ts 同源；前端独立打包不引后端模块，改表需两处同步。
  */
 
@@ -107,7 +107,7 @@ export function cjkCount(text) {
   return n;
 }
 
-/** 分片 id → 中文短名；查不到返回空串。 */
+/** 分片 id -> 中文短名；查不到返回空串。 */
 export function shardTitle(shard) {
   const id = String(shard || "").trim();
   if (!id) return "";

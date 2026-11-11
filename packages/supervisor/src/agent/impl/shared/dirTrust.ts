@@ -6,7 +6,7 @@
  *   Do you trust the files in this folder?  > 1. Trust folder only
  *
  * 该确认只能由人按键，非交互模式下表现为无输出挂死。非交互模式也没有 TUI 可以点
- * 「允许」，未授权时工具调用被直接拒绝，因此同时补齐项目级权限。
+ * “允许”，未授权时工具调用被直接拒绝，因此同时补齐项目级权限。
  *
  * 写入位置与条件：
  * - `<家目录>/<configDir>/settings.json` 的 `trustedDirectories`：追加当前任务根。
@@ -49,6 +49,14 @@ export interface WorkspaceOptions {
    * 省略时写真实家目录。测试需要把写入重定向到临时目录时通过本字段注入。
    */
   home?: () => string;
+  /**
+   * 项目级权限写到哪个目录，相对任务根。
+   *
+   * 省略时与 `configDir` 相同；置 `null` 表示不写项目级配置。需要置空的场合是
+   * 该目录出现在项目里会改变宿主自身行为：WorkBuddy 见到 `.codebuddy` 即转受限模式，
+   * 不执行终端命令，写进去等于把工作区弄坏。
+   */
+  projectConfigDir?: string | null;
 }
 
 /**
@@ -136,7 +144,12 @@ function ensureTrustedDir(root: string, opts: WorkspaceOptions): { ok: boolean; 
  * 时补齐，不覆盖已有列表。文件不是合法 JSON 或写入失败时都不改动该文件。
  */
 function ensureProjectPermissions(root: string, opts: WorkspaceOptions): { ok: boolean; added: boolean; message: string } {
-  const dir = join(root, opts.configDir);
+  const projConfigDir = opts.projectConfigDir === undefined ? opts.configDir : opts.projectConfigDir;
+  if (!projConfigDir) {
+    /* 该项目目录会改变宿主行为（例如 WorkBuddy 见到 `.codebuddy` 即转受限模式），不写。 */
+    return { ok: true, added: false, message: `按配置跳过项目级权限：${opts.label} 不在任务根下建配置目录` };
+  }
+  const dir = join(root, projConfigDir);
   const file = join(dir, "settings.json");
   let raw: Record<string, unknown> = {};
   let existed = false;

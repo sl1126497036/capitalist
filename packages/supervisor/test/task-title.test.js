@@ -8,7 +8,7 @@
  *    真到了老派单（没有 title 字段）就只剩映射表一条路。
  * 2. 两份表不许漂移。服务端 `src/supervisor/taskTitle.ts` 与前端
  *    `web/src/lib/taskTitle.js` 各存一份（前端是独立打包的静态产物，不引后端模块），
- *    键对不上时前端就会在某个分片上退回「未命名任务」。
+ *    键对不上时前端就会在某个分片上退回“未命名任务”。
  */
 
 const test = require("node:test");
@@ -65,7 +65,7 @@ test("前端映射表与服务端同键同名", () => {
   assert.deepStrictEqual(web, { ...SHARD_TITLES }, "两张表的键或值不一致，改表时两边要一起改");
 });
 
-test("标题取值顺序：契约 title → 分片映射 → 正文摘要，永不回落到 id", () => {
+test("标题取值顺序：契约 title -> 分片映射 -> 正文摘要，永不回落到 id", () => {
   assert.strictEqual(taskTitle({ contractTitle: "任务标题中文化", shard: "ux-chat" }), "任务标题中文化");
   assert.strictEqual(taskTitle({ shard: "ux-chat" }), "对话修复");
   assert.strictEqual(taskTitle({ shard: "no-such-shard", action: "把左栏的行名改成中文，别显示代号" }), "把左栏的行名改成中文");
@@ -79,7 +79,7 @@ test("正文摘要只留中文，保留整句不再按字数截断", () => {
   const long = summarizeTitle("这一句话特别长需要被截断到十个汉字以内才行");
   assert.strictEqual(long, "这一句话特别长需要被截断到十个汉字以内才行");
   assert.ok(CJK.test(long), long);
-  // 线上实例：任务卡标题被截成「撤掉看板聊天区的未建」，这里要求整句落库。
+  // 线上实例：任务卡标题被截成“撤掉看板聊天区的未建”，这里要求整句落库。
   assert.strictEqual(summarizeTitle("撤掉看板聊天区的未建单标记按钮，含模板与样式"), "撤掉看板聊天区的未建单标记按钮");
   assert.strictEqual(taskTitle({ shard: "", action: "撤掉看板聊天区的未建单标记按钮" }), "撤掉看板聊天区的未建单标记按钮");
 });
@@ -121,7 +121,7 @@ test("新建派单：标题落库保留完整语句，不按字数截断", async
   }
 });
 
-test("同类合并追加内容：沿用原单标题，不改成「批次」", async () => {
+test("同类合并追加内容：沿用原单标题，不改成“批次”", async () => {
   const root = titleSandbox();
   try {
     appendSupervisorDirective(root, { action: "dispatch", arg: "[core] 第一条要求" });

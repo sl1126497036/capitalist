@@ -8,7 +8,7 @@ import { loadContract, type Contract } from "../core/contract";
 import { findRoot } from "../core/paths";
 import { loadState, saveState } from "../core/state";
 import type { TaskState } from "../core/types";
-import { skillDirs } from "../host/locations";
+import { skillDirs } from "../agent/locations";
 import { flagString, type Parsed } from "./args";
 import { die } from "./output";
 

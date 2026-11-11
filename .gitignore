@@ -28,3 +28,6 @@ packages/supervisor/contracts/*.contract.json
 !packages/supervisor/contracts/minimal.contract.json
 /reports
 /packages/supervisor/.tmp-test
+
+# 本机保留的可选注入实现：不进版本库，也不参与编译与打包
+packages/supervisor/src/token-inject/

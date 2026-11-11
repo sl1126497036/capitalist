@@ -98,7 +98,7 @@
       <div v-if="modelLoading" class="mpickempty">{{ t("宿主模型读取中…") }}</div>
       <template v-else>
         <!-- 默认模型不在清单里时才补一行。 -->
-        <!-- 宿主默认有具体模型名时直接按模型列出，不再出现抽象的「宿主默认」行；清单里有的走下面的循环。 -->
+        <!-- 宿主默认有具体模型名时直接按模型列出，不再出现抽象的“宿主默认”行；清单里有的走下面的循环。 -->
         <button
           v-if="hostDefault && !hostModels.includes(hostDefault)"
           class="mpickrow"

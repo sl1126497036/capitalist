@@ -23,7 +23,7 @@ import {
   recordViolation as writeViolation,
   touchSession,
 } from "../core/ledger";
-import { detectAction, extractLocalPaths, localCheck, localDeleteCheck, tightenLocal } from "../core/localGuard";
+import { detectAction, extractLocalPaths, localCheck, localDeleteCheck, normLocal, tightenLocal } from "../core/localGuard";
 import {
   acquireWithWait,
   checkStale,
@@ -46,7 +46,7 @@ import type { ActionKind, GateResult, LocalDecision } from "../core/types";
 const HINT_UNWATCHED: Record<BriefLang, string> = {
   zh:
     "【capitalist 已生效 · 本会话未纳管】hook 正在运行，当前目录没有任务根。" +
-    "普通问答忽略本行；长流程任务说一句「给这个项目开监督」，" +
+    "普通问答忽略本行；长流程任务说一句“给这个项目开监督”，" +
     '或执行 `capitalist start "<目标>" --contract <任务列表名>`。',
   en:
     "【capitalist active · no task root】The hook is running; this directory has no task root. " +
@@ -65,7 +65,7 @@ const INJECT_RULES: Record<BriefLang, string> = {
   zh:
     "执行纪律：\n" +
     "- 所有 capitalist 命令由本进程执行。\n" +
-    "- 状态已由监工计算。按「下一步」执行，不向用户询问后续动作。\n" +
+    "- 状态已由监工计算。按“下一步”执行，不向用户询问后续动作。\n" +
     '- 存在不确定项时：capitalist ask "<问题>" 登记后停止执行，等待监工裁决。',
   en:
     "Rules:\n" +
@@ -97,19 +97,185 @@ function lockCfg(contract: Contract): LockCfg {
   return {
     enabled: o.enabled !== false,
     strictRead: o.strict_read === true,
-    /* 默认只等 2 秒：hook 卡住的是 worker 的一次工具调用，等太久等于让它空转。 */
+    /* 默认只等 2 秒：hook 阻塞的是工作进程的一次工具调用，等待过久会使该次调用失效。 */
     waitMs: Math.max(0, num(o.wait_ms, 2000)),
     ttlSec: Math.max(10, num(o.ttl_sec, 120)),
   };
 }
 
-/** hook 决策是不是「放行」。deny 的 code 也是 0（靠 stdout 的 JSON 表达），所以要看 stdout。 */
+/** hook 决策是不是“放行”。deny 的 code 也是 0（靠 stdout 的 JSON 表达），所以要看 stdout。 */
 function allowedBy(d: { code: number; stdout?: string | undefined }): boolean {
   return d.code === 0 && !d.stdout;
 }
 
-/** 登记理由的命令。命中时不判本机边界，否则这条命令会被它自己要解除的规则拦住。 */
-const JUSTIFY_CMD = /(^|[\s;&|/])capitalist(\.js)?\s+justify\b/;
+/**
+ * 命令行入口名。`capitalist` 与 `cap` 是同一个 bin 的两个别名（见 package.json 的 `bin`）。
+ */
+const CLI_ENTRY = new Set(["capitalist", "capitalist.js", "capitalist.cjs", "cap", "cap.js", "cap.cjs"]);
+
+/** 包管理器的临时执行前缀。`npx capitalist justify …` 与直接调用等价。 */
+const RUNNER_ENTRY = new Set(["npx", "pnpx", "bunx"]);
+
+/** `node` 一类解释器，其后第一个非开关参数是脚本路径。 */
+const NODE_ENTRY = /^node(js)?(\.exe)?$/i;
+
+/** 取路径最后一段，统一正斜杠并转小写。 */
+function baseName(p: string): string {
+  const s = p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const i = s.lastIndexOf("/");
+  return (i < 0 ? s : s.slice(i + 1)).toLowerCase();
+}
+
+/** 引号内的分隔符不参与切分。 */
+function shellSegments(cmd: string): string[] {
+  const out: string[] = [];
+  let buf = "";
+  let quote = "";
+  for (let i = 0; i < cmd.length; i += 1) {
+    const ch = cmd[i] as string;
+    if (quote) {
+      if (ch === "\\" && quote === '"') {
+        buf += ch;
+        const nx = cmd[i + 1];
+        if (nx !== undefined) {
+          buf += nx;
+          i += 1;
+        }
+        continue;
+      }
+      if (ch === quote) quote = "";
+      buf += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      buf += ch;
+      continue;
+    }
+    if (ch === "\n" || ch === ";" || ch === "&" || ch === "|") {
+      out.push(buf);
+      buf = "";
+      const nx = cmd[i + 1];
+      if ((ch === "&" || ch === "|") && nx === ch) i += 1;
+      continue;
+    }
+    buf += ch;
+  }
+  out.push(buf);
+  return out.filter((s) => s.trim() !== "");
+}
+
+/** 引号感知的分词：引号内的空白不切分，引号本身不进入结果。 */
+function shellTokens(seg: string): string[] {
+  const out: string[] = [];
+  let buf = "";
+  let quote = "";
+  for (let i = 0; i < seg.length; i += 1) {
+    const ch = seg[i] as string;
+    if (quote) {
+      if (ch === "\\" && quote === '"') {
+        const nx = seg[i + 1];
+        if (nx !== undefined) {
+          buf += nx;
+          i += 1;
+        }
+        continue;
+      }
+      if (ch === quote) {
+        quote = "";
+        continue;
+      }
+      buf += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (buf !== "") out.push(buf);
+      buf = "";
+      continue;
+    }
+    buf += ch;
+  }
+  if (buf !== "") out.push(buf);
+  return out;
+}
+
+/**
+ * 脚本路径是不是本项目的命令行入口。
+ *
+ * 认三种写法：直接是 bin 别名、路径里带 `cli` 的 `main.js`、与本 hook 同包的
+ * `dist/cli/main.js` 绝对路径。第三种的判据是真实路径比对，避免把任意项目的
+ * `main.js` 当成登记入口。
+ */
+function isProjectCli(script: string): boolean {
+  const p = script.replace(/\\/g, "/");
+  const base = baseName(p);
+  if (CLI_ENTRY.has(base)) return true;
+  if (!/^main\.(js|cjs|mjs)$/.test(base)) return false;
+  if (/\/cli\//.test(p)) return true;
+  const actual = normLocal(p, process.cwd());
+  const own = normLocal(join(__dirname, "..", "cli", "main.js"));
+  return actual !== "" && actual === own;
+}
+
+/** 单段命令是否在调用 `justify`。 */
+function isJustifySegment(seg: string): boolean {
+  const t = shellTokens(seg);
+  let i = 0;
+  while (i < t.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t[i] as string)) i += 1;
+  while (i < t.length && RUNNER_ENTRY.has(baseName(t[i] as string))) i += 1;
+
+  const head = t[i];
+  if (head === undefined) return false;
+
+  let argAt = i + 1;
+  if (NODE_ENTRY.test(baseName(head))) {
+    let j = i + 1;
+    while (j < t.length && (t[j] as string).startsWith("-")) {
+      /* `-e` / `-p` 后面跟的是代码而不是脚本文件，这类调用不是登记动作。 */
+      if (/^(--?e|--?p|--eval|--print)(=|$)/.test(t[j] as string)) return false;
+      j += 1;
+    }
+    const script = t[j];
+    if (script === undefined || !isProjectCli(script)) return false;
+    argAt = j + 1;
+  } else if (!CLI_ENTRY.has(baseName(head))) {
+    return false;
+  }
+
+  return t[argAt] === "justify";
+}
+
+/**
+ * 看板对话会话的 id 前缀。换代会生成 `capitalist-chat-c<代次>`，前缀一致。
+ */
+const CHAT_SESSION_RX = /^capitalist-chat\b/;
+
+/**
+ * 对话层不许执行的动作：只保留改状态机的两个。
+ *
+ * 禁动作是治症状：真正的问题是“一张单都没有就把阶段往下走”，那由 `advanceStage` 的派单
+ * 判据解决，与对话层能跑什么命令无关。禁得太多会挡住用户口述的需求（登记、派单、结项、
+ * 唤醒都是对话层该执行的），所以名单只留 `advance` 与 `adopt`。
+ */
+const CHAT_WRITE_RX = /(^|[\s;&|/])capitalist(\.js)?\s+(advance|adopt)\b/;
+
+/**
+ * 命令里是否有一次 `justify` 调用。
+ *
+ * 该命令免判本机边界：否则会出现“要放行必须先放行”的死锁，登记通道自身反而无法使用。
+ * 识别因此宁严不宽：错认会让任意命令借 `justify` 字样绕过边界检查。
+ *
+ * 逐段识别：`rm -rf x && capitalist justify x "理由"` 只有第二段是登记动作。
+ *
+ * @param cmd shell 命令原文。
+ */
+export function isJustifyInvocation(cmd: string): boolean {
+  return shellSegments(cmd).some(isJustifySegment);
+}
 
 interface Ctx {
   root: string;
@@ -207,9 +373,9 @@ function deliverPendingDirectives(
     [
       `【用户追加 · 派单 ${dispatchId}】执行期间收到用户追加的内容，本次工具调用暂停一次以完成送达。`,
       `编号：${directiveRef(rec)}`,
-      "先判断这条是不是对「这一单」的要求，然后按结论处理：",
-      "  是 → 按下面的内容调整做法（与原要求冲突时以追加内容为准），然后继续原任务；",
-      "  不是 → 不要改这一单的做法，但收尾时必须把这个编号报成 not_mine 并说明该归哪一单。",
+      "先判断这条是不是对“这一单”的要求，然后按结论处理：",
+      "  是 -> 按下面的内容调整做法（与原要求冲突时以追加内容为准），然后继续原任务；",
+      "  不是 -> 不要改这一单的做法，但收尾时必须把这个编号报成 not_mine 并说明该归哪一单。",
       `回报方式：capitalist report … --outcome "${directiveRef(rec)}=done"` +
         "（也可 not_mine / blocked，多条用分号隔开）。没给结论的这一单过不了收工闸。",
       "被暂停的调用仍需执行时重新发起。",
@@ -252,14 +418,31 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision 
   const gate = evaluate(ctx.contract, cmd);
   const act = detectAction(cmd);
 
-  // `capitalist justify` 是登记理由的通道本身。用一条尚未登记的路径去判这条命令，会形成
-  // 「要放行必须先放行」的死循环。红线仍照判。
-  if (JUSTIFY_CMD.test(cmd)) {
+  /*
+   * 看板对话会话只回答问题。
+   *
+   * 对话模型的职责是解释状态、答疑问，不替用户做决定。历史实现放任它调用 `capitalist record`
+   * 与 `capitalist advance`，结果是一条“回个收到”就能写需求台账并推进阶段，而用户没有下发
+   * 任何任务，阶段已经变了。改台账、动队列、推进阶段一律由用户在面板操作。
+   */
+  if (CHAT_SESSION_RX.test(String(event.sessionId ?? "")) && CHAT_WRITE_RX.test(cmd)) {
+    recordEvent(ctx, event, { cmd: cmd.slice(0, 400), decision: "BLOCK", reason: "chat_write" });
+    return hook.deny(
+      "【对话层】看板对话只回答问题，不改台账、不推进阶段。\n" +
+        "要派单或推进，请用户在面板操作；对话里说明状态与下一步即可。",
+      event.point,
+      event.sessionId,
+    );
+  }
+
+  // `justify` 是登记理由的通道本身。用一条尚未登记的路径去判这条命令，会形成“要放行必须
+  // 先放行”的死循环。红线仍照判。
+  if (isJustifyInvocation(cmd)) {
     recordEvent(ctx, event, { cmd: cmd.slice(0, 400), decision: gate.decision, local: "allow" });
     return gate.decision === "BLOCK" ? hook.deny(describeBlock(ctx.contract, gate, cmd), event.point, event.sessionId) : hook.passthrough();
   }
 
-  // 删除类红线只标识「这是一次删除」，判定归更具体的路径检查，因此路径检查先跑。
+  // 删除类红线只标识“这是一次删除”，判定归更具体的路径检查，因此路径检查先跑。
   if (gate.hits.some((h) => h.defer === "local_delete")) {
     const del = localDeleteCheck(ctx.contract, ctx.root, cmd);
     if (del.decision === "deny") {
@@ -331,7 +514,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision 
     return hook.deny(
       `【本机边界】这条命令超出允许范围：${local.hits.map((h) => h.path).join("、")}\n` +
         `先登记理由：capitalist justify "${p}" "<为什么必须碰它>"\n` +
-        "登记后重试放行，本次越界进入待复核队列。",
+        "登记后重试原命令即放行；放行时记入待复核队列（capitalist review 查看）。",
       event.point,
       event.sessionId,
     );
@@ -410,12 +593,12 @@ function shellWriteTargets(cmd: string, root: string): string[] {
  *
  * 挂在 on_action 上，这是唯一能在执行前拦住的位置。行为分三种：
  *
- *   读：只登记「谁在哪个版本读的」（默认不加锁，多读天然并发）；
- *   写：拿排他锁 + 校验「我读到的版本还是不是现在这个」；
+ *   读：只登记“谁在哪个版本读的”（默认不加锁，多读天然并发）；
+ *   写：拿排他锁 + 校验“我读到的版本还是不是现在这个”；
  *   人（没有 CAPITALIST_WORKER_ID）：不参与锁，否则会把用户自己的操作挡住。
  *
- * 被拒时给的是可执行的三步，不是「失败了」，worker 是通用 agent，它需要知道
- * 现在该干什么才不会死等（用户明确提过「否则会死等」）。
+ * 被拒时给的是可执行的三步，不是“失败了”，worker 是通用 agent，它需要知道
+ * 现在该干什么才不会死等（用户明确提过“否则会死等”）。
  */
 function guardFileLock(
   hook: HookFacet,
@@ -568,7 +751,7 @@ function judgeLocal(
   return hook.deny(
     `【本机边界】${event.tool} 要碰的位置超出允许范围：${local.hits.map((h) => h.path).join("、")}\n` +
       `先说明理由：capitalist justify "${p}" "<为什么必须碰它>"\n` +
-      "登记后才能过，而且这次越界会进待复核队列。",
+      "登记后才能过；放行时记入待复核队列（capitalist review 查看）。",
     event.point,
     event.sessionId,
   );

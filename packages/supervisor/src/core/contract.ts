@@ -3,7 +3,7 @@
  *
  * `evaluate()` 与归档的 Python 实现 `Contract.gate()`
  * （`_archive/python-engine/supervisor/scripts/capitalist.py`）判定结果必须一致。两套实现读同一份
- * 契约文件，判定分叉会使「换一套实现复现问题」失去意义。
+ * 契约文件，判定分叉会使“换一套实现复现问题”失去意义。
  *
  * 对齐点：`requires: "url"` 前置条件、大小写不敏感的 `skip_if`、命中片段前后各取 30 字符、
  * 带 `defer` 的命中不参与严重度计算、严重度次序 BLOCK > NEED_USER > WARN。
@@ -30,7 +30,7 @@ const CONTRACT_BASENAME = /\.contract\.json$/i;
  * 解析后的契约，判定层只依赖这个结构，不再回读原始 JSON。
  *
  * `localGuard` 缺省为空对象，此时本机边界不设限；`failedRedlines` 非空表示有红线未生效，
- * 调用方应把它报给用户，不能当作「规则齐备」。
+ * 调用方应把它报给用户，不能当作“规则齐备”。
  */
 export interface Contract {
   data: ContractData;
@@ -49,10 +49,10 @@ export interface Contract {
   failedRedlines: string[];
 }
 
-/** 红线级别的严格度排序，用于「多条命中取最严」。 */
+/** 红线级别的严格度排序，用于“多条命中取最严”。 */
 const LEVEL_RANK: Record<string, number> = { BLOCK: 3, NEED_USER: 2, WARN: 1 };
 
-/** 本包自带的契约目录：`dist/core` → 包根 → `contracts/`。目录不存在时返回 undefined。 */
+/** 本包自带的契约目录：`dist/core` -> 包根 -> `contracts/`。目录不存在时返回 undefined。 */
 function packageContractsDir(): string | undefined {
   const dir = resolve(__dirname, "..", "..", "contracts");
   return existsSync(dir) ? dir : undefined;
@@ -114,7 +114,7 @@ export function* iterContracts(searchDirs: readonly string[] = []): Generator<st
  *
  * 契约来自 Python 生态，可能带 `(?i)` 这类行内标志。JS 不接受该语法，直接
  * `new RegExp(pattern)` 会抛错；而吞掉异常、跳过该条规则会让红线静默失效，
- * 调用方无从区分「规则没生效」与「没有规则」。因此失败一律返回 null，由上层计入
+ * 调用方无从区分“规则没生效”与“没有规则”。因此失败一律返回 null，由上层计入
  * {@link Contract.failedRedlines} 并上报。
  *
  * 行内标志被剥离并翻译为 JS 标志。没有 JS 对应项的标志（`x`，详细模式）无法翻译，
@@ -147,7 +147,7 @@ function compilePattern(pattern: string, ignoreCase?: boolean): RegExp | null {
 /**
  * 编译全部红线的正则。
  *
- * @returns 编译成功的 id → 正则映射，以及编译失败的 id 列表。
+ * @returns 编译成功的 id -> 正则映射，以及编译失败的 id 列表。
  */
 function compileRedlines(redlines: Redline[]): { map: Map<string, RegExp>; failed: string[] } {
   const map = new Map<string, RegExp>();
@@ -198,7 +198,7 @@ export function contractNames(searchDirs: readonly string[] = []): string[] {
 }
 
 /**
- * 该串是否按「文件路径」对待（而不是契约名）：`.contract.json` 或任意 `.json`。
+ * 该串是否按“文件路径”对待（而不是契约名）：`.contract.json` 或任意 `.json`。
  *
  * 路径形态的 spec 直接当文件读；其余按契约名 / 末级目录名在搜索目录里找。
  */
@@ -211,7 +211,7 @@ function looksLikePath(spec: string): boolean {
  *
  * 路径形态原样返回（读不到由调用方给出针对性报错），名字形态遍历
  * {@link iterContracts} 匹配 `name` 或所在目录名。`loadContract` 与
- * `readContractFile` 共用这一份解析，避免两处各自实现后在「同名契约谁优先」
+ * `readContractFile` 共用这一份解析，避免两处各自实现后在“同名契约谁优先”
  * 上给出不同结论。
  */
 function locateContract(spec: string, searchDirs: readonly string[]): string | null {
@@ -362,7 +362,7 @@ export function readContractFile(spec: string, searchDirs: readonly string[] = [
 }
 
 /**
- * 每 tick 调用：重读契约，按 mtime 与内容哈希判变化。
+ * 每轮调度 调用：重读契约，按 mtime 与内容哈希判变化。
  *
  * 解析失败且 `prev` 存在时，沿用上一份契约并回报 `error`，不中断调度；
  * 首读就失败（无 `prev`）则抛错，由调用方决定退出还是回落。
@@ -441,7 +441,7 @@ export interface RequirementViolation {
 }
 
 /**
- * 检测需求层违规。只针对「删除需求条目」与「降低验收标准」两种明确禁止的动作：
+ * 检测需求层违规。只针对“删除需求条目”与“降低验收标准”两种明确禁止的动作：
  *
  * - 阶段被删：需求条目消失；
  * - 验收标准被删或大幅削弱（文本被砍掉一半以上，视为降低标准）。
@@ -470,7 +470,7 @@ export function detectRequirementViolation(prev: ContractData, next: ContractDat
         out.push({
           kind: "lower_acceptance",
           stage: ps.id,
-          detail: `stage ${ps.id} 验收标准被大幅削弱（${pa.length}→${na.length} 字）`,
+          detail: `stage ${ps.id} 验收标准被大幅削弱（由 ${pa.length} 字减为 ${na.length} 字）`,
         });
       }
     }
@@ -607,9 +607,9 @@ export function rollbackContract(root: string, file: string): ContractData | nul
 
 
 /**
- * 分片级模型优先级链：分片 model → 契约 default_model → 命令行 --worker-model → 宿主默认。
+ * 分片级模型优先级链：分片 model -> 契约 default_model -> 命令行 --worker-model -> 宿主默认。
  *
- * 返回「去重后的非空候选 + 末尾一个 undefined（宿主默认）」。{@link resolveShardModel} 取首项，
+ * 返回“去重后的非空候选 + 末尾一个 undefined（宿主默认）”。{@link resolveShardModel} 取首项，
  * {@link resolveShardModelFallback} 取次项（即上一档失败时的回落）。前导 undefined 会被跳过，
  * 否则分片没写 model 时会错误地回落到 undefined 而非 default_model。
  *
@@ -673,7 +673,7 @@ export function stageById(contract: Contract, id: string): Stage | undefined {
 /**
  * 阶段 id 顺序，严格按契约数组顺序。
  *
- * 契约里没有「下一阶段」字段：`next` 是给使用者的动作说明，不是流程指针。顺序推进与
+ * 契约里没有“下一阶段”字段：`next` 是给使用者的动作说明，不是流程指针。顺序推进与
  * 归档的 Python 实现 `stage_ids()` 一致，两边对顺序的理解不同，同一条 `capitalist advance`
  * 会走到不同阶段，已有任务就无法在两套实现之间接手。
  */
@@ -691,7 +691,11 @@ export function nextStageId(contract: Contract, id: string): string | null {
   const ids = stageIds(contract);
   if (ids.length === 0) return null;
   const i = ids.indexOf(id);
-  if (i < 0) return ids[0] ?? null;
+  /*
+   * 当前阶段不在契约里时返回 null，不回落第一阶段：回落会让状态机“推进”到原阶段，
+   * 事件记为 X -> X，看板显示一次并不存在的推进，实际是状态与契约对不上。
+   */
+  if (i < 0) return null;
   return ids[i + 1] ?? ids[ids.length - 1] ?? null;
 }
 
@@ -702,7 +706,7 @@ export function isLastStage(contract: Contract, id: string): boolean {
 }
 
 /**
- * 该红线的「正确做法」。
+ * 该红线的“正确做法”。
  *
  * @returns 红线 `fix` 字段的文本；该红线不存在或未写 `fix` 时返回中性说明，不编造领域话术。
  */
@@ -715,15 +719,15 @@ export function redlineFix(contract: Contract, id: string): string {
 /**
  * 监工实例租约：`.capitalist/locks/<task>.lock`。
  *
- * 监工单实例不能只靠 supervisor.json：它记录的是「最近一次写心跳的监工」，两个监工
- * 先后启动、先后写心跳时，文件只剩后写者，先写者毫无察觉。租约把「谁占着这个任务根」
- * 落成独立文件：启动时写入（实例 id、pid、启动时间、心跳），每 tick 刷新心跳，退出时
+ * 监工单实例不能只靠 supervisor.json：它记录的是“最近一次写心跳的监工”，两个监工
+ * 先后启动、先后写心跳时，文件只剩后写者，先写者毫无察觉。租约把“谁占着这个任务根”
+ * 落成独立文件：启动时写入（实例 id、pid、启动时间、心跳），每轮调度 刷新心跳，退出时
  * 标记 released。后来者读到存活租约就拒绝启动，错误信息给出持有者 pid 与启动时间。
  *
  * 租约状态三种：`running`（在位）、`superseded`（被接管者标记下线）、`released`（正常退出）。
  */
 export interface InstanceLease {
-  /** 实例 id：每次启动生成一份，用于区分「同一文件的前后写者」。 */
+  /** 实例 id：每次启动生成一份，用于区分“同一文件的前后写者”。 */
   instance_id: string;
   /** 持有者进程号。 */
   pid: number;
@@ -733,7 +737,7 @@ export interface InstanceLease {
   heartbeat_at: string;
   /** 最近一次心跳（epoch 秒），判活用它。 */
   heartbeat_ts: number;
-  /** 判活窗口（秒）。租约自带窗口，读取方不必再猜 tick 配置。 */
+  /** 判活窗口（秒）。租约自带窗口，读取方不必再猜 调度周期配置。 */
   stale_sec: number;
   status: "running" | "superseded" | "released";
   /** 被接管时间（ISO），仅 superseded 时存在。 */
@@ -781,7 +785,7 @@ export function leasePath(root: string, task: string): string {
  * 造一条本进程的租约。
  *
  * @param pid 持有者进程号。
- * @param staleSec 判活窗口（秒），下限 30，吸收 tick 抖动。
+ * @param staleSec 判活窗口（秒），下限 30，吸收 调度抖动。
  * @param instanceId 实例 id；省略时按时间与随机数生成。
  */
 export function newInstanceLease(
@@ -804,7 +808,7 @@ export function newInstanceLease(
 /**
  * 读租约。
  *
- * @returns 文件缺失、JSON 损坏或字段不完整时返回 null，调用方按「无租约」处理。
+ * @returns 文件缺失、JSON 损坏或字段不完整时返回 null，调用方按“无租约”处理。
  */
 export function readLease(root: string, task: string): InstanceLease | null {
   const rec = readJson<InstanceLease | null>(leasePath(root, task), null);
@@ -868,7 +872,7 @@ export interface LeaseStatus {
  * 汇总本任务的实例租约状态。
  *
  * 扫锁目录里属于本任务的全部租约文件（`<task>.lock` 与 `<task>.*.lock` 残留都算），
- * 实例数按「状态 running 且进程仍存活」计。数目大于 1 说明有多个监工实例同时占着
+ * 实例数按“状态 running 且进程仍存活”计。数目大于 1 说明有多个监工实例同时占着
  * 这个任务根，重复派单、重复拉 worker 都会发生，必须告警。
  */
 export function instanceLeaseStatus(root: string, task: string): LeaseStatus {
@@ -909,12 +913,12 @@ export function instanceLeaseStatus(root: string, task: string): LeaseStatus {
 /**
  * 红线预检。
  *
- * 带 `defer` 的红线只负责「认出这是什么动作」，放不放行交给更专门的判定
+ * 带 `defer` 的红线只负责“认出这是什么动作”，放不放行交给更专门的判定
  * （例如本机删除要判路径在不在任务根内）。因此它们不参与最严级别计算，
- * 否则「认出一次删除」就会直接 BLOCK，使路径判定失效。
+ * 否则“认出一次删除”就会直接 BLOCK，使路径判定失效。
  *
  * @param text 被检查的命令文本。
- * @returns 判定结果与命中的红线列表。`skip_if` 正则非法时按「不跳过」处理。
+ * @returns 判定结果与命中的红线列表。`skip_if` 正则非法时按“不跳过”处理。
  */
 export function evaluate(contract: Contract, text: string): GateResult {
   const src = String(text ?? "");
@@ -933,7 +937,7 @@ export function evaluate(contract: Contract, text: string): GateResult {
       try {
         if (new RegExp(skipIf, "i").test(src)) continue;
       } catch {
-        /* skip_if 写错时按「不跳过」处理，允许重复判定。 */
+        /* skip_if 写错时按“不跳过”处理，允许重复判定。 */
       }
     }
 

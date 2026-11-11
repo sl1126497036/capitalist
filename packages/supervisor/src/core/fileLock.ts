@@ -32,9 +32,9 @@ export interface LockEntry {
   /**
    * 由一次工具调用申请、并应在下一次工具调用前释放的锁。
    *
-   * hook 没有「执行后」这个生命周期点（只有 on_action），所以拿不到「写完了」这个时刻。
+   * hook 没有“执行后”这个生命周期点（只有 on_action），所以拿不到“写完了”这个时刻。
    * 但 worker 的工具调用是串行的：下一次 on_action 到来时，上一次写操作必然已经做完。
-   * 于是用 transient 标记，每次 on_action 开头先 `releaseTransient`，等价于「写完即放」。
+   * 于是用 transient 标记，每次 on_action 开头先 `releaseTransient`，等价于“写完即放”。
    */
   transient?: boolean;
 }
@@ -58,7 +58,7 @@ export interface AcquireOpts {
   ttlSec: number;
   /** 读是否也进锁表（严格读）。 */
   strictRead: boolean;
-  /** 申请的是「一次工具调用」级别的锁，下一次调用前应被释放。 */
+  /** 申请的是“一次工具调用”级别的锁，下一次调用前应被释放。 */
   transient?: boolean;
   /**
    * 记进锁表的 pid：持有者 worker 的 pid，不是 hook 自己的。
@@ -267,7 +267,7 @@ export function acquire(root: string, path: string, mode: LockMode, holder: stri
     }
 
     /*
-     * 冲突：排队。写优先体现在「新读者不能越过已经在等的写者」，
+     * 冲突：排队。写优先体现在“新读者不能越过已经在等的写者”，
      * 否则一直有读者进来，写者永远排不到。
      */
     const aheadList = table.queue.filter((w) => lockKey(w.path) === key && w.holder !== holder);
@@ -304,7 +304,7 @@ export function acquire(root: string, path: string, mode: LockMode, holder: stri
 /**
  * 申请并在超时内轮询等待。
  *
- * 这是「别的 worker 要写需要等」的真正落点：hook 侧调它，等到就给过，等不到就拒。
+ * 这是“别的 worker 要写需要等”的真正落点：hook 侧调它，等到就给过，等不到就拒。
  * 轮询间隔从 120ms 起、每次 +80ms 退避，最多等到 `waitMs`。
  */
 export function acquireWithWait(
@@ -339,7 +339,7 @@ function dropWaiter(root: string, path: string, holder: string, mode: LockMode):
   });
 }
 
-/** 释放某个持有者的 transient 锁（「写完即放」的落地方式）。 */
+/** 释放某个持有者的 transient 锁（“写完即放”的落地方式）。 */
 export function releaseTransient(root: string, holder: string): number {
   return withTableLock(root, () => {
     const table = readTable(root);
@@ -470,7 +470,7 @@ function shaOf(buf: Buffer): string {
   return createHash("sha1").update(buf).digest("hex").slice(0, 12);
 }
 
-/** 登记「谁在什么版本上读过这个文件」。 */
+/** 登记“谁在什么版本上读过这个文件”。 */
 export function noteRead(root: string, holder: string, path: string): void {
   try {
     const abs = resolve(path);
@@ -493,7 +493,7 @@ export function noteRead(root: string, holder: string, path: string): void {
       closeSync(fd);
     }
   } catch {
-    /* 文件不存在 / 无权限：不登记，写的时候也就不会因为「没读过」被拦 */
+    /* 文件不存在 / 无权限：不登记，写的时候也就不会因为“没读过”被拦 */
   }
 }
 
@@ -536,7 +536,7 @@ export function checkStale(root: string, holder: string, path: string): StaleRes
     const other = recentWriter(root, path, holder);
     return {
       stale: true,
-      why: `已读取 ${mark.at} 的版本，之后文件被改过（mtime ${new Date(mark.mtime).toLocaleTimeString("zh-CN", { hour12: false })} → ${new Date(st.mtimeMs).toLocaleTimeString("zh-CN", { hour12: false })}）`,
+      why: `已读取 ${mark.at} 的版本，之后文件被改过（mtime ${new Date(mark.mtime).toLocaleTimeString("zh-CN", { hour12: false })} -> ${new Date(st.mtimeMs).toLocaleTimeString("zh-CN", { hour12: false })}）`,
       ...(other ? { by: other } : {}),
     };
   } catch {

@@ -100,7 +100,7 @@ const mem = computed(() => (memPressure.value === null ? null : `${Math.round(me
 
 const cpuTitle = computed(() => {
   const r = res.value;
-  if (cpuPct.value !== null) return t("整机处理器占用率：全部逻辑核的占用（os.cpus 时间片差分，与活动监视器同口径）");
+  if (cpuPct.value !== null) return t("整机处理器占用率，与活动监视器口径一致");
   return t("处理器采样不可用：{why}", { why: r?.unavailable_reason || "后台采样器尚无数据" });
 });
 const memTitle = computed(() => {
@@ -153,7 +153,7 @@ const zombies = computed(() => {
 const zombieTip = computed(() => {
   const arr = ov.value?.unreclaimed_detail;
   if (!Array.isArray(arr) || arr.length === 0) {
-    return t("没有待回收进程：本项目拉起过的进程都确认退出了。别的项目的 node 进程不计入这一格。");
+    return t("无待回收进程。仅统计本项目拉起的进程。");
   }
   return arr
     .map((x) => {
@@ -170,10 +170,10 @@ const cells = computed(() => {
   const dash = (v) => (s.roots ? show(v) : "—");
   return [
     { k: t("总任务"), v: dash(s.total), tone: "total", tip: t("当前任务总数（全部监工合计，等于各状态之和）") },
-    { k: t("运行"), v: dash(s.running), tone: "run", tip: t("当前处于运行中的任务数（与左栏「运行」同一份统计）") },
-    { k: t("排队"), v: dash(s.queued), tone: "warn", tip: t("当前排队中的任务数（与左栏「排队」同一份统计）") },
-    { k: t("异常"), v: dash(s.failed), tone: "bad", tip: t("当前异常任务数（与左栏「异常」同一份统计）") },
-    { k: t("完成"), v: dash(s.done), tone: "total", tip: t("当前已完成的任务数（与左栏「已完成」同一份统计）") },
+    { k: t("运行"), v: dash(s.running), tone: "run", tip: t("当前处于运行中的任务数（与左栏“运行”同一份统计）") },
+    { k: t("排队"), v: dash(s.queued), tone: "warn", tip: t("当前排队中的任务数（与左栏“排队”同一份统计）") },
+    { k: t("异常"), v: dash(s.failed), tone: "bad", tip: t("当前异常任务数（与左栏“异常”同一份统计）") },
+    { k: t("完成"), v: dash(s.done), tone: "total", tip: t("当前已完成的任务数（与左栏“已完成”同一份统计）") },
     { k: t("处理器"), v: cpuPct.value === null ? "—" : `${Math.round(cpuPct.value)}%`, tip: cpuTitle.value },
     { k: t("内存"), v: mem.value ?? "—", tip: memTitle.value },
     ...(creditLeft.value
@@ -181,7 +181,7 @@ const cells = computed(() => {
       : []),
     /* 消耗读数统计当前任务根下全部工作进程的合计。 */
     ...(totalTok.value
-      ? [{ k: t("本轮消耗"), v: totalTok.value, tip: t("这一轮全部 worker 的消耗合计（积分制宿主按积分显示，其余按 token）") }]
+      ? [{ k: t("本轮消耗"), v: totalTok.value, tip: t("本轮全部工作进程的用量合计") }]
       : []),
     ...(fileLocks.value && fileLocks.value.count > 0
       ? [

@@ -30,7 +30,7 @@ function seed(root, row) {
 
 test("target 指向同链的中途单：重派出来的新单照样领得到", () => {
   const root = sandbox();
-  /* 一条链：D-chain（首）→ D-mid（中途被重派掉）。话钉在 D-mid 上。 */
+  /* 一条链：D-chain（首）-> D-mid（中途被重派掉）。话钉在 D-mid 上。 */
   seed(root, { id: "D-chain", lineage: "D-chain" });
   seed(root, { id: "D-mid", lineage: "D-chain" });
 

@@ -43,7 +43,7 @@ function patch(root, id, fields) {
 
 /**
  * 重启后的队列：与 fillSlots 同一条判定（open + 依赖满足），按 compareQueueOrder 排。
- * 「重启」= 所有排序输入只从台账文件来，进程内存里什么都不留。
+ * “重启”= 所有排序输入只从台账文件来，进程内存里什么都不留。
  */
 function queueAfterRestart(root) {
   const rows = capitalist.readDispatches(root);
@@ -90,7 +90,7 @@ test("兄弟节点：同挂一个父节点的两张单在父节点完成后一�
   assert.deepStrictEqual(queueAfterRestart(root), ["B", "C"], "重启后仍是同一组兄弟");
 });
 
-test("三层链：A → B → C 逐层推进，中间层没完成前最底层不出现", () => {
+test("三层链：A -> B -> C 逐层推进，中间层没完成前最底层不出现", () => {
   const root = sandbox();
   put(root, "A");
   put(root, "B", { parent: "A", parent_reason: "B 要 A 的产物" });
@@ -343,7 +343,7 @@ test("场景：派单失败——父节点失败期间子节点继续等，重�
   capitalist.finishDispatch(root, "A", "failed", "进程崩了");
   assert.deepStrictEqual(queueAfterRestart(root), ["X"], "A 失败，B 继续等，X 不受牵连");
 
-  /* 重派单继承原单正文（requeueAdhoc / resetSubtree 的真实行为），血缘才认得出「同一件事」。 */
+  /* 重派单继承原单正文（requeueAdhoc / resetSubtree 的真实行为），血缘才认得出“同一件事”。 */
   put(root, "A2", { lineage: "A", action: "做 A", urgent: true });
   assert.deepStrictEqual(queueAfterRestart(root), ["A2", "X"], "重派单先进队列，B 仍等");
   capitalist.finishDispatch(root, "A2", "done", "重派完成");
@@ -386,7 +386,7 @@ test("PARENT 行解析：编号与理由进结构，不进气泡正文；PARENT:
   assert.ok(!p.reply.includes("PARENT"), "PARENT 行不进正文");
 
   const none = parseReply("DO: dispatch [x] y\nPARENT: none");
-  assert.strictEqual(none.parent, undefined, "none 折成「没有父节点」");
+  assert.strictEqual(none.parent, undefined, "none 折成“没有父节点”");
 
   const zh = parseReply("DO: dispatch [x] y\n父节点: #02\n父节点理由: 要 #02");
   assert.strictEqual(zh.parent, "#02");

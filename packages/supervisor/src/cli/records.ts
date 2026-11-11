@@ -30,7 +30,7 @@ import { appendMq, wakeSupervisor } from "../core/mq";
 import { findRoot, supervisorDir } from "../core/paths";
 import { loadWorker } from "../core/supervisor";
 import { parseWorkerLog } from "../supervisor/workerLog";
-import { skillDirs } from "../host/locations";
+import { skillDirs } from "../agent/locations";
 import { loadState, updateState } from "../core/state";
 import type { RedlineHit, TaskState } from "../core/types";
 import { flagBool, flagString, type Parsed } from "./args";
@@ -41,7 +41,7 @@ interface CmdCtx {
   contract: Contract;
 }
 
-/** 台账里证据的四项。少一项就不算「已证实」。 */
+/** 台账里证据的四项。少一项就不算“已证实”。 */
 const EVIDENCE_FIELDS = ["baseline", "probe", "diff", "repro"] as const;
 
 function ctxOrDie(p: Parsed): CmdCtx {
@@ -86,8 +86,8 @@ export function cmdAnswer(p: Parsed): number {
   let hitText = "";
   for (const r of rows) {
     if (r.type !== "ask") continue;
-    // 三种定位方式：id 精确匹配、正文全文匹配、正文片段匹配。后两种是给「没有 id 的
-    // 历史记录」留的出口，早期监工登记 ask 不写 id，只能按 id 关的话它就永远关不掉，
+    // 三种定位方式：id 精确匹配、正文全文匹配、正文片段匹配。后两种是给“没有 id 的
+    // 历史记录”留的出口，早期监工登记 ask 不写 id，只能按 id 关的话它就永远关不掉，
     // 而 open ask 会让监工一直暂停派单。
     const text = String(r.text ?? r.question ?? "");
     const matched = r.id === id || (text !== "" && (text === id || text.includes(id)));
@@ -114,8 +114,8 @@ export function cmdAnswer(p: Parsed): number {
 
   writeJsonl(file, rows);
 
-  // 重派上限这类 ask，裁决本身就是「放行该片」：把那批失败划到线下。不划的话重派计数
-  // 仍超上限，监工下一 tick 会重新登记同一条 ask，人答了等于没答，阶段永远卡住。
+  // 重派上限这类 ask，裁决本身就是“放行该片”：把那批失败划到线下。不划的话重派计数
+  // 仍超上限，监工下一轮调度 会重新登记同一条 ask，人答了等于没答，阶段永远卡住。
   const capLabel = /重派上限\s+([^\s：:，,]+)/.exec(hitText)?.[1] ?? null;
   if (capLabel) {
     updateState(root, (s) => {
@@ -137,14 +137,14 @@ export function cmdAnswer(p: Parsed): number {
 /**
  * 监工登记：这条违规已经改正了。
  *
- * 不消解的话收工闸会一直按第 3 次拦。
+ * 不消解时收工闸会持续按第 3 次拦截。
  */
 export function cmdCorrect(p: Parsed): number {
   const { root } = ctxOrDie(p);
   const rule = flagString(p, "rule");
   const note = flagString(p, "note") ?? "";
   // 没显式指定会话时传 undefined，让消解覆盖所有会话的同类违规。
-  // 传空串会被当成「只匹配 session 为空的记录」，而 hook 写的记录 session 都不为空。
+  // 传空串会被当成“只匹配 session 为空的记录”，而 hook 写的记录 session 都不为空。
   const session = envSession() || undefined;
 
   const n = resolveViolations(root, { rule, session, note });
@@ -166,11 +166,11 @@ export function cmdCorrect(p: Parsed): number {
 /**
  * 某一个工作进程的动作时间线。
  *
- * 给监工的「上下文索引」用的：对话层只看到一行摘要（车道 / 余量 / 已经干过什么），
+ * 给监工的“上下文索引”用的：对话层只看到一行摘要（车道 / 余量 / 已经干过什么），
  * 无法判定该事项是否执行过时，用本命令查看明细，不推断，也不重新建单。
  *
- * 输出三块：身份（哪一单、哪条车道、什么状态）→ 统计（改过哪些文件、跑过几次构建测试）
- * → 时间线（最近 15 条动作，正序）。全部来自 worker 自己的日志与记录，不做推断。
+ * 输出三块：身份（哪一单、哪条车道、什么状态）-> 统计（改过哪些文件、跑过几次构建测试）
+ * -> 时间线（最近 15 条动作，正序）。全部来自 worker 自己的日志与记录，不做推断。
  */
 export function cmdWorker(p: Parsed): number {
   const { root } = ctxOrDie(p);
@@ -231,7 +231,7 @@ export function cmdWorker(p: Parsed): number {
 /**
  * 列出当前任务根上登记过的会话。
  *
- * 多进程并行时这是「谁在跑」的唯一视图。
+ * 多进程并行时这是“谁运行中”的唯一视图。
  */
 export function cmdSessions(p: Parsed): number {
   const { root } = ctxOrDie(p);
@@ -244,7 +244,7 @@ export function cmdSessions(p: Parsed): number {
   for (const id of ids) {
     const s = all[id];
     if (!s) continue;
-    const mark = s.retired ? "已退役" : "在跑";
+    const mark = s.retired ? "已退役" : "运行中";
     process.stdout.write(
       `${id.slice(0, 12).padEnd(13)} ${s.role.padEnd(10)} ${mark.padEnd(5)} last=${s.last_seen}${
         s.note ? `  ${s.note}` : ""
@@ -337,7 +337,7 @@ export function cmdScope(p: Parsed): number {
   const stage = contract.stages.find((s) => s.id === state.stage);
   const check = runStageCheck(stage?.done, root);
   process.stdout.write(
-    `\n本阶段门槛：${check.ok ? "已满足 → capitalist advance" : `未满足：${check.missing.slice(0, 3).join("；")}`}\n`,
+    `\n本阶段门槛：${check.ok ? "已满足 -> capitalist advance" : `未满足：${check.missing.slice(0, 3).join("；")}`}\n`,
   );
   return 0;
 }
@@ -354,7 +354,7 @@ function readJsonlSafe(file: string): Record<string, unknown> {
 
 
 /**
- * 只改「下一步」这一句，不动阶段与计数。
+ * 只改“下一步”这一句，不动阶段与计数。
  */
 export function cmdSetNext(p: Parsed): number {
   const text = p.positional.join(" ") || flagString(p, "text");
@@ -363,7 +363,7 @@ export function cmdSetNext(p: Parsed): number {
   if (updateState(root, (s) => { s.next_action = text; }) === null) {
     throw new Error("状态写入冲突，重试后仍未成功：请再执行一次");
   }
-  process.stdout.write(`下一步 → ${text}\n`);
+  process.stdout.write(`下一步：${text}\n`);
   return 0;
 }
 
@@ -405,7 +405,7 @@ export function cmdUpdate(p: Parsed): number {
  * 证据台账。
  *
  * `confirmed` 有硬门槛：四项证据缺一项就自动降级为 `unconfirmed` 并记违规。
- * 这道门槛拦不住「已验证」这三个字，但能让缺证据的结论留下降级痕迹。
+ * 这道门槛拦不住“已验证”这三个字，但能让缺证据的结论留下降级痕迹。
  */
 export function cmdLedger(p: Parsed): number {
   const { root, state } = ctxOrDie(p);
@@ -491,7 +491,7 @@ export function cmdLedger(p: Parsed): number {
 
 
 /**
- * 记一条真阻塞：在等外部条件（验证码、账号、授权、别人回话）。
+ * 记一条真阻塞：在等外部条件（验证码、账号、授权、外部回复）。
  *
  * 与 `ask` 的区别：ask 是不知道该怎么办、等对方定；block 是知道怎么办但现在做不了，卡在
  * 别人手上。两者都让收工闸放行，但后者不需要裁决。
@@ -589,7 +589,7 @@ export function cmdUnblock(p: Parsed): number {
   });
   if (ok === null) throw new Error("状态写入冲突，重试后仍未成功：请再执行一次");
 
-  process.stdout.write(`阻塞 ${before} → ${after}\n`);
+  process.stdout.write(`阻塞：${before} 改为 ${after}\n`);
   return 0;
 }
 
@@ -655,7 +655,7 @@ export function cmdFire(p: Parsed): number {
       recordReview(root, {
         rule: h.id,
         label: `越界放行：${h.label}`,
-        why: "这条本来要报备，用户已授权。核授权范围和实际动作对不对得上——别出现「批了 A、做了 B」。",
+        why: "这条本来要报备，用户已授权。核授权范围和实际动作对不对得上——别出现“批了 A、做了 B”。",
         evidence: `${text} ｜ 授权原话：${authorized}`,
         decision: "AUTHORIZED",
         session: envSession(),

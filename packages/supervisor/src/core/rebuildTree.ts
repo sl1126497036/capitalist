@@ -25,9 +25,9 @@ export interface RebuildItem {
   /**
    * 这条处置是否真的会改台账。
    *
-   * 「再跑一次什么都不做」要能被说出口：幂等的前提是计划能分清「该关但已经关了」
-   * 与「该关还没关」。`stats.close` / `stats.reopen` 只数 pending 的，
-   * 命令行据此输出「没有需要改的行」。
+   * “再跑一次什么都不做”要能被说出口：幂等的前提是计划能分清“该关但已经关了”
+   * 与“该关还没关”。`stats.close` / `stats.reopen` 只数 pending 的，
+   * 命令行据此输出“没有需要改的行”。
    */
   pending: boolean;
 }
@@ -74,11 +74,11 @@ function isSettledStatus(s: string): boolean {
 }
 
 /**
- * 这一行是否算「这件事做完了」。
+ * 这一行是否算“这件事做完了”。
  *
  * 重建自己关掉的残留（`rebuilt_at` 有值）不算：它们是被重建关掉的，不是被做完的。
  * 不排除它们的后果是第二次重建把待办也关掉，第一轮把 A 并进 A2（A 记 closed），
- * 第二轮就会把 A 当成「同一件事已完成」，于是 A2 这个待办也被关，桌上什么都不剩。
+ * 第二轮就会把 A 当成“同一件事已完成”，于是 A2 这个待办也被关，桌上什么都不剩。
  * 幂等的要害就在这里。
  */
 function isCompletion(d: Dispatch): boolean {
@@ -162,7 +162,7 @@ export function planRebuild(root: string): RebuildPlan {
     if (g.settledBy) {
       /*
        * 已完工组：留下完工的那张，其余已完工的单也保留不动，它们是既成事实，
-       * 关掉等于抹掉「这件事做过两遍」的记录。只关失败/在途的残留。
+       * 关掉等于抹掉“这件事做过两遍”的记录。只关失败/在途的残留。
        */
       if (id === g.settledBy) {
         items.push({
@@ -306,7 +306,7 @@ export function planRebuild(root: string): RebuildPlan {
 /**
  * 落盘执行重建计划。
  *
- * 一次写完整个文件：中途失败不会留下「关了一半」的台账。
+ * 一次写完整个文件：中途失败不会留下“关了一半”的台账。
  * 只改 `status` / `parent` / `parent_reason` / `retry_verdict` / `note` 这几个字段，
  * 正文、编号、时间、血缘一律不动，重建的是结构，不是历史。
  */
@@ -383,14 +383,14 @@ export function applyRebuild(root: string, plan: RebuildPlan, by = "rebuild"): {
   writeJsonl(dispatchPath(root), rows);
   /*
    * 任务池是派单的投影，重建改了状态就必须同步。
-   * 不同步的后果很直接：「已验收 10 / 失败待重试 11 / 未完成 11」会原地不动，
+   * 不同步的后果很直接：“已验收 10 / 失败待重试 11 / 未完成 11”会原地不动，
    * 用户看着面板以为重建没生效，面板上还能看见旧数字，就是没做完。
    */
   for (const n of changed) syncTaskForDispatch(root, n);
   return { closed, reopened };
 }
 
-/** 未完工的状态集合：与调度口径一致（`open` 等拉起、`claimed` 在跑、`review` 待复核）。 */
+/** 未完工的状态集合：与调度口径一致（`open` 等拉起、`claimed` 运行中、`review` 待复核）。 */
 const IN_FLIGHT_STATUS = new Set(["open", "claimed", "review"]);
 
 export interface FlatCheck {
@@ -400,7 +400,7 @@ export interface FlatCheck {
   inFlight: number;
 }
 
-/** 判「台账是平的」：未完工单超过 1 张，且每一张都没有父节点。 */
+/** 判“台账是平的”：未完工单超过 1 张，且每一张都没有父节点。 */
 export function looksFlat(root: string): FlatCheck {
   const rows = readDispatches(root);
   const live = rows.filter((d) => IN_FLIGHT_STATUS.has(String(d.status)));

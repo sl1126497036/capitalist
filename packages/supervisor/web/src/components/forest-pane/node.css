@@ -35,7 +35,7 @@
   -webkit-box-orient: vertical;
 }
 
-/* 卡片宽 218px，第二行按「标签 + 值」紧凑排列，值允许折行，避免模型名撑破卡片。 */
+/* 卡片宽 218px，第二行按“标签 + 值”紧凑排列，值允许折行，避免模型名撑破卡片。 */
 .fv-nmeta {
   display: flex;
   flex-wrap: wrap;

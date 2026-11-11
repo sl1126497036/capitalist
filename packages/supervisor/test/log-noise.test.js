@@ -1,4 +1,4 @@
-/** 引擎调试块只留「值得展开」的内容。 */
+/** 引擎调试块只留“值得展开”的内容。 */
 
 const test = require("node:test");
 const assert = require("node:assert");
@@ -96,7 +96,7 @@ test("消息流里真诊断走折叠块：整块只有噪声时不发，混了�
   assert.ok(!pure.some((m) => m.kind === "engine"), "整块只有噪声：不许出引擎块");
   assert.ok(
     !pure.some((m) => /已隐藏 \d+ 行引擎调试输出/.test(String(m.text || ""))),
-    "连「已隐藏 N 行」的入口都不该出现",
+    "连“已隐藏 N 行”的入口都不该出现",
   );
 
   const mixed = run([

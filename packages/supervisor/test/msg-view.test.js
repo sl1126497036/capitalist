@@ -89,7 +89,7 @@ test("一次派单只有一条结构记录，补充说明并入它；实时与�
     /* 补充说明并入结构记录，不能因为去掉气泡就把话丢了。 */
     assert.ok(
       card[0].text.includes("顺带把这次改动记进样式变量"),
-      `补充说明应并入指令卡，实际「${card[0].text}」`,
+      `补充说明应并入指令卡，实际“${card[0].text}”`,
     );
     assert.equal(card[0].link, directiveId, "指令卡的归属标识应为指令 id");
 

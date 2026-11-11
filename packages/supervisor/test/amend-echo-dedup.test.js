@@ -50,7 +50,7 @@ function seed(root, { reply }) {
     thread: THREAD,
     from: "supervisor",
   });
-  /* 结构记录：对话层 amend 落成后 loop 执行时记的事件，投影成「派单 X 追加内容：…」。 */
+  /* 结构记录：对话层 amend 落成后 loop 执行时记的事件，投影成“派单 X 追加内容：…”。 */
   recordEvent(root, "directive_amended", {
     dispatch: "D-test1",
     stage: "u6",
@@ -68,7 +68,7 @@ async function supervisorSays(served, root) {
   });
   assert.strictEqual(res.status, 200, `/api/thread 应 200：${res.status}`);
   const d = await res.json();
-  /* 结构记录是 verdict 块（「派单 X 追加内容：…」），叙述气泡是 supervisor 的 say，两类都取。 */
+  /* 结构记录是 verdict 块（“派单 X 追加内容：…”），叙述气泡是 supervisor 的 say，两类都取。 */
   return (d.messages || []).filter(
     (m) => m.role === "supervisor" && (m.kind === "say" || m.kind === "verdict"),
   );
@@ -167,7 +167,7 @@ test("dispatch 叙述并进派单卡，不再单独成泡", async () => {
       assert.strictEqual(cards.length, 1, `派单卡应有且只有一条，实际 ${cards.length} 条`);
       assert.ok(
         cards[0].text.includes("另外把输入区的变量名统一成 paneHint"),
-        `补充说明应并入派单卡，实际「${cards[0].text}」`,
+        `补充说明应并入派单卡，实际“${cards[0].text}”`,
       );
       assert.ok(
         msgs.every((m) => !(m.role === "supervisor" && m.kind === "say" && m.text.includes("变量名"))),

@@ -1,6 +1,6 @@
 /**
  * 看板的中/英文案层。中文原文作键，EN 表只写译文，缺译时回流中文原文。
- * 语言判定优先级：显式选择（localStorage）→ navigator.languages 首选项（zh 前缀为中文，其余为英文）→ 中文。
+ * 语言判定优先级：显式选择（localStorage）-> navigator.languages 首选项（zh 前缀为中文，其余为英文）-> 中文。
  * 数据不翻译：派单标题与正文、监工复盘文字、模型与进程名；单位按界面语言替换，token 保留原词。
  */
 import {ref} from "vue";
@@ -38,7 +38,7 @@ function readLang() {
   return storedLang() || systemLang() || "zh";
 }
 
-/** 中文原文 → 英文。缺的条目直接回流中文。 */
+/** 中文原文 -> 英文。缺的条目直接回流中文。 */
 const EN = {
   /* ---- 顶栏 ---- */
   "监工在线 {n} 个进程运行中": "Supervisor online {n} processes running",
@@ -79,7 +79,7 @@ const EN = {
   "账号信息不可用": "Account info unavailable",
   "有效期未知": "expiry unknown",
   "无昵称": "no nickname",
-  "暂停后不再派新单；在跑进程停止，派单退回排队，恢复后按原序重派": "Pausing stops new dispatches; running processes are stopped and their dispatches return to the queue. Dispatch resumes in the original order.",
+  "暂停后不再派新单；运行中进程停止，派单退回排队，恢复后按原序重派": "Pausing stops new dispatches; running processes are stopped and their dispatches return to the queue. Dispatch resumes in the original order.",
   "切换界面语言": "Switch UI language",
   "关于": "About",
   "在 GitHub 上查看源码": "View source on GitHub",
@@ -108,7 +108,7 @@ const EN = {
   "已验收": "Accepted",
   "并行": "Parallel",
   "已派出、还未领取的派单数": "Dispatched but not yet claimed",
-  "接口没给并行度": "Parallelism not provided by the API",
+  "未取得并行度": "Parallelism unavailable",
 
   /* ---- 指标卡：资源 ---- */
   "资源占用": "Resources",
@@ -142,27 +142,23 @@ const EN = {
   "暂停中": "Paused",
   "重载中": "Reloading",
   "监工重载中": "Supervisor reloading",
-  /* 上下文压缩：气泡「压缩中」与消息卡标签「已压缩」共用这一组词。 */
+  /* 上下文压缩：气泡“压缩中”与消息卡标签“已压缩”共用这一组词。 */
   "压缩中": "Compacting",
   "已压缩": "Compacted",
   "空闲": "Idle",
   "待裁决": "Needs decision",
-  "指令已登记，下一个 tick 生效": "Command recorded; takes effect on the next tick",
+  "指令已登记，下一轮调度生效": "Command recorded; takes effect on the next scheduling round",
   "模型已切换": "Model switched",
-  "已派出、还未领取的派单数（与左栏「排队」同一份统计）":
+  "已派出、还未领取的派单数（与左栏“排队”同一份统计）":
     "Dispatched but not yet claimed (same count as “Queued” in the left column)",
-  "失败、丢失、孤立或已消失的线程数（与左栏「异常」同一份统计）":
+  "失败、丢失、孤立或已消失的线程数（与左栏“异常”同一份统计）":
     "Threads that failed, were lost, orphaned or vanished (same count as “Failed” in the left column)",
-  "当前任务里验收结论为通过的项数（done 的子集，与任务列表同一来源）":
-    "Accepted items among current tasks (a subset of done, same source as the task list)",
+  "验收通过的项数": "Items accepted",
   "上行": "Input",
-  "本根全部 worker 累计输入 token（日志 usage 合计）":
-    "Cumulative input tokens of every worker under this root (summed from log usage)",
+  "当前任务全部工作进程的累计输入用量": "Cumulative input usage of all work processes in this task",
   "下行": "Output",
-  "本根全部 worker 累计输出 token（日志 usage 合计）":
-    "Cumulative output tokens of every worker under this root (summed from log usage)",
-  "整机处理器占用率：全部逻辑核的占用（os.cpus 时间片差分，与活动监视器同口径）":
-    "Host CPU usage across all logical cores (os.cpus tick delta, same reading as Activity Monitor)",
+  "当前任务全部工作进程的累计输出用量": "Cumulative output usage of all work processes in this task",
+  "整机处理器占用率，与活动监视器口径一致": "Host CPU usage, same reading as Activity Monitor",
   "整机内存压力：100% 减去可用内存占比（memory_pressure）":
     "Host memory pressure: 100% minus the free memory percentage (memory_pressure)",
   "内存压力读取不可用：{why}": "Memory pressure unavailable: {why}",
@@ -180,30 +176,28 @@ const EN = {
   "已送达": "Delivered",
   "送达失败": "Delivery failed",
   "人工介入": "Take over",
-  "没有待回收进程：本项目拉起过的进程都确认退出了。别的项目的 node 进程不计入这一格。":
-    "No unreclaimed processes: every process this project started has exited. Node processes from other projects are not counted here.",
+  "无待回收进程。仅统计本项目拉起的进程。": "No unreclaimed processes. Only processes started by this project are counted.",
   "起于 {t}": "started {t}",
   "未知": "unknown",
   "总任务": "Tasks",
   "当前任务总数（全部监工合计，等于各状态之和）":
     "Total tasks (all supervisors combined; equals the sum of every state)",
   "运行": "Running",
-  "当前处于运行中的任务数（与左栏「运行」同一份统计）":
+  "当前处于运行中的任务数（与左栏“运行”同一份统计）":
     "Tasks currently running (same count as “Running” in the left column)",
-  "当前排队中的任务数（与左栏「排队」同一份统计）":
+  "当前排队中的任务数（与左栏“排队”同一份统计）":
     "Tasks currently queued (same count as “Queued” in the left column)",
-  "当前异常任务数（与左栏「异常」同一份统计）":
+  "当前异常任务数（与左栏“异常”同一份统计）":
     "Tasks currently failed (same count as “Failed” in the left column)",
   "完成": "Done",
-  "当前已完成的任务数（与左栏「已完成」同一份统计）":
+  "当前已完成的任务数（与左栏“已完成”同一份统计）":
     "Tasks finished (same count as “Done” in the left column)",
   "处理器": "CPU",
   "已用": "Used",
   "剩余": "Left",
   "累计": "Total",
   "本轮消耗": "This run",
-  "这一轮全部 worker 的消耗合计（积分制宿主按积分显示，其余按 token）":
-    "Spent by every worker in this run (credits on credit-based hosts, otherwise tokens)",
+  "本轮全部工作进程的用量合计": "Total usage of all work processes in this round",
 
   /* ---- 任务队列（左栏）---- */
   "{name}-监工": "{name} supervisor",
@@ -218,7 +212,7 @@ const EN = {
   "待调度": "Pending",
   "心跳超时": "Heartbeat lost",
   "已停": "Stopped",
-  "在跑 {n}": "{n} running",
+  "运行中 {n}": "{n} running",
   "排队 {n}": "{n} queued",
   "累计 {v}": "{v} total",
   "累计 未上报": "total not reported",
@@ -237,10 +231,9 @@ const EN = {
     "These {n} processes are not terminated; their records leave the list and reappear once finished.",
   "这 {n} 张排队中的派单会从队列撤下，监工不再派发。":
     "These {n} queued dispatches are withdrawn and will not be handed out again.",
-  "这些进程的日志之后只能去归档目录里翻。":
-    "The logs of these processes can only be found in the archive afterwards.",
+  "这些进程的日志将移至归档目录。": "The logs of these processes will be moved to the archive.",
   "从队列撤下，监工不再派发": "Withdrawn from the queue; no longer dispatched",
-  "结项并停止重派，在跑进程先结束":
+  "结项并停止重派，运行中进程先结束":
     "Settled, no longer redispatched; a running process ends first",
   "：{why}": ": {why}",
   "调度于 {t}": "Dispatched at {t}",
@@ -269,7 +262,7 @@ const EN = {
   "超限": "over limit",
   "已用超过生效上限，按上限显示": "used exceeds the effective limit; shown at the limit",
   "按消息文本估算": "Estimated from message text",
-  "上传中断 连接已断开，点击「重试」重新上传":
+  "上传中断 连接已断开，点击“重试”重新上传":
     "Upload interrupted connection lost; click Retry to upload again",
   "从上方监工条选择一个任务根": "Pick a task root from the supervisor bar above",
   "从左侧选择一个进程": "Pick a process from the left column",
@@ -278,14 +271,14 @@ const EN = {
   "原消息不在当前窗口内 待确认": "Original message is outside this window awaiting confirmation",
   "受 #{id} 断链影响": "Affected by the broken chain at #{id}",
   "台账未记录": "not recorded in the ledger",
-  "在跑": "Running",
+  "运行中": "Running",
   "复制失败": "Copy failed",
   "失败": "Failed",
   "失败原因：{why}": "Failure reason: {why}",
   /* 重启蒙版副标题。 */
-  "重启中...": "Restarting...",
-  "重启期间界面暂停，完成后自动恢复调度。若未自动恢复，可在宿主唤起或终端执行 capitalist supervise 重新拉起监工。":
-    "The UI is paused while the supervisor restarts, and dispatch resumes automatically when it is done. If it does not resume, run capitalist supervise from the host or a terminal to start the supervisor again.",
+  "重启中…": "Restarting…",
+  "重启期间界面暂停，完成后自动恢复调度。未恢复时，重新执行 capitalist supervise。":
+    "The UI is paused while the supervisor restarts; scheduling resumes automatically when it finishes. If it does not resume, run capitalist supervise again.",
   "尚未选择任务根": "No task root selected",
   /* ---- 离线面板 ---- */
   /* 离线状态：未启动、心跳失联、看板连接失败。 */
@@ -327,6 +320,9 @@ const EN = {
   "未达标": "Not met",
   "成环 无可达根节点": "Cycle no reachable root",
   "截图": "screenshot",
+  "给监工派单或发送消息": "Dispatch or message the supervisor",
+  "给执行中的进程发消息 会在下一个动作间隙收到，不打断当前执行":
+    "Message the running process it arrives at the next action gap; current work is not interrupted",
   "描述要修改的内容": "Describe what to change",
   "描述要修改的内容 执行中的进程会在下一个动作间隙收到，不打断当前执行":
     "Describe what to change the running process receives it at the next action gap; current work is not interrupted",
@@ -366,7 +362,7 @@ const EN = {
   "本轮进程已退出，等待下一轮派发（{why}）":
     "This round's process exited; waiting for the next dispatch ({why})",
   "这个进程尚无消息": "This process has no messages yet",
-  "这个阶段的分片都收工了": "every shard in this stage is done",
+  "本阶段分片均已完成": "all shards in this stage are complete",
   "进程异常 {why}": "Process failed {why}",
   "重派 {n} 次": "redispatched {n} times",
   "附件": "attachment",
@@ -380,10 +376,10 @@ const EN = {
   "{n} 条新消息": "New messages: {n}",
   "一条对当前任务有用的记忆：用户习惯、运行环境、项目约定、卡点等":
     "A memory useful to the current task: user habits, runtime environment, project conventions, blockers",
-  "上一张（←）": "Previous (←)",
+  "上一张": "Previous (←)",
   "上下文 未上报": "context not reported",
   "上传中，完成后可发送": "Uploading; send once it finishes",
-  "下一张（→）": "Next (→)",
+  "下一张": "Next (->)",
   "个旧任务": "old tasks",
   "个旧任务（结束超过 3 小时）": "old tasks (finished over 3 hours ago)",
   "中断": "Interrupt",
@@ -411,8 +407,8 @@ const EN = {
   "取消关闭": "Cancel closing",
   "取消引用": "Remove quote",
   "取消立即执行": "Cancel run-now",
-  "台账中没有派单，森林为空。": "No dispatches in the ledger; the forest is empty.",
-  "台账读取失败：{e}": "Failed to read the ledger: {e}",
+  "没有派单记录": "No dispatch records",
+  "读取失败：{e}": "Failed to read: {e}",
   "同时登记阻塞（不重派，等外部条件解决后手动解除）":
     "Also record a blocker (no redispatch until it is cleared manually)",
   "图片/路径": "Image / path",
@@ -421,7 +417,7 @@ const EN = {
   "复制引擎调试全文": "Copy the full engine debug output",
   "复制这一段": "Copy this passage",
   "复制这条": "Copy this message",
-  "失败节点带「断链」标记，其下整棵子树降亮并注明受影响的单号":
+  "失败节点带“断链”标记，其下整棵子树降亮并注明受影响的单号":
     "Failed nodes carry a “broken chain” mark; their whole sub-tree is dimmed and the affected task numbers are noted",
   "对话层": "Chat layer",
   "对话模型": "Chat model",
@@ -467,7 +463,7 @@ const EN = {
   "查看任务": "View task",
   "查看任务 #{no}": "View task #{no}",
   "模型 未记录": "model not recorded",
-  "正在读取派单台账…": "Reading the dispatch ledger…",
+  "正在读取派单记录…": "Reading dispatch records…",
   "正在读宿主模型…": "Loading host models…",
   "正在读记忆…": "Loading memory…",
   "正在载入消息…": "Loading messages…",
@@ -476,7 +472,7 @@ const EN = {
     "The dispatch body has no numbered items; deliver one by one as the report requires",
   "消息流": "Messages",
   "清空": "Clear",
-  "清空「{label}」": "Clear “{label}”",
+  "清空“{label}”": "Clear “{label}”",
   "点标题切到监工会话": "Click the title to switch to the supervisor chat",
   "点此展开": "click to expand",
   "状态": "Status",
@@ -499,7 +495,7 @@ const EN = {
   "确认下发": "Dispatch",
   "移除这张附件": "Remove this attachment",
   "立即执行": "Run now",
-  "提到队首，必要时让在跑的单让位":
+  "提到队首，必要时让运行中的单让位":
     "Move to the front; a running task yields its slot if needed",
   "查看派单节点关系": "Parent-child links and blockers between dispatches",
   "插队失败": "Jump-the-queue failed",
@@ -631,19 +627,19 @@ const EN = {
     "A finished dispatch can be answered in its original session or woken by the supervisor",
   "拖动输入框上沿可调整输入框高度，双击上沿恢复默认高度":
     "Drag the top edge of the input to resize it; double-click the edge to reset",
-  "通过「图片/路径」选择文件后，任务根内的相对路径会插入输入框":
+  "通过“图片/路径”选择文件后，任务根内的相对路径会插入输入框":
     "Picking a file under Image / path inserts its path relative to the task root",
   "截图可直接粘贴或拖入输入框，上传完成后随消息一并发送":
     "Screenshots can be pasted or dropped into the input and are sent with the message once uploaded",
-  "在工作进程会话中开启「监工介入」，消息将转由监工处理，工作进程不会收到":
+  "在工作进程会话中开启“监工介入”，消息将转由监工处理，工作进程不会收到":
     "With Supervisor involvement on in a worker session, the supervisor handles the message and the worker does not receive it",
-  "在监工会话中选择「派单模型」，新派出的单都用它，直到再次更换或清除":
+  "在监工会话中选择“派单模型”，新派出的单都用它，直到再次更换或清除":
     "Choosing Dispatch model in the supervisor session applies to every new dispatch until changed or cleared",
-  "点击消息操作区的「#」按钮可引用该消息，引用内容随下一次输入一并发送":
+  "点击消息操作区的“#”按钮可引用该消息，引用内容随下一次输入一并发送":
     "Click “#” on a message to quote it; the quote is sent with the next input",
-  "「中断」会结束当前进程并由监工重派；同时登记阻塞时改为等待外部条件解除":
+  "“中断”会结束当前进程并由监工重派；同时登记阻塞时改为等待外部条件解除":
     "Interrupt stops the current process and the supervisor redispatches; recording a blocker instead waits for it to clear",
-  /* 繁忙提醒分三段渲染，各段分别取词条；「繁忙中」标提醒色。 */
+  /* 繁忙提醒分三段渲染，各段分别取词条；“繁忙中”标提醒色。 */
 
   /* ---- 全局提示与操作回执 ---- */
   "capitalist 监工看板": "capitalist Supervisor board",
@@ -695,13 +691,12 @@ const EN = {
 
   /* ---- 会话区：用量行 / 上传提示 / 块标签 ---- */
   "（进程 {w}）": " (process {w})",
-  "只显示最近 {a} 条（共 {b} 条），更早的在 .capitalist 台账里":
-    "Showing the latest {a} of {b} messages; earlier ones are in the .capitalist ledger",
+  "仅显示最近 {a} 条（共 {b} 条），更早记录见任务目录": "Showing the latest {a} of {b} messages; earlier records are in the task directory",
   "图片 {n}MB，超过 8MB 上限": "Image is {n}MB, over the 8MB limit",
-  "上传超时（{n} 秒） 图片未上传，点击「重试」重新上传":
+  "上传超时（{n} 秒） 图片未上传，点击“重试”重新上传":
     "Upload timed out ({n}s) image not uploaded; click Retry to upload again",
   "上传失败": "Upload failed",
-  "（拖入的 {list} 拿不到本机路径，请用「图片/路径」选）":
+  "（拖入的 {list} 拿不到本机路径，请用“图片/路径”选）":
     "(Cannot read local paths for dropped files {list}; use Image / path instead)",
   "、": ", ",
   "思考过程": "Thinking",
@@ -725,10 +720,9 @@ const EN = {
   "正在设置…": "Applying…",
   "工作树重建记录": "Work tree rebuild log",
   "调度已暂停": "Scheduling paused",
-  "点击右上角「恢复调度」继续": "Click Resume scheduling in the top right to continue",
+  "点击右上角“恢复调度”继续": "Click Resume scheduling in the top right to continue",
   "重启监工": "Restart supervisor",
-  "当前进程立即退出，正在执行的工作进程一并结束；新进程随后自动拉起。任务台账、阶段与看板访问地址都不变。":
-    "The current process exits immediately and running work processes end with it; a new process starts automatically. The task ledger, stages and board URL are unchanged.",
+  "当前进程立即退出，正在执行的工作进程一并结束；新进程随后自动拉起。任务记录、阶段与看板地址都不变。": "The current process exits immediately and running work processes end with it; a new process starts automatically. Task records, stages and the board address are unchanged.",
   "关停监工": "Stop supervisor",
   "进程立即退出，正在执行的工作进程一并结束。恢复需要重新执行 capitalist supervise。":
     "The process exits immediately and running work processes end with it. Recovery requires running capitalist supervise again.",

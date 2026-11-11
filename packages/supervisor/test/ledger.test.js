@@ -47,7 +47,7 @@ const hit = (root, evidence, session = "s1") =>
     session,
   });
 
-test("同一命令 60 秒内只记一次（否则「第几次」这个信号就废了）", () => {
+test("同一命令 60 秒内只记一次（否则“第几次”这个信号就废了）", () => {
   const root = tmpRoot();
   const a = hit(root, "rm -rf /tmp/x");
   const b = hit(root, "rm -rf /tmp/x");

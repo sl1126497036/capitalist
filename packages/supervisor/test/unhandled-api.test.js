@@ -23,7 +23,7 @@ let boardSeq = 0;
 
 /** 起一块临时看板，返回带 key 的请求函数。 */
 async function withBoard(root, fn) {
-  /* 端口不能用 0：serveBoard 的 port 是「起始端口 + 顺延」，0 会让它把地址算成 :0。 */
+  /* 端口不能用 0：serveBoard 的 port 是“起始端口 + 顺延”，0 会让它把地址算成 :0。 */
   const served = await serveBoard({ root, port: 7900 + ((process.pid + boardSeq * 7) % 90), maxPortTries: 20 });
   boardSeq += 1;
   const base = `http://127.0.0.1:${served.port}`;
@@ -43,7 +43,7 @@ async function withBoard(root, fn) {
   }
 }
 
-test("接口：列出 → 建单（原话预填、只带本条附件）→ 出列；再来一次 409", async () => {
+test("接口：列出 -> 建单（原话预填、只带本条附件）-> 出列；再来一次 409", async () => {
   const root = sandbox();
   /* 前一条带过一张旧图，后一条本身没贴图：建单时不许把旧图带进来。 */
   recordUserMessage(root, { text: "上一张图是别的单的", atts: [".capitalist/attachments/old.png"] });
@@ -85,7 +85,7 @@ test("接口：列出 → 建单（原话预填、只带本条附件）→ 出�
   });
 });
 
-test("接口：已答复 → 不再出现，消息流上的未建单标记一起消失", async () => {
+test("接口：已答复 -> 不再出现，消息流上的未建单标记一起消失", async () => {
   const root = sandbox();
   const msg = recordUserMessage(root, { text: "把按钮换成圆角" });
   settleChat(root, { msg_id: msg.id, verdict: "answered_only", text: "把按钮换成圆角" });
@@ -101,7 +101,7 @@ test("接口：已答复 → 不再出现，消息流上的未建单标记一起
     const d = await dismissed.json();
     assert.strictEqual(d.ok, true);
     assert.deepStrictEqual(d.items, []);
-    assert.strictEqual(listSupervisorDirectives(root).length, 0, "「不需要动作」不建单");
+    assert.strictEqual(listSupervisorDirectives(root).length, 0, "“不需要动作”不建单");
   });
 
   const after = buildSupervisorLog(root, { hours: 0 }).messages.find((m) => m.role === "user");

@@ -1,7 +1,7 @@
 /**
  * 监工进程与工作进程。
  *
- * 要验的是三件事，与「谁建立谁」直接相关：
+ * 要验的是三件事，与“谁建立谁”直接相关：
  *   1. 派单是抢占式的，两个 worker 不会接到同一张单；
  *   2. 每个 worker 一条独立记录，心跳互不影响（多 worker 并行的前提）；
  *   3. `capitalist supervise` 会自己建根，并拉起一个 pid 与监工不同的独立进程。
@@ -230,7 +230,7 @@ process.stdin.on("end", () => {
   const cli = join(__dirname, "..", "dist", "cli", "main.js");
   /*
    * 在 worker 进程里跑测试时，环境里带着 CAPITALIST_WORKER_ID / CAPITALIST_DISPATCH_ID。子进程继承
-   * 这些值会被命令层判成「工作进程不能执行 supervise」而直接拒掉，测试测的是监工本身，
+   * 这些值会被命令层判成“工作进程不能执行 supervise”而直接拒掉，测试测的是监工本身，
    * 必须先把调用者的 worker 身份剥干净。
    */
   const env = { ...process.env, CAPITALIST_WORKER_BIN: fake };
@@ -240,11 +240,11 @@ process.stdin.on("end", () => {
   /*
    * 用异步 spawn + 主动等待，不用 spawnSync：Windows 上同步子进程会连带收掉它拉起的
    * 后代，`--once` 又只跑一拍就退，假 worker 常常还没执行就被一起带走。异步拉起后
-   * 等它落盘再收尾，测的仍是「监工自己建根并拉出独立进程」。
+   * 等它落盘再收尾，测的仍是“监工自己建根并拉出独立进程”。
    */
   const child = spawn(
     process.execPath,
-    [cli, "supervise", "重构计费服务", "--contract", "minimal", "--max-ticks", "3", "--auto-start"],
+    [cli, "supervise", "重构计费服务", "--contract", "minimal", "--max-ticks", "3", "--auto-dispatch"],
     { cwd: base, env, stdio: "ignore" },
   );
   const settled = new Promise((resolve) => child.once("exit", resolve));
@@ -310,9 +310,9 @@ test("宿主探测：没有可用 CLI 的机器直接报错，不假装拉起", 
   const host = detectWorkerHost();
   if (saved) process.env.CAPITALIST_WORKER_BIN = saved;
 
-  // 探测结果必须是某个「参与自动探测」的 impl 的 worker key；都没有时是 null，
+  // 探测结果必须是某个“参与自动探测”的 impl 的 worker key；都没有时是 null，
   // 而不是编一个出来。名单从注册表推导，不在测试里抄一份。
-  const registry = require("../dist/host/registry");
+  const registry = require("../dist/agent/registry");
   const auto = registry
     .workerHosts()
     .filter((impl) => impl.worker.detectPriority !== undefined)
@@ -344,7 +344,7 @@ test("停止走哨兵文件，不会被心跳写回 running", () => {
   assert.equal(capitalist.stopRequested(root), false);
 });
 
-test("已有监工在跑时，第二个拒绝启动", async () => {
+test("已有监工运行中时，第二个拒绝启动", async () => {
   const root = sandbox();
   capitalist.saveSupervisor(root, runningRecord());
 
@@ -443,8 +443,8 @@ test("复验单的正文不被契约刷新覆盖（否则复验退化成重做�
 /**
  * 一个确实还活着的 pid。
  *
- * 判活已经改成「心跳新鲜 + pid 仍在」：编一个不存在的号（早期写的 process.pid + 1000）
- * 现在会被正确判成「已停」，单实例用例就测不到东西了。这里真起一个哑进程，让它活到
+ * 判活已经改成“心跳新鲜 + pid 仍在”：编一个不存在的号（早期写的 process.pid + 1000）
+ * 现在会被正确判成“已停”，单实例用例就测不到东西了。这里真起一个哑进程，让它活到
  * 测试进程退出。
  */
 let livePidCache = 0;
@@ -485,7 +485,7 @@ function runningRecord() {
 }
 
 
-test("立即执行：一个 tick 内腾槽拉起，在跑的单挂起并标已让位", () => {
+test("立即执行：一个 tick 内腾槽拉起，运行中的单挂起并标已让位", () => {
   const { chmodSync, writeFileSync: write } = require("node:fs");
   const preempt = require("../dist/core/preempt");
   const boardMod = require("../dist/supervisor/board");
@@ -498,7 +498,7 @@ test("立即执行：一个 tick 内腾槽拉起，在跑的单挂起并标已�
   write(fake, "#!/usr/bin/env node\nprocess.stdin.resume();\nsetTimeout(() => {}, 60000);\n");
   chmodSync(fake, 0o755);
 
-  /* 一个真的活着的进程，扮演「正在跑的那一单」。 */
+  /* 一个真的活着的进程，扮演“正运行中的那一单”。 */
   const victim = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], {
     stdio: "ignore",
     windowsHide: true,
@@ -564,8 +564,8 @@ test("立即执行：一个 tick 内腾槽拉起，在跑的单挂起并标已�
     );
 
     const run = rows.find((d) => d.id === "D-run");
-    assert.strictEqual(run.status, "open", "在跑的单退回排队，不能停在 claimed");
-    assert.ok(run.yielded_at, "让位要留痕，界面才能标「已让位」");
+    assert.strictEqual(run.status, "open", "运行中的单退回排队，不能停在 claimed");
+    assert.ok(run.yielded_at, "让位要留痕，界面才能标“已让位”");
     assert.strictEqual(run.yielded_by, "D-imm");
 
     const victimRec = capitalist.loadWorker(base, "W-run");
@@ -577,9 +577,9 @@ test("立即执行：一个 tick 内腾槽拉起，在跑的单挂起并标已�
       assert.ok(d.yielded_at, `${id} 也要标已让位（它被这一单越过去了）`);
     }
 
-    /* 计数：在跑只有立即执行那一个，其余算排队，挂起的进程不能继续算作在跑。 */
+    /* 计数：运行中只有立即执行那一个，其余算排队，挂起的进程不能继续算作运行中。 */
     const counts = boardMod.buildThreadsPage(base, 500).counts;
-    assert.strictEqual(counts.running, 1, `在跑应为 1：${JSON.stringify(counts)}`);
+    assert.strictEqual(counts.running, 1, `运行中应为 1：${JSON.stringify(counts)}`);
     assert.strictEqual(counts.queued, 3, `排队应为 3：${JSON.stringify(counts)}`);
     assert.strictEqual(counts.failed, 0, `让位不是失败：${JSON.stringify(counts)}`);
 
@@ -600,7 +600,7 @@ test("立即执行：一个 tick 内腾槽拉起，在跑的单挂起并标已�
     assert.strictEqual(
       capitalist.readDispatches(base).find((d) => d.id === "D-imm2").status,
       "open",
-      "已经有立即执行在跑时，第二张按普通置顶排队",
+      "已经有立即执行运行中时，第二张按普通置顶排队",
     );
 
     /* 结束立即执行单，再恢复。 */

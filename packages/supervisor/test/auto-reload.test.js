@@ -35,7 +35,7 @@ test("读数解析：result 行里的 contextUsed 与 contextWindow 能读出来
 test("读数解析：没有读数时一律 null，不拿 0 冒充", () => {
   assert.deepEqual(contextUsageOfResult({ type: "result" }), { used: null, window: null });
   assert.deepEqual(contextUsageOfResult(null), { used: null, window: null });
-  // 空串 / 负数 / 非数字都算「没有读数」
+  // 空串 / 负数 / 非数字都算“没有读数”
   assert.equal(contextUsageOfResult({ _meta: { "x.ai/contextUsed": 0 } }).used, null);
   assert.equal(contextUsageOfResult({ _meta: { "x.ai/contextUsed": -5 } }).used, null);
   assert.equal(contextUsageOfResult({ _meta: { "x.ai/contextUsed": "abc" } }).used, null);
@@ -148,7 +148,7 @@ function makeOrderRoot() {
   ];
   writeFileSync(join(capitalist, "inbox", "dispatch.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
 
-  // shard-b 已结单且台账四项证据齐全 → done_verified，不占恢复次序、不进复验清单
+  // shard-b 已结单且台账四项证据齐全 -> done_verified，不占恢复次序、不进复验清单
   writeFileSync(
     join(capitalist, "ledger.jsonl"),
     JSON.stringify({

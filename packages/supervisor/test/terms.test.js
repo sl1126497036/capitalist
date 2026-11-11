@@ -3,7 +3,7 @@
  *
  * 守三件事：
  *
- * 1. `dispatch_retry` 这类事件名只活在台账里，界面上必须翻成「重派任务」；
+ * 1. `dispatch_retry` 这类事件名只活在台账里，界面上必须翻成“重派任务”；
  * 2. 消息正文里的 worker / exit / pid / SIGTERM / hook 全部换成中文，
  *    `open` / `gone` 这类原始状态也不许直接摆出来；
  * 3. 标签表只有 `src/supervisor/terms.ts` 一份，前端 `fmt.js` 直接读它。
@@ -26,7 +26,7 @@ const CJK = /[\u4e00-\u9fa5]/;
 /** 界面上不该出现的英文内部词（整词匹配，避免误伤模型名、宿主名）。 */
 const BANNED = /\b(worker|exit|pid|SIGTERM|hook|open|queued|closed|gone|missing|running|failed)\b/i;
 
-test("术语表：每条事件 / 指令 / 状态都有中文，dispatch_retry 是「重派任务」", () => {
+test("术语表：每条事件 / 指令 / 状态都有中文，dispatch_retry 是“重派任务”", () => {
   assert.equal(terms.zhEvent("dispatch_retry"), "重派任务");
   assert.equal(terms.zhEvent("dispatch_orphan"), "判死重派");
   assert.equal(terms.zhStatus("open"), "待执行");

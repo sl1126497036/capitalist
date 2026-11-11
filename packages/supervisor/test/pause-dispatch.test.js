@@ -139,14 +139,14 @@ test("暂停单算作待办：监工不因它转成待命", () => {
 
   const state = loadState(root);
   const contract = { name: "minimal", data: {}, stages: [{ id: "S1", name: "执行", done: { type: "none" } }] };
-  assert.strictEqual(loop.hasPendingWork(root, contract, state), true, "队列里挂着暂停单不是「无待办」");
+  assert.strictEqual(loop.hasPendingWork(root, contract, state), true, "队列里挂着暂停单不是“无待办”");
 });
 
 test("启动后新派单不受旧单暂停影响：仍可被领取与填槽", () => {
   const root = sandbox();
   put(root, "D-old");
   loop.holdLegacyDispatches(root);
-  /* 监工已在跑时宿主侧派入的单：没有暂停标记。 */
+  /* 监工已运行中时宿主侧派入的单：没有暂停标记。 */
   put(root, "D-new");
 
   assert.strictEqual(capitalist.firstOpenDispatch(root)?.id, "D-new", "暂停旧单不挡新单领取");

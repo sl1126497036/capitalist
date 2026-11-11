@@ -1,12 +1,12 @@
 /**
  * 监工状态徽章映射：顶栏徽章与右栏用量说明共用 `/api/supervisor`。
- * 只搬运字段为「键 / 值 / 色号」，不推断、不补值，缺失字段显示破折号。
+ * 只搬运字段为“键 / 值 / 色号”，不推断、不补值，缺失字段显示破折号。
  */
 
 /**
  * @param {object} capitalist `/api/supervisor` 的返回
  * @returns {{k: string, v: string|number, tone?: string, dot?: boolean, tip?: string, na?: boolean}[]}
- *   状态 / 并行 / 运行 / 排队 / 待裁决 / 欠账，以及有心跳说明时多一条「异常」。
+ *   状态 / 并行 / 运行 / 排队 / 待裁决 / 欠账，以及有心跳说明时多一条“异常”。
  */
 export function supervisorStatusRows(capitalist) {
   const s = capitalist || {};

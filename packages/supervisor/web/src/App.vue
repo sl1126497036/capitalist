@@ -173,11 +173,11 @@ function toggleQueue() {
 }
 /* /stream 的逐字缓冲按工作进程 id 累积，落库正文到达后由 ChatPane 判定退场。 */
 const liveOut = ref({});
-/* 正在等对话回执的会话集合：回执未落或请求未结束前，状态条用它区分「生成中」与「已结束」。 */
+/* 正在等对话回执的会话集合：回执未落或请求未结束前，状态条用它区分“生成中”与“已结束”。 */
 const talkBusy = ref(new Set());
 const msgTotal = ref(0);
 const msgTruncated = ref(false);
-/** 监工流时间窗之外还有事件时置真；该值为真时显示「展开更早的消息」。 */
+/** 监工流时间窗之外还有事件时置真；该值为真时显示“展开更早的消息”。 */
 const msgHasOlder = ref(false);
 const notice = ref(null);
 /* 监工流没有 unread 字段，前端按事件总数记水位、差值算未读；总数因时间窗滑出而变小时同步下调水位，不显示负数。 */
@@ -315,13 +315,13 @@ async function tryJson(url) {
   }
 }
 
-/** 消息请求失败时显示全局「请求失败」提示。 */
+/** 消息请求失败时显示全局“请求失败”提示。 */
 function msgRequestFail(error) {
   errKind.value = "request";
   err.value = $t("请求失败 {m}", { m: error });
 }
 
-/** 消息请求成功后清掉「请求失败」类异常条，脚本异常保留。 */
+/** 消息请求成功后清掉“请求失败”类异常条，脚本异常保留。 */
 function msgRequestOk() {
   if (errKind.value === "request") {
     err.value = "";
@@ -368,7 +368,7 @@ async function loadStructure(thenMessages = false) {
   capitalistLoaded.value = true;
   if (!supervisorRes?.online) {
      /*
-      * 离线时切到「未启动」态：任务、消息、指标、流式行清空；
+      * 离线时切到“未启动”态：任务、消息、指标、流式行清空；
       * 顶栏读数条（额度 / 内存）与调度无关，离线时仍继续刷新。
       */
     threads.value = [];
@@ -401,7 +401,7 @@ async function loadStructure(thenMessages = false) {
     loadMessages();
   }
   if (!root.value) {
-    /* 结构确认无任务根时收掉载入指示，显示「尚未选择任务根」。 */
+    /* 结构确认无任务根时收掉载入指示，显示“尚未选择任务根”。 */
     msgPending.value = false;
   }
   metrics.value = metRes || {};
@@ -1131,7 +1131,7 @@ async function onHandback() {
   load();
 }
 
-/* 结项由后端把派单置为 closed（在跑先结单再 SIGTERM，排队直接撤下）；请求期间单号写入 cardStopBusy 供 QueuePane 铺蒙版，同一时刻只允许一张卡处于请求中。 */
+/* 结项由后端把派单置为 closed（运行中先结单再 SIGTERM，排队直接撤下）；请求期间单号写入 cardStopBusy 供 QueuePane 铺蒙版，同一时刻只允许一张卡处于请求中。 */
 /* 操作蒙版至少停留 320ms，避免请求过快时蒙版一闪而过。 */
 const BUSY_MIN_MS = 320;
 function holdBusy(startedAt) {
@@ -1176,7 +1176,7 @@ async function onPromoteTask({ id, shard, title }) {
   load();
 }
 
-/* 唤醒同样使用页面级回执；暂停单可能已过时，回执说明「下一 tick 起参与调度」。 */
+/* 唤醒同样使用页面级回执；暂停单可能已过时，回执说明“下一轮调度 起参与调度”。 */
 async function onWakeTask({ id, shard, title }) {
   if (!id) return;
   const r = await postJson("./api/command", { action: "wake", id, shard: shard || "" });
@@ -1188,7 +1188,7 @@ async function onWakeTask({ id, shard, title }) {
   load();
 }
 
-/* bucket 取界面筛选档名（all / done / bad）；后端只归档已结束记录，在跑与排队的保留。 */
+/* bucket 取界面筛选档名（all / done / bad）；后端只归档已结束记录，运行中与排队的保留。 */
 async function onClearThreads(bucket) {
   const r = await postJson("./api/command", { action: "clear-threads", bucket: String(bucket || "all") });
   showToast(
@@ -1234,14 +1234,14 @@ async function onClearCard({ key }) {
   }
 }
 
-/* 状态行只统计服务端给出的在跑进程数（含将起、已领），不受筛选与搜索影响。 */
+/* 状态行只统计服务端给出的运行中进程数（含将起、已领），不受筛选与搜索影响。 */
 const runningCount = computed(() => Number(threadCounts.value?.running || 0));
 
 /**
  * 离线原因仅用于选择提示文案：lost 心跳失联 / ended 上一轮已结束 / never 未启动。
  *
  * 服务端将所有非 running 状态归为 status:"stopped"，仅凭该字段无法区分后两种，
- * 用 last_status 补充「已完成」状态。
+ * 用 last_status 补充“已完成”状态。
  */
 const offlineKind = computed(() => {
   const s = capitalist.value || {};
@@ -1337,7 +1337,7 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
     />
 
     <div class="body">
-      <!-- 未在线时渲染状态区；首帧未取得 /api/supervisor 前按「连接中」处理；离线时不提供消息输入入口。 -->
+      <!-- 未在线时渲染状态区；首帧未取得 /api/supervisor 前按“连接中”处理；离线时不提供消息输入入口。 -->
       <template v-if="!capitalistLoaded || !capitalist?.online">
         <div v-if="!capitalistLoaded" class="boot-pane" role="status" aria-live="polite">
           <span class="boot-dots" aria-hidden="true"><i/><i/><i/></span>
@@ -1474,7 +1474,7 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
         class="ctx-mask"
         role="alertdialog"
         aria-modal="true"
-        :aria-label="t('重启中...')"
+        :aria-label="t('重启中…')"
         @click.stop.prevent
         @pointerdown.stop.prevent
         @pointerup.stop.prevent
@@ -1487,9 +1487,9 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
         <div class="ctx-mask-box">
           <div class="ctx-mask-title">
             <span class="ctx-mask-spin" aria-hidden="true"></span>
-            {{ t("重启中...") }}
+            {{ t("重启中…") }}
           </div>
-          <div class="ctx-mask-note">{{ t("重启期间界面暂停，完成后自动恢复调度。若未自动恢复，可在宿主唤起或终端执行 capitalist supervise 重新拉起监工。") }}</div>
+          <div class="ctx-mask-note">{{ t("重启期间界面暂停，完成后自动恢复调度。未恢复时，重新执行 capitalist supervise。") }}</div>
         </div>
       </div>
     </div>
@@ -1608,7 +1608,7 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
   transform: translateX(-16px);
   opacity: 0.55;
 }
-/* 系统开启「减少动态效果」时直接换宽度，不做过渡。 */
+/* 系统开启“减少动态效果”时直接换宽度，不做过渡。 */
 @media (prefers-reduced-motion: reduce) {
   .leftwrap,
   .leftwrap :deep(.queue) {

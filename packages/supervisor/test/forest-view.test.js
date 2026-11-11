@@ -178,7 +178,7 @@ test("失败后重派：兄弟照旧按各自父节点算，不互相连坐", ()
   assert.strictEqual(retried.blocked, false, "新单不受旧单失败牵连");
 });
 
-test("在跑的子树节点：父节点失败不改写它的状态，只把没起来的后代标成断链", () => {
+test("运行中的子树节点：父节点失败不改写它的状态，只把没起来的后代标成断链", () => {
   const root = sandbox();
   put(root, "R0");
   put(root, "R1", { parent: "R0", parent_reason: "等 R0" });
@@ -189,10 +189,10 @@ test("在跑的子树节点：父节点失败不改写它的状态，只把没�
   const v = buildForestView(root);
   const r1 = nodeOf(v, "R1");
   assert.strictEqual(r1.state, "running");
-  assert.strictEqual(r1.blocked, false, "在跑的单不算断链");
+  assert.strictEqual(r1.blocked, false, "运行中的单不算断链");
   assert.strictEqual(nodeOf(v, "R2").blocked, true, "它下面的还没起来，仍算断链");
   assert.strictEqual(nodeOf(v, "R2").blockedBy, "R0", "断链的来源是最上面那张失败的父单");
-  assert.strictEqual(v.trees[0].alive, true, "有进程在跑，这棵树就算有活");
+  assert.strictEqual(v.trees[0].alive, true, "有进程运行中，这棵树就算有活");
 });
 
 

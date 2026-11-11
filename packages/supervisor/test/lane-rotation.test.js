@@ -125,7 +125,7 @@ test("运行中按日志增量刷新占用：不用等进程退出，闸门就�
   const d = aDispatch();
   const first = lane.pickLane(root, d);
 
-  // 一个还在跑的 worker：记录里 status=running，日志里有宿主上下文读数。
+  // 一个还运行中的 worker：记录里 status=running，日志里有宿主上下文读数。
   const workers = join(root, ".capitalist", "workers");
   const id = "7";
   const log = join(workers, `${id}.log`);
@@ -158,7 +158,7 @@ test("运行中按日志增量刷新占用：不用等进程退出，闸门就�
     })}\n`,
   );
 
-  // 进程没有退出，只有日志增长，这就是「运行中」的现场。
+  // 进程没有退出，只有日志增长，这就是“运行中”的现场。
   loop.refreshLaneUsage(root, []);
 
   const st = lane.readLane(root, "capitalist-u1-x");

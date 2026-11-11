@@ -9,7 +9,7 @@
  *
  * 退出码 0 放行，退出码 2 用于忽略结构化输出的宿主。内部错误一律退出 0。
  *
- * 例外是「监工已不在了」：那由 `orphanGuard` 判定，写一行说明进 worker 日志后退出 1，
+ * 例外是“监工已不在了”：那由 `orphanGuard` 判定，写一行说明进 worker 日志后退出 1，
  * 不再走正常放行。它不是 hook 的错误，是 worker 该结束了。
  */
 
@@ -79,14 +79,51 @@ function parseArgs(argv: string[]): Args {
   return { event: rest[0] ?? "", hostArg, selftest };
 }
 
-/** 读 stdin。TTY（手工执行）时不阻塞，直接给空对象。 */
-function readStdin(): string {
-  if (process.stdin.isTTY) return "{}";
-  try {
-    return readFileSync(0, "utf8");
-  } catch {
-    return "{}";
-  }
+/**
+ * 等 stdin 的首次数据上限，单位毫秒。
+ *
+ * 宿主调 hook 时会把事件写成 JSON 从 stdin 传入。读取必须带超时：`-p` 模式下
+ * 宿主的管道不保证在 hook 退出前关闭，同步读到 EOF 会一直等到宿主超时，
+ * 宿主又在等 hook 返回，于是双方互等，整条命令表现为卡住。
+ */
+const STDIN_WAIT_MS = 800;
+
+/**
+ * 读 stdin。
+ *
+ * TTY（手工执行）时直接给空对象。非 TTY 时最多等 {@link STDIN_WAIT_MS}：
+ * 收齐后立即返回，超时则用已收到的部分，没收到就返回空对象。
+ * 拿不到完整事件时按空事件处理，走放行，不阻断宿主。
+ */
+function readStdin(): Promise<string> {
+  if (process.stdin.isTTY) return Promise.resolve("{}");
+  return new Promise((resolve) => {
+    let buf = "";
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        process.stdin.destroy();
+      } catch {
+        /* 已关闭时忽略 */
+      }
+      resolve(buf.trim() || "{}");
+    };
+    const timer = setTimeout(finish, STDIN_WAIT_MS);
+    try {
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk: string) => {
+        buf += chunk;
+      });
+      process.stdin.on("end", finish);
+      process.stdin.on("error", finish);
+      process.stdin.resume();
+    } catch {
+      finish();
+    }
+  });
 }
 
 /**
@@ -116,7 +153,7 @@ function selftest(impl: HostImpl): number {
   return 0;
 }
 
-function main(): number {
+async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
 
   // 先自查监工是否存活，再读 stdin。
@@ -139,7 +176,7 @@ function main(): number {
 
   let payload: NativePayload = {};
   try {
-    const raw = readStdin().trim();
+    const raw = (await readStdin()).trim();
     const parsed = raw ? JSON.parse(raw) : {};
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       payload = parsed as NativePayload;
@@ -151,6 +188,14 @@ function main(): number {
   const mapped = impl.hook.pointFor(args.event);
   if (mapped === null) return 0; // 该宿主事件不参与监督
 
+  /*
+   * 状态注入只在工作进程内有意义：它把监工状态与待处理插话送进模型上下文。
+   * 监工探测与用户手工打开的一次性会话走同一条启动路径，却不需要这段注入；
+   * 该路径上宿主要等 hook 返回，整条命令会表现为卡住。
+   * 判据沿用 hook 体系既有约定：工作进程带 CAPITALIST_WORKER_ID。
+   */
+  if (mapped === "on_idle" && !process.env.CAPITALIST_WORKER_ID) return 0;
+
   const event = impl.hook.parse(payload, args.event);
   // 先续心跳再判定：判定可能耗时或抛错，心跳不能跟着一起丢。
   touchWorkerHeartbeat();
@@ -160,4 +205,7 @@ function main(): number {
   return result.code;
 }
 
-process.exit(main());
+/* 未捕获异常一律放行：hook 报错不应让宿主的命令失败。 */
+main()
+  .then((code) => process.exit(code))
+  .catch(() => process.exit(0));

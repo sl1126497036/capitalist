@@ -111,7 +111,7 @@ function tsOf(iso: string): number {
   return Number.isFinite(t) ? t : 0;
 }
 
-/** 按四道上限裁剪：时效 → 条数 → 总字数，顺序固定，优先移除最旧条目。 */
+/** 按四道上限裁剪：时效 -> 条数 -> 总字数，顺序固定，优先移除最旧条目。 */
 function prune(entries: MemoryEntry[]): { entries: MemoryEntry[]; changed: boolean } {
   const before = entries.length;
   const now = Date.now();
@@ -423,7 +423,7 @@ export function renderMemoryConstraints(entries: readonly MemoryEntry[]): string
 /**
  * 派单正文追加约束；注入前剥掉旧区块，避免重派时重复注入。
  *
- * 兼容旧标题：此前写入的派单正文里区块头为「【调度经验记忆」，重派时仍要能被剥掉。
+ * 兼容旧标题：此前写入的派单正文里区块头为“【调度经验记忆”，重派时仍要能被剥掉。
  */
 const MEMORY_SECTION_HEADS = ["【项目记忆", "【调度经验记忆"];
 

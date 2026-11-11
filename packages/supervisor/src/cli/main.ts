@@ -29,7 +29,7 @@ import { INBOX_LEDGER, readInbox } from "../core/inbox";
 import { appendJsonl, readJson, readJsonl, writeJson } from "../core/json";
 import { recordEvent, recordViolation } from "../core/ledger";
 import { findRoot, isInside, supervisorDir } from "../core/paths";
-import { skillDirs } from "../host/locations";
+import { skillDirs } from "../agent/locations";
 import { describeMode, modeNames, normalizeMode } from "../core/permission";
 import { generateContract, describeGenerated } from "../supervisor/genContract";
 import { loadState, resolveModeFor, saveState, statePath, supervisorDisplayState, SUPERVISOR_STATE_LABEL, updateState } from "../core/state";
@@ -51,14 +51,14 @@ import {
   cmdUpdate,
 } from "./records";
 import { clearStopFlag, isSupervisorAlive, loadSupervisor, loadWorker, pausedDispatches, pidAlive, readDispatches } from "../core/supervisor";
-import { all } from "../host/registry";
-import { deriveCapabilities } from "../host/contract";
+import { all } from "../agent/registry";
+import { deriveCapabilities } from "../agent/contract";
 import { flagBool, flagNumber, flagString, flagTokens, parse, positionalText, type Parsed } from "./args";
 import { loadOrDie, rootOrDie } from "./context";
 import { die, write } from "./output";
 import { COMMAND_HELP, HELP, VERSION } from "./help";
 import { cmdBoard, cmdFeed } from "./boardCmd";
-import { cmdAuth } from "./authCmd";
+import { cmdAuthCheck } from "./authCheck";
 import { cmdGate, cmdJustify, cmdLocalCheck } from "./precheck";
 import { cmdClose, cmdNext, cmdPromote, cmdReport, cmdStopWorker, cmdSuperviseStop, cmdWake, cmdWorkers, detachSupervisor } from "./proc";
 import { cmdLock } from "./lockCmd";
@@ -95,7 +95,7 @@ function cmdRestart(p: Parsed): number {
   const dir = supervisorDir(root);
 
   if (existsSync(join(dir, "state.json"))) {
-    if (isSupervisorAlive(root)) die("监工还在跑：先 capitalist supervise-stop，等它退出再 restart");
+    if (isSupervisorAlive(root)) die("监工运行中：先执行 capitalist supervise-stop，退出后再执行 restart");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     renameSync(dir, `${dir}.closed.${stamp}`);
     write(`旧任务根已归档：${dir}.closed.${stamp}\n`);
@@ -135,7 +135,7 @@ function createRoot(target: string, spec: string, fallback: boolean, rootArg?: s
     const others = contractNames(skillDirs()).filter((n) => n !== "generic").join("|") || "…";
     write(
       `\n未指定领域任务列表，已回落到通用任务列表（generic）。\n` +
-        `      通用红线生效，但「这个领域什么算做完」没有定义。\n` +
+        `      通用红线生效，但“这个领域什么算做完”没有定义。\n` +
         `      若这是明确领域任务：capitalist adopt --contract <${others}>\n`,
     );
   }
@@ -164,7 +164,7 @@ function cmdAdopt(p: Parsed): number {
 
   const after = loadState(root) ?? state;
   write(
-    `任务列表：${prev} → ${contract.name}（${contract.domain || "未标注领域"}）\n阶段：${after.stage}\n下一步：${after.next_action}\n`,
+    `任务列表：${prev} -> ${contract.name}（${contract.domain || "未标注领域"}）\n阶段：${after.stage}\n下一步：${after.next_action}\n`,
   );
   return 0;
 }
@@ -223,7 +223,7 @@ function cmdAdvance(p: Parsed): number {
     die("状态写入冲突，重试后仍未成功：请再执行一次");
   }
   write(
-    `阶段推进：${sid} → ${next.id} ${next.name}\n` +
+    `阶段推进：${sid} -> ${next.id} ${next.name}\n` +
       (next.goal ? `目标：${next.goal}\n` : "") +
       `下一步：${next.next ?? ""}\n`,
   );
@@ -253,7 +253,7 @@ function cmdRecord(p: Parsed): number {
   if (!isInside(target, supervisorDir(root))) die(`只能记到 .capitalist/ 以内：${name}`);
 
   if (!appendJsonl(target, obj)) die(`写入失败：${target}`);
-  write(`已记录 → .capitalist/${name}\n`);
+  write(`已记录到 .capitalist/${name}\n`);
   return 0;
 }
 
@@ -299,7 +299,7 @@ function cmdInbox(p: Parsed): number {
     .filter((q) => (want ? q.id === want : true));
 
   if (ignored.length > 0) {
-    // 自检行放在最前面：先说明「台账里有坏行被跳过」，后面的列表才不会被误读成全部。
+    // 自检行放在最前面：先说明“台账里有坏行被跳过”，后面的列表才不会被误读成全部。
     write(
       `已忽略 ${ignored.length} 条畸形记录（不参与裁决）：` +
         `${ignored
@@ -317,7 +317,7 @@ function cmdInbox(p: Parsed): number {
     return 0;
   }
   for (const q of rows) {
-    /* 用「问N」不用 `#N`：`#N` 是任务编号（界面与监工共用同一套），两者混用会串号。 */
+    /* 用“问N”不用 `#N`：`#N` 是任务编号（界面与监工共用同一套），两者混用会串号。 */
     write(`问${q.id} [${String(q.stage ?? "")}] ${q.text}\n`);
   }
   return 0;
@@ -335,7 +335,7 @@ function cmdTasks(p: Parsed): number {
     }
     write(`已按 ${ds.length} 条历史派单回填任务池\n`);
   }
-  /** 同义归并：把「同一件事被反复追加」产生的重复项并成一条。 */
+  /** 同义归并：把“同一件事被反复追加”产生的重复项并成一条。 */
   if (flagBool(p, "merge")) {
     const groups = planMerges(root);
     const total = groups.reduce((n, g) => n + g.drop.length, 0);
@@ -366,7 +366,7 @@ function cmdTasks(p: Parsed): number {
     write("（任务池是空的：还没有派过单。每建一张派单会自动登记一项。）\n");
     return 0;
   }
-  /** 排序按「还欠着的」优先：失败 → 待确认 → 进行中 → 待派 → 已验收 → 已关闭。 */
+  /** 排序按“还欠着的”优先：失败 -> 待确认 -> 进行中 -> 待派 -> 已验收 -> 已关闭。 */
   const order: TaskState[] = ["failed", "submitted", "dispatched", "pending", "accepted", "void"];
   const label: Record<TaskState, string> = {
     failed: "失败待重试",
@@ -470,7 +470,7 @@ function cmdStatus(p: Parsed): number {
   const tkSum = taskSummary(root);
   if (tkSum.total > 0) write(`${summaryLine(tkSum)}\n`);
 
-  // 指令与接管状态输出「已登记，下次派单生效」。
+  // 指令与接管状态输出“已登记，下次派单生效”。
   const pending = listDirectives(root).filter((r) => r.consumed !== true);
   if (pending.length > 0) {
     write(`待生效指令：${pending.length} 条（只对下一次派单生效，尚未拼入 action）\n`);
@@ -486,7 +486,7 @@ function cmdStatus(p: Parsed): number {
     write(`\n⚠ 工作区准备失败（${ws.impl}）：${ws.message}\n${ws.fix}\n`);
   }
 
-  // 退出码表达「门槛过没过」，与 --json 一致：脚本里两种模式行为相同才算说得清
+  // 退出码表达“门槛过没过”，与 --json 一致：脚本里两种模式行为相同才算说得清
   return check.ok ? 0 : 2;
 }
 
@@ -497,11 +497,11 @@ function cmdBrief(p: Parsed): number {
   const stage = stageById(contract, state.stage);
   const check = runCheck(stage?.done as Record<string, unknown> | undefined, root);
   let text = `${buildBrief({ root, state, contract, mode, missing: check.missing })}\n`;
-  // 暂停期间必须把「下一步」压住：执行侧照常拿到 next_action，会误以为可以继续开工。
+  // 暂停期间必须把“下一步”压住：执行侧照常拿到 next_action，会误以为可以继续开工。
   const pause = readPause(root);
   if (pause) {
     text +=
-      `\n▸ 任务已暂停（自 ${pause.at}，原因：${pause.reason}）：监工暂停派单，上面的「下一步」暂不执行。\n` +
+      `\n▸ 任务已暂停（自 ${pause.at}，原因：${pause.reason}）：监工暂停派单，上面的“下一步”暂不执行。\n` +
       `  等待操作者执行 capitalist resume；恢复之前不要继续开工。\n`;
   }
   write(text);
@@ -519,7 +519,7 @@ function cmdMode(p: Parsed): number {
       write(`${JSON.stringify({ mode: effective, stored: state.permission_mode ?? null, available: modeNames() }, null, 2)}\n`);
       return 0;
     }
-    write(`生效档位：${effective} —— ${describeMode(effective)}\n\n可用档位：\n`);
+    write(`生效档位：${effective}，${describeMode(effective)}\n\n可用档位：\n`);
     for (const m of modeNames()) {
       write(` ${m === effective ? "*" : " "} ${m.padEnd(13)} ${describeMode(m)}\n`);
     }
@@ -531,7 +531,7 @@ function cmdMode(p: Parsed): number {
   if (updateState(root, (s) => { s.permission_mode = next; }) === null) {
     die("状态写入冲突，重试后仍未成功：请再执行一次");
   }
-  write(`档位：${effective} → ${next}（${describeMode(next)}）\n`);
+  write(`档位：${effective} 改为 ${next}（${describeMode(next)}）\n`);
   if (next === "bypass") {
     write("bypass 档位放宽档位与本机边界判定，任务列表红线仍按原级别拦截。该档位仅用于受控环境。\n");
   }
@@ -591,7 +591,7 @@ function cmdSay(p: Parsed): number {
   return 0;
 }
 
-/** 一条「说给某一单」的话落在哪个阶段。 */
+/** 一条“说给某一单”的话落在哪个阶段。 */
 function stageOfTarget(root: string, target: string): string {
   const rows = readDispatches(root);
   const byId = rows.find((d) => String(d.id) === target);
@@ -606,8 +606,8 @@ function stageOfTarget(root: string, target: string): string {
  * 接管某分片。
  *
  * 接管只改变监工行为：落 `.capitalist/takeover.json`（记 root / shard / at / reason / active），
- * 调度层每 tick 读它，被接管的片不自动重派、也不自动验收。不是只改界面文案。
- * 接管不终止已在跑的进程，要中断进程用 `capitalist stop-worker`。
+ * 调度层每轮调度 读它，被接管的片不自动重派、也不自动验收。不是只改界面文案。
+ * 接管不终止已运行中的进程，要中断进程用 `capitalist stop-worker`。
  */
 function cmdTakeover(p: Parsed): number {
   const root = rootOrDie(p);
@@ -617,7 +617,7 @@ function cmdTakeover(p: Parsed): number {
   const scope = rec.shard ? `分片 ${rec.shard}` : "整个任务根（所有分片）";
   write(
     `已接管 ${scope}（原因：${rec.reason}）。\n` +
-      `监工从下一 tick 起：不自动重派该片、不自动验收该片，等 capitalist release 恢复。\n` +
+      `监工从下一轮调度起：不自动重派该片、不自动验收该片，等 capitalist release 恢复。\n` +
       `接管只改变监工行为，不终止运行中的进程；中断进程使用 capitalist stop-worker <id>。\n`,
   );
   return 0;
@@ -634,7 +634,7 @@ function cmdRelease(p: Parsed): number {
   }
   write(
     `已交还 ${released.map((s) => (s === "*" ? "整个任务根" : `分片 ${s}`)).join("、")}。\n` +
-      `生效时机：下一 tick 起监工恢复该片的自动重派与自动验收。\n`,
+      `生效时机：下一轮调度起监工恢复该片的自动重派与自动验收。\n`,
   );
   return 0;
 }
@@ -677,17 +677,17 @@ function cmdPause(p: Parsed): number {
   recordEvent(root, "pause_set", { reason: rec.reason, by: rec.by });
   write(
     `已暂停（自 ${rec.at}，原因：${rec.reason}）。\n` +
-      `监工从下一 tick 起不再派新单；运行中的进程停止，对应派单退回排队，恢复后按原顺序重派。\n` +
+      `监工从下一轮调度起不再派新单；运行中的进程停止，对应派单退回排队，恢复后按原顺序重派。\n` +
       `已暂停的旧派单不随恢复调度解除暂停，需通过 capitalist wake --user 单独唤醒。恢复调度：capitalist resume\n`,
   );
   return 0;
 }
 
 /**
- * 解除暂停：删除 .capitalist/pause.json，下一 tick 起监工恢复派单（不自动认领契约分片）。
+ * 解除暂停：删除 .capitalist/pause.json，下一轮调度 起监工恢复派单（不自动认领契约分片）。
  *
  * 恢复派单是用户动作。非交互环境（宿主会话里代执行命令）默认拒绝，避免将启动信号
- * 视为用户授权；用户明确要求时通过 `--user` 恢复，看板「恢复调度」按钮调用接口，不经过这里。
+ * 视为用户授权；用户明确要求时通过 `--user` 恢复，看板“恢复调度”按钮调用接口，不经过这里。
  */
 function cmdResume(p: Parsed): number {
   const root = rootOrDie(p);
@@ -703,7 +703,7 @@ function cmdResume(p: Parsed): number {
     write(
       "拒绝：恢复派单需要用户动作。\n" +
         "当前不在交互终端（宿主会话里的命令执行），按启动规则保持暂停，队列原样保留。\n" +
-        "用户明确要求恢复时：capitalist resume --user；或在看板点击「恢复调度」。\n",
+        "用户明确要求恢复时：capitalist resume --user；或在看板点击“恢复调度”。\n",
     );
     return 1;
   }
@@ -715,7 +715,7 @@ function cmdResume(p: Parsed): number {
   clearStopFlag(root);
   recordEvent(root, "pause_cleared", { by: byUser ? "user(--user)" : "user(tty)" });
   write(
-    "已恢复：监工从下一 tick 起恢复派单，只执行派入的派单，不按契约自动建单。" +
+    "已恢复：监工从下一轮调度起恢复派单，只执行派入的派单，不按契约自动建单。" +
       "被暂停的旧派单仍需通过 capitalist wake --user 唤醒。\n",
   );
   return 0;
@@ -812,7 +812,7 @@ function workspaceFixHint(root: string, msg: string): string {
   if (isPerm) {
     return [
       "工作区配置目录写入被拒绝（权限 / 只读 / 被占用）。可操作的修复：",
-      `  1. 确认当前用户对任务根有写权限（Windows：右键目录→属性→安全；或 icacls "${root}"）`,
+      `  1. 确认当前用户对任务根有写权限（Windows：右键目录->属性->安全；或 icacls "${root}"）`,
       "  2. 关闭可能占用配置文件（settings.json / 项目配置）的进程：编辑器、其它 agent 会话、IDE",
       "  3. 若任务根在只读挂载或受控目录，换一个可写目录重新 capitalist start",
       "  4. 修复后执行 capitalist status 复检，或重新 capitalist supervise",
@@ -823,7 +823,7 @@ function workspaceFixHint(root: string, msg: string): string {
 
 async function main(): Promise<number> {
   // 版本与帮助这两个通用开关先归一：`-v` / `-h` 不带双横线，解析器会把它们当命令名，
-  // 落到「未知命令」分支上。
+  // 落到“未知命令”分支上。
   const argv = process.argv.slice(2).map((a) => (a === "-h" ? "--help" : a));
   if (argv.includes("--version") || argv.includes("-v") || argv.includes("-V")) {
     write(`capitalist ${VERSION}\n`);
@@ -967,7 +967,8 @@ async function main(): Promise<number> {
         interactive: !dryRun && !flagBool(p, "yes") && process.stdin.isTTY === true,
         root,
       });
-      if (chosen === null) return 0;
+      /* 未选择宿主时不做任何写入：退出码非零，脚本与自动化据此判定“未安装”。 */
+      if (chosen === null) return 1;
       return runInstall({
         hosts: chosen,
         dryRun,
@@ -995,6 +996,60 @@ async function main(): Promise<number> {
       });
     }
     case "supervise": {
+      /*
+       * 唯一一次读取宿主登录态，且只在令牌下发开启时执行。
+       *
+       * 下发缺省关闭：工作进程与对话通道使用宿主 CLI 自身的登录态，插件不读取任何凭据，
+       * 也不触发访问询问。置 `CAPITALIST_TOKEN_INJECT=1` 恢复下发。
+       *
+       * 开启下发时：读取由本进程发起，不接收外部传入的令牌；令牌只写进本进程环境，由
+       * 监工、对话通道与工作进程共用。令牌不进 argv、不写文件、不写日志、不写 supervisor.json。
+       */
+      {
+        const tok = await import("../supervisor/officialToken");
+        if (!tok.tokenInjectionEnabled()) {
+          write("[监工] 未下发宿主令牌：工作进程与对话通道使用宿主自身的登录态。\n");
+          try {
+            const diagRoot = flagString(p, "root") ?? process.cwd();
+            writeJson(join(supervisorDir(diagRoot), "auth-diag.json"), { injection: "off" });
+          } catch {
+            /* 诊断写失败不影响启动 */
+          }
+        } else if (!tok.tokenInjectorPresent()) {
+          write("[监工] 未下发宿主令牌：注入组件不存在。\n");
+          try {
+            const diagRoot = flagString(p, "root") ?? process.cwd();
+            writeJson(join(supervisorDir(diagRoot), "auth-diag.json"), tok.hostTokenDiag());
+          } catch {
+            /* 诊断写失败不影响启动 */
+          }
+        } else {
+          const source = tok.warmHostToken();
+          /*
+           * 诊断落盘：只写判定与错误码，供重启后回看读取落在哪一层；不含令牌。
+           * 读取失败的提示只出现在 stdout，进程转到后台后无从复查。
+           */
+          try {
+            const diagRoot = flagString(p, "root") ?? process.cwd();
+            writeJson(join(supervisorDir(diagRoot), "auth-diag.json"), tok.hostTokenDiag());
+          } catch {
+            /* 诊断写失败不影响启动 */
+          }
+          if (source !== "none") {
+            write("[监工] 已取得宿主令牌：对话与派单直接使用，不会再询问。\n");
+          } else {
+            const failure = tok.officialTokenFailure();
+            const code = String(tok.hostTokenDiag()["errorCode"] ?? "");
+            write(
+              failure === "missing"
+                ? "[监工] 未取得宿主令牌：宿主登录态不可见。若宿主已登录，说明沙箱把存在性判定挡成了不存在，见 .capitalist/auth-diag.json。\n"
+                : failure === "encrypted"
+                  ? "[监工] 未取得宿主令牌：宿主登录态为加密格式，无法取出访问令牌。\n"
+                  : `[监工] 未取得宿主令牌：授权请求被拒或未响应${code ? `（${code}）` : ""}，重启监工并在弹窗中选择“本次会话内始终允许”。\n`,
+            );
+          }
+        }
+      }
       const supervisorRoot = flagString(p, "root") ?? process.cwd();
       /*
        * 已有监工在运行时返回其 pid、心跳与看板地址，不返回启动失败提示。
@@ -1020,7 +1075,7 @@ async function main(): Promise<number> {
        * 按环境特征判定为 claude-code 并按该族取凭证；显式声明可覆盖该判定。
        */
       {
-        const reg = await import("../host/registry");
+        const reg = await import("../agent/registry");
         const declHost = String(flagString(p, "agent") ?? "").trim();
         if (declHost) {
           /* `claude` 等别名先归一为 impl id 再查询。 */
@@ -1048,11 +1103,18 @@ async function main(): Promise<number> {
       const healHosts = [detectedWorker].filter(
         (h): h is string => !!h && h !== "custom",
       );
-      /** hook 自动补装：默认不做，要装得显式 `--with-hooks`（或 CAPITALIST_WITH_HOOKS=1）。 */
-      const wantHooks = flagBool(p, "with-hooks") || process.env.CAPITALIST_WITH_HOOKS === "1";
+      /*
+       * hook 自动补装：非 Windows 默认执行，装完插件直接启动即可，不必先单独跑 install。
+       * Windows 保持显式 `--with-hooks`：hook 为每次工具调用起一个短命进程，那边表现为持续闪窗。
+       * 两种平台都能用 `--no-hooks` 关掉。
+       */
+      const wantHooks =
+        flagBool(p, "with-hooks") ||
+        process.env.CAPITALIST_WITH_HOOKS === "1" ||
+        process.platform !== "win32";
       const skipHooks = !wantHooks || flagBool(p, "no-hooks");
       if (skipHooks) {
-        write("[监工] 不装 hook（默认）：不会弹 hook 窗口；心跳由「pid + 日志增长」回落，红线预检走工作进程档位\n");
+        write("[监工] 不装 hook：心跳由“pid + 日志增长”回落，红线预检走工作进程档位\n");
       }
       if (healHosts.length > 0 && !skipHooks) {
         // 写项目级 settings.local.json：用户级那份由宿主自己维护，hooks 键保不住。
@@ -1064,7 +1126,7 @@ async function main(): Promise<number> {
       }
       if (flagBool(p, "detach")) return detachSupervisor(supervisorRoot);
       /*
-       * 「启动默认不派单」放在主循环里判定：队列里还有待办时，把上次未完成的派单逐张标记暂停；
+       * “启动默认不派单”放在主循环里判定：队列里还有待办时，把上次未完成的派单逐张标记暂停；
        * 没有待办就直接待命在线（不派单、不轮询、不退出），等用户派单。
        * 暂停是派单级标记，宿主侧新派入的单不受影响。
        */
@@ -1086,7 +1148,7 @@ async function main(): Promise<number> {
         target: p.positional[0],
         contractSpec: contractSpec || undefined,
         autoDispatch: flagBool(p, "auto-dispatch"),
-        autoStart: flagBool(p, "auto-start"),
+        ...(process.env.CAPITALIST_HOST_TOKEN ? { token: process.env.CAPITALIST_HOST_TOKEN } : {}),
         tickSec: flagNumber(p, "tick"),
         workerTimeoutSec: flagNumber(p, "worker-timeout"),
         stuckSec: flagNumber(p, "stuck-sec"),
@@ -1101,8 +1163,8 @@ async function main(): Promise<number> {
         workerVisible: flagBool(p, "worker-visible"),
         force: flagBool(p, "force"),
         spawnWorkers: flagBool(p, "no-spawn") ? false : undefined,
-        // 主循环里的 hook 周期补装同样要跟着这个开关：否则启动时说「不装」，跑满 60 秒
-        // 又写回去，闪窗与「配置被重置」都会复发。
+        // 主循环里的 hook 周期补装同样要跟着这个开关：否则启动时说“不装”，跑满 60 秒
+        // 又写回去，闪窗与“配置被重置”都会复发。
         installHooks: !skipHooks,
         // 看板默认随监工起；--no-board 显式关掉（不监听任何端口）。
         board: flagBool(p, "no-board") ? false : undefined,
@@ -1117,10 +1179,26 @@ async function main(): Promise<number> {
     case "supervise-stop":
       return cmdSuperviseStop(p);
     /*
+     * 诊断命令：只读一次宿主凭证并输出判定，不启动监工。
+     *
+     * 读取要在一次工具调用内完成，询问才会挂到这次调用上；因此单独成命令，避免与
+     * 后台常驻进程的启动时序纠缠。输出不含令牌，只给长度。
+     */
+    case "auth-probe": {
+      const tok = await import("../supervisor/officialToken");
+      const source = tok.warmHostToken();
+      write(`${JSON.stringify({ source, ...tok.hostTokenDiag() }, null, 2)}\n`);
+      return source === "none" ? 1 : 0;
+    }
+    case "auth-check": {
+      const { cmdAuthCheck } = await import("./authCheck");
+      return cmdAuthCheck(p);
+    }
+    /*
      * 内部命令：由监工在启动时自己拉起（见 supervisor/guard.ts 的 ensureGuard），
      * 不进 help、也不需要用户手动跑。
      *
-     * 它的唯一职责是「监工被硬杀之后，把它拉起的 worker 收掉」。硬杀（taskkill /F、
+     * 它的唯一职责是“监工被硬杀之后，把它拉起的 worker 收掉”。硬杀（taskkill /F、
      * 任务管理器结束进程）不执行任何信号处理器，所以监工自己没机会清理，只能靠这个
      * 独立进程盯着监工的 pid。
      */
@@ -1162,7 +1240,12 @@ async function main(): Promise<number> {
     case "workers":
       return cmdWorkers(p);
     case "auth":
-      return cmdAuth(p);
+      /*
+       * 令牌导出已移除：插件不把令牌写到磁盘。保留子命令名只为给旧脚本一句可读的说明，
+       * 不再读写任何文件。
+       */
+      write("该命令已移除：插件不从磁盘保存或读取令牌，认证由启动时读取的宿主凭证完成。\n");
+      return 0;
     case "board":
       return cmdBoard(p);
     case "feed":
@@ -1185,10 +1268,10 @@ async function main(): Promise<number> {
  * 否则多值写法会静默只装第一个。逗号写法（`--agent a,b`）保持原样可用。
  */
 /**
- * 已有监工在跑时的提示文案：pid、轮次、心跳，外加看板地址。
+ * 已有监工运行中时的提示文案：pid、轮次、心跳，外加看板地址。
  *
  * 判活按 pid 不按心跳窗口：心跳停顿可能只是它卡在一次长调用上，进程还在。
- * @returns 没有在跑的监工时返回 null。
+ * @returns 没有运行中的监工时返回 null。
  */
 function runningSupervisorNotice(root: string): string | null {
   const rec = loadSupervisor(root);

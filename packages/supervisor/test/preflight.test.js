@@ -25,7 +25,7 @@ function freshPrompt(dispatch) {
   });
 }
 
-test("首次派单提示词带「动手前先核对现状」，并写明五项核对", () => {
+test("首次派单提示词带“动手前先核对现状”，并写明五项核对", () => {
   const prompt = freshPrompt({ at: AT });
   assert.ok(prompt.includes(GROUNDING_HEAD));
   assert.match(prompt, /读目标文件当前内容与最近改动痕迹/);

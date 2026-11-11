@@ -73,7 +73,7 @@ test("失败路径同样落账：登记失败按 answered_only 记，并带上�
   assert.strictEqual(r.unhandled, true);
 });
 
-test("answered_only + 要求特征 → 追加 chat_unhandled", () => {
+test("answered_only + 要求特征 -> 追加 chat_unhandled", () => {
   const root = sandbox();
   const r = settleChat(root, {
     msg_id: "M-req",
@@ -97,7 +97,7 @@ test("纯提问：只有 chat_settled，不产生 chat_unhandled", () => {
   const r = settleChat(root, {
     msg_id: "M-ask",
     verdict: "answered_only",
-    text: "这一单现在跑到哪一步了？",
+    text: "这一单现运行中到哪一步了？",
   });
   assert.strictEqual(r.unhandled, false);
   assert.deepStrictEqual(r.hints, []);
@@ -118,7 +118,7 @@ test("有动作的 verdict 不会落 chat_unhandled（即便原话带要求特�
   assert.strictEqual(eventsOf(root, "chat_unhandled").length, 0);
 });
 
-test("人后来补建单 → 出列；人点「已答复」→ 出列", () => {
+test("人后来补建单 -> 出列；人点“已答复”-> 出列", () => {
   const root = sandbox();
   settleChat(root, { msg_id: "M-a", verdict: "answered_only", text: "新增一个入口" });
   settleChat(root, { msg_id: "M-b", verdict: "answered_only", text: "把按钮挪到中间" });
@@ -161,7 +161,7 @@ test("要求特征清单与判定：按派单给定的 15 个词，保持清单�
   assert.deepStrictEqual(requirementHints(""), []);
 });
 
-test("动作 → verdict 映射：dispatch/amend/queue/promote 各归各类，--now 算 promote", () => {
+test("动作 -> verdict 映射：dispatch/amend/queue/promote 各归各类，--now 算 promote", () => {
   assert.strictEqual(chatVerdictOf("dispatch", "做一件事"), "dispatched");
   assert.strictEqual(chatVerdictOf("dispatch", "--now 做一件事"), "promoted");
   assert.strictEqual(chatVerdictOf("amend", "D-1 加一句"), "amended");
@@ -182,12 +182,12 @@ test("对话流投影：未建单的发言在 capitalist-events 里带 unhandled
   const root = sandbox();
   const asked = recordUserMessage(root, { text: "新消息挪到中间，这里上方" });
   settleChat(root, { msg_id: asked.id, verdict: "answered_only", text: "新消息挪到中间，这里上方" });
-  const plain = recordUserMessage(root, { text: "这一单现在跑到哪一步了？" });
-  settleChat(root, { msg_id: plain.id, verdict: "answered_only", text: "这一单现在跑到哪一步了？" });
+  const plain = recordUserMessage(root, { text: "这一单现运行中到哪一步了？" });
+  settleChat(root, { msg_id: plain.id, verdict: "answered_only", text: "这一单现运行中到哪一步了？" });
 
   const log = buildSupervisorLog(root, { hours: 0 });
   const reqMsg = log.messages.find((m) => m.role === "user" && m.text === "新消息挪到中间，这里上方");
-  const plainMsg = log.messages.find((m) => m.role === "user" && m.text === "这一单现在跑到哪一步了？");
+  const plainMsg = log.messages.find((m) => m.role === "user" && m.text === "这一单现运行中到哪一步了？");
   assert.ok(reqMsg, "要求那条应出现在监工流里");
   assert.strictEqual(reqMsg.unhandled, true, "带要求特征、没建单的发言要挂未建单标记");
   assert.strictEqual(reqMsg.msg_id, asked.id, "标记要带 msg_id，前端靠它回查原话");

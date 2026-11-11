@@ -29,7 +29,7 @@ function openClaimed(root, id = "D-stuck1") {
   return capitalist.readDispatches(root).find((d) => d.id === id);
 }
 
-/** 造一条在跑 worker 记录；日志内容与 mtime 都由调用方决定。 */
+/** 造一条运行中 worker 记录；日志内容与 mtime 都由调用方决定。 */
 function workerWithLog(root, lines, ageSec) {
   const dir = join(root, ".capitalist", "workers");
   mkdirSync(dir, { recursive: true });
@@ -85,13 +85,13 @@ test("判活：心跳与日志都超过窗口，判为不存活", () => {
 });
 
 
-test("分类：日志没有新增且没有明确线索 → 空转等待", () => {
+test("分类：日志没有新增且没有明确线索 -> 空转等待", () => {
   const ev = stuckMod.classifyStuck(["开始处理这一单", "读取了 src/index.ts"]);
   assert.equal(ev.kind, "idle");
   assert.match(ev.why, /没有新增/);
 });
 
-test("分类：登录/验证码/配额提示 → 等外部条件", () => {
+test("分类：登录/验证码/配额提示 -> 等外部条件", () => {
   const ev = stuckMod.classifyStuck([
     "执行 npm login",
     "等待用户完成登录授权",
@@ -101,14 +101,14 @@ test("分类：登录/验证码/配额提示 → 等外部条件", () => {
   assert.match(ev.why, /登录|验证码|授权/);
 });
 
-test("分类：同一段报错反复出现 → 报错循环", () => {
+test("分类：同一段报错反复出现 -> 报错循环", () => {
   const line = "TypeError: Cannot read properties of undefined (reading 'billing')";
   const ev = stuckMod.classifyStuck([line, line, line, line, "执行 node scripts/check.js"]);
   assert.equal(ev.kind, "error_loop");
   assert.match(ev.why, /重复/);
 });
 
-test("分类：同一句命令反复刷且不是报错 → 重复无效重试", () => {
+test("分类：同一句命令反复刷且不是报错 -> 重复无效重试", () => {
   const line = "执行 pytest tests/test_billing.py -q，结果没有任何变化";
   const ev = stuckMod.classifyStuck([line, line, line, "读取 tests/test_billing.py"]);
   assert.equal(ev.kind, "retry");
@@ -134,7 +134,7 @@ test("原地打转：日志持续增长也会判卡点，并在本轮写入指�
   openClaimed(root);
   const line = "执行 pytest tests/test_billing.py -q，结果没有任何变化";
   const rec = workerWithLog(root, Array.from({ length: 130 }, () => line), 1);
-  /* 心跳也保持新鲜：这一类卡点的特征正是「两个信号都正常，但只在重复同一件事」。 */
+  /* 心跳也保持新鲜：这一类卡点的特征正是“两个信号都正常，但只在重复同一件事”。 */
   rec.heartbeat_ts = Date.now() / 1000;
   capitalist.saveWorker(root, rec);
 

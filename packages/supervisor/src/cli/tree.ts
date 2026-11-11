@@ -67,7 +67,7 @@ function listTrees(root: string, all = false): number {
     process.stdout.write(`\n另有 ${done} 棵树已全部收尾（历史，加 --all 展开）\n`);
   }
 
-  /* 根节点一览：重建前后最容易看的就是「未完工的根有几个」。 */
+  /* 根节点一览：重建前后最容易看的就是“未完工的根有几个”。 */
   const roots = shown.filter((t) => !t.cycle).map((t) => t.rootId);
   process.stdout.write(`\n未完工的根 ${roots.length} 个：${roots.join(" ") || "（无）"}\n`);
   return 0;
@@ -81,7 +81,7 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
   );
 
   for (const g of plan.groups) {
-    const flag = g.settledBy ? `已完成于 ${g.settledBy}` : `未完成 → 代表 ${g.representative}`;
+    const flag = g.settledBy ? `已完成于 ${g.settledBy}` : `未完成 -> 代表 ${g.representative}`;
     process.stdout.write(`· ${clip(g.label, 38)}  [${g.members.length} 条] ${flag}\n`);
   }
   process.stdout.write("\n");
@@ -90,7 +90,7 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
     /* 计划中不列出不改台账的处置。 */
     if (it.action === "keep" || !it.pending) continue;
     const verb = it.action === "close" ? "关" : "开";
-    const parent = it.parent ? `  → 父 ${it.parent}` : "";
+    const parent = it.parent ? `  -> 父 ${it.parent}` : "";
     process.stdout.write(`  ${verb} ${it.id}  ${clip(it.title, 30)}  ${clip(it.reason, 44)}${parent}\n`);
   }
 

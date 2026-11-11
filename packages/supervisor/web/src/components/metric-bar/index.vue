@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 监工指标条：运行 / 排队 / 异常 / 已验收与并行分子读 /api/supervisor.tasks 的聚合，与左栏、顶栏同源。
- * 接口缺项显示「—」，不按 0 处理。
+ * 接口缺项显示“—”，不按 0 处理。
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { fmtTokens, modelLabel } from "../../lib/usage.js";
@@ -49,7 +49,7 @@ const pauseLabel = computed(() => {
 
 /**
  * 刚切换成功的目标模型（`""` 为宿主默认）：轮询把 supervisor_model 带回来之前先用它显示。
- * 不这样做，蒙版撤掉时顶栏仍停在旧模型，看起来像是「关了蒙版还要再等一会儿」。
+ * 不这样做，蒙版撤掉时顶栏仍停在旧模型，看起来像是“关了蒙版还要再等一会儿”。
  */
 const modelPending = ref(null);
 
@@ -84,7 +84,7 @@ const hostDefault = computed(
 
 /** 按原 id 展示；路由别名换算成实际模型，解析不出来就原样显示。 */
 const modelLabelText = computed(() => {
-  /* 未显式指定时显示默认的具体模型，与弹层标「默认」的那行一致。 */
+  /* 未显式指定时显示默认的具体模型，与弹层标“默认”的那行一致。 */
   const raw = rawModel.value || hostDefault.value;
   if (!raw) return t("宿主默认");
   return modelLabel(raw);
@@ -107,7 +107,7 @@ async function post(action) {
   busy.value = true;
   try {
     const d = await command(action);
-    flash(d.effective || t("指令已登记，下一个 tick 生效"), false);
+    flash(d.effective || t("指令已登记，下一轮调度生效"), false);
   } catch (e) {
     flash(t("操作未生效：{m}", { m: e instanceof Error ? e.message : String(e) }), true);
   } finally {
@@ -125,7 +125,7 @@ async function togglePause() {
     const d = await command(action);
     emit("pause", action === "pause");
     emit("refresh");
-    flash(d.effective || t("指令已登记，下一个 tick 生效"), false);
+    flash(d.effective || t("指令已登记，下一轮调度生效"), false);
   } catch (e) {
     flash(t("操作未生效：{m}", { m: e instanceof Error ? e.message : String(e) }), true);
   } finally {
@@ -146,7 +146,7 @@ function confirmYes() {
 function restartSupervisor() {
   confirmAsk.value = {
     title: t("重启监工"),
-    text: t("当前进程立即退出，正在执行的工作进程一并结束；新进程随后自动拉起。任务台账、阶段与看板访问地址都不变。"),
+    text: t("当前进程立即退出，正在执行的工作进程一并结束；新进程随后自动拉起。任务记录、阶段与看板地址都不变。"),
     ok: t("重启"),
     danger: false,
     /* 先铺蒙版再发请求：监工收到命令即退场，期间界面无反馈；事件由 App 接住铺满视口，/api/supervisor 恢复后撤除。 */
@@ -265,7 +265,7 @@ const concEl = ref(null);
 const concPos = ref({ left: 0, top: 0 });
 let concAnchorRect = null;
 
-/** 输入合法当且仅当是 ≥1 的整数；空串单独提示「未填写」。 */
+/** 输入合法当且仅当是 ≥1 的整数；空串单独提示“未填写”。 */
 const concN = computed(() => (/^\d+$/.test(String(concVal.value).trim()) ? Number(String(concVal.value).trim()) : null));
 const concInvalid = computed(() => concN.value === null || concN.value < 1);
 
@@ -325,28 +325,28 @@ const cells = computed(() => [
         : [{ t: String(run.value), cls: "run" }, { t: `/${par.value}` }],
     na: par.value === null,
     btn: par.value !== null,
-    tip: par.value === null ? t("接口没给并行度") : t("调整并行度"),
+    tip: par.value === null ? t("未取得并行度") : t("调整并行度"),
   },
   {
     k: t("排队中"),
     v: count(stat("queued")),
     tone: "warn",
     na: stat("queued") === null,
-    tip: t("已派出、还未领取的派单数（与左栏「排队」同一份统计）"),
+    tip: t("已派出、还未领取的派单数（与左栏“排队”同一份统计）"),
   },
   {
     k: t("异常"),
     v: count(stat("failed")),
     tone: (stat("failed") ?? 0) > 0 ? "bad" : "",
     na: stat("failed") === null,
-    tip: t("失败、丢失、孤立或已消失的线程数（与左栏「异常」同一份统计）"),
+    tip: t("失败、丢失、孤立或已消失的线程数（与左栏“异常”同一份统计）"),
   },
   {
     k: t("已验收"),
     v: count(stat("accepted")),
     tone: "ok",
     na: stat("accepted") === null,
-    tip: t("当前任务里验收结论为通过的项数（done 的子集，与任务列表同一来源）"),
+    tip: t("验收通过的项数"),
   },
   { sep: true },
   {
@@ -354,14 +354,14 @@ const cells = computed(() => [
     v: tokens(usage.value.total_input_tokens),
     tone: "vio",
     na: num(usage.value.total_input_tokens) === null,
-    tip: t("本根全部 worker 累计输入 token（日志 usage 合计）"),
+    tip: t("当前任务全部工作进程的累计输入用量"),
   },
   {
     k: t("下行"),
     v: tokens(usage.value.total_output_tokens),
     tone: "vio",
     na: num(usage.value.total_output_tokens) === null,
-    tip: t("本根全部 worker 累计输出 token（日志 usage 合计）"),
+    tip: t("当前任务全部工作进程的累计输出用量"),
   },
 ]);
 </script>

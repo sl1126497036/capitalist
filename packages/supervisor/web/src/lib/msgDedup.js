@@ -54,7 +54,7 @@ function richer(a, b) {
 export function dedupeMessages(list) {
   const rows = Array.isArray(list) ? list : [];
   const out = [];
-  /** key → 输出数组下标（最后一次出现位置，供跨批次比较）。 */
+  /** key -> 输出数组下标（最后一次出现位置，供跨批次比较）。 */
   const seen = new Map();
   for (const m of rows) {
     const role = String(m?.role || "");

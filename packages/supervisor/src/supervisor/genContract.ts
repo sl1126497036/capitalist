@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { skillDirs } from "../host/locations";
+import { skillDirs } from "../agent/locations";
 import { askModel } from "./llm";
 
 /** 生成结果。`ok:false` 时调用方应退回内置契约。 */

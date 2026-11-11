@@ -20,7 +20,7 @@ test("rejectTail：reason 优先，空了回落 detail，都空返回空串", as
   assert.equal(rejectTail(undefined, undefined), "");
 });
 
-test("rejectTail：纯空白串视同空，不产生「被拒 ·  」式尾巴", async () => {
+test("rejectTail：纯空白串视同空，不产生“被拒 ·  ”式尾巴", async () => {
   const rejectTail = await loadRejectTail();
   assert.equal(rejectTail("   ", "detail"), "detail");
   assert.equal(rejectTail("  ", "   "), "");

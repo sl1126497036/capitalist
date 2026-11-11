@@ -6,7 +6,7 @@
 
 import { readJson } from "../core/json";
 import { supervisorPath } from "../core/supervisor";
-import { byId } from "../host/registry";
+import { byId } from "../agent/registry";
 
 export interface ModelDecision {
   /** 实际传给 `--model` 的值；`undefined` 表示该宿主没有模型策略，按原样传递。 */

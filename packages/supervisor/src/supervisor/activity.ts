@@ -23,7 +23,7 @@ export function isBuildCommand(command: string): boolean {
   );
 }
 
-/** 日志动作 → 界面动作；`null` / `undefined` 表示判不出来，调用方回退。 */
+/** 日志动作 -> 界面动作；`null` / `undefined` 表示判不出来，调用方回退。 */
 export function doingOfAction(action: { phase?: string; command?: string } | null | undefined): WorkerDoing | "" {
   if (!action) return "";
   if (action.phase === "reply") return "reply";
@@ -86,7 +86,7 @@ export function currentSupervisorAction(): SupervisorAction | "" {
 }
 
 /**
- * 监工指示档位。判定优先级：重载 → 在跑动作 → 待处理申报 → 在跑工作进程 → 回落 `thinking`。
+ * 监工指示档位。判定优先级：重载 -> 运行中动作 -> 待处理申报 -> 运行中工作进程 -> 回落 `thinking`。
  * 重载标记由监工进程或 CLI 写、看板进程读，故从磁盘状态取，不依赖进程内计数。
  */
 export function supervisorActivityOf(args: {

@@ -65,8 +65,8 @@ test("执行中送达（limit=1）只领一条，其余留在队列里", () => {
   assert.equal(one.length, 1, "hook 通道一次只能铺一条");
 
   /*
-   * 判据用「还在不在队列里」而不是 isDirectiveOpen：后者问的是「落实了没有」，
-   * 领走但没结论的那条对收工闸仍然是「没落实」，两个问题不能混。
+   * 判据用“还在不在队列里”而不是 isDirectiveOpen：后者问的是“落实了没有”，
+   * 领走但没结论的那条对收工闸仍然是“没落实”，两个问题不能混。
    */
   const rest = cmds.listDirectives(root).filter((x) => x.consumed !== true);
   assert.equal(rest.length, 1, "没送到的那条不许被标成已送达");
@@ -99,7 +99,7 @@ test("字数上限只约束第二条起：单条超长也得送，否则它永�
 });
 
 
-test("送达不等于落实：领走之后仍然算「没落实」", () => {
+test("送达不等于落实：领走之后仍然算“没落实”", () => {
   const root = sandbox();
   seed(root, "D-d");
   const rec = put(root, "改了没");
@@ -166,7 +166,7 @@ test("结论只认 done / not_mine / blocked", () => {
   assert.equal(r.ok, false);
 });
 
-test("not_mine / blocked 不带说明要拒：不许给它一条比「说句收到过」更省事的甩掉通道", () => {
+test("not_mine / blocked 不带说明要拒：不许给它一条比“说句收到过”更省事的甩掉通道", () => {
   const root = sandbox();
   seed(root, "D-i2");
   const a = put(root, "一条要求");
@@ -225,7 +225,7 @@ function refPattern(ref) {
   return new RegExp(String(ref).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 }
 
-test("收工闸：送到了但没给结论，不许结单，并直接给出可复制的命令行", () => {
+test("收工闸：送到了但没有结论，不许结单，并直接给出可复制的命令行", () => {
   const root = sandbox();
   seed(root, "D-cli");
   const rec = put(root, "这条要回报");
@@ -233,7 +233,7 @@ test("收工闸：送到了但没给结论，不许结单，并直接给出可�
 
   const denied = runCli(["report", "D-cli", "--status", "done", "--note", "做完了", "--root", root]);
   assert.equal(denied.code, 1, `没结论必须挡住：${denied.out}`);
-  assert.match(denied.out, /没给结论/);
+  assert.match(denied.out, /未给出结论/);
   assert.match(denied.out, /--outcome/, "要给出可直接复制的命令行，否则挡一次就要来回猜格式");
   assert.match(denied.out, refPattern(cmds.directiveRef(rec)), "要点明是哪一条");
 });

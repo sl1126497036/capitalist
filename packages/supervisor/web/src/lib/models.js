@@ -21,7 +21,7 @@ export async function loadModels(force = false) {
         models: Array.isArray(d.models) ? d.models.map(String) : [],
         host: String(d.host || ""),
         source: String(d.source || ""),
-        /* 宿主配置的默认模型，用于「宿主默认」一行。 */
+        /* 宿主配置的默认模型，用于“宿主默认”一行。 */
         default_model: String(d.default_model || ""),
         reason: String(d.reason || ""),
       };

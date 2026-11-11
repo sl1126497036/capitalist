@@ -1,8 +1,8 @@
 /**
  * `capitalist reload`，监工上下文重载。
  *
- * 执行「落快照 → 压上下文 → 换会话 → 写恢复计划」，不推进阶段、不改 schedule。
- * 复验单由监工下一 tick 的 `applyResumePlan` 补出（`source=reverify`）。
+ * 执行“落快照 -> 压上下文 -> 换会话 -> 写恢复计划”，不推进阶段、不改 schedule。
+ * 复验单由监工在下一轮调度中经 `applyResumePlan` 补出（`source=reverify`）。
  *
  * 本命令逐条复跑 done 规格并压缩上下文，与只读写台账的 records.ts 分开。
  */
@@ -10,7 +10,7 @@
 import { loadContract } from "../core/contract";
 import { findRoot } from "../core/paths";
 import { loadState } from "../core/state";
-import { skillDirs } from "../host/locations";
+import { skillDirs } from "../agent/locations";
 import { beginReload, readResumePlan, reloadStatus, snapshotPath } from "../supervisor/reload";
 import { flagBool, flagInt, flagString, type Parsed } from "./args";
 
@@ -45,7 +45,7 @@ export async function cmdReload(p: Parsed): Promise<number> {
   const contract = loadContract(state.contract_path) ?? loadContract(state.contract, skillDirs());
   if (!contract) throw new Error(`任务列表文件丢失：${state.contract_path}`);
 
-  // 上限 60 秒：这个参数只用于「让人看见重载中」，不是常驻等待。
+  // 上限 60 秒：这个参数只用于“让人看见重载中”，不是常驻等待。
   const holdSec = flagInt(p, "hold", { min: 0, max: 60, fallback: 0 });
   const summary = await beginReload(root, contract, { holdSec });
   const plan = readResumePlan(root);
@@ -58,13 +58,13 @@ export async function cmdReload(p: Parsed): Promise<number> {
   process.stdout.write(
     [
       `快照：${snapshotPath(root)}`,
-      `上下文：${summary.before_chars} → ${summary.after_chars} 字` +
-        `（事件 ${summary.events_total} 条，移除 ${summary.events_dropped} 条心跳/tick/已完成明细）`,
+      `上下文：${summary.before_chars} -> ${summary.after_chars} 字` +
+        `（事件 ${summary.events_total} 条，移除 ${summary.events_dropped} 条心跳、调度与已完成明细）`,
       `会话：${summary.session_id}（换会话即换上下文，老会话不再读）`,
       `不重派（已完成且有证据）：${summary.skip} 片`,
-      `待复验（已做但未验证）：${summary.reverify} 片 → 监工下一 tick 派复验单` +
+      `待复验（已做未验证）：${summary.reverify} 个分片，下一轮调度派复验单` +
         (summary.deferred ? `（另有 ${summary.deferred} 片属于旧阶段/已删分片，只记录不派）` : ""),
-      `继续做（未完成）：${summary.pending} 片 → 由监工原有补派逻辑接手`,
+      `继续做（未完成）：${summary.pending} 片 -> 由监工原有补派逻辑接手`,
       plan && plan.reverify.length > 0
         ? `复验清单：${plan.reverify.map((r) => r.key).join("、")}`
         : "复验清单：无",

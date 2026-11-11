@@ -18,7 +18,7 @@ interface CreditFile {
   last_used: number | null;
   /** 上一次快照时刻（ISO） */
   last_at: string;
-  /** 单位（照计费接口，一般是「积分」） */
+  /** 单位（照计费接口，一般是“积分”） */
   unit: string;
   /** 上一次读数所属账号 uid；换账号后基线不可沿用 */
   uid?: string;
@@ -49,7 +49,7 @@ const cache = new Map<string, { mtimeMs: number; size: number; file: CreditFile 
 
 /**
  * 数值字段解析。空值返回 null：`Number(null)` 与 `Number("")` 都是 0，
- * 直接转换会把「没有基线」读成「基线为 0」，让首次真实读数整体算成一笔增量。
+ * 直接转换会把“没有基线”读成“基线为 0”，让首次真实读数整体算成一笔增量。
  */
 function numOrNull(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
@@ -107,7 +107,7 @@ function round4(n: number): number {
 
 /**
  * 工作进程最后一次有动作的时刻：心跳时间与日志最后写入时间取较晚者。
- * 日志是宿主输出的落点，只有产生内容时才变，可作为「这段时间确有消耗」的判据。
+ * 日志是宿主输出的落点，只有产生内容时才变，可作为“这段时间确有消耗”的判据。
  */
 function lastActivityMs(w: ReturnType<typeof listWorkers>[number]): number {
   let ms = Date.parse(String(w.heartbeat_at ?? ""));
@@ -192,7 +192,7 @@ export function noteCreditUsed(root: string, used: number | null, unit: string, 
     return;
   }
   /*
-   * 活跃判据取「窗口内有过动作」，不看进程状态：监工停止或判死延迟时，
+   * 活跃判据取“窗口内有过动作”，不看进程状态：监工停止或判死延迟时，
    * 记录会长期停在 running，只按状态判断会把此后的账号增量持续记给这个进程。
    */
   const active = workers.filter((w) => lastActivityMs(w) >= windowFrom);

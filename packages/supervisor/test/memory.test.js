@@ -52,7 +52,7 @@ test("收录范围不只有卡点：默认按习惯/环境收，无关键词也�
   assert.equal(env.kind, "habit", "默认按习惯/环境收，不是卡点");
   assert.equal(env.keys.length > 0, true, "有实词时仍要能提炼关键词");
 
-  /* 纯符号 / 纯数字这种提不出关键词的内容：非空就收，不按「不是卡点」拒绝。 */
+  /* 纯符号 / 纯数字这种提不出关键词的内容：非空就收，不按“不是卡点”拒绝。 */
   const bare = addMemory(root, "！！");
   assert.ok(bare, "提不出关键词也应保存");
   assert.equal(bare.kind, "habit");

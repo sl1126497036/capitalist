@@ -43,18 +43,18 @@ const supervisorTitle = computed(() => {
 });
 
 
-/* 暂停档不提供清空：暂停单的处置为唤醒或关闭，归档会使该派单离开待办队列，语义与「清空列表」不同。 */
+/* 暂停档不提供清空：暂停单的处置为唤醒或关闭，归档会使该派单离开待办队列，语义与“清空列表”不同。 */
 const canClear = computed(() => filter.value !== "paused" && (counts.value[filter.value] || 0) > 0);
 const clearAsk = ref(false);
 
-/** 清空只归档记录，不结束在跑进程。 */
+/** 清空只归档记录，不结束运行中进程。 */
 const clearBody = computed(() => {
   const n = counts.value[filter.value] || 0;
   const base = tr("将清空 {n} 项：进程记录与派单移进归档目录，列表里不再出现。", { n });
   if (filter.value === "all") return `${base}${tr("运行中的进程不会结束，完成后会重新出现在列表。")}`;
   if (filter.value === "run") return tr("这 {n} 个进程不会结束，记录移出列表，完成后会重新出现。", { n });
   if (filter.value === "queue") return tr("这 {n} 张排队中的派单会从队列撤下，监工不再派发。", { n });
-  if (filter.value === "bad") return `${base}${tr("这些进程的日志之后只能去归档目录里翻。")}`;
+  if (filter.value === "bad") return `${base}${tr("这些进程的日志将移至归档目录。")}`;
   return base;
 });
 
@@ -94,9 +94,9 @@ function cell(t) {
     return { tone: "run", kind: "word", text: workerDoingText("report") };
   }
   if (s === "running" || s === "starting" || s === "claimed") {
-    /* 判活以后端 alive 为准（另核对 pid）；文案用「进程已退出」，不用「无响应」。 */
+    /* 判活以后端 alive 为准（另核对 pid）；文案用“进程已退出”，不用“无响应”。 */
     if (t?.alive === false) return { tone: "bad", kind: "word", text: tr("进程已退出") };
-    /* 状态位按日志动作出词，读不出时回退「运行中」；耗时放在第二行。 */
+    /* 状态位按日志动作出词，读不出时回退“运行中”；耗时放在第二行。 */
     if (t?.doing) return { tone: "run", kind: "word", text: workerDoingText(t.doing) };
     return { tone: "run", kind: "word", text: tr("运行中") };
   }
@@ -435,6 +435,9 @@ const closing = ref("");
 
 /* 后端 closeTask 仅拦截 done/closed 终态，运行、排队、暂停、exited 未结与回执档均可关闭；异常档执行清除。 */
 function canClose(t) {
+  /* 已结束、已取消与异常档只提供清除：同一张卡同时给出关闭与清除，会让人以为还要再关一次。 */
+  const b = bucket(t);
+  if (b === "done" || b === "canceled" || b === "bad") return false;
   const s = String(t?.status || "");
   if (s === "running" || s === "starting" || s === "claimed" || s === "queued" || s === "open") return true;
   /* 暂停单可能已经过时，支持直接关闭，无需先唤醒。 */
@@ -454,7 +457,7 @@ function canWake(t) {
   return String(t?.status || "") === "paused";
 }
 
-/** 同一后端动作在排队行称「取消」、在跑行称「关闭」。 */
+/** 同一后端动作在排队行称“取消”、运行中行称“关闭”。 */
 function closeWord(t) {
   return canPromote(t) ? tr("取消") : tr("关闭");
 }
@@ -462,12 +465,12 @@ function closeWord(t) {
 function closeTip(t) {
   return canPromote(t)
     ? tr("从队列撤下，监工不再派发")
-    : tr("结项并停止重派，在跑进程先结束");
+    : tr("结项并停止重派，运行中进程先结束");
 }
 
 const promoting = ref("");
 
-/** 首次点击只进入确认态：立即执行会让在跑进程挂起、排队单被越过。 */
+/** 首次点击只进入确认态：立即执行会让运行中进程挂起、排队单被越过。 */
 function promoteTap(r) {
   promoting.value = promoting.value === r.t.id ? "" : r.t.id;
   closing.value = "";
@@ -508,7 +511,7 @@ function closeConfirm(r) {
 }
 
 
-/* 清除只写标记让卡离开列表，历史台账保留；异常档先结项再打标记，在跑与排队不提供清除。 */
+/* 清除只写标记让卡离开列表，历史台账保留；异常档先结项再打标记，运行中与排队不提供清除。 */
 function canClearCard(t) {
   const b = bucket(t);
   return b === "done" || b === "canceled" || b === "bad";
@@ -577,7 +580,7 @@ const supervisorMeta = computed(() => {
   if (!s || !s.status) return "—";
   const alive = typeof s.running === "number" ? s.running : 0;
   const queued = typeof s.queued === "number" ? s.queued : 0;
-  const bits = [alive > 0 ? tr("在跑 {n}", { n: alive }) : tr("空闲")];
+  const bits = [alive > 0 ? tr("运行中 {n}", { n: alive }) : tr("空闲")];
   if (queued > 0) bits.push(tr("排队 {n}", { n: queued }));
   const used = supervisorUsage.value;
   if (used) bits.push(tr("累计 {v}", { v: used }));

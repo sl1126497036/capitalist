@@ -13,8 +13,8 @@ const { loadState } = require("../dist/core/state");
 const loop = require("../dist/supervisor/loop");
 
 /*
- * 判定通道指向一个不存在的可执行文件：本文件验的是「判死后怎么传导」，
- * 不验「模型认为该不该重试」。不挡的话每次判死都会真的拉起一个模型会话。
+ * 判定通道指向一个不存在的可执行文件：本文件验的是“判死后怎么传导”，
+ * 不验“模型认为该不该重试”。不挡的话每次判死都会真的拉起一个模型会话。
  */
 process.env.CAPITALIST_WORKER_BIN = join(tmpdir(), "no-such-worker-bin-for-cascade-test");
 
@@ -90,7 +90,7 @@ function alive(pid) {
 
 const quiet = () => {};
 
-/** 一条「父节点带一条链」的标准现场：父已失败两次，第三次正在跑，下面挂两代子孙。 */
+/** 一条“父节点带一条链”的标准现场：父已失败两次，第三次正运行中，下面挂两代子孙。 */
 function scene(root, { log = "worker 崩了：unexpected exit" } = {}) {
   put(root, "P0", { status: "failed", note: "第一次：启动即退", done_at: new Date().toISOString() });
   put(root, "P1", { status: "failed", note: "第二次：又退", done_at: new Date().toISOString(), attempt: 2 });
@@ -120,7 +120,7 @@ function scene(root, { log = "worker 崩了：unexpected exit" } = {}) {
 }
 
 
-test("父节点第三次失败：整棵子树判死、在跑的子进程被停、不再有重试", () => {
+test("父节点第三次失败：整棵子树判死、运行中的子进程被停、不再有重试", () => {
   const root = sandbox();
   const { c2 } = scene(root);
   const before = capitalist.readDispatches(root).length;
@@ -145,7 +145,7 @@ test("父节点第三次失败：整棵子树判死、在跑的子进程被停�
   assert.equal(row(root, "D1").status, "done", "已完成的子孙不动");
   assert.equal(row(root, "T2").status, "open", "别的树不受牵连");
 
-  assert.equal(alive(c2.pid), false, "在跑的子进程必须停掉");
+  assert.equal(alive(c2.pid), false, "运行中的子进程必须停掉");
 
   const ev = events(root, "dispatch_cascade_failed");
   assert.equal(ev.length, 1, "级联要记一条事件");

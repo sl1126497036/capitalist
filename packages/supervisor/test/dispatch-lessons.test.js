@@ -25,7 +25,7 @@ function scratch(name = "capitalist-lessons-") {
 test("卡点记忆：两次同类卡点归并为一条，次数累加且重启后仍在", () => {
   const root = scratch();
   try {
-    rememberLesson(root, "worker 提示词里写了「等 A 完成后再改 B」，两个进程互相等死", "D-1");
+    rememberLesson(root, "worker 提示词里写了“等 A 完成后再改 B”，两个进程互相等死", "D-1");
     rememberLesson(root, "又一单把顺序句写进 worker 提示词，等 A 完成后再改 B，互相等死", "D-2");
 
     const entries = loadMemories(root);

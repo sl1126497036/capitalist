@@ -88,14 +88,14 @@ test("删除目标不确定时拒绝：通配符与缺失目标语义不同，�
   assert.equal(detectAction("ls"), "read");
 });
 
-test("脚本删除 API 也能抽出目标（否则理由会错成「没给出目标」）", () => {
+test("脚本删除 API 也能抽出目标（否则理由会错成“没给出目标”）", () => {
   assert.deepEqual(extractDeleteArgs("python -c \"shutil.rmtree('/home/user')\"").targets, [
     "/home/user",
   ]);
   assert.deepEqual(extractDeleteArgs("python3 -c 'import os; os.remove(\"/etc/x\")'").targets, [
     "/etc/x",
   ]);
-  // 真实路径里的括号不能被截短：截短的方向是「看起来在任务根内」，那是漏判
+  // 真实路径里的括号不能被截短：截短的方向是“看起来在任务根内”，那是漏判
   assert.deepEqual(extractDeleteArgs("rm -rf a)b").targets, ["a)b"]);
 });
 
@@ -132,7 +132,7 @@ test("mtime_after_stage：缺时间字段时回落 created_at，而不是永远�
   );
   assert.equal(runCheck({ type: "mtime_after_stage", path: "memory.md" }, root).ok, true);
 
-  // 阶段在本文件上次修改之后才进入 → 没更新过
+  // 阶段在本文件上次修改之后才进入 -> 没更新过
   writeFileSync(
     join(root, ".capitalist", "state.json"),
     JSON.stringify({ stage: "S5", stage_entered_at_ts: Math.floor(Date.now() / 1000) + 60 }),

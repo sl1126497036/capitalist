@@ -42,7 +42,7 @@ export function expandHome(p: string): string {
  *
  * 必要性：hook 的 `cwd` 字段来自宿主，通常是原生路径；但用户手工调用、或者
  * 某些宿主在 Git Bash 下启动时，会传 `/d/work` 这种 POSIX 写法。Windows 的 fs
- * 会把它当成当前盘符下的 `\d\work`，于是「任务根明明在，却报未纳管」，
+ * 会把它当成当前盘符下的 `\d\work`，于是“任务根明明在，却报未纳管”，
  * 这类失败极难从现象反推原因，必须在入口处就抹平。
  *
  * @returns 非 Windows 平台或不符合该写法时原样返回。
@@ -99,7 +99,7 @@ export function absolutize(p: string, base?: string): string {
 /**
  * 判断 child 是否落在 parent 之内（含相等）。用归一化比较，避免分隔符差异。
  *
- * @returns parent 为空串时恒为 false（没有可归属的边界，不能当成「全在内」）。
+ * @returns parent 为空串时恒为 false（没有可归属的边界，不能当成“全在内”）。
  */
 export function isInside(child: string, parent: string): boolean {
   // 小写归一只在大小写不敏感的平台成立（Windows、macOS 默认 APFS）。Linux 上仅大小写

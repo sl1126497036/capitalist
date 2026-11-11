@@ -8,11 +8,11 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const registry = require("../dist/host/registry");
-const { deriveCapabilities } = require("../dist/host/contract");
+const registry = require("../dist/agent/registry");
+const { deriveCapabilities } = require("../dist/agent/contract");
 
 const CTX = {
-  entry: "/pkg/dist/host/main.js",
+  entry: "/pkg/dist/agent/main.js",
   node: "/usr/bin/node",
   marker: "capitalist-supervisor",
   platform: "linux",
@@ -67,29 +67,29 @@ test("worker 参数快照：argv 与 stdin 两种路径都在 impl 里定死", (
     };
   }
   // 取值与形状都是外部兼容面：改这里等于改任务根里的 worker 记录。
-  assert.deepEqual(seen.claude, {
+  assert.deepEqual(seen["claude-code"], {
     argv: ["-p", "DO", "--permission-mode", "acceptEdits", "--output-format", "text", "--model", "m"],
     stdin: ["-p", "--output-format", "text", "--model", "m"],
     autoDetect: true,
     authEnvVar: null,
   });
   // `--port 0` 让每个 worker 自选端口：默认端口固定，与桌面端宿主同机运行会 EADDRINUSE，
-  // 而 CLI 在这种失败下仍以退出码 0 结束，表现为「进程起来了但什么也没干」。
+  // 而 CLI 在这种失败下仍以退出码 0 结束，表现为“进程起来了但什么也没干”。
   assert.deepEqual(seen.codebuddy, {
     argv: ["-p", "DO", "--permission-mode", "bypassPermissions", "--port", "0", "--model", "m", "--output-format", "stream-json", "-d"],
     stdin: ["-p", "--permission-mode", "bypassPermissions", "--port", "0", "--model", "m", "--output-format", "stream-json", "-d"],
     autoDetect: true,
-    authEnvVar: null,
+    authEnvVar: "CODEBUDDY_AUTH_TOKEN",
   });
   assert.equal(seen.workbuddy.autoDetect, false, "没有可靠非交互入口的宿主不得参与自动探测");
 });
 
-test("探测顺序：自动探测仍是 codebuddy → claude（外部行为，不许变）", () => {
+test("探测顺序：自动探测仍是 codebuddy -> claude（外部行为，不许变）", () => {
   const auto = registry
     .workerHosts()
     .filter((impl) => impl.worker.detectPriority !== undefined)
     .map((impl) => impl.worker.key);
-  assert.deepEqual(auto, ["codebuddy", "claude"]);
+  assert.deepEqual(auto, ["codebuddy", "claude-code"]);
 });
 
 test("探测优先级：workerHosts 降序且不含未声明优先级的宿主在前", () => {
@@ -120,7 +120,7 @@ test("workspace：没有 facet 的 impl 一个项目配置都不写", () => {
 test("workspace：有 facet 的 impl 幂等追加，且不改用户已有值", () => {
   const root = mkdtempSync(join(tmpdir(), "capitalist-ws2-"));
   // 用 impl/shared 的工厂自建一份（家目录指向临时目录），避免测试写真实宿主配置。
-  const { createWorkspaceFacet } = require("../dist/host/impl/shared/dirTrust");
+  const { createWorkspaceFacet } = require("../dist/agent/impl/shared/dirTrust");
   const facet = createWorkspaceFacet({
     configDir: ".hostx",
     label: "HostX",
@@ -150,7 +150,7 @@ test("workspace：有 facet 的 impl 幂等追加，且不改用户已有值", (
 });
 
 test("Windows hook 依赖：缺 Git Bash 时判定不可用，非 Windows 不检查", () => {
-  const { gitBashAvailable } = require("../dist/host/impl/shared/workerCommon");
+  const { gitBashAvailable } = require("../dist/agent/impl/shared/workerCommon");
   const never = () => false;
   assert.equal(gitBashAvailable("darwin", {}, never), true, "非 Windows 恒为可用");
   assert.equal(gitBashAvailable("linux", { PATH: "" }, never), true);
@@ -190,7 +190,7 @@ test("capitalist hosts 的输出与注册表一致（自检出口不会各说各
 });
 
 test("hook 入口：未知宿主不阻断，也不假装跑的是别的 impl", () => {
-  const r = spawnSync(process.execPath, [join(PKG, "dist", "host", "main.js"), "PreToolUse", "--agent", "nope"], {
+  const r = spawnSync(process.execPath, [join(PKG, "dist", "agent", "main.js"), "PreToolUse", "--agent", "nope"], {
     encoding: "utf8",
     input: "{}",
   });
@@ -199,7 +199,7 @@ test("hook 入口：未知宿主不阻断，也不假装跑的是别的 impl", (
 });
 
 test("hook 入口：--selftest 打印配置位置与映射，不处理事件", () => {
-  const r = spawnSync(process.execPath, [join(PKG, "dist", "host", "main.js"), "--selftest"], {
+  const r = spawnSync(process.execPath, [join(PKG, "dist", "agent", "main.js"), "--selftest"], {
     encoding: "utf8",
     input: "{}",
   });

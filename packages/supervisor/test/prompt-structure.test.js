@@ -35,7 +35,7 @@ test("首次派单：七块，序号连续不重复", () => {
   const text = buildPrompt(ARGS);
   const s = seq(text);
   assert.equal(s.length, 7, `实际区块：${blocks(text).join(" / ")}`);
-  assert.deepEqual(s, CN.slice(0, 7), "序号必须从「一」连续排到「七」，不能跳号或撞号");
+  assert.deepEqual(s, CN.slice(0, 7), "序号必须从“一”连续排到“七”，不能跳号或撞号");
 });
 
 test("续跑：与首次派单同一套块序", () => {
@@ -52,20 +52,20 @@ test("修复单：七块；诊断单（只读）少一块核对现状，序号�
   assert.deepEqual(seq(fix), CN.slice(0, 7));
 
   assert.equal(seq(diag).length, 6, `诊断单区块：${blocks(diag).join(" / ")}`);
-  assert.deepEqual(seq(diag), CN.slice(0, 6), "诊断单没有「核对现状」，后面的序号要整体前移");
+  assert.deepEqual(seq(diag), CN.slice(0, 6), "诊断单没有“核对现状”，后面的序号要整体前移");
   assert.ok(!blocks(diag).some((n) => n.includes("核对现状")), "只读进程不该有动手前核对这一段");
 });
 
 test("不再有重复的核对现状：只有一块，且合并了两边独有的内容", () => {
   const text = buildPrompt(ARGS);
   const headings = text.split("\n").filter((l) => /^【/.test(l) && l.includes("核对现状"));
-  assert.equal(headings.length, 1, `「核对现状」只该有一个区块标题，实际：${headings.join(" / ")}`);
+  assert.equal(headings.length, 1, `“核对现状”只该有一个区块标题，实际：${headings.join(" / ")}`);
   assert.ok(text.includes("mtime 晚于本单创建时刻"), "preflight 独有的 mtime 比对要保留");
   assert.ok(text.includes("与已验收的做法相反"), "preflight 独有的口径核对要保留");
   assert.ok(text.includes("相关模块现在怎么做的"), "grounding 独有的理解现状要保留");
 });
 
-test("「带超时」只写一遍：结单口径里说完，不再在动作清单里重复", () => {
+test("“带超时”只写一遍：结单口径里说完，不再在动作清单里重复", () => {
   const text = buildPrompt(ARGS);
   const hits = text.split("\n").filter((l) => l.includes("带超时与无输出判定"));
   assert.equal(hits.length, 1, `实际出现 ${hits.length} 处：\n${hits.join("\n")}`);
@@ -74,7 +74,7 @@ test("「带超时」只写一遍：结单口径里说完，不再在动作清�
 test("旧标题不再出现（已被合并或重命名）", () => {
   const text = buildPrompt(ARGS);
   for (const gone of ["【只认这一单】", "【动手前先对齐现状】", "【碰到问题就申报", "做这几件事："]) {
-    assert.ok(!text.includes(gone), `「${gone}」已被合并，不该还在`);
+    assert.ok(!text.includes(gone), `“${gone}”已被合并，不该还在`);
   }
 });
 

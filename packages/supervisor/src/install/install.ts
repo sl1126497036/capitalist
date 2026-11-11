@@ -4,9 +4,9 @@
  * ## 职责边界
  *
  * 本文件只负责机制：幂等合并、只动 `hooks` 键、保留用户原有条目、卸载时识别自有条目。
- * 「写哪些事件、命令长什么样、装完还差哪一步」是各 impl 的 `InstallFacet`。
+ * “写哪些事件、命令长什么样、装完还差哪一步”是各 impl 的 `InstallFacet`。
  *
- * 不同宿主的分发与生效方式不同，差异不在「怎么跑 hook」，而在「怎么让 hook 跑起来」。
+ * 不同宿主的分发与生效方式不同，差异不在“怎么跑 hook”，而在“怎么让 hook 跑起来”。
  * 后置条件以 impl 的 `notice` / `preconditions` 数据表示，由安装器输出。
  *
  * ## 合并原则
@@ -20,9 +20,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { writeJson } from "../core/json";
-import type { HostImpl, InstallContext, InstallEntry } from "../host/contract";
-import { all, byId, normalize } from "../host/registry";
-import { watchConfigPath } from "../host/locations";
+import type { HostImpl, InstallContext, InstallEntry } from "../agent/contract";
+import { all, byId, normalize } from "../agent/registry";
+import { watchConfigPath } from "../agent/locations";
 
 /**
  * 自有条目的识别标记。安装器靠它做幂等，用户也靠它在配置里认出这段是谁写的。
@@ -33,8 +33,8 @@ const MARKER = "capitalist-supervisor";
 /**
  * 手册在宿主 skills 目录下的名字。
  *
- * 取包名而不取 `supervisor`：宿主以目录名作为 skill 名展示；列表显示「supervisor」时，
- * 与用户指令中的「监工」无法对应。
+ * 取包名而不取 `supervisor`：宿主以目录名作为 skill 名展示；列表显示“supervisor”时，
+ * 与用户指令中的“监工”无法对应。
  */
 const SKILL_NAME = "capitalist";
 
@@ -50,7 +50,7 @@ export interface InstallOptions {
   /**
    * hook 写进哪个任务根的项目级配置。
    *
-   * 缺省取当前工作目录，`capitalist install` 的语义是「把本项目的监工接到宿主上」，
+   * 缺省取当前工作目录，`capitalist install` 的语义是“把本项目的监工接到宿主上”，
    * 站在项目里执行就装到这个项目。不再退到用户级：写宿主的用户级配置目录
    * 会让这台机器上所有项目、所有会话的每次工具调用都 spawn 一次 hook，
    * Windows 上就是一直闪窗。要装到别的项目就显式 `--root`。
@@ -107,7 +107,7 @@ function isInstalled(impl: HostImpl): boolean {
  */
 function hookEntryPath(): string {
   // 运行时 __dirname 为 <包根>/dist/install，入口脚本在同级的 host 目录下。
-  return join(__dirname, "..", "host", "main.js");
+  return join(__dirname, "..", "agent", "main.js");
 }
 
 /**
@@ -150,7 +150,7 @@ interface MergeResult {
  *
  * 文件不存在按空对象处理（首次安装）；存在但不是 JSON 对象时抛出带修复指引的错误，
  * 由调用方转成面向使用者的失败信息。安装与卸载共用这一份读取：两处各写一份时，
- * 同一份坏文件会在安装时报「拒绝覆盖」、在卸载时被当成空配置，卸载于是报告成功而 hook
+ * 同一份坏文件会在安装时报“拒绝覆盖”、在卸载时被当成空配置，卸载于是报告成功而 hook
  * 仍留在配置里。
  *
  * @throws 文件存在但不是合法 JSON 时抛出。
@@ -380,7 +380,15 @@ export function ensureHooks(hostIds: string[], root?: string): HealResult {
 }
 
 function hookSettingsFile(impl: HostImpl, root?: string): string | null {
-  if (!root || !impl.settingsFile || impl.projectLocal !== true) return null;
+  if (!impl.settingsFile) return null;
+  /*
+   * 用户级落点：项目里不建配置目录。
+   *
+   * WorkBuddy 一旦在项目里看到 `.codebuddy` 就转入受限模式，bash 不可用，插件等于没装。
+   * 这类宿主的 hook 只能写用户级，代价是本机所有该宿主会话都会触发，取舍见 impl 注释。
+   */
+  if (impl.userLevelHook === true) return join(homedir(), impl.configDir, impl.settingsFile);
+  if (!root || impl.projectLocal !== true) return null;
   return join(root, impl.configDir, "settings.local.json");
 }
 
@@ -542,7 +550,7 @@ export function runInstall(opts: InstallOptions): number {
 }
 
 /**
- * 手册下标：安装包里 vendor 的那份 → 仓库根的那份（开发态）→ 环境变量指定。
+ * 手册下标：安装包里 vendor 的那份 -> 仓库根的那份（开发态）-> 环境变量指定。
  *
  * 发布包里只有 `skill/SKILL.md`；从仓库直接跑时这个目录不在包内，源头在仓库根。
  * 两份同名但只有一份是源，构建时由 `scripts/vendor-skill.mjs` 从根同步进包。
@@ -603,4 +611,38 @@ export function ensureSkillManual(
     }
   }
   return { placed, failed, cleaned };
+}
+
+/**
+ * 用户级接入：hook 写入 `~/<宿主配置目录>/settings.json`。
+ *
+ * 只在显式要求时使用（`capitalist install --user`）。缺省落点是项目级：用户级写入会让这台
+ * 机器上所有项目、所有会话的每次工具调用都起一次 hook 进程，Windows 上表现为持续闪窗。
+ * 需要换目录即生效时由用户显式选择。
+ */
+export function installUserHooks(hostIds: readonly string[]): {
+  ok: string[];
+  failed: Array<{ id: string; message: string }>;
+} {
+  const ctx = installContext();
+  const ok: string[] = [];
+  const failed: Array<{ id: string; message: string }> = [];
+
+  for (const raw of hostIds) {
+    const id = normalize(raw);
+    const impl = id ? byId(id) : null;
+    if (!impl?.install || !impl.settingsFile) {
+      failed.push({ id: raw, message: "该宿主不支持 hook 安装" });
+      continue;
+    }
+    if (!existsSync(join(homedir(), impl.configDir))) continue;
+    const file = join(homedir(), impl.configDir, impl.settingsFile);
+    try {
+      mergeSettings(file, impl.install.plan(ctx), false);
+      ok.push(`${impl.id}(${file})`);
+    } catch (err) {
+      failed.push({ id: impl.id, message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return { ok, failed };
 }

@@ -9,9 +9,9 @@ const capitalist = require("../dist/core/supervisor");
 const cmds = require("../dist/core/commands");
 const { createTaskRoot } = require("../dist/core/init");
 const { recordEvent } = require("../dist/core/ledger");
-const { loadState } = require("../dist/core/state");
-const dispatch = require("../dist/host/dispatch").dispatch;
-const { byId } = require("../dist/host/registry");
+const { loadState, updateState } = require("../dist/core/state");
+const dispatch = require("../dist/agent/dispatch").dispatch;
+const { byId } = require("../dist/agent/registry");
 const { buildThreadMessages, buildSupervisorLog } = require("../dist/supervisor/board");
 const { appendSupervisorDirective, listSupervisorDirectives, markSupervisorDirective } = require("../dist/supervisor/direct");
 const { assignThreadNos } = require("../dist/supervisor/threadNo");
@@ -207,10 +207,10 @@ test("看板会话流：未消费的追加内容显示去向，不写成无限�
 
   const { messages } = buildThreadMessages(root, "shard:a", "a", { limit: 400 });
   const say = messages.find((m) => m.kind === "say" && String(m.text).includes("还没生效的话"));
-  assert.ok(say, "未生效的话也显示（那是「我说过什么」，不是待办清单）");
+  assert.ok(say, "未生效的话也显示（那是“我说过什么”，不是待办清单）");
   assert.equal(say.status, "已登记，随归属单带入");
   assert.equal(say.no, undefined, "未消费的追加还没进任何一单，不许显示单号");
-  assert.ok(!String(say.status).includes("等下一次派单"), "目标单在跑或即将启动时不许写无限期等待");
+  assert.ok(!String(say.status).includes("等下一次派单"), "目标单运行中或即将启动时不许写无限期等待");
 });
 
 test("滞留追加补投递：目标单已终结时翻回 open，下一拍带着追加重新拉起", () => {
@@ -231,10 +231,52 @@ test("滞留追加补投递：目标单已终结时翻回 open，下一拍带着
   assert.equal(row.done_at, undefined, "旧的完成时间要清掉，否则下一拍又当它已结束");
   assert.equal(cmds.listDirectives(root)[0].consumed, false, "翻单不等于消费，启动时才并入");
 
-  /* 仍在途的单不动：在跑由 hook 下一个动作间隙送达。 */
+  /* 仍在途的单不动：运行中由 hook 下一个动作间隙送达。 */
   seedDispatch(root, { id: "D-run", lineage: "D-run", status: "claimed" });
-  cmds.appendDirective(root, { text: "在跑的单不要翻", shard: "a", target: "D-run", lineage: "D-run" });
+  cmds.appendDirective(root, { text: "运行中的单不要翻", shard: "a", target: "D-run", lineage: "D-run" });
   assert.deepEqual(loop.drainSettledDirectives(root), [], "在途单不该被翻回 open");
+});
+
+test("追加目标单属已推进阶段：不翻回，追加标记为未投递", () => {
+  const root = sandbox();
+  seedDispatch(root, { status: "superseded" });
+  cmds.appendDirective(root, {
+    text: "阶段推进之后才补的这句",
+    shard: "a",
+    target: "D-append1",
+    lineage: "D-append1",
+  });
+
+  /* 阶段推进到 S1：S0 的单已经没有执行位，翻回也会被同一轮按阶段作废。 */
+  updateState(root, (s) => {
+    s.stage = "S1";
+  });
+
+  assert.deepEqual(loop.drainSettledDirectives(root), [], "已推进阶段的单不该翻回 open");
+  const row = capitalist.readDispatches(root).find((d) => d.id === "D-append1");
+  assert.equal(row.status, "superseded", "单子保持终态，不再每轮复活");
+
+  const d = cmds.listDirectives(root)[0];
+  assert.equal(d.consumed, true, "无法投递的追加要标记，否则每轮重复尝试");
+  assert.equal(d.consumed_via, "dropped", "去向要能区分于并入派单");
+  assert.ok(String(d.dropped_reason).includes("S0"), "原因里写明所属阶段");
+
+  assert.deepEqual(loop.drainSettledDirectives(root), [], "已标记的追加不进入复活流程");
+});
+
+test("手动结项的单在同一阶段仍由追加唤起", () => {
+  const root = sandbox();
+  seedDispatch(root, { status: "closed", done_at: new Date().toISOString() });
+  cmds.appendDirective(root, {
+    text: "结项之后再补一句",
+    shard: "a",
+    target: "D-append1",
+    lineage: "D-append1",
+  });
+
+  assert.deepEqual(loop.drainSettledDirectives(root), ["D-append1"]);
+  const row = capitalist.readDispatches(root).find((d) => d.id === "D-append1");
+  assert.equal(row.status, "open", "同阶段的结项单要能被追加重新拉开");
 });
 
 test("同一次追加只画一张卡片：directive_amended 与插话记录同文时不重复下发", () => {
@@ -261,7 +303,7 @@ test("同一次追加只画一张卡片：directive_amended 与插话记录同�
     String(m.text ?? "").replace(/\s+/g, "").includes(text.replace(/\s+/g, "")),
   );
   assert.equal(hits.length, 1, `同一次追加应只剩一张卡片，实际 ${hits.length} 条：${hits.map((h) => h.kind).join(" / ")}`);
-  assert.equal(hits[0].kind, "say", "保留消息卡片，丢掉带「追加内容」标签的原始记录");
+  assert.equal(hits[0].kind, "say", "保留消息卡片，丢掉带“追加内容”标签的原始记录");
 });
 
 
@@ -343,7 +385,7 @@ test("历史合并回执按自己的说明回填编号：查不到归属时不�
   assert.equal(missing?.no, undefined, "查不到归属就不显示单号");
 });
 
-test("追加被启动带入时，卡片状态写「已并入派单 #号」而不是只写并入", () => {
+test("追加被启动带入时，卡片状态写“已并入派单 #号”而不是只写并入", () => {
   const root = sandbox();
   seedDispatch(root, { status: "open" });
   assignThreadNos(root, ["s0/a"]);
@@ -360,7 +402,7 @@ test("追加被启动带入时，卡片状态写「已并入派单 #号」而不
   assert.equal(say.status, "已并入派单 · 待结论");
   assert.equal(say.no, "01", "已并入时要显示目标单号");
 
-  /* 回报结论之后，同一个卡片要变成「已落实」，这是用户能不能看出「到底改没改」的地方。 */
+  /* 回报结论之后，同一个卡片要变成“已落实”，这是用户能不能看出“到底改没改”的地方。 */
   const rec = cmds.listDirectives(root).find((x) => String(x.text).includes("启动时一起带入的话"));
   cmds.markDirectiveOutcome(root, cmds.directiveRef(rec), "done", { by: "D-append1", note: "改了 styles.css" });
   const after = buildThreadMessages(root, "shard:a", "a", { limit: 400 });

@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { recordEvent } from "../core/ledger";
 import { resolveContextWindow } from "../core/limits";
 import type { Dispatch, WorkerRecord } from "../core/supervisor";
-import type { WorkerSession } from "../host/contract";
+import type { WorkerSession } from "../agent/contract";
 
 /** 车道记录：一车道一代，换代只改 `current`。 */
 export interface LaneState {

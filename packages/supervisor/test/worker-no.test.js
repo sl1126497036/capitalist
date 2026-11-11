@@ -28,7 +28,7 @@ test("新进程 id 是纯数字，且自增不重复", () => {
 test("跳过已被占用的号，不复用台账里已存在的进程", () => {
   const root = sandbox();
   const first = capitalist.newWorkerId(root);
-  /* 伪造一个「这个名字已经被写进台账」的局面。 */
+  /* 伪造一个“这个名字已经被写进台账”的局面。 */
   capitalist.saveWorker(root, {
     id: String(Number(first) + 1),
     host: "codebuddy",

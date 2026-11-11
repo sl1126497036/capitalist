@@ -1,4 +1,4 @@
-/** 收工闸「这是不是重启单」的判据。 */
+/** 收工闸“这是不是重启单”的判据。 */
 
 const test = require("node:test");
 const assert = require("node:assert");

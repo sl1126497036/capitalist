@@ -54,7 +54,7 @@ function cell(t) {
     const secs = closedSecs(t);
     return secs === null ? { tone: "done", ...NA_DUR } : { tone: "done", kind: "dur", text: dur(secs) };
   }
-  /* 状态词沿用 i18n 的 statusQueued：只写「排队」，不加「中」。
+  /* 状态词沿用 i18n 的 statusQueued：只写“排队”，不加“中”。
      该档包含刚入队与排队较久两种情形，进行时后缀不适用于两者。 */
   if (s === "queued" || s === "open") return { tone: "warn", kind: "word", text: "排队" };
   if (s === "failed" || s === "missing" || s === "orphan" || s === "gone") {
@@ -75,7 +75,7 @@ function liveSecs(t) {
   return Math.max(fromServer, Math.round((Date.now() - start) / 1000));
 }
 
-/** 已结束：优先用服务端算好的 duration_sec，没有再按「首末消息时间」兜一次；都没有就是 null。 */
+/** 已结束：优先用服务端算好的 duration_sec，没有再按“首末消息时间”兜一次；都没有就是 null。 */
 function closedSecs(t) {
   const d = Number(t?.duration_sec);
   if (d > 0) return d;
@@ -119,7 +119,7 @@ function modelOf(raw) {
   const head = (cut > 0 ? s.slice(0, cut) : s).toLowerCase();
   const rest = cut > 0 ? s.slice(cut + 1) : "";
   const name = VENDOR[head] || capFirst(head);
-  /* 版本段按 `-`/`_` 断词，逐词首字母大写：`v4.1-flash` → `V4.1 Flash`。 */
+  /* 版本段按 `-`/`_` 断词，逐词首字母大写：`v4.1-flash` -> `V4.1 Flash`。 */
   const ver = rest
     .split(/[-_]+/)
     .filter(Boolean)
@@ -209,7 +209,7 @@ async function hydrate() {
 
 /* ---------------------------------------------------------------- 行名 */
 
-/** 线程 → 派单：先按 dispatch id，再退到同分片（旧版同口径）。 */
+/** 线程 -> 派单：先按 dispatch id，再退到同分片（旧版同口径）。 */
 function dispatchOf(t) {
   const ds = dispatches.value || [];
   if (t?.dispatch) {
@@ -278,7 +278,7 @@ const list = computed(() =>
 
 /**
  * 各档计数按全部线程算，不受搜索与当前档位影响，与 client.ts 的计数口径一致。
- * 搜索是「从列表里找」，筛选是「看哪一类」，两套维度互相改写对方数字会让人无法判断基数。
+ * 搜索是“从列表里找”，筛选是“看哪一类”，两套维度互相改写对方数字会让人无法判断基数。
  * 折叠掉的旧任务仍计入：它们是真实存在的任务，折叠只是显示层的收起（按钮本身写着收起了几条）。
  */
 const counts = computed(() => {
@@ -360,14 +360,14 @@ const rows = computed(() =>
     };
   }),
 );
-/** 一屏最多画这么多行，其余收进「还有 N 个进程未显示」（旧版 client.ts:1281、1339）。 */
+/** 一屏最多画这么多行，其余收进“还有 N 个进程未显示”（旧版 client.ts:1281、1339）。 */
 const ROW_LIMIT = 50;
 const showAllRows = ref(Boolean(props.__all));
 
 const shown = computed(() => (showAllRows.value ? rows.value : rows.value.slice(0, ROW_LIMIT)));
 
 /**
- * 余量按「列表长度」与「服务端总数」取大者算：/api/threads 有 limit，拿回来的行数可能少于
+ * 余量按“列表长度”与“服务端总数”取大者算：/api/threads 有 limit，拿回来的行数可能少于
  * 总数（total 更大），只按本地行数算会把没拉到的那部分悄悄吞掉。
  */
 const rest = computed(() => Math.max(rows.value.length, Number(props.total) || 0) - shown.value.length);
@@ -398,7 +398,7 @@ const retry = computed(() => {
 
 const closing = ref("");
 
-/** 只有还开着的单能关：在跑（running/starting/claimed）与排队（queued/open）。 */
+/** 只有还开着的单能关：运行中（running/starting/claimed）与排队（queued/open）。 */
 function canClose(t) {
   const s = String(t?.status || "");
   return s === "running" || s === "starting" || s === "claimed" || s === "queued" || s === "open";
@@ -409,7 +409,7 @@ function canPromote(t) {
   return s === "queued" || s === "open";
 }
 
-/** 排队行的动作用「取消」，在跑的动作用「关闭」。同一个后端动作按状态给不同标签。 */
+/** 排队行的动作用“取消”，运行中的动作用“关闭”。同一个后端动作按状态给不同标签。 */
 function closeWord(t) {
   return canPromote(t) ? "取消" : "关闭";
 }
@@ -417,7 +417,7 @@ function closeWord(t) {
 function closeTip(t) {
   return canPromote(t)
     ? "取消这一单：从队列撤下，监工不再派发"
-    : "关闭这一单：结项并停止重派（在跑进程会先被结束）";
+    : "关闭这一单：结项并停止重派（运行中进程会先被结束）";
 }
 
 const promoting = ref("");
@@ -491,7 +491,7 @@ function supervisorBadge(s) {
   return { badge: "已停", cls: "" };
 }
 
-/** 「{stage} · i/n 阶段 · 并行 p · 累计 X tokens」，下线再加「已停」。 */
+/** “{stage} · i/n 阶段 · 并行 p · 累计 X tokens”，下线再加“已停”。 */
 const supervisorMeta = computed(() => {
   const s = supervisorView.value || {};
   if (!s || !s.status) return "—";
@@ -508,7 +508,7 @@ const supervisorMeta = computed(() => {
 /** 本根累计消耗：积分制宿主只报积分，无读数时留空（不回退为 token）。 */
 const supervisorUsage = computed(() => totalUsageText(supervisorView.value?.usage));
 
-/** 监工行的上下文：取在跑 worker 里最满的一条（/api/supervisor 的 context）。 */
+/** 监工行的上下文：取运行中 worker 里最满的一条（/api/supervisor 的 context）。 */
 const supervisorCtx = computed(() => {
   const c = supervisorView.value?.context;
   if (!c || typeof c.used !== "number") return "";
@@ -535,7 +535,7 @@ const supervisorUnreadShown = computed(() => Math.max(0, Number(props.supervisor
  * 监工行显示的模型：优先 `supervisor_model`（监工对话层的显式选择），没有就显示默认那个具体模型。
  *
  * 接口的 `model` 是最近一次派单的模型，属于工作进程，不能当作监工模型显示。
- * `supervisor_model` 为空时，「宿主默认」不给出具体模型名，因此用同一个 `model` 作为默认模型的观测值
+ * `supervisor_model` 为空时，“宿主默认”不给出具体模型名，因此用同一个 `model` 作为默认模型的观测值
  * （未显式指定时监工与工作进程使用同一套宿主配置）。
  */
 const supervisorModel = computed(() => {
