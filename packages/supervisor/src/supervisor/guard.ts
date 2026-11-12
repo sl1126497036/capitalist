@@ -172,6 +172,15 @@ export function runGuard(root: string, supervisorPid: number): void {
   });
 
   const timer = setInterval(() => {
+    /*
+     * 任务根被删就静默退出。
+     *
+     * 继续写日志会把目录重新建出来，用户删了又冒出来，会以为进程没停。
+     */
+    if (!existsSync(supervisorDir(root))) {
+      stop();
+      process.exit(0);
+    }
     if (pidAlive(supervisorPid)) {
       miss = 0;
       return;

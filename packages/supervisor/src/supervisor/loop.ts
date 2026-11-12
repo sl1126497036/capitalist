@@ -1579,6 +1579,8 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   let concurrencyOverride: number | null = null;
 
   let stopping = false;
+  /** 连续几轮看不到看板在监听。看板重启期间 listening 会短暂为 false，够 3 轮才认下线。 */
+  let boardDownTicks = 0;
   const onSignal = (): void => {
     stopping = true;
   };
@@ -1694,6 +1696,24 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
 
   try {
     for (let i = 0; i < limit; i += 1) {
+      /*
+       * 轮次开头先看用户是否已经关掉。这一轮后面要写心跳与状态，
+       * 放在写入之后检查会把删掉的目录重新建出来。
+       */
+      if (!existsSync(join(opts.root, ".capitalist", "supervisor.json"))) {
+        out("[监工] 任务根已删除，退出");
+        break;
+      }
+      if (boardEnabled && boardRef.serving && !boardRef.serving.server.listening) {
+        boardDownTicks += 1;
+        if (boardDownTicks >= 3) {
+          recordEvent(opts.root, "supervisor_stop", { by: "user", via: "board_down", reason: "看板已下线" });
+          out("[监工] 看板已下线，退出");
+          break;
+        }
+      } else {
+        boardDownTicks = 0;
+      }
       /*
        * ticks 统计实际执行调度的轮次，待命轮次不计。
        * 心跳每轮都刷，待命时进程也要能被判定为在线。

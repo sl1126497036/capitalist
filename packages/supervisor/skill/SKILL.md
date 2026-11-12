@@ -41,6 +41,8 @@ capitalist supervise "<目标>" --agent <宿主>
 
 WorkBuddy 必须加 `--detach`：宿主把长命令转入后台执行，命令随即返回；读取登录态发生在这条命令执行期间，授权询问才能显示在界面上。未加 `--detach` 时读取在后台进程中进行，询问无处显示，按拒绝处理，对话通道与派单随之不可用。
 
+Windows 上 `--detach` 经本地启动器转交，该启动器由 `capitalist install` 创建。启动失败时执行 `capitalist serve --status`；未运行就让用户重跑 `capitalist install`。
+
 监工在后台常驻，不占用当前会话。启动后执行 `capitalist status`，输出应为“监工：在线（pid …，心跳 Ns 前更新）”；仅输出“已启动”表示心跳尚未确认。
 
 - 启动后有两种状态，均等待用户动作：
@@ -63,6 +65,7 @@ WorkBuddy 必须加 `--detach`：宿主把长命令转入后台执行，命令�
 
 - WorkBuddy 中的注意事项
   - 无终端可用时处于“受限模式”，需先解除。
+  - 用系统安装的 Node 运行监工。宿主内置的 Node 运行时无法启动监工。
 - ClaudeCode
   - 宿主为 ClaudeCode 时，监工通过 `claude -p` 调度。
 

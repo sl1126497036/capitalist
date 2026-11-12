@@ -11,8 +11,8 @@
  * 写入位置与条件：
  * - `<家目录>/<configDir>/settings.json` 的 `trustedDirectories`：追加当前任务根。
  *   文件不存在、不是合法 JSON、写入失败时不改该文件。
- * - `<任务根>/<configDir>/settings.json` 的 `permissions`：已存在 `defaultMode` 时不写。
- *   写入时补 `defaultMode` 与 `allow`，已有的 `allow` 保留。
+ * - 项目级权限由各宿主的 `projectConfigDir` 决定；声明为空时不写，避免宿主把项目判为
+ *   受限工作区。
  *
  * 用户已有的信任条目与其它键不改动。
  */
@@ -195,7 +195,7 @@ function ensureProjectPermissions(root: string, opts: WorkspaceOptions): { ok: b
 /**
  * 组合成 workspace facet。
  *
- * 顺序固定：先信任目录，再补权限。权限写进项目配置，宿主还没信任这个目录时不会读取。
+ * 顺序固定：先信任目录，再补权限。是否写项目级配置由各宿主的 `projectConfigDir` 决定。
  */
 export function createWorkspaceFacet(opts: WorkspaceOptions): WorkspaceFacet {
   return {

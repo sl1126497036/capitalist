@@ -10,6 +10,7 @@ import { closeSync, existsSync, openSync, readSync, rmSync, statSync } from "nod
 import { join } from "node:path";
 import { readJson } from "../core/json";
 import { supervisorDir } from "../core/paths";
+import { BRIDGE_PLATFORM, askBridge } from "../core/bridge";
 
 import { supervisorDisplayState, SUPERVISOR_STATE_LABEL } from "../core/state";
 import { closeTask, promoteTask, stopWorker, listDirectives, directiveMatches, directiveRef, isDirectiveOpen, markDirectiveOutcome, DIRECTIVE_OUTCOMES, type DirectiveOutcome } from "../core/commands";
@@ -50,7 +51,7 @@ const REVIEW_WINDOW_MS = 3 * 60 * 1000;
 import { die, write, writeJson } from "./output";
 
 /** 后台起监工。 */
-export function detachSupervisor(root: string): number {
+export async function detachSupervisor(root: string): Promise<number> {
   const entry = process.argv[1];
   if (!entry) die("拿不到入口路径，无法后台启动；改为前台执行 capitalist supervise");
   /*
@@ -58,39 +59,62 @@ export function detachSupervisor(root: string): number {
    * 宿主因此不会为同一次启动问两遍。
    */
   const args = process.argv.slice(2).filter((a) => a !== "--detach");
-  const child = spawn(process.execPath, [entry, ...args], {
-    cwd: process.cwd(),
-    detached: true,
-    stdio: "ignore",
-    // 后台起监工时不要弹控制台窗口：这是“脱离终端”的进程，弹窗只会打断用户。
-    windowsHide: true,
-  });
-  child.unref();
-  const pid = child.pid;
-  if (!pid) die("未取得后台进程 pid，请在前台执行 capitalist supervise");
+
+  /*
+   * Windows 上先交给启动器：命令一返回，本进程所在的 Job 会回收整棵进程树，
+   * detached 只脱离控制台。启动器由用户终端拉起，不在这个 Job 里。
+   */
+  let pid = 0;
+  let viaServe = false;
+  if (BRIDGE_PLATFORM) {
+    const reply = await askBridge({ type: "spawn", cwd: process.cwd(), args: [entry, ...args] });
+    if (reply?.ok && reply.pid) {
+      pid = reply.pid;
+      viaServe = true;
+    }
+  }
+
+  if (!pid) {
+    const child = spawn(process.execPath, [entry, ...args], {
+      cwd: process.cwd(),
+      detached: true,
+      stdio: "ignore",
+      // 后台起监工时不要弹控制台窗口：这是“脱离终端”的进程，弹窗只会打断用户。
+      windowsHide: true,
+    });
+    child.unref();
+    pid = child.pid ?? 0;
+    if (!pid) die("未取得后台进程 pid，请在前台执行 capitalist supervise");
+  }
 
   const verdict = waitDetachedAlive(root, pid, DETACH_PROBE_MS);
   if (verdict === "died") {
+    if (viaServe) {
+      die(
+        [
+          `后台监工（pid ${pid}）启动后立刻退出。`,
+          "看 .capitalist/supervisor.log 尾几行：常见是宿主 CLI 登录态不可用（Authentication required）。",
+        ].join("\n"),
+      );
+    }
     die(
       [
-        `后台监工（pid ${pid}）启动后立刻退出，没有留下心跳，未成功启动。`,
-        "",
-        "原因是它挂在上层会话的进程树里：命令一返回，整棵树被回收（Windows 上是 Job 对象），",
-        "子进程的 detached 只脱离控制台，脱不出这个 Job。",
-        "",
-        "换成这两种方式之一：",
-        '  · 前台跑：`capitalist supervise "目标" --contract <名>`，由终端或常驻任务一直持有；',
-        "  · 独立终端：自己开一个窗口执行同样命令，不经过上层会话。",
+        `后台监工（pid ${pid}）启动后立刻退出，不要重试。`,
+        "执行 capitalist serve --status；未运行就重跑 capitalist install。",
       ].join("\n"),
     );
   }
-  const tail = verdict === "alive" ? "，心跳已确认" : "（等待期内没读到心跳，用 capitalist status 复核）";
-  write(`监工已在后台启动（pid ${pid}）${tail}。查看：capitalist workers\n`);
+  const how = viaServe ? "，经启动器转交" : "";
+  if (verdict === "alive") {
+    write(`监工已启动（pid ${pid}）${how}。查看：capitalist workers\n`);
+  } else {
+    write(`监工已启动（pid ${pid}）${how}，心跳未确认。用 capitalist status 复核。\n`);
+  }
   return 0;
 }
 
 /** detach 后观察多久再下结论。 */
-const DETACH_PROBE_MS = 30_000;
+const DETACH_PROBE_MS = 12_000;
 
 /** 同步等待。派单结论需立即返回，此路径不使用异步。 */
 function sleepSync(ms: number): void {

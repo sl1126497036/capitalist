@@ -954,6 +954,10 @@ async function main(): Promise<number> {
       if (r.cached) write(`（结论来自缓存 ${r.status.checkedAt}，加 --force 重新联网）\n`);
       return 0;
     }
+    case "serve": {
+      const { cmdServe } = await import("./serveCmd");
+      return await cmdServe(p);
+    }
     case "install": {
       const { runInstall } = await import("../install/install");
       const { resolveAgents } = await import("../install/prompt");
@@ -1124,7 +1128,7 @@ async function main(): Promise<number> {
         }
         for (const f of healed.failed) write(`[监工] hook 补装失败（${f.id}）：${f.message}\n`);
       }
-      if (flagBool(p, "detach")) return detachSupervisor(supervisorRoot);
+      if (flagBool(p, "detach")) return await detachSupervisor(supervisorRoot);
       /*
        * “启动默认不派单”放在主循环里判定：队列里还有待办时，把上次未完成的派单逐张标记暂停；
        * 没有待办就直接待命在线（不派单、不轮询、不退出），等用户派单。

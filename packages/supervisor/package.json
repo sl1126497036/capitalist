@@ -1,6 +1,6 @@
 {
   "name": "capitalist",
-  "version": "0.1.31",
+  "version": "0.1.32",
   "description": "Supervise long-running AI tasks from outside the model: contracts, stage gates, redlines, ledgers, and a review queue.",
   "license": "Apache-2.0",
   "author": {
