@@ -7918,7 +7918,7 @@ async function sampleWindows(): Promise<ProcSnapshot> {
    *
    * CIM 查询要起一个 powershell 进程，看板每 5 秒跑一次，宿主的命令通道会跟着
    * 每隔几秒闪一次控制台窗口。整机 CPU 与内存由 os.cpus / os.freemem 直接算，不受影响；
-   * 只有「每个 node 进程占多少」这一项缺失。需要时设 CAPITALIST_BOARD_PROC_SAMPLE=1。
+   * 只有“每个 node 进程占多少”这一项缺失。需要时设 CAPITALIST_BOARD_PROC_SAMPLE=1。
    */
   if (String(process.env.CAPITALIST_BOARD_PROC_SAMPLE ?? "").trim() !== "1") {
     return {

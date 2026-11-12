@@ -132,8 +132,8 @@ export const HELP = `capitalist ${VERSION} 长流程任务监工
                         覆盖监工与全部工作进程。未授权时启动日志输出“未下发宿主令牌”。
                         --worker-visible 为每个工作进程打开独立控制台窗口
   supervise-stop        请求监工退出（下一 tick 生效）
-  serve [--status]      Windows 专用：本地启动器，由 capitalist install 创建。
-                        --detach 经它转交才能常驻；--status 查看是否在运行
+  serve [--status]      Windows 专用启动器，由 capitalist install 拉起。
+                        --detach 依赖启动器，未运行时重跑 capitalist install；--status 查看是否在运行
   auth                 已移除：插件不把令牌写入磁盘，认证只用宿主自身的登录态
   auth-check [--agent <id>] [--no-probe] [--json]
                       检查宿主能否正常调用模型。输出探测结果与令牌来源，

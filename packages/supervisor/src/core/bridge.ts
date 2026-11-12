@@ -2,10 +2,10 @@
  * 本地启动器通道。
  *
  * 宿主在命令通道里执行命令时，命令一返回整棵进程树被回收（Windows 上是 Job 对象），
- * `detached` 只脱离控制台。安装时在用户终端拉起一个常驻启动器，它不在那条命令的 Job 里，
- * 由它拉起监工才能常驻。
+ * `detached` 只脱离控制台。安装时在用户终端拉起一个常驻启动器，启动器不在那条命令的 Job 里，
+ * 由启动器拉起监工才能常驻。
  *
- * 只接受「用本包编译入口启动监工」这一种请求，不接受任意命令行。
+ * 只接受“用本包编译入口启动监工”这一种请求，不接受任意命令行。
  * 只在 Windows 上启用；其它平台 `detach` 可正常脱离，本模块不参与。
  */
 
@@ -123,7 +123,7 @@ function spawnFromBridge(args: string[], cwd: string): BridgeReply {
     });
     child.unref();
     const pid = child.pid;
-    if (!pid) return { ok: false, error: "没有拿到 pid" };
+    if (!pid) return { ok: false, error: "未取得 pid" };
     return { ok: true, pid };
   } catch (err) {
     return { ok: false, error: String((err as Error).message ?? err) };

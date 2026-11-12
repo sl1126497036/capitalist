@@ -24,16 +24,14 @@ function log(line: string): void {
 /** 探活。 */
 async function status(): Promise<number> {
   const alive = await askBridge({ type: "ping" }, 3000);
-  write(
-    [`启动器：${alive?.ok ? "在线" : "未运行"}`, alive?.ok ? "" : "重跑 capitalist install。", ""].join("\n"),
-  );
+  write(alive?.ok ? "启动器：在线\n" : "启动器：未运行。重跑 capitalist install。\n");
   return alive?.ok ? 0 : 1;
 }
 
 /** `capitalist serve [--status]`。 */
 export function cmdServe(p: Parsed): Promise<number> | number {
   if (!BRIDGE_PLATFORM) {
-    write("当前平台不需要启动器。\n");
+    write("当前平台不使用启动器。\n");
     return 0;
   }
   if (flagBool(p, "status")) return status();

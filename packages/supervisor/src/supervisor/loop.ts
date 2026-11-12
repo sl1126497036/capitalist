@@ -1697,7 +1697,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   try {
     for (let i = 0; i < limit; i += 1) {
       /*
-       * 轮次开头先看用户是否已经关掉。这一轮后面要写心跳与状态，
+       * 轮次开头先判断用户是否已经关掉。这一轮后面要写心跳与状态，
        * 放在写入之后检查会把删掉的目录重新建出来。
        */
       if (!existsSync(join(opts.root, ".capitalist", "supervisor.json"))) {

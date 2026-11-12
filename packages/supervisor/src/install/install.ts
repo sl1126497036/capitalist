@@ -532,7 +532,7 @@ export function runInstall(opts: InstallOptions): number {
    * Windows：拉起沙箱外启动器。
    *
    * 宿主的命令通道会在命令结束时回收整棵进程树（Job 对象），detached 只脱离控制台。
-   * 这里在用户终端里拉起启动器，它不在那条命令的 Job 里，`--detach` 转交给它才能常驻。
+   * 这里在用户终端里拉起启动器，启动器不在那条命令的 Job 里，`--detach` 转交后才常驻。
    * 不写自启、不写注册表：启动器在本机重启后失效，重跑 install 或 `capitalist serve` 即可。
    */
   if (!dryRun && BRIDGE_PLATFORM) {
@@ -540,11 +540,11 @@ export function runInstall(opts: InstallOptions): number {
       const pid = startBridgeNow(process.argv[1] ?? "");
       details.push(
         pid > 0
-          ? `启动器：pid ${pid}（日志 ${bridgeLogPath()}）`
-          : `启动器：未启动（日志 ${bridgeLogPath()}）`,
+          ? `启动器：pid ${pid}，日志见 ${bridgeLogPath()}`
+          : `启动器：未启动，日志见 ${bridgeLogPath()}`,
       );
     } catch (err) {
-      notes.push(`启动器：未启动（${String((err as Error).message ?? err)}）`);
+      notes.push(`启动器：未启动，${String((err as Error).message ?? err)}`);
     }
   }
 

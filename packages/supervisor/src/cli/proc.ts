@@ -93,22 +93,21 @@ export async function detachSupervisor(root: string): Promise<number> {
       die(
         [
           `后台监工（pid ${pid}）启动后立刻退出。`,
-          "看 .capitalist/supervisor.log 尾几行：常见是宿主 CLI 登录态不可用（Authentication required）。",
+          "查看 .capitalist/supervisor.log 末尾几行：常见原因是宿主 CLI 登录态不可用（Authentication required）。",
         ].join("\n"),
       );
     }
     die(
       [
         `后台监工（pid ${pid}）启动后立刻退出，不要重试。`,
-        "执行 capitalist serve --status；未运行就重跑 capitalist install。",
+        "执行 capitalist serve --status，未运行则重跑 capitalist install。",
       ].join("\n"),
     );
   }
-  const how = viaServe ? "，经启动器转交" : "";
   if (verdict === "alive") {
-    write(`监工已启动（pid ${pid}）${how}。查看：capitalist workers\n`);
+    write(`监工已启动（pid ${pid}）。查看：capitalist workers\n`);
   } else {
-    write(`监工已启动（pid ${pid}）${how}，心跳未确认。用 capitalist status 复核。\n`);
+    write(`监工已启动（pid ${pid}），心跳未确认。执行 capitalist status 复核。\n`);
   }
   return 0;
 }

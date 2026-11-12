@@ -1,6 +1,6 @@
 ---
 name: capitalist
-version: 0.1.31
+version: 0.1.32
 agent_created: true
 description: capitalist（监工进程）。监工是独立进程（capitalist supervise），工作进程由它拉起，各自独立；本会话只启动监工、读取状态、回报结论，不执行业务代码。适用于多阶段、跨会话、易偏离、有硬性红线、需持续核验进度的任务。触发词：capitalist、监督、盯着做、自动推进、别中断、开新进程、换进程、上下文太长、上下文压缩、会话一长就糊涂、多进程协调、一个进程执行一个监督、不想每一步都给指令、谁来把关、按流程走、照着流程走、监督这个任务、让它自己跑、装 capitalist、开监督、给我盯一下。
 ---
@@ -30,7 +30,7 @@ description: capitalist（监工进程）。监工是独立进程（capitalist s
 ## 2. 启动监工
 
 ```bash
-# WorkBuddy
+# WorkBuddy 必须加--detach 否则codebuddy -p 无凭证权限会导致无法使用
 capitalist supervise "<目标>" --agent workbuddy --detach
 
 # CodeBuddy / ClaudeCode
@@ -41,7 +41,7 @@ capitalist supervise "<目标>" --agent <宿主>
 
 WorkBuddy 必须加 `--detach`：宿主把长命令转入后台执行，命令随即返回；读取登录态发生在这条命令执行期间，授权询问才能显示在界面上。未加 `--detach` 时读取在后台进程中进行，询问无处显示，按拒绝处理，对话通道与派单随之不可用。
 
-Windows 上 `--detach` 经本地启动器转交，该启动器由 `capitalist install` 创建。启动失败时执行 `capitalist serve --status`；未运行就让用户重跑 `capitalist install`。
+Windows 上 `--detach` 由启动器转交，启动器由 `capitalist install` 创建。启动失败时执行 `capitalist serve --status`，未运行则重跑 `capitalist install`。
 
 监工在后台常驻，不占用当前会话。启动后执行 `capitalist status`，输出应为“监工：在线（pid …，心跳 Ns 前更新）”；仅输出“已启动”表示心跳尚未确认。
 
@@ -65,7 +65,8 @@ Windows 上 `--detach` 经本地启动器转交，该启动器由 `capitalist in
 
 - WorkBuddy 中的注意事项
   - 无终端可用时处于“受限模式”，需先解除。
-  - 用系统安装的 Node 运行监工。宿主内置的 Node 运行时无法启动监工。
+  - 必须用系统安装的 Node 运行，宿主内置的 Node 无法启动监工。
+  - 启动时必须加--detach，且maxOS下用户需同意凭证访问授权（授权会由WorkBuddy自动检测发起，无需介入），否则将出现“对话通道不可用”
 - ClaudeCode
   - 宿主为 ClaudeCode 时，监工通过 `claude -p` 调度。
 
