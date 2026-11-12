@@ -7,11 +7,11 @@
 [English](README.en.md)
 </div>
 
-这是一个 AI 自动化多任务调度插件： 每个任务上下文独立，由监工进程统一调度，调度时会单独维护一份进程中的上下文和记忆。本项目由人工设计和测试，经 Deepseek-V4.1-Flash 编码实现。
+这是一个 AI 自动化多任务调度插件： 每个任务上下文独立，可并发，由监工进程统一调度，调度时会单独维护一份进程中的上下文和记忆。本项目由人工设计和测试，经 Deepseek-V4.1-Flash 编码实现。
 
 ## 工作内容
 
-`capitalist` 是一个跨 Agent 的 AI 插件，用于自动化 AI 进程调度并帮用户完成任务验收。
+`capitalist` 是一个跨 Agent 的 AI 插件，用于自动化 AI 进程调度并帮助用户完成任务验收。
 
 
 | Agent 痛点 | 本插件方案 |
@@ -33,15 +33,16 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 
 `--agent` 取值见「宿主支持」表。安装项按所选宿主写入，未指定时不写入；交互终端下可省略，安装器会给出选择菜单。
 
-`npm i -g` 之后必须执行一次 `capitalist install`：hook 与手册都在这一步写入，未执行时宿主不会加载本插件。
+`npm i -g` 之后须执行一次 `capitalist install`：hook 与手册才会写入，未执行时宿主不会加载本插件。
 
-环境要求：Node.js ≥ 18.17；macOS / Linux / Windows；工作进程宿主需提供非交互入口（`claude -p`、`codebuddy -p`）。
+环境要求：Node.js ≥ 18.17；macOS / Windows；工作进程宿主需提供非交互入口（`claude -p`、`codebuddy -p`）。
+
 
 ### 安装故障
 
 | 现象 | 处理 |
 |---|---|
-| `npm i -g capitalist` 报 `EEXIST .../bin/capitalist` | 该路径已有同名文件，来源是手工软链或旧版残留。执行 `npm uninstall -g capitalist`，仍存在时移走该文件再安装 |
+| `npm i -g capitalist` 报 `EEXIST .../bin/capitalist` | 该路径可能存在手工软链或旧版残留。执行 `npm uninstall -g capitalist`，仍存在时移走该文件再安装 |
 | 报 `EISDIR` 或 `ENOTEMPTY .../lib/node_modules/capitalist` | 该目录为旧安装或指向源码的软链，npm 无法覆盖。移走该目录（`$(npm prefix -g)/lib/node_modules/capitalist`）后重装；该目录不承载任务数据 |
 | 报 `Your cache folder contains root-owned files` | npm 缓存目录属主异常。执行 `sudo chown -R $(id -u):$(id -g) ~/.npm` 后重装 |
 | 安装后 `capitalist` 指向源码目录 | 曾用 `npm link` 或手工软链。`readlink -f $(which capitalist)` 确认指向，移走该软链后重新安装 |
@@ -49,10 +50,10 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 
 ### WorkBuddy 中的注意事项
 
-- 1、无终端可用时处于“受限模式”，需先解除，否则安装与启动都无法执行。
-- 2、启动监工必须加 `--detach`。宿主把长命令转入后台执行，命令随即返回；凭证读取发生在这条命令执行期间，授权询问才能显示在界面上。未加或未授权时对话通道与派单不可用。
-- 3、WorkBuddy 与 CodeBuddy 需合并安装：插件在 WorkBuddy 桌面端使用，工作进程由 CodeBuddy CLI 承担，账号凭证来自 CodeBuddy。
-- 4、WorkBuddy 对凭证目录设有文件访问限制（设置 → 安全 → 文件安全）。未放行时可能导致对话与派单失败。
+- 无终端可用时处于“受限模式”，需先解除，否则命令不可用。
+- 启动监工必须加 `--detach`。宿主把长命令转入后台执行，命令随即返回；凭证读取发生在这条命令执行期间，才能触发授权询问提醒。macOS下必须取得用户授权，未加`--detach`或未授权时报“对话通道不可用”。
+- WorkBuddy 与 CodeBuddy 需合并安装：插件在 WorkBuddy 桌面端使用，工作进程由 CodeBuddy CLI 承担，账号凭证来自 CodeBuddy。
+- WorkBuddy 对凭证目录设有文件访问限制（设置 → 安全 → 文件安全）。未放行时可能导致对话与派单失败。
 
 
 
@@ -60,16 +61,16 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 
 对已安装本插件的宿主下达指令（建议手动选择`capitalist`skill后执行）：
 
-- 帮我启动一下监工进程并待命。
+- 帮我启动一下监工进程然后待命。
 - 帮我启动一个监工进程，并完成计费服务重构。
 - 给监工加派一个登录页联调任务。
 - 给这个项目开一个监工，并按“xxx”skill流程创建契约。
 
 宿主执行 `capitalist supervise`，在当前目录创建任务根并拉起常驻监工；“加派”类需求由 `capitalist say` 追加到派单，未开工的并入原派单，执行中的由 hook 在下次工具调用前送达。触发词表见 `skill/SKILL.md`。
 
-也可以使用监工面板：启动日志输出看板地址，形如 `http://127.0.0.1:7788/`，同一地址也出现在 `capitalist status` 的 `board_url` 里。面板里可恢复派单、查看阶段与在途工作进程、写入新指令、裁决提问。访问 key 缺省不校验；以 `--secure` 启动时输出带 `?key=` 的地址，key 每次启动变更。
+推荐使用监工面板：启动日志输出看板地址，形如 `http://127.0.0.1:7788/`，也可以通过`capitalist status` 的 `board_url` 查看面板地址。面板可恢复派单、查看阶段，可与在途工作进程、写入新指令、裁决提问。访问 key 缺省时不做校验，但是可能存在内网安全问题；以 `--secure` 启动时将输出带 `?key=` 地址，key 每次启动变更。
 
-## 场景
+## 使用场景
 
 任务可在宿主中直接下发，也可通过监工面板下发。
 
@@ -85,14 +86,16 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 
 你可以：多站点按站点拆成分片，单站点按子域拆成后续阶段的分片。破坏性命令由契约 `redlines` 里的 `BLOCK` 规则按命令文本拦截，命中写入 `violations.jsonl`；已放行的越界动作可用 `capitalist review` 事后复核。结果验收以 `capitalist record` 与 `capitalist ledger` 写入的证据为准。契约字段与门槛类型见 `skill/SKILL.md` 第 8 节。
 
+
+
 ## 详细介绍
 
 ### 进程模型
 
 | 角色 | 启动方式 | 职责 |
 |---|---|---|
-| 监工进程 | `capitalist supervise`，常驻 | 建任务根、选定契约、派单、验收、回收重派 |
-| 工作进程 | 独立宿主进程（`claude -p` / `codebuddy -p`） | 执行当前派单，各自持有 pid、会话与上下文 |
+| 监工进程 | `capitalist supervise`，常驻 | 创建任务根、制定契约、派单、验收、回收重派 |
+| 工作进程 | 独立宿主进程（`claude -p` / `codebuddy -p`） | 执行派单任务，各自持有 pid、会话与上下文，任务完成后将上报监工验收 |
 | 宿主 hook | 宿主在会话生命周期点调用 | 注入状态、按契约红线与本机边界判定命令 |
 
 `capitalist` 提供三个可执行文件：主命令 `capitalist`、短名 `cap`、hook 入口 `capitalist-hook`。`capitalist board` 在 `127.0.0.1:7788` 提供本地看板（端口占用时顺延，仅本机可访问）。
@@ -100,14 +103,14 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 ### 一次任务的流程
 
 1. 在项目目录执行 `capitalist supervise "<目标>" --contract minimal`。命令创建 `.capitalist/`，写入 `state.json` 与 `inbox/`，启动常驻监工与本地看板。
-2. 在看板点「恢复派单」或执行 `capitalist resume`。监工按当前阶段的 `next` / `parallel` 写入派单，每张派单拉起一个独立工作进程。
+2. 在看板点“恢复派单”或下发新任务。监工按当前阶段的 `next` / `parallel` 写入派单，每张派单拉起一个独立工作进程。
 3. 工作进程会话中，宿主在提交输入时调用 hook，注入当前阶段、未达标项与下一步动作；在工具调用前按契约红线与本机边界判定命令，命中 `BLOCK` 时拒绝执行。
-4. 工作进程用 `capitalist record` 写证据、用 `capitalist report` 结单。监工按阶段 `done` 验收；门槛达标才推进到下一阶段，未达标时重派。
-5. 会话结束或进程退出后状态仍在磁盘。重新执行 `capitalist supervise` 续用同一任务根；`capitalist reload` 生成快照与恢复计划，下一 tick 补出复验单。
+4. 工作进程使用 `capitalist record` 写验收凭据、用 `capitalist report` 结单。监工按阶段验收；门槛达标才推进到下一阶段，未达标时重派。
+5. 会话结束或进程退出后状态仍在磁盘。重新执行 `capitalist supervise` 续用同一任务根；`capitalist reload` 生成快照与恢复计划，下一派单补出复验单。
 
 ### 契约
 
-契约是纯 JSON 文件，定义阶段、门槛、红线与本机边界。仓库内置 `packages/supervisor/contracts/minimal.contract.json`，提供不预设行业知识的三阶段流程。
+契约是纯 JSON 文件，定义阶段、门槛、红线与本机边界。仓库内置 `packages/supervisor/contracts/minimal.contract.json`，提供基础三阶段流程。
 
 ```json
 {
@@ -168,13 +171,13 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 |---|---|
 | 宿主 / hook | 提供模型调用与登录态的 agent CLI；hook 是它在会话生命周期点调用的判定入口 |
 | 任务根 | 含 `.capitalist/state.json` 的项目目录；命令向上查找最近的一个 |
-| 契约 | JSON 文件，定义阶段、门槛、红线与本机边界 |
+| 契约 | 定义阶段、门槛、红线与本机边界 |
 | 阶段 / 门槛 | 契约中的有序步骤与 `done` 判定；未达标时 `capitalist advance` 被拒绝 |
 | 派单 / 分片 | 监工写入 `inbox/dispatch.jsonl` 的工作单元；`parallel` 分片各自对应一个工作进程 |
 | 红线 / 本机边界 | 契约中的命令文本正则规则与路径范围；级别为 `BLOCK` / `NEED_USER` / `WARN` |
-| 权限档位 | `plan` / `default` / `accept_edits` / `bypass`，改变规则判定的宽严 |
-| 证据台账 | `.capitalist/` 下的 JSONL 文件，记录需求、改动、结论与违规 |
-| 看板 | 本地 HTTP 页面，展示阶段、派单、工作进程与回报流水 |
+| 权限档位 | `plan` / `default` / `accept_edits` / `bypass`，改变规则判定尺度 |
+| 验收凭据 | `.capitalist/` 下的 JSONL 文件，记录需求、改动、结论与违规 |
+| 看板 | 本地 HTTP可视化页面，展示阶段、派单、工作进程与回报流水 |
 
 ### 宿主支持
 

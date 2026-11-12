@@ -5,14 +5,13 @@
 [![Node 18.17+](https://img.shields.io/badge/node-18.17%2B-blue.svg)](https://nodejs.org/)
 
 [中文](README.md)
-
 </div>
 
-An AI multi-task scheduling plugin: every task keeps its own context, while a supervisor process coordinates them and maintains a separate in-process context and memory for each. Designed and tested by hand, coded with Deepseek-V4.1-Flash.
+An AI automated multi-task scheduling plugin: each task keeps its own context and tasks can run concurrently, all coordinated by a supervisor process that maintains a separate in-process context and memory for every task while scheduling. Designed and tested by hand, coded with Deepseek-V4.1-Flash.
 
 ## What it does
 
-`capitalist` is a cross-agent AI plugin that schedules AI processes and verifies the results on the user's behalf.
+`capitalist` is a cross-agent AI plugin that automates AI process scheduling and helps the user verify task results.
 
 | Agent pain point | What this plugin does |
 |---|---|
@@ -32,15 +31,15 @@ capitalist install --agent <host>   # choose a host; writes the hook and the sup
 
 For `--agent` values see the "Supported hosts" table. Installation items are written for the selected host and nothing is written when none is given; on an interactive terminal the flag may be omitted and the installer shows a menu.
 
-`capitalist install` must be run once after `npm i -g`: the hook and the manual are written in that step, and hosts do not load the plugin without it.
+`capitalist install` must be run once after `npm i -g`: only then are the hook and the manual written, and hosts do not load the plugin without it.
 
-Requirements: Node.js ≥ 18.17; macOS / Linux / Windows; the work-process host must offer a non-interactive entry point (`claude -p`, `codebuddy -p`).
+Requirements: Node.js ≥ 18.17; macOS / Windows; the work-process host must offer a non-interactive entry point (`claude -p`, `codebuddy -p`).
 
 ### Install troubleshooting
 
 | Symptom | Action |
 |---|---|
-| `npm i -g capitalist` reports `EEXIST .../bin/capitalist` | A file with the same name already exists, from a manual symlink or an older install. Run `npm uninstall -g capitalist`; if it remains, move the file away and reinstall |
+| `npm i -g capitalist` reports `EEXIST .../bin/capitalist` | The path may hold a manual symlink or leftovers from an older version. Run `npm uninstall -g capitalist`; if it remains, move the file away and reinstall |
 | Reports `EISDIR` or `ENOTEMPTY .../lib/node_modules/capitalist` | The directory is an older install or a symlink to the source, which npm cannot overwrite. Move the directory (`$(npm prefix -g)/lib/node_modules/capitalist`) and reinstall; it holds no task data |
 | Reports `Your cache folder contains root-owned files` | The npm cache has a wrong owner. Run `sudo chown -R $(id -u):$(id -g) ~/.npm` and reinstall |
 | `capitalist` points to the source directory after install | An earlier `npm link` or manual symlink. Check with `readlink -f $(which capitalist)`, move the symlink away and reinstall |
@@ -48,25 +47,25 @@ Requirements: Node.js ≥ 18.17; macOS / Linux / Windows; the work-process host 
 
 ### Notes for WorkBuddy
 
-- 1. Without a terminal the host runs in "restricted mode". Clear it first, otherwise neither install nor startup can run.
-- 2. Starting the supervisor requires `--detach`. The host moves a long command to the background and returns immediately; the login state is read while that command runs, which is when the authorization prompt can be shown. Without it, or without authorization, the chat channel and dispatch are unavailable.
-- 3. WorkBuddy and CodeBuddy are installed together: the plugin runs in the WorkBuddy desktop app, work processes are carried by the CodeBuddy CLI, and the account credentials come from CodeBuddy.
-- 4. WorkBuddy restricts file access to the credential directory (Settings → Security → File security). Failing to allow it can break chat and dispatch.
+- Without a terminal the host runs in "restricted mode". Clear it first, otherwise commands are unavailable.
+- Starting the supervisor requires `--detach`. The host moves a long command to the background and returns immediately; the credentials are read while that command runs, which is when the authorization prompt can be triggered. On macOS the user must grant authorization; without `--detach`, or without authorization, the host reports "chat channel unavailable".
+- WorkBuddy and CodeBuddy are installed together: the plugin runs in the WorkBuddy desktop app, work processes are carried by the CodeBuddy CLI, and the account credentials come from CodeBuddy.
+- WorkBuddy restricts file access to the credential directory (Settings → Security → File security). Failing to allow it can break chat and dispatch.
 
 ## Quick use from a host
 
 Send these to a host with the plugin installed (selecting the `capitalist` skill manually is recommended):
 
-- Start a supervisor process and leave it on standby.
+- Start a supervisor process and then leave it on standby.
 - Start a supervisor process and finish the billing service refactor.
 - Add a login-page integration task to the supervisor.
 - Open a supervisor for this project and create a contract following the "xxx" skill workflow.
 
 The host runs `capitalist supervise`, which creates the task root in the current directory and starts a resident supervisor; "add task" requests are appended with `capitalist say` and merged into the existing dispatch when work has not started, or delivered by the hook before the next tool call while it runs. See `skill/SKILL.md` for the trigger table.
 
-The supervisor panel is also available: the startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address appears in `board_url` from `capitalist status`. From the panel you can resume dispatch, inspect stages and running work processes, write new instructions and adjudicate questions. The access key is not checked by default; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
+The supervisor panel is recommended: the startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address can be read from `board_url` in `capitalist status`. From the panel you can resume dispatches, inspect stages, interact with running work processes, write new instructions and adjudicate questions. The access key is not checked by default, but leaving it unchecked may pose an intranet security risk; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
 
-## Scenarios
+## Use cases
 
 Tasks can be issued from the host directly or from the supervisor panel.
 
@@ -88,8 +87,8 @@ You can: split multiple sites into shards per site, and split a single site into
 
 | Role | How it starts | Responsibility |
 |---|---|---|
-| Supervisor process | `capitalist supervise`, resident | Creates the task root, selects the contract, dispatches, accepts, reclaims and re-dispatches |
-| Work process | Separate host process (`claude -p` / `codebuddy -p`) | Executes the current dispatch; holds its own pid, session and context |
+| Supervisor process | `capitalist supervise`, resident | Creates the task root, draws up the contract, dispatches, accepts, reclaims and re-dispatches |
+| Work process | Separate host process (`claude -p` / `codebuddy -p`) | Executes dispatches; holds its own pid, session and context, and reports back to the supervisor for acceptance once the task is done |
 | Host hook | Called by the host at session lifecycle points | Injects state, judges commands against contract redlines and local boundaries |
 
 `capitalist` ships three executables: the main command `capitalist`, the short alias `cap`, and the hook entry `capitalist-hook`. `capitalist board` serves a local board on `127.0.0.1:7788` (the port shifts when occupied, loopback only).
@@ -97,14 +96,14 @@ You can: split multiple sites into shards per site, and split a single site into
 ### Lifecycle of one task
 
 1. In the project directory run `capitalist supervise "<target>" --contract minimal`. The command creates `.capitalist/`, writes `state.json` and `inbox/`, and starts the resident supervisor and the local board.
-2. Click "resume dispatch" on the board or run `capitalist resume`. The supervisor writes dispatches from the current stage's `next` / `parallel`, and each dispatch starts a separate work process.
+2. Click "resume dispatch" on the board or issue a new task there. The supervisor writes dispatches from the current stage's `next` / `parallel`, and each dispatch starts a separate work process.
 3. In the work process session the host calls the hook on input submission, injecting the current stage, unmet items and the next action; before each tool call it judges the command against contract redlines and local boundaries and rejects it on a `BLOCK` hit.
-4. The work process writes evidence with `capitalist record` and closes the dispatch with `capitalist report`. The supervisor accepts against the stage's `done`; only when the gate passes does it advance, otherwise it re-dispatches.
-5. State stays on disk after the session ends or the process exits. Running `capitalist supervise` again reuses the same task root; `capitalist reload` produces a snapshot and a resume plan, and the next scheduling round adds re-verification dispatches.
+4. The work process writes acceptance evidence with `capitalist record` and closes the dispatch with `capitalist report`. The supervisor accepts per stage; only when the gate passes does it advance, otherwise it re-dispatches.
+5. State stays on disk after the session ends or the process exits. Running `capitalist supervise` again reuses the same task root; `capitalist reload` produces a snapshot and a resume plan, and the next dispatch adds a re-verification dispatch.
 
 ### Contract
 
-A contract is a plain JSON file defining stages, gates, redlines and local boundaries. The repository ships `packages/supervisor/contracts/minimal.contract.json`, a three-stage flow with no assumed domain knowledge.
+A contract is a plain JSON file defining stages, gates, redlines and local boundaries. The repository ships `packages/supervisor/contracts/minimal.contract.json`, a basic three-stage flow.
 
 ```json
 {
@@ -165,13 +164,13 @@ All subcommands and flags are listed in `capitalist --help`; the split of duties
 |---|---|
 | Host / hook | The agent CLI providing model calls and login state; the hook is the judging entry point it calls at session lifecycle points |
 | Task root | A project directory containing `.capitalist/state.json`; commands search upward for the nearest one |
-| Contract | A JSON file defining stages, gates, redlines and local boundaries |
+| Contract | Defines stages, gates, redlines and local boundaries |
 | Stage / gate | Ordered steps in a contract and their `done` judgement; `capitalist advance` is rejected while a gate is unmet |
 | Dispatch / shard | A work unit written by the supervisor to `inbox/dispatch.jsonl`; each `parallel` shard maps to one work process |
 | Redline / local boundary | Command-text regex rules and path scope in a contract; levels are `BLOCK` / `NEED_USER` / `WARN` |
-| Permission mode | `plan` / `default` / `accept_edits` / `bypass`, changing how strict rule judging is |
-| Evidence ledger | JSONL files under `.capitalist/` recording requirements, changes, conclusions and violations |
-| Board | A local HTTP page showing stages, dispatches, work processes and report history |
+| Permission mode | `plan` / `default` / `accept_edits` / `bypass`, changing how strictly rules are judged |
+| Acceptance evidence | JSONL files under `.capitalist/` recording requirements, changes, conclusions and violations |
+| Board | A local HTTP visual page showing stages, dispatches, work processes and report history |
 
 ### Supported hosts
 
