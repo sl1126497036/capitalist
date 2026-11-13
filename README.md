@@ -213,4 +213,4 @@ skill/                  agent 手册（安装到各宿主的 skills 目录）
 
 Apache License 2.0。Copyright 2026 sl1126497036 (https://github.com/sl1126497036)。
 
-全文见 [LICENSE](LICENSE)，归属声明见 [NOTICE](NOTICE)，第三方组件许可见 [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES)。
+全文: [LICENSE](LICENSE)，归属声明: [NOTICE](NOTICE)，第三方组件许可: [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES)。
