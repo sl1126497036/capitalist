@@ -16,7 +16,7 @@ export interface Parsed {
  * 解析 argv（不含 node 与脚本路径）。
  *
  * `--key=value` 与 `--key value` 等价；后面紧跟另一个 `--` 开头的参数时，当前键取 true，
- * 不吞掉下一个选项。位置参数按出现顺序保留。
+ * 不消费下一个选项。位置参数按出现顺序保留。
  */
 export function parse(argv: string[]): Parsed {
   const positional: string[] = [];

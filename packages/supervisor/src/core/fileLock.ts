@@ -132,7 +132,7 @@ function withTableLock<T>(root: string, fn: () => T): T {
       fd = openSync(mp, "wx");
       break;
     } catch {
-      if (Date.now() - started > 400) return fn(); // 抢不到就裸跑一次，避免工具调用被卡死
+      if (Date.now() - started > 400) return fn(); // 未获取锁时直接执行一次，避免工具调用被阻塞
       sleepSync(10 + Math.floor(Math.random() * 20));
     }
   }
@@ -383,7 +383,7 @@ export function release(root: string, path: string, holder: string): boolean {
  * 强制解锁（不看持有者）。
  *
  * 只在人明确要求时用：`capitalist lock release <path> --force`。典型场景是持有者进程还活着
- * 但已经卡死，而它占的文件别人急着改，这时候等 ttl 到期太慢。
+ * 但已经卡死，而它占的文件正被其它进程等待修改，这时候等 ttl 到期太慢。
  */
 export function forceRelease(root: string, path: string): boolean {
   const key = lockKey(path);

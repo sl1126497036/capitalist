@@ -153,7 +153,7 @@ export function supervisorDisplayState(root: string): SupervisorDisplayInfo {
   return {
     state: "timeout",
     pid: rec.pid,
-    detail: `进程还在（pid ${rec.pid}）但心跳已 ${age}s 未更新——可能卡死或失联`,
+    detail: `进程还在（pid ${rec.pid}）但心跳已 ${age}s 未更新——可能卡死或无响应`,
     heartbeat_age_sec: age,
   };
 }

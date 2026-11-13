@@ -113,7 +113,7 @@ export function* iterContracts(searchDirs: readonly string[] = []): Generator<st
  * 把契约里的正则转成 JS RegExp。
  *
  * 契约来自 Python 生态，可能带 `(?i)` 这类行内标志。JS 不接受该语法，直接
- * `new RegExp(pattern)` 会抛错；而吞掉异常、跳过该条规则会让红线静默失效，
+ * `new RegExp(pattern)` 会抛错；而静默忽略异常、跳过该条规则会让红线静默失效，
  * 调用方无从区分“规则没生效”与“没有规则”。因此失败一律返回 null，由上层计入
  * {@link Contract.failedRedlines} 并上报。
  *

@@ -106,7 +106,7 @@ export function commitCursor(root: string, offset: number): void {
  * 读尚未消费的申报，并给出新的消费位置。
  *
  * 逐行解析：坏行跳过但不阻断后面的行，同时把“跳过了几行”报出来，一条写坏的记录
- * 不该让整批申报都读不到，也不该被静默吞掉。
+ * 不该让整批申报都读不到，也不应被静默忽略。
  */
 export function readPendingMq(root: string): {
   messages: MqMessage[];
