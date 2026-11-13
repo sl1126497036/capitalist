@@ -109,21 +109,25 @@ const degraded = computed(() => String(view.value?.degraded || ""));
 
 function progress(t) {
   const s = t.stats;
-  const parts = [tr("{n} 个节点", { n: s.total }), tr("{n} 个已完成", { n: s.done + s.closed })];
+  const parts = [tr("{n} 个节点", { n: s.total }), tr("{n} 个已完成", { n: s.done })];
+  if (s.closed) parts.push(tr("{n} 个已结项", { n: s.closed }));
   const left = [];
   if (s.running) left.push(tr("{n} 进行中", { n: s.running }));
   if (s.queued) left.push(tr("{n} 排队", { n: s.queued }));
   if (s.waiting) left.push(tr("{n} 等父节点", { n: s.waiting }));
   if (s.review) left.push(tr("{n} 待验收", { n: s.review }));
   if (s.failed) left.push(tr("{n} 失败", { n: s.failed }));
-  parts.push(left.length ? tr("还差 {list}", { list: left.join(" / ") }) : tr("全部完成"));
+  if (left.length) parts.push(tr("还差 {list}", { list: left.join(" / ") }));
+  /* 已有结项计数时不补“全部完成”，避免同一行重复。 */
+  else if (!s.closed) parts.push(tr("全部完成"));
   return parts.join(" ");
 }
 
 const summary = computed(() => {
   const t = totals.value;
   if (!t) return "";
-  const bits = [tr("{n} 棵树", { n: trees.value.length }), tr("{n} 个节点", { n: t.total }), tr("{n} 个已完成", { n: t.done + t.closed })];
+  const bits = [tr("{n} 棵树", { n: trees.value.length }), tr("{n} 个节点", { n: t.total }), tr("{n} 个已完成", { n: t.done })];
+  if (t.closed) bits.push(tr("{n} 个已结项", { n: t.closed }));
   if (t.running) bits.push(tr("{n} 进行中", { n: t.running }));
   if (t.waiting) bits.push(tr("{n} 等父节点", { n: t.waiting }));
   if (t.failed) bits.push(tr("{n} 失败", { n: t.failed }));

@@ -189,9 +189,12 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
   });
 
   if (r.fallback) {
+    const detail = String(r.error ?? "").replace(/\s+/g, " ").trim();
     return {
       decision: "continue",
-      why: "判定通道不可用，按确定性流程走",
+      why: detail
+        ? `判定通道不可用：${detail.slice(0, 160)}。流程继续。`
+        : "判定通道不可用：模型未给出失败原因。流程继续。",
       fallback: true,
       error: String(r.error ?? "").slice(0, 400),
     };

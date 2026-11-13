@@ -392,7 +392,7 @@
 .row.t-run .dot {
   animation: qpulse 2.4s ease-in-out infinite;
 }
-/* 未读按透明度闪，不改尺寸，避免挤动首行。 */
+/* 未读按透明度变化，不改尺寸，不挤动首行。 */
 .row .dot.unread {
   animation: dotpulse 1.6s ease-in-out infinite;
 }
@@ -537,7 +537,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--s5);
-  /* 状态点运行时会外扩 3px，而这里裁到内容盒：留出 3px 再抵消外边距，光晕完整、文字位置不动。 */
+  /* 状态点的外扩 3px 会被内容盒裁掉：留同宽内边距并用负外边距抵消，文字位置不变。 */
   padding-left: 3px;
   margin-left: -3px;
 

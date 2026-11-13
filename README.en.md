@@ -83,6 +83,10 @@ For security tasks a skill can drive vulnerability hunting across several sites 
 
 You can split multiple sites into shards per site, split a single site into later-stage shards per subdomain, or dispatch several src hunting instructions in one go.
 
+## Runtime panel
+
+![Supervisor panel](board.png)
+
 ## Details
 
 ### Process model

@@ -80,6 +80,9 @@ function durText(node) {
       <p v-else-if="item.node.inCycle" class="fv-nflag">{{ t("成环 无可达根节点") }}</p>
       <p v-else-if="item.node.blocked" class="fv-nflag">{{ t("受 #{id} 断链影响", { id: item.node.blockedBy }) }}</p>
       <p v-else-if="item.node.state === 'waiting'" class="fv-nwait">{{ t("卡在 #{id}", { id: item.node.stuckOn }) }}</p>
+      <p v-else-if="item.node.state === 'closed' && item.node.reason" class="fv-nreason">
+        {{ t("结项原因：{why}", { why: item.node.reason }) }}
+      </p>
     </div>
 
     <div v-if="item.kids.length" class="fv-kids">

@@ -4376,7 +4376,7 @@ export function buildThreads(root: string): ThreadSummary[] {
 }
 
 
-export type TaskBucket = "run" | "queue" | "paused" | "bad" | "done" | "canceled";
+export type TaskBucket = "run" | "queue" | "paused" | "bad" | "done" | "canceled" | "closed";
 
 export function taskBucket(status: unknown): TaskBucket {
   const s = String(status ?? "");
@@ -4387,6 +4387,8 @@ export function taskBucket(status: unknown): TaskBucket {
   if (s === "paused") return "paused";
   if (s === "done" || s === "exited" || s === "finished") return "done";
   if (s === "canceled") return "canceled";
+  /* 作废与结项单单独成档，不计入排队与运行。 */
+  if (s === "closed" || s === "superseded") return "closed";
   return "bad";
 }
 
@@ -4398,17 +4400,29 @@ export interface TaskCounts {
   failed: number;
   done: number;
   canceled: number;
+  closed: number;
   accepted: number;
   ended: number;
 }
 
-/** total = running + queued + paused + failed + done + canceled，每条线程只计入一个分类。 */
+/** total = running + queued + paused + failed + done + canceled + closed，每条线程只计入一个分类。 */
 export function taskCountsOf(
   threads: ReadonlyArray<{ id?: string | null; status?: string | null }>,
   acceptedKeys?: ReadonlySet<string>,
   settledKeys?: ReadonlySet<string>,
 ): TaskCounts {
-  const out: TaskCounts = { total: 0, running: 0, queued: 0, paused: 0, failed: 0, done: 0, canceled: 0, accepted: 0, ended: 0 };
+  const out: TaskCounts = {
+    total: 0,
+    running: 0,
+    queued: 0,
+    paused: 0,
+    failed: 0,
+    done: 0,
+    canceled: 0,
+    closed: 0,
+    accepted: 0,
+    ended: 0,
+  };
   for (const t of threads) {
     const b = taskBucket(t.status);
     out.total += 1;
@@ -4417,6 +4431,7 @@ export function taskCountsOf(
     else if (b === "paused") out.paused += 1;
     else if (b === "bad") out.failed += 1;
     else if (b === "canceled") out.canceled += 1;
+    else if (b === "closed") out.closed += 1;
     else {
       const unsettled = String(t.status ?? "") === "exited" && settledKeys && !settledKeys.has(String(t.id ?? ""));
       if (unsettled) out.queued += 1;
@@ -4645,6 +4660,44 @@ function buildThreadsPageUncached(
       lineage: String((d as { lineage?: string }).lineage ?? d.id),
       stage: d.stage,
       status: "canceled",
+      model: dispatchModel(d),
+      worker: "",
+      last_at: "",
+      last_role: "",
+      last: "",
+      unread: 0,
+      held: isHeld(d.shard),
+      started_at: d.at,
+      dispatch: d.id,
+      title: dispatchTitle(d),
+      output_bytes: 0,
+      duration_sec: 0,
+      spawn_count: 0,
+      usage: noUsage(d.at, dispatchModel(d)),
+    });
+  }
+
+  /*
+   * 作废单补入列表。
+   *
+   * 阶段推进作废的单没有工作进程，不会经 worker 循环进入 threads；
+   * 单独成档，不与用户取消合并。
+   */
+  for (const d of dispatches) {
+    if (String(d.status ?? "") !== "superseded") continue;
+    const supersededAt = Date.parse(String(d.closed_at ?? d.done_at ?? d.at ?? ""));
+    if (Number.isFinite(supersededAt) && Date.now() - supersededAt > CANCELED_KEEP_MS) continue;
+    const key = taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? ""));
+    if (threads.has(key)) continue;
+    threads.set(key, {
+      id: key,
+      no: "",
+      stuck_on: "",
+      stuck_on_no: "",
+      shard: d.shard ?? "",
+      lineage: String((d as { lineage?: string }).lineage ?? d.id),
+      stage: d.stage,
+      status: "superseded",
       model: dispatchModel(d),
       worker: "",
       last_at: "",
@@ -7434,7 +7487,7 @@ export function buildSupervisorLog(
    * 派单消息同时在监工进程出现。
    *
    * 自动派单只写 `dispatch_open`，该事件不在消息白名单内，仅靠事件流时监工进程没有消息。
-   * 派单自身带正文与编号，按派单消息渲染，与工作进程同形。
+   * 派单自身带正文与编号，按派单消息渲染，与工作进程侧一致。
    */
   for (const d of dispatchRows) {
     if (!fresh(d.at)) continue;
@@ -8171,14 +8224,36 @@ export function buildOverview(roots: string[]): BoardOverview {
   let queued = 0;
   /** 跨根 token 合计只做加法。 */
   const figs: UsageFigures[] = [];
-  const taskTotals: TaskCounts = { total: 0, running: 0, queued: 0, paused: 0, failed: 0, done: 0, canceled: 0, accepted: 0, ended: 0 };
+  const taskTotals: TaskCounts = {
+    total: 0,
+    running: 0,
+    queued: 0,
+    paused: 0,
+    failed: 0,
+    done: 0,
+    canceled: 0,
+    closed: 0,
+    accepted: 0,
+    ended: 0,
+  };
 
   const rows: BoardOverview["roots"] = [];
   for (const root of roots) {
     let status: TaskSummary["status"] = "done";
     let procs = 0;
     let alive = 0;
-    let counts: TaskCounts = { total: 0, running: 0, queued: 0, paused: 0, failed: 0, done: 0, canceled: 0, accepted: 0, ended: 0 };
+    let counts: TaskCounts = {
+      total: 0,
+      running: 0,
+      queued: 0,
+      paused: 0,
+      failed: 0,
+      done: 0,
+      canceled: 0,
+      closed: 0,
+      accepted: 0,
+      ended: 0,
+    };
     try {
       status = supervisorStateOf(root).status;
       if (status === "running") running++;

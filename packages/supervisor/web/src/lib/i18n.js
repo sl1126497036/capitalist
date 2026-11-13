@@ -206,6 +206,7 @@ const EN = {
   "启动 未记录": "start time not recorded",
   "关闭": "Close",
   "已取消": "Canceled",
+  "已作废": "Voided",
   "已让位": "Yielded",
   "暂不重派": "No retry",
   "接管中": "Taken over",
@@ -248,6 +249,7 @@ const EN = {
   " {n} 条未读": " {n} unread",
   "{n} 个子单": "Sub-tasks: {n}",
   "{n} 个已完成": "Done: {n}",
+  "{n} 个已结项": "Closed: {n}",
   "{n} 个节点": "Nodes: {n}",
   "{n} 个落在断链子树": "In blocked sub-trees: {n}",
   "{n} 失败": "Failed: {n}",
@@ -275,6 +277,7 @@ const EN = {
   "复制失败": "Copy failed",
   "失败": "Failed",
   "失败原因：{why}": "Failure reason: {why}",
+  "结项原因：{why}": "Closure reason: {why}",
   /* 重启蒙版副标题。 */
   "重启中…": "Restarting…",
   "重启期间界面暂停，完成后自动恢复调度。未恢复时，重新执行 capitalist supervise。":

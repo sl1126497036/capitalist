@@ -63,7 +63,7 @@ function seed(root) {
   );
 }
 
-const SUM_KEYS = ["running", "queued", "paused", "failed", "done", "ended", "canceled"];
+const SUM_KEYS = ["running", "queued", "paused", "failed", "done", "ended", "canceled", "closed"];
 
 function assertShape(c) {
   assert.equal(
@@ -88,6 +88,7 @@ test("统计唯一来源：四处接口逐字段一致，且总数等于各状�
       done: 1,
       ended: 0,
       canceled: 0,
+      closed: 0,
       accepted: 1,
     });
     assertShape(counts);
@@ -140,6 +141,7 @@ test("未知状态归异常，不藏进已完成", () => {
     done: 1,
     ended: 0,
     canceled: 1,
+    closed: 0,
     accepted: 0,
   });
   assertShape(counts);

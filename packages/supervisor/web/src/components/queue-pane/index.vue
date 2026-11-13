@@ -44,7 +44,13 @@ const supervisorTitle = computed(() => {
 
 
 /* 暂停档不提供清空：暂停单的处置为唤醒或关闭，归档会使该派单离开待办队列，语义与“清空列表”不同。 */
-const canClear = computed(() => filter.value !== "paused" && (counts.value[filter.value] || 0) > 0);
+/* 已结项档同样不清空：这些单已终止，归档只影响回查。 */
+const canClear = computed(
+  () =>
+    filter.value !== "paused" &&
+    filter.value !== "closed" &&
+    (counts.value[filter.value] || 0) > 0,
+);
 const clearAsk = ref(false);
 
 /** 清空只归档记录，不结束运行中进程。 */
@@ -82,6 +88,8 @@ function bucket(x) {
   if (s === "done" || s === "finished") return "done";
   if (s === "exited") return settled(t) ? "done" : "queue";
   if (s === "canceled") return "canceled";
+  /* 作废与结项单单独成档，与后端 taskBucket 同口径。 */
+  if (s === "closed" || s === "superseded") return "closed";
   /* 未知状态按异常归类，与后端一致。 */
   return "bad";
 }
@@ -89,6 +97,8 @@ function cell(t) {
   const s = String(t?.status || "");
   /* 后端把 closed 且 closed_by 为 user 的单标为 canceled；监工不调度，恢复需在对话中提出。 */
   if (s === "canceled") return { tone: "cancel", kind: "word", text: tr("已取消") };
+  if (s === "superseded") return { tone: "cancel", kind: "word", text: tr("已作废") };
+  if (s === "closed") return { tone: "cancel", kind: "word", text: tr("已结项") };
   /* 派单处于 reported 时不显示运行中或耗时；判据取后端下发的 doing，不按运行时长推断。 */
   if (String(t?.doing || "") === "report") {
     return { tone: "run", kind: "word", text: workerDoingText("report") };
@@ -251,6 +261,7 @@ const FILTERS = computed(() => {
     { key: "done", label: tr("已完成"), tone: "done" },
   ];
   if ((counts.value.canceled || 0) > 0) out.push({ key: "canceled", label: tr("已取消"), tone: "cancel" });
+  if ((counts.value.closed || 0) > 0) out.push({ key: "closed", label: tr("已结项"), tone: "cancel" });
   return out;
 });
 
@@ -296,6 +307,7 @@ const counts = computed(() => {
     bad: num(s.failed),
     done: num(s.done),
     canceled: num(s.canceled),
+    closed: num(s.closed),
   };
 });
 

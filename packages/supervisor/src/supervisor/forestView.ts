@@ -155,6 +155,13 @@ function failureReason(d: Dispatch): string {
   return clip(String(d.note ?? ""));
 }
 
+/** 结项原因：取台账备注，缺失时按状态给默认说明。 */
+function closeReason(d: Dispatch): string {
+  const note = clip(String(d.note ?? ""));
+  if (note) return note;
+  return String(d.status ?? "") === "superseded" ? "阶段已推进，本单的验收口径不再适用" : "";
+}
+
 function emptyStats(): ForestTreeStats {
   return { total: 0, done: 0, failed: 0, running: 0, queued: 0, waiting: 0, review: 0, closed: 0, remaining: 0, blocked: 0 };
 }
@@ -338,14 +345,20 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
       const lin = String((d as unknown as Record<string, unknown>).lineage || d.id);
       return lineageDone.has(lin) ? "closed" : "failed";
     }
-    if (status === "closed") return "closed";
+    if (status === "closed" || status === "superseded") return "closed";
     /* `open` 及其它未知值：前置满足为 queued，未满足为 waiting。 */
     return pendingPrereq(d) ? "waiting" : "queued";
   };
 
   const stuckOf = (d: Dispatch): string => pendingPrereq(d);
 
-  const reasonOf = (d: Dispatch): string => (String(d.status ?? "") === "failed" ? failureReason(d) : "");
+  const reasonOf = (d: Dispatch): string => {
+    const status = String(d.status ?? "");
+    if (status === "failed") return failureReason(d);
+    /* 已结项的单同样给出原因。 */
+    if (status === "closed" || status === "superseded") return closeReason(d);
+    return "";
+  };
   const retriesOf = (d: Dispatch): number => retriesOfMap.get(String(d.id)) ?? 0;
 
   /*

@@ -1693,6 +1693,10 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   let standby = !pendingWork0;
   /** 任务达标只播报一次；之后转入待命，不再重复。 */
   let doneAnnounced = false;
+  /** 上一轮的在途单数：由有到无即队列清空，据此写一次总结。启动时为 -1，不触发。 */
+  let prevInFlight = -1;
+  /** 总结走模型，耗时以十秒计；期间不再重复发起。 */
+  let summaryRunning = false;
 
   try {
     for (let i = 0; i < limit; i += 1) {
@@ -2115,6 +2119,18 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         `[监工] tick ${rec.ticks} ｜ ${loadState(opts.root)?.stage ?? "?"} ｜ ` +
           `${concurrencyLabel(capacity, capWanted)} ｜ ${describeQueue(opts.root, contract, capacity)}`,
       );
+
+      /* 在途单由有到无时写一条结项总结：队列空了，用户需要知道这一批各自的结果。 */
+      const inFlightNow = inFlightCount(opts.root);
+      if (inFlightNow === 0 && prevInFlight > 0 && !summaryRunning) {
+        summaryRunning = true;
+        void summarizeRun(opts.root, out)
+          .catch((err) => out(`[监工] 结项总结失败：${String((err as Error).message ?? err)}`))
+          .finally(() => {
+            summaryRunning = false;
+          });
+      }
+      prevInFlight = inFlightNow;
 
       // 阶段卡死判据：在途签名（派单 id/状态 + 工作进程日志字节数）连续 {@link STALL_TICKS} 个 调度轮次 未变。
       // 签名含日志增量，运行时长不计入卡死判定。
@@ -2972,6 +2988,19 @@ function dispatchNoLabel(root: string, id: string): string {
 }
 
 /**
+ * 判重用的正文归一化：去掉附件行、空白与标点，全角转半角。
+ *
+ * 这里只判“是否为同一段文字”，措辞差异由相似度判定处理。
+ */
+function dedupeKey(text: string): string {
+  return String(text ?? "")
+    .replace(/^\s*\[附件\].*$/gm, "")
+    .normalize("NFKC")
+    .replace(/[\s\p{P}\p{S}]+/gu, "")
+    .toLowerCase();
+}
+
+/**
  * 用当前状态回答 `ask` 的问题。只读，只陈述阶段进度、并行度、在途数、派单构成、`runCheck` 结果、
  * 暂停与裁决与欠账、重派最多的分片、下一步，不给建议也不改变调度状态。问题原文置于开头。
  */
@@ -3246,22 +3275,45 @@ async function applyOneDirective(
       );
     }
     /*
-     * 忽略附件行与空白比较 action：已有 open / claimed / review 的同内容单时不新派，
+     * 忽略附件行、空白与标点后比较 action：已有在途的同内容单时不新派，
      * 避免两个进程执行同一任务并互相覆盖。
      */
-    const bodyKey = String(body ?? "").replace(/\s+/g, " ").trim();
-    const dup = readDispatches(root).find(
-      (x) =>
-        (x.status === "open" || x.status === "claimed" || x.status === "review") &&
-        String(x.action ?? "")
-          .replace(/^\s*\[附件\].*$/gm, "")
-          .replace(/\s+/g, " ")
-          .trim() === bodyKey,
-    );
+    const bodyKey = dedupeKey(body);
+    /* 空正文不参与判重：归一化后都是空串，会把互不相干的单判成同一件。 */
+    const dup = bodyKey
+      ? readDispatches(root).find(
+          (x) =>
+            (x.status === "open" || x.status === "claimed" || x.status === "review") &&
+            dedupeKey(String(x.action ?? "")) === bodyKey,
+        )
+      : undefined;
     if (dup) {
+      const label = dispatchNoLabel(root, dup.id);
+      const at = label ? ` ${label}` : "";
       return reject(
-        `同一件事已有在途单 ${dup.id}（${dup.status}）：不重复派。要看进展就点开那一单，要重做用 capitalist retry。`,
+        `已有在途单${at}（${dup.status}）覆盖同一件事，本条未新建。需要重跑时对该单执行 capitalist retry。`,
       );
+    }
+    /*
+     * 同车道（同 `[标签]`）且正文高度相似时按同一件事处理，已有在途单不再新建。
+     * 阈值 0.8 高于下方合并的 0.45：相似到这一程度的内容追加进去会污染原单正文。
+     * 标签不同不算重复，作用对象不同的两件事文字常常相似。
+     */
+    if (tag) {
+      const twin = readDispatches(root).find((x) => {
+        const st = String(x.status ?? "");
+        if (st !== "open" && st !== "claimed" && st !== "reported" && st !== "review") return false;
+        const tags = (x as DispatchEx).tags;
+        if (!Array.isArray(tags) || !tags.includes(tag)) return false;
+        return titleSimilarity(String(x.action ?? ""), body) >= 0.8;
+      });
+      if (twin) {
+        const label = dispatchNoLabel(root, twin.id);
+        const at = label ? ` ${label}` : "";
+        return reject(
+          `已有在途单${at}覆盖同一件事，本条未新建。补充或更正用 amend${at}；重跑需先结项该单。`,
+        );
+      }
     }
     /*
      * 将 `PARENT` / `AFTER` 的编号或 id 翻译为台账派单 id：编号表仅用于界面，台账 id 在重派后仍可追踪。
@@ -4310,7 +4362,15 @@ function supersedeStaleDispatches(
       reason: "阶段已推进，本单的验收口径不再适用",
     });
     out(`[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）属于已推进的阶段，标记 superseded 并释放槽位`);
-    return { ...d, status: "superseded" } as unknown as Dispatch;
+    /* 作废原因写进台账，工作树与任务列表据此展示。 */
+    const hadNote = String((d as { note?: unknown }).note ?? "").trim();
+    return {
+      ...d,
+      status: "superseded",
+      note: hadNote || "阶段已推进，本单的验收口径不再适用",
+      /* 作废时刻单列：建单时刻可能很早，按它算展示窗口会把单判成过期。 */
+      closed_at: new Date().toISOString(),
+    } as unknown as Dispatch;
   });
   if (changed) writeJsonl(dispatchPath(root), out2);
 }
@@ -6220,6 +6280,117 @@ function settleDebt(root: string, out: (s: string) => void): void {
 }
 
 
+/** 在途派单：已派出但尚未结项。 */
+const LIVE_DISPATCH_STATUS = new Set(["open", "claimed", "reported", "review"]);
+
+function inFlightCount(root: string): number {
+  return readDispatches(root).filter((d) => LIVE_DISPATCH_STATUS.has(String(d.status ?? ""))).length;
+}
+
+/** 结项状态词；台账状态到界面词只在这里转换一次。 */
+function closedWord(d: Dispatch): string {
+  const s = String(d.status ?? "");
+  if (s === "done") return "已完成";
+  if (s === "failed") return "失败";
+  if (s === "superseded") return "已作废";
+  if (s === "closed") return String(d.closed_by ?? "") === "user" ? "已取消" : "已结项";
+  return "已结束";
+}
+
+/** 单张派单的耗时：认领到结项，未认领时按建单时刻起算。 */
+function spentOf(d: Dispatch): string {
+  const start = Date.parse(String(d.claimed_at ?? d.at ?? ""));
+  const end = Date.parse(String(d.done_at ?? (d as { closed_at?: string }).closed_at ?? ""));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return "";
+  const min = Math.round((end - start) / 60_000);
+  return min >= 1 ? `${min} 分钟` : "不足 1 分钟";
+}
+
+/**
+ * 队列清空后的台账事实。
+ *
+ * 供模型写总结，也作模型不可用时的回落正文：只列结局、耗时与结项原因，不作评价。
+ */
+function runFacts(root: string): { facts: string; count: number } | null {
+  const rows = readDispatches(root);
+  if (rows.length === 0) return null;
+  const done = rows.filter((d) => String(d.status ?? "") === "done").length;
+  const failed = rows.filter((d) => String(d.status ?? "") === "failed").length;
+  const closed = rows.filter((d) => {
+    const s = String(d.status ?? "");
+    return s === "closed" || s === "superseded";
+  }).length;
+  const parts = [`完成 ${done}`];
+  if (failed) parts.push(`失败 ${failed}`);
+  if (closed) parts.push(`结项或作废 ${closed}`);
+  const lines: string[] = [`台账累计 ${rows.length} 张派单，全部结束：${parts.join("、")}。`];
+  /* 只列最近 8 张：更早的单已在上轮总结里出现过，重复列出会把消息区撑长。 */
+  for (const d of rows.slice(-8)) {
+    const label = dispatchNoLabel(root, d.id);
+    const body = String(d.action ?? "").replace(/\s+/g, " ").trim();
+    const title = String((d as { title?: string }).title ?? "").trim() || body.slice(0, 24) || d.id;
+    const spent = spentOf(d);
+    const why =
+      String(d.status ?? "") === "superseded" || String(d.status ?? "") === "closed"
+        ? String(d.note ?? "").trim()
+        : "";
+    lines.push(
+      `· ${label || d.id} ${title}${spent ? `（${spent}）` : ""}：${closedWord(d)}` +
+        `${why ? `（${why}）` : ""}`,
+    );
+  }
+  const stage = loadState(root)?.stage ?? "";
+  lines.push(stage ? `当前阶段 ${stage} 没有在途单。` : "没有在途单。");
+  return { facts: lines.join("\n"), count: rows.length };
+}
+
+/** 总结正文交给监工模型写；通道不可用时回落台账事实，并说明原因。 */
+async function summaryText(root: string, facts: string): Promise<string> {
+  const prompt = [
+    "【任务：写结项总结】",
+    "下面这些派单已全部结束。把台账事实归纳成一段话，给用户看。",
+    "",
+    facts,
+    "",
+    "写法：",
+    "  · 开头一句话交代整体：几张单、成功几张、没成功的为什么失败。",
+    "  · 中间只讲没成功的；成功的不逐张复述，除非耗时值得说明。",
+    "  · 结尾一句话说当前停在哪个阶段、有没有在途单。",
+    "  · 只写上面存在的内容。不推测原因，不评价好坏，不列改进建议。",
+    "  · 不逐条抄编号与状态，不用列表符号，不用感叹号。",
+    "  · 用与用户相同的语言。",
+  ].join("\n");
+  const r = await askModel({
+    prompt,
+    /* 每次单独起会话：总结不该把上一批的内容带进来。 */
+    sessionId: brainSessionOf(root, `capitalist-summary-${Date.now()}`).id,
+    cwd: root,
+    timeoutMs: 120_000,
+    effort: "high",
+    model: loadSupervisor(root)?.supervisor_model || undefined,
+  });
+  if (!r.ok) {
+    const why = String(r.text ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+    return `总结通道不可用${why ? `：${why}` : ""}。以下为台账摘要。\n${facts}`;
+  }
+  const text = r.text.trim();
+  if (!text) return `总结通道未返回内容。以下为台账摘要。\n${facts}`;
+  return text;
+}
+
+/**
+ * 队列清空后写一条结项总结。
+ *
+ * 正文由监工模型生成，模型不可用时退回台账事实并写明原因。
+ */
+async function summarizeRun(root: string, out: (s: string) => void): Promise<void> {
+  const f = runFacts(root);
+  if (!f) return;
+  const text = await summaryText(root, f.facts);
+  recordEvent(root, "supervisor_reply", { reply: text, thread: "" });
+  out(`[监工] 队列已清空，已写结项总结（${f.count} 张派单）`);
+}
+
 function describeQueue(root: string, contract: Contract, capacity: number): string {
   const state = loadState(root);
   if (!state) return "";
@@ -6415,6 +6586,7 @@ export const __testing = {
   retryDelayMs,
   retryDelaysMs,
   describeQueue,
+  summarizeRun,
   createOpenShardDispatch,
   killWorkerPid,
   killJudgedWorker,
