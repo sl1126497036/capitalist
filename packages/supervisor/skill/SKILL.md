@@ -1,6 +1,6 @@
 ---
 name: capitalist
-version: 0.1.32
+version: 0.1.33
 agent_created: true
 description: capitalist（监工进程）。监工是独立进程（capitalist supervise），工作进程由它拉起，各自独立；本会话只启动监工、读取状态、回报结论，不执行业务代码。适用于多阶段、跨会话、易偏离、有硬性红线、需持续核验进度的任务。触发词：capitalist、监督、盯着做、自动推进、别中断、开新进程、换进程、上下文太长、上下文压缩、会话一长就糊涂、多进程协调、一个进程执行一个监督、不想每一步都给指令、谁来把关、按流程走、照着流程走、监督这个任务、让它自己跑、装 capitalist、开监督、给我盯一下。
 ---
@@ -30,7 +30,7 @@ description: capitalist（监工进程）。监工是独立进程（capitalist s
 ## 2. 启动监工
 
 ```bash
-# WorkBuddy 必须加--detach 否则codebuddy -p 无凭证权限会导致无法使用
+# WorkBuddy 必须加 --detach，否则 codebuddy -p 无凭证权限会导致无法使用
 capitalist supervise "<目标>" --agent workbuddy --detach
 
 # CodeBuddy / ClaudeCode
@@ -66,7 +66,7 @@ Windows 上 `--detach` 由启动器转交，启动器由 `capitalist install` �
 - WorkBuddy 中的注意事项
   - 无终端可用时处于“受限模式”，需先解除。
   - 必须用系统安装的 Node 运行，宿主内置的 Node 无法启动监工。
-  - 启动时必须加--detach，且maxOS下用户需同意凭证访问授权（授权会由WorkBuddy自动检测发起，无需介入），否则将出现“对话通道不可用”
+  - 启动时必须加 --detach，且 macOS 下用户需同意凭证访问授权（授权会由 WorkBuddy 自动检测发起，无需介入），否则将出现“对话通道不可用”
 - ClaudeCode
   - 宿主为 ClaudeCode 时，监工通过 `claude -p` 调度。
 
