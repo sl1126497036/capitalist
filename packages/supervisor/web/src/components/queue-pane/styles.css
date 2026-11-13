@@ -392,7 +392,7 @@
 .row.t-run .dot {
   animation: qpulse 2.4s ease-in-out infinite;
 }
-/* .nm 有 overflow:hidden，状态点用 inset 内发光，避免外扩效果被裁成半圆。 */
+/* 未读按透明度闪，不改尺寸，避免挤动首行。 */
 .row .dot.unread {
   animation: dotpulse 1.6s ease-in-out infinite;
 }
@@ -537,6 +537,9 @@
   display: flex;
   align-items: baseline;
   gap: var(--s5);
+  /* 状态点运行时会外扩 3px，而这里裁到内容盒：留出 3px 再抵消外边距，光晕完整、文字位置不动。 */
+  padding-left: 3px;
+  margin-left: -3px;
 
   font-size: var(--f-body);
   line-height: 1.25;

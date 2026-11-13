@@ -116,11 +116,12 @@ export function evtReceipt(m) {
   return no ? `${base} #${no}` : base;
 }
 
-/** 发言判据：监工流的 supervisor_answer 与派给工作进程的 kind=dispatch，其余为事件。 */
+/** 发言判据：派单消息两处都算监工发言，其余按当前视图判。 */
 export function isSupervisorSpeech(m, supervisorView) {
   if (!m || m.role !== "supervisor") return false;
+  if (m.kind === "dispatch") return true;
   if (supervisorView) return m.event === "supervisor_answer";
-  return m.kind === "dispatch";
+  return false;
 }
 
 /**

@@ -587,7 +587,7 @@
                 <template #message="{ content }">
                   <div v-if="v.c === 'user' || v.c === 'human'" class="usig">{{ t("我：") }}</div>
                   <div v-if="v.c === 'supervisorsay'" class="rhdr">
-                    <span class="rtitle">{{ v.m.kind === "say" ? t("监工：") : t("监工裁决：") }}</span>
+                    <span class="rtitle">{{ v.m.kind === "say" ? t("监工：") : v.m.kind === "dispatch" ? t("监工派单：") : t("监工裁决：") }}</span>
                     <span v-if="v.m.kind === 'say'" class="rsig">{{ t("对话层") }}</span>
                     <span
                       v-if="v.assoc"

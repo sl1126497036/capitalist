@@ -481,6 +481,7 @@ const EN = {
   "监工介入": "Supervisor involvement",
   "监工指标": "Supervisor metrics",
   "监工派单后会出现在这里": "Dispatches appear here once the supervisor sends them",
+  "监工派单：": "Supervisor dispatch:",
   "监工消息流": "Supervisor messages",
   "监工裁决：": "Supervisor verdict:",
   "监工：": "Supervisor:",
@@ -625,20 +626,26 @@ const EN = {
   /* ---- 输入区轮播提示 ---- */
   "已结束的派单可在原会话中回复，也可由监工介入唤醒":
     "A finished dispatch can be answered in its original session or woken by the supervisor",
-  "拖动输入框上沿可调整输入框高度，双击上沿恢复默认高度":
-    "Drag the top edge of the input to resize it; double-click the edge to reset",
+  "拖动输入框上沿可改变高度，双击恢复默认":
+    "Drag the top edge of the input box to change its height; double-click to reset",
   "通过“图片/路径”选择文件后，任务根内的相对路径会插入输入框":
     "Picking a file under Image / path inserts its path relative to the task root",
   "截图可直接粘贴或拖入输入框，上传完成后随消息一并发送":
     "Screenshots can be pasted or dropped into the input and are sent with the message once uploaded",
   "在工作进程会话中开启“监工介入”，消息将转由监工处理，工作进程不会收到":
     "With Supervisor involvement on in a worker session, the supervisor handles the message and the worker does not receive it",
-  "在监工会话中选择“派单模型”，新派出的单都用它，直到再次更换或清除":
-    "Choosing Dispatch model in the supervisor session applies to every new dispatch until changed or cleared",
-  "点击消息操作区的“#”按钮可引用该消息，引用内容随下一次输入一并发送":
-    "Click “#” on a message to quote it; the quote is sent with the next input",
-  "“中断”会结束当前进程并由监工重派；同时登记阻塞时改为等待外部条件解除":
-    "Interrupt stops the current process and the supervisor redispatches; recording a blocker instead waits for it to clear",
+  "“派单模型”选定后对之后的新单持续生效，更换或清除后失效":
+    "Once chosen, Dispatch model applies to every later dispatch until changed or cleared",
+  "顶部的并行度与上下文读数可点击切换":
+    "Click the concurrency and context readings at the top to switch them",
+  "发消息可指定技能，作用于下一张派单，如“下一条派单加上 caveman-scene 技能”":
+    "A message can name a skill for the next dispatch, e.g. “add the caveman-scene skill to the next dispatch”",
+  "消息卡片上的“#”可引用该条信息，引用随下一条消息一起发出":
+    "The “#” on a message card quotes it; the quote goes out with your next message",
+  "点击“中断”可结束当前进程并重派；“中断”时勾选“同时登记阻塞”则不再重派":
+    "Interrupt ends the current process and redispatches it; ticking “Also record a blocker” in that dialog skips the redispatch",
+  "连续失败达到上限会停下等用户裁决，不再自动重派":
+    "Consecutive failures reaching the limit stop for the user's decision and are not retried automatically",
   /* 繁忙提醒分三段渲染，各段分别取词条；“繁忙中”标提醒色。 */
 
   /* ---- 全局提示与操作回执 ---- */

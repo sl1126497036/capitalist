@@ -7293,6 +7293,8 @@ export function buildSupervisorLog(
   const ledgerOnly = ledgerOnlyRoot(root);
   /** 回执正文里的内部派单 id 按编号表换成界面号。 */
   const nos = dispatchNoTable(root);
+  /** 派单消息与 has_older 共用这一份读数。 */
+  const dispatchRows = readDispatchesBoard(root);
 
   const narrationLeftover = new Map<string, string>();
   for (const e of rows) {
@@ -7428,6 +7430,33 @@ export function buildSupervisorLog(
   }
   for (const m of logAgg.values()) msgs.push(m);
 
+  /*
+   * 派单消息同时在监工进程出现。
+   *
+   * 自动派单只写 `dispatch_open`，该事件不在消息白名单内，仅靠事件流时监工进程没有消息。
+   * 派单自身带正文与编号，按派单消息渲染，与工作进程同形。
+   */
+  for (const d of dispatchRows) {
+    if (!fresh(d.at)) continue;
+    const text = String(d.action ?? "");
+    if (!text.trim()) continue;
+    const atts = attachmentsOf({ atts: d.atts, text });
+    const no = nos.get(d.id) ?? "";
+    msgs.push({
+      id: `D-${d.id}`,
+      at: String(d.at ?? ""),
+      role: "supervisor",
+      kind: "dispatch",
+      text,
+      tool: "",
+      cmd: text,
+      status: String(d.status ?? ""),
+      thread: CAPITALIST_THREAD_ID,
+      tier: "main",
+      ...(no ? { no } : {}),
+      ...(atts.length ? { atts } : {}),
+    });
+  }
 
   // 带线程号的记录归位到那个进程的会话，不进监工流。
   for (const r of supervisorDirectives) {
@@ -7499,7 +7528,9 @@ export function buildSupervisorLog(
      */
     has_older:
       msgs.length > limit ||
-      (cutTs > 0 && rows.some((e) => (atTs(String((e as { at?: unknown }).at ?? "")) || 0) < cutTs)),
+      (cutTs > 0 &&
+        (rows.some((e) => (atTs(String((e as { at?: unknown }).at ?? "")) || 0) < cutTs) ||
+          dispatchRows.some((d) => (atTs(String(d.at ?? "")) || 0) < cutTs))),
     messages: msgs.slice(Math.max(0, msgs.length - limit)),
   };
   if (fp) supervisorLogCache = { root, key: fp, value };
