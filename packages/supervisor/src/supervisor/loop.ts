@@ -810,7 +810,7 @@ function escalateCascade(
     evidence: dg.evidence,
     why,
   });
-  out(`[监工] ${failed.id} 的失败原因处理不了（${dg.cause}：${why}）：已登记待裁决并标阻塞，等人工检查`);
+  out(`[监工] ${failed.id} 的失败原因无法处理（${dg.cause}：${why}）：已登记待裁决并标阻塞，等人工检查`);
 }
 
 /** 重试判定的异步池（与 triage 分开：两个池子各自限流，不互相排队）。 */
@@ -897,7 +897,7 @@ function enqueueRetryJudgement(
       why: verdict.why,
       fallback: verdict.fallback === true,
     });
-    out(`[监工] 判定可以再试（第 ${attempts} 次失败）：${verdict.why}`);
+    out(`[监工] 判定可重试（第 ${attempts} 次失败）：${verdict.why}`);
   });
   pumpRetry();
 }
@@ -945,12 +945,12 @@ async function judgeRetry(
 
   const r = await decide({
     root,
-    question: "这一单还要不要再试一次？先核对上一轮的卡点（失败原因、阻塞项）是否已经消除，再作判断。",
+    question: "是否重试这一单？先核对上一轮卡点（失败原因、阻塞项）是否已消除，再作判断。",
     facts,
     actions: [
       {
         name: "retry",
-        desc: "再试一次：卡点已消除或本来就该换个时机（环境抖动、端口/文件被临时占用、并发撞车、外部服务超时）",
+        desc: "重试：卡点已消除，或失败由临时条件导致（环境抖动、端口/文件被临时占用、并发冲突、外部服务超时）",
       },
       {
         name: "give_up",
@@ -1614,7 +1614,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     if (pruned.removed > 0) {
       out(`[监工] 已清理 ${pruned.removed} 个原子写残留的临时文件`);
       if (pruned.truncated) {
-        out("[监工] 残留较多，本轮只清了一批；下次启动继续清（不影响本轮派单）");
+        out("[监工] 残留较多，本轮已清理部分；下次启动继续（不影响本轮派单）");
       }
     }
   } catch (err) {
@@ -1637,10 +1637,10 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   try {
     const reaped = reapOrphans(opts.root, out);
     if (reaped.length > 0) {
-      out(`[监工] 启动清理：收掉 ${reaped.length} 个上一轮遗留的 worker（事件 worker_reaped 已入台账）`);
+      out(`[监工] 启动清理：回收 ${reaped.length} 个上一轮遗留的 worker（事件 worker_reaped 已入台账）`);
     }
   } catch (err) {
-    out(`[监工] 清孤儿失败（不影响启动）：${errText(err)}`);
+    out(`[监工] 清理孤儿进程失败（不影响启动）：${errText(err)}`);
   }
 
   // 首 调度轮次 前修复存量台账结构：重派与重试会给同一件事留下多行，`parent` 只在建单时写一次，
@@ -1668,10 +1668,10 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
             : `[监工] 守护进程已运行中（pid ${g.pid}），沿用`,
         );
       } else {
-        out("[监工] 守护进程没起来（取不到入口路径）：强杀本进程后工作进程只能等下次启动清孤儿");
+        out("[监工] 守护进程未启动（取不到入口路径）：强制终止本进程后工作进程只能等下次启动清理孤儿");
       }
     } catch (err) {
-      out(`[监工] 起守护失败（不影响启动）：${errText(err)}`);
+      out(`[监工] 启动守护进程失败（不影响启动）：${errText(err)}`);
     }
   }
 
@@ -2039,7 +2039,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
           stage: rd.stage,
           shard: rd.shard ?? "",
         });
-        out(`[监工] 派单 ${rd.id}（${rd.stage}/${rd.shard || "整阶段"}）上报后一直没人裁决，退回重派`);
+        out(`[监工] 派单 ${rd.id}（${rd.stage}/${rd.shard || "整阶段"}）上报后无裁决，退回重派`);
       }
 
       // 暂停时不派新单；心跳、判死回收与已完成派单的结算照常。
@@ -2774,7 +2774,7 @@ function reportStageStalled(
   recordEvent(root, "stage_stalled", payload);
 
   out(
-    `[监工] ⚠ 阶段 ${progress.stage || "(无阶段)"} 卡死：连续 ${ticks} 个 tick（约 ${Math.round(
+    `[监工] [警告] 阶段 ${progress.stage || "(无阶段)"} 卡死：连续 ${ticks} 个 tick（约 ${Math.round(
       ticks * tickSec,
     )}s）没有任何在途进展`,
   );
@@ -4920,7 +4920,7 @@ function fillSlots(
         });
         out(
           `[监工] ${cand.id} 的目标文件 ${blocked.path} 被 ${blocked.holder} 占用已 ${Math.round(waited / 1000)}s，` +
-            "不再等：照派，由工作进程自己撞锁（拿不到会收到三步指引）",
+            "不等待：照常派发，由工作进程自行竞争文件锁（拿不到锁会收到处理指引）",
         );
         d = cand;
         break;

@@ -10,7 +10,7 @@ import { supervisorDir } from "./paths";
 /** 一条待裁决问题（ask）最多能让阶段停多久。 */
 export const ASK_BLOCK_MS = 15 * 60 * 1000;
 
-/** 一条插话/指令挂了多久之后不再挡“报完成”。 */
+/** 一条插话/指令生效超过多久后不再拦截“报完成”。 */
 export const DIRECTIVE_STALE_MS = 30 * 60 * 1000;
 
 export const DIRECTIVE_OUTCOME_GUARD_MS = 45 * 60 * 1000;
@@ -155,7 +155,7 @@ export function modelRealWindow(model: string, reported?: number | null): number
   return defaultContextWindow(model) || null;
 }
 
-/** 该模型的缺省窗口：600k，模型撑不住时降到模型的真实窗口。 */
+/** 该模型的缺省窗口：600k，模型窗口不足时降到模型的真实窗口。 */
 export function defaultCtxWindowFor(model: string, reported?: number | null): number {
   const real = modelRealWindow(model, reported);
   return real !== null && real < DEFAULT_CTX_WINDOW ? real : DEFAULT_CTX_WINDOW;

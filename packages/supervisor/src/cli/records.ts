@@ -115,7 +115,7 @@ export function cmdAnswer(p: Parsed): number {
   writeJsonl(file, rows);
 
   // 重派上限这类 ask，裁决本身就是“放行该片”：把那批失败划到线下。不划的话重派计数
-  // 仍超上限，监工下一轮调度 会重新登记同一条 ask，人答了等于没答，阶段永远卡住。
+  // 仍超上限时，监工下一轮调度会重新登记同一条 ask，答复未登记即视为未答复，阶段持续卡住。
   const capLabel = /重派上限\s+([^\s：:，,]+)/.exec(hitText)?.[1] ?? null;
   if (capLabel) {
     updateState(root, (s) => {
@@ -666,7 +666,7 @@ export function cmdFire(p: Parsed): number {
 
   if (res.decision !== "PASS") reportHits(hits);
 
-  // 限速：连续发枪之间留间隔，避免把目标打挂。等就真等，不要假装发了。
+  // 限速：连续请求之间留间隔，避免目标服务过载。需等待就等待，不发无效请求。
   const gap = Number(flagString(p, "gap") ?? 0) || 0;
   const lastFile = join(supervisorDir(root), "last_fire.txt");
   if (gap > 0 && existsSync(lastFile)) {

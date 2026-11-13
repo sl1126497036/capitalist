@@ -66,7 +66,7 @@ export function markQuotaExhausted(root: string, text: string): void {
   }
 }
 
-/** 跑通一次就清掉。文件不存在时不写盘（绝大多数调用都会走到这里，别做无意义 IO）。 */
+/** 首次成功后清除。文件不存在时不写盘（绝大多数调用都会走到这里，避免无意义 IO）。 */
 export function clearQuotaExhausted(root: string): void {
   if (!readQuotaState(root).exhausted) return;
   try {

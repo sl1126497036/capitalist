@@ -582,7 +582,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
       ? "查明卡点：卡在哪一步、为什么卡、证据是什么。给出结论与修复建议。不改任何代码。"
       : "查明卡点并修复：先定位根因，再改代码，再验证。",
     ``,
-    /* 修复单也要先核对现状：卡点描述可能已过时，根因或许已被其它改动一并修掉。 */
+    /* 修复单也要先核对现状：卡点描述可能已过时，根因或许已被其它改动一并修复。 */
     ...(readonly ? [] : [...buildGroundingBlock(d, "【三、动手前先核对现状】"), ``]),
     `【${readonly ? "三" : "四"}、怎么查】`,
     /* 修复单只读本单的说明与日志，全局文件按本单 id 取相关行，避免读到别人的单而带偏结论。 */
@@ -671,7 +671,7 @@ export function listSkills(root: string): { name: string; dir: string; path: str
 /**
  * 派单正文是否点名该技能。
  *
- * 按整词匹配，避免正文里的常见短词与目录名撞车；名字过短的一律不注入，只列路径。
+ * 按整词匹配，避免正文里的常见短词与目录名冲突；名字过短的一律不注入，只列路径。
  */
 function mentionsSkill(text: string, name: string): boolean {
   if (name.length < 4) return false;
@@ -973,7 +973,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
     beatFromOutput();
   });
 
-  // 启动失败是异步事件（ENOENT 之类），不接住会以未捕获异常结束监工进程。
+  // 启动失败是异步事件（ENOENT 之类），不捕获会以未捕获异常结束监工进程。
   child.on("error", (err) => {
     const rec = loadWorker(opts.root, id);
     if (rec) saveWorker(opts.root, { ...rec, status: "failed", exit_code: -1 });
@@ -1166,7 +1166,7 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
   });
   child.unref();
 
-  // 启动失败是异步事件：不接住会以未捕获异常结束监工进程。窗口模式的 pid 属于
+  // 启动失败是异步事件：不捕获会以未捕获异常结束监工进程。窗口模式的 pid 属于
   // cmd.exe，开窗后即退出，所以这里只把记录标 failed，存活判断仍交给 report。
   child.on("error", (err) => {
     const rec = loadWorker(opts.root, id);

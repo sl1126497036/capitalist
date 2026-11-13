@@ -323,7 +323,7 @@ function cmdInbox(p: Parsed): number {
   return 0;
 }
 
-/** 任务池：派了几项、验收了几项、还剩几项。 */
+/** 任务池：已派、已验收、剩余项数。 */
 function cmdTasks(p: Parsed): number {
   const root = rootOrDie(p);
   /** 回填：把已经存在的派单台账投影成任务项。 */
@@ -466,7 +466,7 @@ function cmdStatus(p: Parsed): number {
   }
   if (lease.warn) write(`警告：${lease.warn}\n`);
 
-  /** 任务池汇总：派了几项、验收了几项、还剩几项。 */
+  /** 任务池汇总：已派、已验收、剩余项数。 */
   const tkSum = taskSummary(root);
   if (tkSum.total > 0) write(`${summaryLine(tkSum)}\n`);
 
@@ -497,7 +497,7 @@ function cmdBrief(p: Parsed): number {
   const stage = stageById(contract, state.stage);
   const check = runCheck(stage?.done as Record<string, unknown> | undefined, root);
   let text = `${buildBrief({ root, state, contract, mode, missing: check.missing })}\n`;
-  // 暂停期间必须把“下一步”压住：执行侧照常拿到 next_action，会误以为可以继续开工。
+  // 暂停期间必须抑制“下一步”：执行侧照常拿到 next_action，会误以为可以继续开工。
   const pause = readPause(root);
   if (pause) {
     text +=
@@ -1046,7 +1046,7 @@ async function main(): Promise<number> {
             const code = String(tok.hostTokenDiag()["errorCode"] ?? "");
             write(
               failure === "missing"
-                ? "[监工] 未取得宿主令牌：宿主登录态不可见。若宿主已登录，说明沙箱把存在性判定挡成了不存在，见 .capitalist/auth-diag.json。\n"
+                ? "[监工] 未取得宿主令牌：宿主登录态不可见。若宿主已登录，说明沙箱使存在性判定误报为不存在，见 .capitalist/auth-diag.json。\n"
                 : failure === "encrypted"
                   ? "[监工] 未取得宿主令牌：宿主登录态为加密格式，无法取出访问令牌。\n"
                   : `[监工] 未取得宿主令牌：授权请求被拒或未响应${code ? `（${code}）` : ""}，重启监工并在弹窗中选择“本次会话内始终允许”。\n`,
@@ -1214,7 +1214,7 @@ async function main(): Promise<number> {
       }
       const { runGuard } = await import("../supervisor/guard");
       runGuard(gRoot, gPid);
-      // 常驻：main() 一 resolve，入口就会 process.exit，守护得把这一下挡住。
+      // 常驻：main() 一 resolve，入口就会 process.exit，守护进程需拦截该行为。
       return await new Promise<number>(() => {});
     }
     case "next":

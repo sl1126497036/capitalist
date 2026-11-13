@@ -407,7 +407,7 @@ export function renderMemoryConstraints(entries: readonly MemoryEntry[]): string
     .map((e) => {
       const n = e.count > 1 ? `（已发生 ${e.count} 次，最近 ${String(e.last_at).slice(0, 10)}）` : "";
       /*
-       * 两类条目性质不同：习惯与环境是既有事实，照做即可；卡点记录要求先核对是否仍成立，
+       * 两类条目性质不同：习惯与环境是既有事实，按其执行；卡点记录要求先核对是否仍成立，
        * 避免在同一个地方重复失败。
        */
       const tag = e.kind === "habit" ? "【用户习惯与运行环境】" : "【项目卡点】";

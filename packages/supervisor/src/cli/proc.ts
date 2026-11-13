@@ -302,7 +302,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
   const id = p.positional[0];
   if (!id)
     die(
-      '用法：capitalist report <派单id> --status done|failed --note "<做了什么>" [--evidence "<凭什么算做到了>"]' +
+      '用法：capitalist report <派单id> --status done|failed --note "<做了什么>" [--evidence "<改动与验证结果>"]' +
         ' [--added "<用户新增的需求>"] [--outcome "<编号>=done|not_mine|blocked;…"]',
     );
   const root = rootOrDie(p);
@@ -388,7 +388,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       }
       write("逐条回报结论后再 capitalist report：\n");
       write(`  capitalist report ${id} --status ${status} --note "…" --outcome "${args.join(";")}"\n`);
-      write("做不了本单的写 not_mine 并说明该归哪一单，做不了的写 blocked 并说明卡在哪；\n");
+      write("本单不属于自己的写 not_mine 并说明归属；无法执行的写 blocked 并说明卡点；\n");
       write("不确定怎么算的，用 capitalist ask 说明——收工闸对已登记的问题放行。\n");
       return 1;
     }
@@ -479,7 +479,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
 
     const verdict = await awaitVerdict(root, id, 240_000);
     if (verdict === "accepted") {
-      write("监工已验收，这一单结了。\n");
+      write("监工已验收，本单已结。\n");
       return 0;
     }
     if (verdict === "rejected") {
@@ -487,7 +487,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       return 1;
     }
     if (verdict === "error") {
-      write(`这一单出了异常（不是打回），按监工记录停手：\n${verdictReason(root, id)}\n`);
+      write(`本单出现异常（非打回），按监工记录停手：\n${verdictReason(root, id)}\n`);
       write("确认卡在哪之后用 capitalist ask 说明，不要自己重开一张。\n");
       return 0;
     }

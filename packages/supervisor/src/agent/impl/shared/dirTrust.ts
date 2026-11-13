@@ -54,7 +54,7 @@ export interface WorkspaceOptions {
    *
    * 省略时与 `configDir` 相同；置 `null` 表示不写项目级配置。需要置空的场合是
    * 该目录出现在项目里会改变宿主自身行为：WorkBuddy 见到 `.codebuddy` 即转受限模式，
-   * 不执行终端命令，写进去等于把工作区弄坏。
+   * 不执行终端命令，写入会破坏工作区。
    */
   projectConfigDir?: string | null;
 }

@@ -195,7 +195,7 @@ async function hydrate() {
     const r = await fetch("./api/supervisor", { headers: { accept: "application/json" } });
     if (r.ok) localSupervisor.value = (await r.json()) || {};
   } catch {
-    /* 拿不到就维持上一次读数：监工行不是主线，不能因为这里失手把左栏弄红。 */
+    /* 读取失败时维持上一次读数：监工行不是主线，不能因该行失败把左栏标为异常。 */
   }
   if (!dispatches.value.length) {
     try {

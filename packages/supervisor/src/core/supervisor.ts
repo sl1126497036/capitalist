@@ -79,7 +79,7 @@ export interface SupervisorRecord {
   /**
    * 追加的禁用模型（`supervise --model-denylist "a,b"`）。
    *
-   * 与平台名单取并集：只能加不能减，配置写错一个名字不该放行一个已知会跑偏的模型。
+   * 与平台名单取并集：只能加不能减，配置写错一个名字也不放行已知会偏离预期的模型。
    */
   model_denylist?: string[];
   /**
@@ -138,7 +138,7 @@ export interface Dispatch {
   /**
    * 被让位的时刻（ISO）。
    *
-   * “立即执行”要真插队就得腾出并发槽：正运行中的那一单会退回排队，排队中的单会被越过。
+   * “立即执行”会腾出并发槽：正运行中的那一单退回排队，排队中的单被越过。
    * 两类单都写这个字段，界面据此标“已让位”，它们既没失败也没被撤销，只是排在
    * 那张立即执行单后面。立即执行单结束后由 `core/preempt.ts` 统一清掉。
    */
@@ -1036,7 +1036,7 @@ export function pausedDispatches(root: string): Dispatch[] {
 
 /** 同片上一张未结单的派单带过的附件，补到本单 action 末尾。 */
 function carryAttachments(rows: Dispatch[], d: Dispatch): Dispatch {
-  /** 只有“重派”才继承：同一片的活没干成，重发一单时不能把用户交的那张图弄丢。 */
+  /** 只有“重派”才继承：同一片的任务未完成，重发一单时不能丢失用户提供的图。 */
   if (d.source !== "requeue") return d;
   const stage = String(d.stage ?? "");
   const shard = String(d.shard ?? "");
@@ -1271,7 +1271,7 @@ export function prerequisitesOf(d: {
  *
  * {@link dependenciesSettled} 对孤儿前置按“已满足”放行（等一个不存在的编号就是永久
  * 等待），但放行必须留痕：调度层每拍拿这个函数核对，有孤儿就记
- * `dispatch_parent_missing` 事件，否则台账被归档/重写之后，依赖悄悄失效，
+ * `dispatch_parent_missing` 事件，否则台账被归档/重写之后，依赖静默失效，
  * 顺序错了却没人知道是哪张单、缺了哪个编号。
  */
 export function missingPrerequisites(
@@ -1491,7 +1491,7 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
     return {
       ok: false,
       code: "missing_reason",
-      reason: "挂了父节点但没写 PARENT_REASON：写清为什么必须先做父节点（一两句），否则这条边无法判断真假",
+      reason: "声明了父节点但未写 PARENT_REASON：说明为何必须先完成父节点（一两句），否则无法判定该边是否成立",
     };
   }
   const byId = new Map(rows.map((r) => [String(r.id), r] as const));

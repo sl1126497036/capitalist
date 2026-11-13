@@ -273,7 +273,7 @@ export function laneKeyOf(d: {
   if (sh) return `${st}/${sh}`;
   /** 用 `||` 不用 `??`：空串也要回退到 id。 */
   const l = String(d.lineage || d.id || "").trim();
-  /* x 前缀：避免和真正的分片名撞（分片名不会以 x 开头）。 */
+  /* x 前缀：避免与真正的分片名冲突（分片名不会以 x 开头）。 */
   return l ? `${st}/x${l.slice(-6)}` : `${st}/main`;
 }
 
@@ -644,7 +644,7 @@ export function appendSection(action: string, header: string, lines: string[]): 
  * 接管文件结构。
  *
  * 一个任务根可以同时有多片被接管，所以 `items` 是数组；整个文件仍是一个对象，便于
- * 别的读者（brief / 手工排查）一眼看清 root 与更新时间。早期版本把根对象直接写成数组，
+ * 其他读者（brief / 手工排查）可直接读取 root 与更新时间。早期版本把根对象直接写成数组，
  * {@link readTakeover} 仍然兼容那种形状，读进来后归一化。
  */
 export interface TakeoverItem {
@@ -991,7 +991,7 @@ export interface PromoteTaskResult {
    * 这一单会不会真的插队（挂起一个运行中的进程腾槽）。
    *
    * 只有“当前没有别的立即执行运行中”才是 true。回执要按它说话：说“腾槽”却没腾，
-   * 用户下一眼看队列就会发现它还在等，比不置顶更伤信任。
+   * 用户查看队列即发现它仍在等待，比不置顶更损害信任。
    */
   preempt: boolean;
   /** 已经有立即执行运行中时，挡在前面的那张派单 id；否则为空串。 */
