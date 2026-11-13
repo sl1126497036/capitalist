@@ -916,7 +916,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   for (const d of snap.directives) L.push(`- ${d.shard ? `[${d.shard}] ` : ""}${d.text}`);
   L.push("");
 
-  L.push("## 未裁决提问（等人回填，不要自行拍板）");
+  L.push("## 未裁决提问（等用户回填，不自行裁决）");
   if (snap.asks.length === 0) L.push("(无)");
   /* 提问编号用“问N”：`#N` 保留给任务编号（`thread-no.json`），避免与任务号混淆。 */
   for (const a of snap.asks) L.push(`- 问${a.id} ${a.shard ? `[${a.shard}] ` : ""}${a.text}`);

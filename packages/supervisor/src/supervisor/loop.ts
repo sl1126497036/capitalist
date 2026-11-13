@@ -596,7 +596,7 @@ const FAILURE_RULES: Array<{ cause: FailureCause; re: RegExp; fixable: boolean; 
     cause: "env",
     re: /ENOENT|EACCES|EADDRINUSE|EBUSY|EPERM|ENOSPC|cannot find module|端口.{0,4}占用|磁盘空间/i,
     fixable: true,
-    summary: "环境缺件（文件/端口/权限位）：修掉本地条件后重跑",
+    summary: "环境缺件（文件/端口/权限位）：消除本地条件后重跑",
   },
 ];
 

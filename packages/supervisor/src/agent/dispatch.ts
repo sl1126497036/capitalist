@@ -46,7 +46,7 @@ import type { ActionKind, GateResult, LocalDecision } from "../core/types";
 const HINT_UNWATCHED: Record<BriefLang, string> = {
   zh:
     "【capitalist 已生效 · 本会话未纳管】hook 正在运行，当前目录没有任务根。" +
-    "普通问答忽略本行；长流程任务说一句“给这个项目开监督”，" +
+    "普通问答忽略本行；长流程任务可回复“给这个项目开监督”，" +
     '或执行 `capitalist start "<目标>" --contract <任务列表名>`。',
   en:
     "【capitalist active · no task root】The hook is running; this directory has no task root. " +
@@ -768,7 +768,7 @@ function describeBlock(contract: Contract, gate: GateResult, cmd: string): strin
   return (
     `【红线拦截】\n${head}\n命中：…${hit[0]?.snippet ?? cmd.slice(0, 80)}…\n` +
     (fix ? `正确做法：${fix}\n` : "") +
-    "换一条不越界的路径；拿不准就 capitalist ask 让监工裁决。"
+    "换一条不越界的路径；不确定时 capitalist ask 由监工裁决。"
   );
 }
 
