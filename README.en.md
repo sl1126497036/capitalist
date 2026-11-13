@@ -63,7 +63,9 @@ Send these to a host with the plugin installed (selecting the `capitalist` skill
 
 The host runs `capitalist supervise`, which creates the task root in the current directory and starts a resident supervisor; "add task" requests are appended with `capitalist say` and merged into the existing dispatch when work has not started, or delivered by the hook before the next tool call while it runs. See `skill/SKILL.md` for the trigger table.
 
-The supervisor panel is recommended: the startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address can be read from `board_url` in `capitalist status`. From the panel you can resume dispatches, inspect stages, interact with running work processes, write new instructions and adjudicate questions. The access key is not checked by default, but leaving it unchecked may pose an intranet security risk; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
+When a third-party skill is referenced in a host, the supervisor can either generate a contract automatically following that skill's workflow, or split the skill by work content and attach the full skill address so work processes can fetch it themselves.
+
+The supervisor panel is recommended for task supervision and scheduling. The startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address can be read from `board_url` in `capitalist status`. From the panel you can resume dispatches, inspect stages, interact with running work processes, write new instructions and adjudicate questions. The access key is not checked by default, but leaving it unchecked may pose an intranet security risk; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
 
 ## Use cases
 
@@ -73,13 +75,13 @@ Tasks can be issued from the host directly or from the supervisor panel.
 
 For coding tasks the supervisor can let frontend and backend proceed independently and start integration and automated-test processes once both are done.
 
-You can: write a custom contract with frontend and backend as two `parallel` shards, one dispatch and one work process each; put integration and automated tests in later stages, which only produce dispatches after the previous stage's `done` gate passes. The built-in `minimal` contract has three stages only (requirement confirmation, execution, pre-delivery review) without domain split, so such orchestration needs a separate contract.
+You can: create a custom contract with frontend and backend as two `parallel` shards, one dispatch and one work process each; put integration and automated tests in later stages, which advance automatically once the previous stage is done.
 
 ### 2. Security tasks: batch dispatch and split by domain
 
 For security tasks a skill can drive vulnerability hunting across several sites in one dispatch, with the supervisor enforcing redlines and accepting results as the skill requires; alternatively, split by site and dispatch by subdomain once asset collection is done.
 
-You can: split multiple sites into shards per site, and split a single site into later-stage shards per subdomain. Destructive commands are blocked by the `BLOCK` rules in the contract's `redlines` based on command text, and hits are written to `violations.jsonl`; actions already allowed can be reviewed afterwards with `capitalist review`. Acceptance relies on the evidence written by `capitalist record` and `capitalist ledger`. Contract fields and gate types are covered in section 8 of `skill/SKILL.md`.
+You can split multiple sites into shards per site, split a single site into later-stage shards per subdomain, or dispatch several src hunting instructions in one go.
 
 ## Details
 
