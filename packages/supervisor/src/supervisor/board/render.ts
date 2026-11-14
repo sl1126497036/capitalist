@@ -6,8 +6,8 @@
 
 import { ThreadMessage, describeEvent } from "./snapshot";
 import { zh } from "./zh";
-import { isShellTool, summarizeCommand } from "../workerLog";
-import { dispatchOfThreadNo } from "../threadNo";
+import { isShellTool, summarizeCommand } from "../worker/workerLog";
+import { dispatchOfThreadNo } from "../usage/threadNo";
 export const MQ_KIND_LABEL: Record<string, string> = {
   stuck: "卡住",
   question: "要方向",

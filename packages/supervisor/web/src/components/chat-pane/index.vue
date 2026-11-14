@@ -2516,7 +2516,7 @@ const emptyState = computed(() => {
   if (props.offline) return {h: tr("没有消息"), d: ""};
   if (isSupervisor.value) {
     if (!props.root) return {h: tr("尚未选择任务根"), d: tr("从上方监工条选择一个任务根")};
-    return {h: tr("暂无监工记录，发送指令可创建派单"), d: ""};
+    return {h: tr("暂无监工记录，发送指令创建新的任务单"), d: ""};
   }
   if (!props.thread) return {h: tr("从左侧选择一个进程"), d: ""};
   return {h: tr("这个进程尚无消息"), d: ""};

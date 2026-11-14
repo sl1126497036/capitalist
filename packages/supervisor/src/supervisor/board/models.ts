@@ -16,7 +16,7 @@ import {
   resetHelpModelsCacheForTest,
 } from "../../agent/modelCatalog";
 import { byId, detect } from "../../agent/registry";
-import { loadSupervisor } from "../../core/supervisor";
+import { loadSupervisor } from "../../core/record/supervisor";
 
 export function knownModelsOf(host: string): readonly string[] {
   return byId(host)?.knownModels ?? [];

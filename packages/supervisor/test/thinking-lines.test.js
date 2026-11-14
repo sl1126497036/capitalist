@@ -2,7 +2,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { isThinkingOnlyLine, withoutThinking, tailWithinChars } = require("../dist/supervisor/workerLog");
+const { isThinkingOnlyLine, withoutThinking, tailWithinChars } = require("../dist/supervisor/worker/workerLog");
 
 const thinkingEv = JSON.stringify({
   type: "assistant",

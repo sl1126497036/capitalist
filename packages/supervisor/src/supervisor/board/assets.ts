@@ -10,9 +10,9 @@ import { readFileSync, statSync } from "node:fs";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 
-import { readJson, writeJson } from "../../core/json";
-import { supervisorDir } from "../../core/paths";
-import { loadSupervisor } from "../../core/supervisor";
+import { readJson, writeJson } from "../../core/record/json";
+import { supervisorDir } from "../../core/record/paths";
+import { loadSupervisor } from "../../core/record/supervisor";
 
 export function etagOf(body: string): string {
   return `"${createHash("sha256").update(body, "utf8").digest("hex").slice(0, 20)}"`;

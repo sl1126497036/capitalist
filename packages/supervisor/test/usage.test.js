@@ -20,7 +20,7 @@ const { mkdirSync, mkdtempSync, writeFileSync, appendFileSync } = require("node:
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const usage = require("../dist/supervisor/usage");
+const usage = require("../dist/supervisor/usage/usage");
 const board = require("../dist/supervisor/board");
 
 /** 建一个最小任务根：state.json + workers/index.jsonl + 若干 worker 记录与日志。 */

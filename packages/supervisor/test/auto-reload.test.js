@@ -6,7 +6,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { loadContract } = require(join(PKG, "dist/core/contract.js"));
+const { loadContract } = require(join(PKG, "dist/core/contract/contract.js"));
 const {
   CAPITALIST_CTX_RELOAD_RATIO,
   applyResumePlan,
@@ -17,8 +17,8 @@ const {
   recordSupervisorContext,
   reloadStatus,
   shouldAutoReload,
-} = require(join(PKG, "dist/supervisor/reload.js"));
-const { contextUsageOfResult } = require(join(PKG, "dist/supervisor/llm.js"));
+} = require(join(PKG, "dist/supervisor/context/reload.js"));
+const { contextUsageOfResult } = require(join(PKG, "dist/supervisor/channel/llm.js"));
 
 
 test("读数解析：result 行里的 contextUsed 与 contextWindow 能读出来", () => {

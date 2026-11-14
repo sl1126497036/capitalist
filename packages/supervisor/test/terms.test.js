@@ -19,7 +19,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const terms = require(join(PKG, "dist/supervisor/terms.js"));
+const terms = require(join(PKG, "dist/supervisor/context/terms.js"));
 const board = require(join(PKG, "dist/supervisor/board"));
 
 const CJK = /[\u4e00-\u9fa5]/;

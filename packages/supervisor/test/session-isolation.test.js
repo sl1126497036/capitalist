@@ -5,9 +5,9 @@ const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
-const { recordEvent } = require("../dist/core/ledger");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { recordEvent } = require("../dist/core/record/ledger");
 const {
   buildSupervisorLog,
   buildThreadMessages,

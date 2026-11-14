@@ -1,16 +1,16 @@
 
-import { archiveFinished, listWorkers, loadWorker, loadSupervisor, readDispatches, setWorkerModel, wakeDispatch, workerModelPath } from "../../core/supervisor";
-import { isWorkerRef, promoteTask, stopWorker } from "../../core/commands";
-import { loadState, updateState } from "../../core/state";
-import { writeJson, readJson } from "../../core/json";
-import { recordEvent } from "../../core/ledger";
-import type { ShotRef } from "../../core/messages";
+import { archiveFinished, listWorkers, loadWorker, loadSupervisor, readDispatches, setWorkerModel, wakeDispatch, workerModelPath } from "../../core/record/supervisor";
+import { isWorkerRef, promoteTask, stopWorker } from "../../core/dispatch/commands";
+import { loadState, updateState } from "../../core/record/state";
+import { writeJson, readJson } from "../../core/record/json";
+import { recordEvent } from "../../core/record/ledger";
+import type { ShotRef } from "../../core/message/messages";
 import { unlinkSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { resolveModel } from "../modelPolicy";
-import { sessionPath } from "../reload";
-import { laneBaseId } from "../sessionLane";
+import { resolveModel } from "../judge/modelPolicy";
+import { sessionPath } from "../context/reload";
+import { laneBaseId } from "../judge/sessionLane";
 import { cBad, cId, cStr, type CommandResult } from "./cmdArgs";
 import { clearPause, quoteDispatchLabel, reopenDispatch, resolveQuoteText, runCli, sayArgsOf, setPause, shardOfThread, workerOfThread, writeQuotedDirect } from "./cmdQuote";
 import { diagnose } from "./snapshot";

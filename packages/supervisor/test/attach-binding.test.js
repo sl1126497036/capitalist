@@ -8,14 +8,14 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const { buildThreadMessages } = require(join(PKG, "dist/supervisor/board"));
-const { appendDirective, listDirectives } = require(join(PKG, "dist/core/commands.js"));
-const { appendDispatch, readDispatches } = require(join(PKG, "dist/core/supervisor.js"));
-const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));
-const { loadState } = require(join(PKG, "dist/core/state.js"));
-const { readJsonl } = require(join(PKG, "dist/core/json.js"));
-const { eventsPath } = require(join(PKG, "dist/core/ledger.js"));
+const { appendDirective, listDirectives } = require(join(PKG, "dist/core/dispatch/commands.js"));
+const { appendDispatch, readDispatches } = require(join(PKG, "dist/core/record/supervisor.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { loadState } = require(join(PKG, "dist/core/record/state.js"));
+const { readJsonl } = require(join(PKG, "dist/core/record/json.js"));
+const { eventsPath } = require(join(PKG, "dist/core/record/ledger.js"));
 const loop = require(join(PKG, "dist/supervisor/loop.js"));
-const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/direct.js"));
+const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/channel/direct.js"));
 
 const IMG = ".capitalist/attachments/a.png";
 

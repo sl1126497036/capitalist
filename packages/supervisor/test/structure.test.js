@@ -50,7 +50,8 @@ test("规则1：单文件行数不超上限，已超标的只准减不准增", (
 });
 
 test("规则2：core 不引用上层目录", () => {
-  const forbidden = /from "\.\.\/(supervisor|cli|agent|install)\//;
+  /* core 按领域分了子目录，反向引用要穿透任意层数，不能只认一级。 */
+  const forbidden = /from "(?:\.\.\/)+(supervisor|cli|agent|install)\//;
   const offenders = [];
   for (const file of walk(join(SRC, "core"))) {
     if (forbidden.test(readFileSync(file, "utf8"))) offenders.push(rel(file));

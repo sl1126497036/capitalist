@@ -12,7 +12,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const { channelFile, markChannelDown, markChannelUp, readChannelDown } = require("../dist/core/channel");
+const { channelFile, markChannelDown, markChannelUp, readChannelDown } = require("../dist/core/message/channel");
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-channel-"));

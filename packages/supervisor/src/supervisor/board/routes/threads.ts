@@ -5,11 +5,11 @@
  */
 
 import { parseSince, type BoardCtx } from "../types";
-import { activeTakeover } from "../../../core/commands";
-import { lockStatus } from "../../../core/fileLock";
-import { listWorkers, readDispatches } from "../../../core/supervisor";
-import { balanceView } from "../../balance";
-import { stripDispatchEcho } from "../../msgView";
+import { activeTakeover } from "../../../core/dispatch/commands";
+import { lockStatus } from "../../../core/record/fileLock";
+import { listWorkers, readDispatches } from "../../../core/record/supervisor";
+import { balanceView } from "../../usage/balance";
+import { stripDispatchEcho } from "../../view/msgView";
 import { readJsonlFromTail } from "../logs";
 import { buildThreadMessages } from "../messages";
 import { fingerprint } from "../render";

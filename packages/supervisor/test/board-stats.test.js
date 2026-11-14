@@ -8,9 +8,9 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const board = require(join(PKG, "dist/supervisor/board"));
-const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));
-const { appendDispatch, registerWorker } = require(join(PKG, "dist/core/supervisor.js"));
-const { supervisorDir } = require(join(PKG, "dist/core/paths.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { appendDispatch, registerWorker } = require(join(PKG, "dist/core/record/supervisor.js"));
+const { supervisorDir } = require(join(PKG, "dist/core/record/paths.js"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-stats-"));

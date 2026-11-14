@@ -7,9 +7,9 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { supervisorReplyView } = require(join(PKG, "dist/supervisor/msgView.js"));
-const { recordEvent } = require(join(PKG, "dist/core/ledger.js"));
-const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/direct.js"));
+const { supervisorReplyView } = require(join(PKG, "dist/supervisor/view/msgView.js"));
+const { recordEvent } = require(join(PKG, "dist/core/record/ledger.js"));
+const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/channel/direct.js"));
 const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 
 const BODY =

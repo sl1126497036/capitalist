@@ -5,8 +5,8 @@
  */
 
 import type { BoardCtx } from "../types";
-import { appendJsonl, readJsonl } from "../../../core/json";
-import { supervisorDir } from "../../../core/paths";
+import { appendJsonl, readJsonl } from "../../../core/record/json";
+import { supervisorDir } from "../../../core/record/paths";
 import { BOARD_WEB_TYPES } from "../assets";
 import { rootFromUrl } from "../snapshot";
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";

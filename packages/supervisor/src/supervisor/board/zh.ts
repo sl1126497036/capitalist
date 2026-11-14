@@ -4,7 +4,7 @@
  * 前端复用同一份术语表，这里只做一层容错包装，避免各处自行写映射。
  */
 
-import { zhCommandLabel, zhContractKind, zhStatus } from "../terms";
+import { zhCommandLabel, zhContractKind, zhStatus } from "../context/terms";
 
 export function zhCall(fn: unknown, value: unknown, extra?: unknown): string {
   if (typeof fn !== "function") return String(value ?? "");

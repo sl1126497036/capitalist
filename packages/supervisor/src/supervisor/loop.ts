@@ -21,9 +21,9 @@ import { errText, sleep } from "../core/text";
 import { byId } from "../agent/registry";
 import { rotationCandidates } from "../agent/modelCatalog";
 
-import { runCheck } from "../core/checks";
+import { runCheck } from "../core/contract/checks";
 import { clearBoardModuleCache } from "./boardCache";
-import { askModel, AUTH_REQUIRED_TEXT, isQuotaText, looksLikeAuth, looksLikeQuota, QUOTA_EXHAUSTED_TEXT } from "./llm";
+import { askModel, AUTH_REQUIRED_TEXT, isQuotaText, looksLikeAuth, looksLikeQuota, QUOTA_EXHAUSTED_TEXT } from "./channel/llm";
 import {
   activeTakeover,
   appendDirective,
@@ -38,7 +38,7 @@ import {
   promoteTask,
   spliceDirectives,
   takeoverShard,
-} from "../core/commands";
+} from "../core/dispatch/commands";
 import {
   buildIntervention,
   classifyStuck,
@@ -49,13 +49,13 @@ import {
   stuckGapSec,
   stuckStateOf,
   type StuckEvidence,
-} from "./stuck";
+} from "./worker/stuck";
 import {
   ignoredSignature,
   inboxDir,
   openInboxAsks,
   readInbox,
-} from "../core/inbox";
+} from "../core/dispatch/inbox";
 import {
   type Contract,
   detectRequirementViolation,
@@ -76,21 +76,21 @@ import {
   stageIds,
   touchLease,
   writeLease,
-} from "../core/contract";
-import { createTaskRoot, enterStage } from "../core/init";
-import { markChannelDown, markChannelUp, readChannelDown } from "../core/channel";
-import { appendJsonl, pruneTempFiles, readJson, readJsonl, writeJson, writeJsonl } from "../core/json";
-import { recordEvent, recordEventThrottled } from "../core/ledger";
+} from "../core/contract/contract";
+import { createTaskRoot, enterStage } from "../core/contract/init";
+import { markChannelDown, markChannelUp, readChannelDown } from "../core/message/channel";
+import { appendJsonl, pruneTempFiles, readJson, readJsonl, writeJson, writeJsonl } from "../core/record/json";
+import { recordEvent, recordEventThrottled } from "../core/record/ledger";
 /* 文件写锁供调度查询占用，避免派单命中已被占用的文件。 */
-import { reap as reapFileLocks, releaseAll as releaseFileLocks, writeHolderOf } from "../core/fileLock";
-import { extractLocalPaths } from "../core/localGuard";
-import { ASK_BLOCK_MS, DEFAULT_SUPERVISOR_CONTEXT_LIMIT, VERDICT_HOLD_MS, WAKE_GRACE_MS } from "../core/limits";
+import { reap as reapFileLocks, releaseAll as releaseFileLocks, writeHolderOf } from "../core/record/fileLock";
+import { extractLocalPaths } from "../core/guard/localGuard";
+import { ASK_BLOCK_MS, DEFAULT_SUPERVISOR_CONTEXT_LIMIT, VERDICT_HOLD_MS, WAKE_GRACE_MS } from "../core/guard/limits";
 import { clockOf } from "../core/clock";
-import { copyStandardNote, memoriesFor, primeMemory, rememberLesson, renderMemoryConstraints, withLessons } from "./memory";
-import { commitCursor, readPendingMq, type MqMessage } from "../core/mq";
-import { attachmentsIn, bindAttachments, stripAttachments, withAttachmentLines } from "../core/attachments";
-import { attachmentsOfMessage } from "../core/messages";
-import { ensureTaskForDispatch, titleSimilarity } from "../core/tasks";
+import { copyStandardNote, memoriesFor, primeMemory, rememberLesson, renderMemoryConstraints, withLessons } from "./context/memory";
+import { commitCursor, readPendingMq, type MqMessage } from "../core/dispatch/mq";
+import { attachmentsIn, bindAttachments, stripAttachments, withAttachmentLines } from "../core/message/attachments";
+import { attachmentsOfMessage } from "../core/message/messages";
+import { ensureTaskForDispatch, titleSimilarity } from "../core/record/tasks";
 import {
   clearPreemptLease,
   isImmediate,
@@ -101,11 +101,11 @@ import {
   savePreemptLease,
   yieldOrder,
   yieldedDispatches,
-} from "../core/preempt";
-import { autoRebuild } from "../core/rebuildTree";
-import { supervisorDir } from "../core/paths";
-import { markQuotaExhausted } from "../core/quota";
-import { loadState, updateState } from "../core/state";
+} from "../core/dispatch/preempt";
+import { autoRebuild } from "../core/dispatch/rebuildTree";
+import { supervisorDir } from "../core/record/paths";
+import { markQuotaExhausted } from "../core/guard/quota";
+import { loadState, updateState } from "../core/record/state";
 import {
   activeDispatches,
   appendDispatch,
@@ -151,7 +151,7 @@ import {
   type Dispatch,
   type SupervisorRecord,
   type WorkerRecord,
-} from "../core/supervisor";
+} from "../core/record/supervisor";
 import type { Stage, TaskState } from "../core/types";
 import { disposeAll, registerDisposer, __resetDisposers } from "./dispose";
 import {
@@ -160,22 +160,22 @@ import {
   CAPITALIST_ACTIONS,
   type SupervisorDirective,
   type SupervisorResult,
-} from "./direct";
-import { planInstruct } from "./instruct";
-import { applyResumePlan, beginReload, noteContractChange, shouldAutoReload } from "./reload";
-import { reapOrphans } from "./reapOrphans";
-import { ensureGuard, stopGuard } from "./guard";
-import { laneOfWorker, recordLaneUsage } from "./sessionLane";
-import { shardTitle, taskTitle } from "./taskTitle";
-import { dispatchNoTable, dispatchOfThreadNo, threadIdByNo } from "./threadNo";
-import { decide } from "./brain";
-import { brainSessionOf } from "./brainLane";
-import { deniedModelsUsed, resolveModel } from "./modelPolicy";
-import { triage, worthTriaging, type TriageVerdict } from "./triage";
-import { workspaceFacts } from "./workspaceFacts";
-import { workerUsage } from "./usage";
-import { isLogNoise, tailWithinChars, withoutThinking } from "./workerLog";
-import { killTree, sleepSync, waitExit } from "./terminate";
+} from "./channel/direct";
+import { planInstruct } from "./judge/instruct";
+import { applyResumePlan, beginReload, noteContractChange, shouldAutoReload } from "./context/reload";
+import { reapOrphans } from "./worker/reapOrphans";
+import { ensureGuard, stopGuard } from "./worker/guard";
+import { laneOfWorker, recordLaneUsage } from "./judge/sessionLane";
+import { shardTitle, taskTitle } from "./usage/taskTitle";
+import { dispatchNoTable, dispatchOfThreadNo, threadIdByNo } from "./usage/threadNo";
+import { decide } from "./judge/brain";
+import { brainSessionOf } from "./judge/brainLane";
+import { deniedModelsUsed, resolveModel } from "./judge/modelPolicy";
+import { triage, worthTriaging, type TriageVerdict } from "./judge/triage";
+import { workspaceFacts } from "./context/workspaceFacts";
+import { workerUsage } from "./usage/usage";
+import { isLogNoise, tailWithinChars, withoutThinking } from "./worker/workerLog";
+import { killTree, sleepSync, waitExit } from "./worker/terminate";
 import {
   actionTail,
   BLOCKER_MARKER,
@@ -186,8 +186,8 @@ import {
   openVisibleWorker,
   workerImpl,
   type WorkerHost,
-} from "./worker";
-import { officialAccessToken, tokenInjectionEnabled } from "./officialToken";
+} from "./worker/worker";
+import { officialAccessToken, tokenInjectionEnabled } from "./channel/officialToken";
 import type { Served, ServeOptions } from "./board";
 import { skillDirs } from "../agent/locations";
 import { currentHost, siblings, workerHosts } from "../agent/registry";
@@ -997,7 +997,7 @@ const REDISPATCH_LIMIT = 3;
  */
 const HARD_STOP_FAILURES = 8;
 
-/* `ASK_BLOCK_MS` 定义在 core/limits.ts，`capitalist report` 的结单判断共用，避免两处数值分叉。 */
+/* `ASK_BLOCK_MS` 定义在 core/guard/limits.ts，`capitalist report` 的结单判断共用，避免两处数值分叉。 */
 
 interface StageParallel {
   id: string;
@@ -1026,7 +1026,7 @@ interface DispatchEx extends Dispatch {
 
 /**
  * 看板服务的类型别名（`serveBoard` 的签名）。
- * `board.ts` 反向引用本文件的 pause 读取，静态 import 会成初始化环，故运行时再 `import()`，此处只用类型。
+ * `board/routes/chat.ts` 反向引用本文件的 pause 读取，静态 import 会成初始化环，故运行时再 `import()`，此处只用类型。
  */
 type ServeFn = (opts: ServeOptions) => Promise<Served>;
 
@@ -1084,7 +1084,7 @@ function boardBuildStamp(): { stamp: string; files: number } | null {
 }
 
 /**
- * `dist/core/*.js` 的内容指纹（sha1），用于判断本次构建是否改动 core。
+ * `dist/core` 下全部 `.js` 的内容指纹（sha1），用于判断本次构建是否改动 core；core 已分目录，必须递归。
  * 热重载只换 `dist/supervisor` 下的模块，不换 `dist/core`（共享可变状态），故 core 一变就必须完整重启。
  * 按内容而非 mtime 判断：tsc 每次构建重写全部产物，mtime 必变，按 mtime 会禁止所有热重载。
  * @returns 目录读不到时返回 null，按“无法判断”处理，不阻断热重载。
@@ -1093,7 +1093,7 @@ export function coreContentHash(): string | null {
   const dir = join(__dirname, "..", "core");
   let names: string[];
   try {
-    names = readdirSync(dir).filter((n) => n.endsWith(".js")).sort();
+    names = readdirSync(dir, { recursive: true }).map(String).filter((n) => n.endsWith(".js")).sort();
   } catch {
     return null;
   }
@@ -6409,7 +6409,7 @@ function looksLooping(file: string): { looping: boolean; sample: string; times: 
     } finally {
       closeSync(fd);
     }
-    /* 先过滤宿主周期性噪声再统计重复；噪声表复用 workerLog.ts，避免与 board.ts 各写一份规则。 */
+    /* 先过滤宿主周期性噪声再统计重复；噪声表复用 workerLog.ts，避免与看板各写一份规则。 */
     const lines = buf
       .toString("utf8")
       .split("\n")

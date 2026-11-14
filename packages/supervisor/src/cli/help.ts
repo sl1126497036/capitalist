@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { modeNames } from "../core/permission";
+import { modeNames } from "../core/guard/permission";
 
 /**
  * 版本号唯一来源：包根的 `package.json`。

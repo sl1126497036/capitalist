@@ -1,10 +1,10 @@
 
-import { stripAttachments } from "../../core/attachments";
-import { listWorkers, readDispatches } from "../../core/supervisor";
-import { readTasks } from "../../core/tasks";
-import { laneContextWindow, readLane } from "../sessionLane";
-import { dispatchNoTable } from "../threadNo";
-import { parseWorkerLog } from "../workerLog";
+import { stripAttachments } from "../../core/message/attachments";
+import { listWorkers, readDispatches } from "../../core/record/supervisor";
+import { readTasks } from "../../core/record/tasks";
+import { laneContextWindow, readLane } from "../judge/sessionLane";
+import { dispatchNoTable } from "../usage/threadNo";
+import { parseWorkerLog } from "../worker/workerLog";
 import { ThreadSummary, dispatchTitle } from "./snapshot";
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 

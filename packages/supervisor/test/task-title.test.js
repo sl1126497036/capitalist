@@ -18,12 +18,12 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { SHARD_TITLES, shardTitle, summarizeTitle, taskTitle } = require(join(PKG, "dist/supervisor/taskTitle.js"));
-const capitalist = require(join(PKG, "dist/core/supervisor.js"));
-const { loadState } = require(join(PKG, "dist/core/state.js"));
-const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));
+const { SHARD_TITLES, shardTitle, summarizeTitle, taskTitle } = require(join(PKG, "dist/supervisor/usage/taskTitle.js"));
+const capitalist = require(join(PKG, "dist/core/record/supervisor.js"));
+const { loadState } = require(join(PKG, "dist/core/record/state.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
 const loop = require(join(PKG, "dist/supervisor/loop.js"));
-const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/direct.js"));
+const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/channel/direct.js"));
 
 const CJK = /[\u4e00-\u9fa5]/;
 const CONTRACT_DIR = join(PKG, "contracts");

@@ -21,7 +21,7 @@ const {
   rememberLesson,
   updateMemory,
   withLessons,
-} = require(join(PKG, "dist/supervisor/memory.js"));
+} = require(join(PKG, "dist/supervisor/context/memory.js"));
 const { clearRuntimeLedger } = require(join(PKG, "dist/supervisor/board"));
 
 const DAY = 24 * 60 * 60 * 1000;

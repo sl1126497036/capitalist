@@ -1,7 +1,7 @@
-import { listDirectives } from "../../core/commands";
-import { mqPath } from "../../core/mq";
-import { Dispatch, WorkerRecord } from "../../core/supervisor";
-import { dispatchNoTable } from "../threadNo";
+import { listDirectives } from "../../core/dispatch/commands";
+import { mqPath } from "../../core/dispatch/mq";
+import { Dispatch, WorkerRecord } from "../../core/record/supervisor";
+import { dispatchNoTable } from "../usage/threadNo";
 import { readWorkerEvents, FRESH_LOG_SEC, logIdleSec, chunkWorkerLines, readJsonlFromTail } from "./logs";
 import { fingerprint, toolSummary, verdictText } from "./render";
 import { ThreadMessage } from "./snapshot";

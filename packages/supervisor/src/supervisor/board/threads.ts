@@ -1,21 +1,21 @@
 import { THREAD_PAGE_LIMIT, THREAD_PEEK_TAIL_BYTES, ThreadSummary, dispatchTitle, ageSec } from "./snapshot";
 import { join } from "node:path";
-import { supervisorDir } from "../../core/paths";
-import { readJson, writeJson } from "../../core/json";
-import { Dispatch, WorkerRecord, loadSupervisor, dispatchPaused, workerLivenessOf, DEFAULT_LOG_STALL_SEC, parentOf, pendingPrerequisites } from "../../core/supervisor";
+import { supervisorDir } from "../../core/record/paths";
+import { readJson, writeJson } from "../../core/record/json";
+import { Dispatch, WorkerRecord, loadSupervisor, dispatchPaused, workerLivenessOf, DEFAULT_LOG_STALL_SEC, parentOf, pendingPrerequisites } from "../../core/record/supervisor";
 import { taskKeyOf, readClearedMarks, threadStatusTerminal, threadStatusAbnormal } from "./state";
-import { readTasks } from "../../core/tasks";
-import { WorkerAction, parseWorkerLog } from "../workerLog";
+import { readTasks } from "../../core/record/tasks";
+import { WorkerAction, parseWorkerLog } from "../worker/workerLog";
 import { statSync } from "node:fs";
 import { readLogRange } from "./logs";
-import { WorkerDoing, doingOfAction } from "../activity";
+import { WorkerDoing, doingOfAction } from "../worker/activity";
 import { messageContext, threadMessages } from "./messages";
-import { activeTakeover } from "../../core/commands";
+import { activeTakeover } from "../../core/dispatch/commands";
 import { costRowOf, spawnCountFor, fillContextWindow, costTotals, tokenTotals } from "./stats";
 import { dispatchModel, atTs } from "./sources";
-import { noUsage } from "../usage";
+import { noUsage } from "../usage/usage";
 import { oneLine } from "./render";
-import { assignThreadNos, threadNoLabel, threadNoOf } from "../threadNo";
+import { assignThreadNos, threadNoLabel, threadNoOf } from "../usage/threadNo";
 /**
  * 看板线程视图层：线程列表、消息流、任务分桶与已读水位。
  *

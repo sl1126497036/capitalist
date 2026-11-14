@@ -7,8 +7,8 @@
 
 import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 
-import { sizeCached, statCached } from "../../core/fsCache";
-import { parseWorkerLog, type WorkerLogParts } from "../workerLog";
+import { sizeCached, statCached } from "../../core/record/fsCache";
+import { parseWorkerLog, type WorkerLogParts } from "../worker/workerLog";
 
 /** 日志尾部内容缓存：一轮请求里同一条日志会被预览、用量、成本各读一次。 */
 export const tailLinesCache = new Map<string, { key: string; lines: string[] }>();

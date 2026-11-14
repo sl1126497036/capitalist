@@ -17,11 +17,11 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { recordUserMessage } = require(join(PKG, "dist/core/messages.js"));
+const { recordUserMessage } = require(join(PKG, "dist/core/message/messages.js"));
 const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
-const { severeSupervisorEventLines, supervisorChatTurnSessionId } = require(join(PKG, "dist/supervisor/reload.js"));
-const { eventsPath, recordEvent } = require(join(PKG, "dist/core/ledger.js"));
-const { readJsonl } = require(join(PKG, "dist/core/json.js"));
+const { severeSupervisorEventLines, supervisorChatTurnSessionId } = require(join(PKG, "dist/supervisor/context/reload.js"));
+const { eventsPath, recordEvent } = require(join(PKG, "dist/core/record/ledger.js"));
+const { readJsonl } = require(join(PKG, "dist/core/record/json.js"));
 
 function sandbox(name = "capitalist-msg-quote-") {
   return mkdtempSync(join(tmpdir(), name));

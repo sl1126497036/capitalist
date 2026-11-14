@@ -7,9 +7,9 @@
 
 import { join, resolve } from "node:path";
 
-import { attachmentsIn } from "../../core/attachments";
-import { supervisorDir } from "../../core/paths";
-import { listWorkers, readDispatches, type Dispatch, type WorkerRecord } from "../../core/supervisor";
+import { attachmentsIn } from "../../core/message/attachments";
+import { supervisorDir } from "../../core/record/paths";
+import { listWorkers, readDispatches, type Dispatch, type WorkerRecord } from "../../core/record/supervisor";
 
 export const BOARD_READ_TTL_MS = 800;
 export const dispatchesBoardCache = new Map<string, { at: number; rows: Dispatch[] }>();

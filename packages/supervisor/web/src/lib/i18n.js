@@ -335,8 +335,8 @@ const EN = {
   "实际调用 {m}": "actually calls {m}",
   "日志没有上下文读数": "the log has no context reading",
   "日志里没有原因": "no reason in the log",
-  "暂无监工记录，发送指令可创建派单":
-    "No supervisor records yet. Send a command to create a dispatch.",
+  "暂无监工记录，发送指令创建新的任务单":
+    "No supervisor records yet. Send a command to create a new dispatch.",
   "未完成：{list}": "Unfinished: {list}",
   "未开始": "not started",
   "未记录": "not recorded",

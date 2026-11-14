@@ -6,10 +6,10 @@
 
 import { BoardCtx } from "../types";
 import { hostOverrideOf } from "../../../agent/registry";
-import { writeJson } from "../../../core/json";
-import { recordEvent } from "../../../core/ledger";
-import { loadSupervisor, requestSupervisorStop, saveSupervisor, finishDispatch, readDispatches } from "../../../core/supervisor";
-import { appendSupervisorDirective } from "../../direct";
+import { writeJson } from "../../../core/record/json";
+import { recordEvent } from "../../../core/record/ledger";
+import { loadSupervisor, requestSupervisorStop, saveSupervisor, finishDispatch, readDispatches } from "../../../core/record/supervisor";
+import { appendSupervisorDirective } from "../../channel/direct";
 import { listTaskRoots } from "../sources";
 import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";

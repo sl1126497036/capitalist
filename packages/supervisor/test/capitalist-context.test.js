@@ -12,7 +12,7 @@ const {
   effectiveSupervisorContextLimit,
   recordSupervisorContext,
   shouldAutoReload,
-} = require(join(PKG, "dist/supervisor/reload.js"));
+} = require(join(PKG, "dist/supervisor/context/reload.js"));
 
 function sandbox(capitalist) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-ctxlimit-"));

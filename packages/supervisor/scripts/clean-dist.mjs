@@ -30,13 +30,27 @@ function walk(dir, out = []) {
 }
 
 if (existsSync(DIST)) {
-  let removed = 0;
+  const stale = [];
   for (const file of walk(DIST)) {
     const rel = relative(DIST, file);
     const source = join(SRC, rel.replace(/\.d\.ts$/, ".ts").replace(/\.js$/, ".ts"));
-    if (existsSync(source)) continue;
-    unlinkSync(file);
-    removed += 1;
+    if (!existsSync(source)) stale.push(file);
+  }
+  let removed = 0;
+  let failed = 0;
+  for (const file of stale) {
+    try {
+      unlinkSync(file);
+      removed += 1;
+    } catch {
+      failed += 1;
+    }
   }
   if (removed > 0) console.log(`[clean] 删掉 ${removed} 个没有对应源文件的产物`);
+  if (failed > 0) {
+    console.error(
+      `[clean] ${failed} 个旧产物没删掉。构建会加载到旧模块，请在不受删除策略限制的终端重跑构建。`,
+    );
+    process.exit(1);
+  }
 }

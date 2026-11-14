@@ -1,4 +1,4 @@
-import { ShotRef } from "../../core/messages";
+import { ShotRef } from "../../core/message/messages";
 
 /**
  * 命令入参校验：把界面传来的未知值收敛成命令层能直接用的字符串、ID 与结果。

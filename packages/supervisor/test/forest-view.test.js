@@ -5,10 +5,10 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { writeJsonl } = require("../dist/core/json");
-const { createTaskRoot } = require("../dist/core/init");
-const { buildForestView } = require("../dist/supervisor/forestView");
+const capitalist = require("../dist/core/record/supervisor");
+const { writeJsonl } = require("../dist/core/record/json");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { buildForestView } = require("../dist/supervisor/view/forestView");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-forest-view-"));

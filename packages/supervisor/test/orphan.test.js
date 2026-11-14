@@ -16,13 +16,13 @@ const { existsSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } = requ
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
-const { reapOrphans, describePid } = require("../dist/supervisor/reapOrphans");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { reapOrphans, describePid } = require("../dist/supervisor/worker/reapOrphans");
 const { registerDisposer, disposeAll, __resetDisposers } = require("../dist/supervisor/dispose");
-const { launchWorker } = require("../dist/supervisor/worker");
+const { launchWorker } = require("../dist/supervisor/worker/worker");
 
-const HOOK = resolve(__dirname, "..", "dist", "host", "main.js");
+const HOOK = resolve(__dirname, "..", "dist", "agent", "main.js");
 
 /** 起一个不会自己退的 node 进程；args 会进它的命令行。 */
 function dummy(args = []) {

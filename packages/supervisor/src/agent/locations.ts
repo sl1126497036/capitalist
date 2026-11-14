@@ -2,14 +2,14 @@
  * 宿主派生路径：契约搜索目录、自动纳管配置位置。
  *
  * 这些路径从宿主配置目录派生，目录名一律来自 `registry.dirs()`，本文件不写宿主名。
- * 纯路径原语（`findRoot` / `isInside` / `expandHome`）在 `core/paths.ts`。
+ * 纯路径原语（`findRoot` / `isInside` / `expandHome`）在 `core/record/paths.ts`。
  */
 
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { normalizeForCompare } from "../core/paths";
+import { normalizeForCompare } from "../core/record/paths";
 import { existingDirs } from "./registry";
 
 /**

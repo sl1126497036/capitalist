@@ -12,7 +12,7 @@ const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const PKG = resolve(__dirname, "..");
-const { askModel, parseReply, resolveChatHost } = require(join(PKG, "dist/supervisor/llm.js"));
+const { askModel, parseReply, resolveChatHost } = require(join(PKG, "dist/supervisor/channel/llm.js"));
 
 /** 替身 CLI：把收到的 argv 写入 `DIAG_ARGV_FILE`，并向 stdout 回一段正文。 */
 function fakeCli(dir) {

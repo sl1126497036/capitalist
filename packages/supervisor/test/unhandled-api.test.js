@@ -7,9 +7,9 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const { serveBoard, buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
-const { recordUserMessage } = require(join(PKG, "dist/core/messages.js"));
-const { settleChat } = require(join(PKG, "dist/supervisor/chatSettle.js"));
-const { listSupervisorDirectives } = require(join(PKG, "dist/supervisor/direct.js"));
+const { recordUserMessage } = require(join(PKG, "dist/core/message/messages.js"));
+const { settleChat } = require(join(PKG, "dist/supervisor/view/chatSettle.js"));
+const { listSupervisorDirectives } = require(join(PKG, "dist/supervisor/channel/direct.js"));
 
 function sandbox(name = "capitalist-unhandled-api-") {
   const root = mkdtempSync(join(tmpdir(), name));

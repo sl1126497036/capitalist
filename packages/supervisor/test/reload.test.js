@@ -16,7 +16,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { loadContract } = require(join(PKG, "dist/core/contract.js"));
+const { loadContract } = require(join(PKG, "dist/core/contract/contract.js"));
 const {
   applyResumePlan,
   beginReload,
@@ -28,8 +28,8 @@ const {
   reloadStatus,
   sessionPath,
   snapshotPath,
-} = require(join(PKG, "dist/supervisor/reload.js"));
-const { readDispatches } = require(join(PKG, "dist/core/supervisor.js"));
+} = require(join(PKG, "dist/supervisor/context/reload.js"));
+const { readDispatches } = require(join(PKG, "dist/core/record/supervisor.js"));
 
 const CONTRACT_CONTEXT = "工作根 D:/demo。禁止 git 写操作。只改 src/ 下的文件。";
 

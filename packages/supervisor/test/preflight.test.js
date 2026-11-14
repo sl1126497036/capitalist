@@ -4,13 +4,13 @@ const assert = require("node:assert");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { buildPrompt, buildResumePrompt } = require(join(PKG, "dist/supervisor/worker.js"));
+const { buildPrompt, buildResumePrompt } = require(join(PKG, "dist/supervisor/worker/worker.js"));
 const {
   PREFLIGHT_MARKER,
   attachPreflight,
   buildPreflightBlock,
   preflightAtOf,
-} = require(join(PKG, "dist/supervisor/preflight.js"));
+} = require(join(PKG, "dist/supervisor/worker/preflight.js"));
 
 const AT = "2026-11-04T13:09:42.000Z";
 /** 合并后的段落标题（带区块序号）。 */

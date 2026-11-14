@@ -5,7 +5,7 @@
  */
 
 import { BoardCtx, parseSince } from "../types";
-import { buildForestView } from "../../forestView";
+import { buildForestView } from "../../view/forestView";
 import { forestNoOf } from "../cmdContext";
 import { overviewJson } from "../overview";
 import { buildSnapshot, dispatchTitle, rootFromUrl } from "../snapshot";
@@ -13,14 +13,14 @@ import { modelsView } from "../models";
 import { listTaskRoots } from "../sources";
 import { ALERT_LIMIT_DEFAULT, buildAlerts, buildMetrics, buildSupervisorStatus, buildTaskSummaries, fitState } from "../views";
 
-import { bindAttachments } from "../../../core/attachments";
-import { CTX_WINDOW_PRESETS, ctxWindowSupported, isCtxWindowPreset, modelRealWindow, readCtxWindow, readCtxWindowChosen, writeCtxWindow } from "../../../core/limits";
-import { attachmentsOfMessage } from "../../../core/messages";
-import { listWorkers, readDispatches } from "../../../core/supervisor";
-import { dismissChat, listUnhandled, settleChat } from "../../chatSettle";
-import { appendSupervisorDirective } from "../../direct";
-import { addMemory, deleteMemory, isMemoryKind, memorySnapshot, updateMemory } from "../../memory";
-import { buildUsageLedger as usageLedger, workerUsageRow } from "../../usage";
+import { bindAttachments } from "../../../core/message/attachments";
+import { CTX_WINDOW_PRESETS, ctxWindowSupported, isCtxWindowPreset, modelRealWindow, readCtxWindow, readCtxWindowChosen, writeCtxWindow } from "../../../core/guard/limits";
+import { attachmentsOfMessage } from "../../../core/message/messages";
+import { listWorkers, readDispatches } from "../../../core/record/supervisor";
+import { dismissChat, listUnhandled, settleChat } from "../../view/chatSettle";
+import { appendSupervisorDirective } from "../../channel/direct";
+import { addMemory, deleteMemory, isMemoryKind, memorySnapshot, updateMemory } from "../../context/memory";
+import { buildUsageLedger as usageLedger, workerUsageRow } from "../../usage/usage";
 import { buildSupervisorLog } from "../supervisorLog";
 import { resolve } from "node:path";
 

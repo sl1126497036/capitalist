@@ -1,10 +1,10 @@
-import { readDispatches } from "../../core/supervisor";
-import { readTasks, taskSummary as poolSummary, type TaskSummary as TaskPoolSummary } from "../../core/tasks";
-import { unhandledFromEvents } from "../chatSettle";
-import { listSupervisorDirectives, SupervisorDirective } from "../direct";
-import { stripDispatchEcho, supervisorReplyView } from "../msgView";
-import { shardTitle } from "../taskTitle";
-import { dispatchNoTable } from "../threadNo";
+import { readDispatches } from "../../core/record/supervisor";
+import { readTasks, taskSummary as poolSummary, type TaskSummary as TaskPoolSummary } from "../../core/record/tasks";
+import { unhandledFromEvents } from "../view/chatSettle";
+import { listSupervisorDirectives, SupervisorDirective } from "../channel/direct";
+import { stripDispatchEcho, supervisorReplyView } from "../view/msgView";
+import { shardTitle } from "../usage/taskTitle";
+import { dispatchNoTable } from "../usage/threadNo";
 import { readJsonlFromTail } from "./logs";
 import { MQ_KIND_LABEL, fingerprint, maskDispatchIds } from "./render";
 import { ThreadRole, ThreadMessage, describeEvent, ledgerOnlyRoot } from "./snapshot";

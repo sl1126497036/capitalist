@@ -4,7 +4,7 @@ const assert = require("node:assert");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { contextUsageOfResult, contextUsedOfAssistantMessage } = require(join(PKG, "dist/supervisor/llm.js"));
+const { contextUsageOfResult, contextUsedOfAssistantMessage } = require(join(PKG, "dist/supervisor/channel/llm.js"));
 
 test("assistant 行：input_tokens 原样作为已用（已含缓存命中）", () => {
   const line = {

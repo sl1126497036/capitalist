@@ -10,11 +10,11 @@ import os from "node:os";
 import { ServerResponse, createServer, IncomingMessage } from "node:http";
 import { resolve, join } from "node:path";
 
-import { readJson, writeJson } from "../../core/json";
-import { pidAlive } from "../../core/fileLock";
-import { SupervisorRecord, listWorkers, WorkerRecord, loadSupervisor } from "../../core/supervisor";
-import { reapOrphans } from "../reapOrphans";
-import { parseWorkerLog } from "../workerLog";
+import { readJson, writeJson } from "../../core/record/json";
+import { pidAlive } from "../../core/record/fileLock";
+import { SupervisorRecord, listWorkers, WorkerRecord, loadSupervisor } from "../../core/record/supervisor";
+import { reapOrphans } from "../worker/reapOrphans";
+import { parseWorkerLog } from "../worker/workerLog";
 import { handleCapitalistChat } from "./routes/chat";
 import { handleCommand, handleCapitalistCommand, handleConfirmDispatch } from "./routes/command";
 import { handleFsList, handleAttachments, handleUpload, handleAttachment } from "./routes/files";
