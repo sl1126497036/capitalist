@@ -13,7 +13,7 @@ const { join, resolve } = require("node:path");
 const PKG = resolve(__dirname, "..");
 const loop = require(join(PKG, "dist/supervisor/loop.js"));
 const { AUTH_REQUIRED_TEXT, QUOTA_EXHAUSTED_TEXT, looksLikeAuth } = require(
-  join(PKG, "dist/supervisor/llm.js"),
+  join(PKG, "dist/supervisor/channel/llm.js"),
 );
 
 function scratch() {

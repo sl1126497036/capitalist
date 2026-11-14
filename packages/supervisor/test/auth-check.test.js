@@ -6,7 +6,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const { createTaskRoot } = require("../dist/core/init");
+const { createTaskRoot } = require("../dist/core/contract/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-auth-"));

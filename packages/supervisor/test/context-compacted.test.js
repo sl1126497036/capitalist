@@ -13,11 +13,11 @@ const {
   ctxDropIsCompaction,
   recordSupervisorContext,
   readSupervisorContext,
-} = require(join(PKG, "dist/supervisor/reload.js"));
-const { loadContract } = require(join(PKG, "dist/core/contract.js"));
-const { zhEvent } = require(join(PKG, "dist/supervisor/terms.js"));
-const { supervisorActivityOf } = require(join(PKG, "dist/supervisor/activity.js"));
-const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board.js"));
+} = require(join(PKG, "dist/supervisor/context/reload.js"));
+const { loadContract } = require(join(PKG, "dist/core/contract/contract.js"));
+const { zhEvent } = require(join(PKG, "dist/supervisor/context/terms.js"));
+const { supervisorActivityOf } = require(join(PKG, "dist/supervisor/worker/activity.js"));
+const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-compact-"));

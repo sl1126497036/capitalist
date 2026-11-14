@@ -7,8 +7,8 @@ const { mkdirSync, mkdtempSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const usage = require("../dist/supervisor/usage");
-const reload = require("../dist/supervisor/reload");
+const usage = require("../dist/supervisor/usage/usage");
+const reload = require("../dist/supervisor/context/reload");
 
 const MODEL = "deepseek-v4.1-flash";
 

@@ -8,20 +8,20 @@
  *
  * 看板页面不在库导出范围内：页面由 `web/` 的 Vue 产物提供，经 HTTP 托管。
  */
-export * from "./core/autowatch";
-export * from "./core/brief";
-export * from "./core/checks";
-export * from "./core/commands";
-export * from "./core/contract";
-export * from "./core/http";
-export * from "./core/init";
-export * from "./core/json";
-export * from "./core/jwt";
-export * from "./core/ledger";
-export * from "./core/localGuard";
-export * from "./core/paths";
-export * from "./core/permission";
-export * from "./core/preempt";
-export * from "./core/state";
-export * from "./core/supervisor";
+export * from "./core/platform/autowatch";
+export * from "./core/message/brief";
+export * from "./core/contract/checks";
+export * from "./core/dispatch/commands";
+export * from "./core/contract/contract";
+export * from "./core/platform/http";
+export * from "./core/contract/init";
+export * from "./core/record/json";
+export * from "./core/guard/jwt";
+export * from "./core/record/ledger";
+export * from "./core/guard/localGuard";
+export * from "./core/record/paths";
+export * from "./core/guard/permission";
+export * from "./core/dispatch/preempt";
+export * from "./core/record/state";
+export * from "./core/record/supervisor";
 export * from "./core/types";

@@ -7,7 +7,7 @@ const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const lane = require("../dist/supervisor/sessionLane");
+const lane = require("../dist/supervisor/judge/sessionLane");
 const loop = require("../dist/supervisor/loop");
 
 function emptyRoot() {

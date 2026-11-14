@@ -6,8 +6,8 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { serveBoard } = require(join(PKG, "dist/supervisor/board.js"));
-const { recordEvent } = require(join(PKG, "dist/core/ledger.js"));
+const { serveBoard } = require(join(PKG, "dist/supervisor/board"));
+const { recordEvent } = require(join(PKG, "dist/core/record/ledger.js"));
 
 const AMEND_TEXT = "顶栏要用中文";
 const THREAD = "u6/s1";

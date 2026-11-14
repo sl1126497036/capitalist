@@ -7,10 +7,10 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { supervisorReplyView } = require(join(PKG, "dist/supervisor/msgView.js"));
-const { recordEvent } = require(join(PKG, "dist/core/ledger.js"));
-const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/direct.js"));
-const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board.js"));
+const { supervisorReplyView } = require(join(PKG, "dist/supervisor/view/msgView.js"));
+const { recordEvent } = require(join(PKG, "dist/core/record/ledger.js"));
+const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/channel/direct.js"));
+const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 
 const BODY =
   "调整聊天输入框正下方滚动提示文案的水平对齐：该行文字目前靠左，改为水平居中，与上方高度调节手柄的居中位置一致；确认轮换文案长短变化时不换行。";

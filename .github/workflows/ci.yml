@@ -87,7 +87,7 @@ jobs:
           tar -tzf capitalist-*.tgz > files.txt
           for f in \
             package/dist/cli/main.js \
-            package/dist/host/main.js \
+            package/dist/agent/main.js \
             package/dist/board-web/index.html \
             package/contracts/minimal.contract.json \
             package/skill/SKILL.md \

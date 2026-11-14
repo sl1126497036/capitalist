@@ -6,14 +6,14 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const capitalist = require("../dist/core/supervisor");
-const { writeJsonl } = require("../dist/core/json");
-const { loadState } = require("../dist/core/state");
-const { createTaskRoot } = require("../dist/core/init");
+const capitalist = require("../dist/core/record/supervisor");
+const { writeJsonl } = require("../dist/core/record/json");
+const { loadState } = require("../dist/core/record/state");
+const { createTaskRoot } = require("../dist/core/contract/init");
 const loop = require("../dist/supervisor/loop");
-const { appendSupervisorDirective, listSupervisorDirectives } = require("../dist/supervisor/direct");
-const { parseReply } = require("../dist/supervisor/llm");
-const { assignThreadNos } = require("../dist/supervisor/threadNo");
+const { appendSupervisorDirective, listSupervisorDirectives } = require("../dist/supervisor/channel/direct");
+const { parseReply } = require("../dist/supervisor/channel/llm");
+const { assignThreadNos } = require("../dist/supervisor/usage/threadNo");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-forest-"));
@@ -302,7 +302,7 @@ test("场景：机器重启——换一个进程只读台账重算，树与队�
   assert.deepStrictEqual(before, ["R", "B"]);
 
   const script = `
-    const capitalist = require(${JSON.stringify(require.resolve("../dist/core/supervisor"))});
+    const capitalist = require(${JSON.stringify(require.resolve("../dist/core/record/supervisor"))});
     const rows = capitalist.readDispatches(process.argv[1]);
     const sel = rows
       .map((d, i) => ({ d, i }))

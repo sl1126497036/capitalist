@@ -6,16 +6,16 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const capitalist = require("../dist/core/supervisor");
-const { writeJsonl } = require("../dist/core/json");
-const { loadState } = require("../dist/core/state");
-const { createTaskRoot } = require("../dist/core/init");
+const capitalist = require("../dist/core/record/supervisor");
+const { writeJsonl } = require("../dist/core/record/json");
+const { loadState } = require("../dist/core/record/state");
+const { createTaskRoot } = require("../dist/core/contract/init");
 const loop = require("../dist/supervisor/loop");
-const { appendSupervisorDirective, listSupervisorDirectives } = require("../dist/supervisor/direct");
-const { parseReply } = require("../dist/supervisor/llm");
-const { assignThreadNos } = require("../dist/supervisor/threadNo");
-const { eventsPath } = require("../dist/core/ledger");
-const { readJsonl } = require("../dist/core/json");
+const { appendSupervisorDirective, listSupervisorDirectives } = require("../dist/supervisor/channel/direct");
+const { parseReply } = require("../dist/supervisor/channel/llm");
+const { assignThreadNos } = require("../dist/supervisor/usage/threadNo");
+const { eventsPath } = require("../dist/core/record/ledger");
+const { readJsonl } = require("../dist/core/record/json");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-order-"));
@@ -177,7 +177,7 @@ test("跨进程重启：队列顺序只从台账复原（真实子进程重算�
 
   capitalist.finishDispatch(root, "C1", "done", "完成");
   const script = `
-    const capitalist = require(${JSON.stringify(require.resolve("../dist/core/supervisor"))});
+    const capitalist = require(${JSON.stringify(require.resolve("../dist/core/record/supervisor"))});
     const rows = capitalist.readDispatches(process.argv[1]);
     const sel = rows
       .map((d, i) => ({ d, i }))
@@ -284,7 +284,7 @@ test("多前置孤儿：AFTER 挂了台账里没有的编号，放行时记 disp
 
 test("场景：立即执行——让位不改台账行序，恢复后与重启后都是原来的顺序", () => {
   const root = sandbox();
-  const preempt = require("../dist/core/preempt");
+  const preempt = require("../dist/core/dispatch/preempt");
   put(root, "A", { status: "claimed", worker: "W-a" });
   put(root, "B");
   put(root, "C");

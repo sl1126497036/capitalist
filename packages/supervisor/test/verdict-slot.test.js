@@ -6,7 +6,7 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const { awaitingVerdict } = require(join(PKG, "dist/supervisor/loop.js"));
-const { VERDICT_HOLD_MS } = require(join(PKG, "dist/core/limits.js"));
+const { VERDICT_HOLD_MS } = require(join(PKG, "dist/core/guard/limits.js"));
 
 function at(msAgo) {
   return new Date(Date.now() - msAgo).toISOString();

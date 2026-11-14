@@ -16,11 +16,11 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
-const { loadState, saveState } = require("../dist/core/state");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { loadState, saveState } = require("../dist/core/record/state");
 const loop = require("../dist/supervisor/loop");
-const { detectWorkerHost, buildPrompt, resolveSession } = require("../dist/supervisor/worker");
+const { detectWorkerHost, buildPrompt, resolveSession } = require("../dist/supervisor/worker/worker");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-sv-"));
@@ -196,7 +196,7 @@ test("worker prompt 只给这一单的边界，并禁止代监工推进", () => 
 });
 
 test("续跑提示词同样带上下文约束与生效要求", () => {
-  const { buildResumePrompt } = require("../dist/supervisor/worker");
+  const { buildResumePrompt } = require("../dist/supervisor/worker/worker");
   const p = buildResumePrompt({
     root: "/tmp/x",
     target: "重构计费服务",
@@ -487,7 +487,7 @@ function runningRecord() {
 
 test("立即执行：一个 tick 内腾槽拉起，运行中的单挂起并标已让位", () => {
   const { chmodSync, writeFileSync: write } = require("node:fs");
-  const preempt = require("../dist/core/preempt");
+  const preempt = require("../dist/core/dispatch/preempt");
   const boardMod = require("../dist/supervisor/board");
 
   const base = mkdtempSync(join(tmpdir(), "capitalist-preempt-"));

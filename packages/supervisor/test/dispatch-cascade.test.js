@@ -6,10 +6,10 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawn } = require("node:child_process");
 
-const capitalist = require("../dist/core/supervisor");
-const { writeJsonl, readJsonl } = require("../dist/core/json");
-const { createTaskRoot } = require("../dist/core/init");
-const { loadState } = require("../dist/core/state");
+const capitalist = require("../dist/core/record/supervisor");
+const { writeJsonl, readJsonl } = require("../dist/core/record/json");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { loadState } = require("../dist/core/record/state");
 const loop = require("../dist/supervisor/loop");
 
 /*

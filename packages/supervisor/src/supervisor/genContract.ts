@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { basename, join } from "node:path";
 
 import { skillDirs } from "../agent/locations";
-import { askModel } from "./llm";
+import { askModel } from "./channel/llm";
 
 /** 生成结果。`ok:false` 时调用方应退回内置契约。 */
 export interface GenContractResult {

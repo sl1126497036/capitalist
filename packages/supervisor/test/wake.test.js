@@ -5,10 +5,10 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
 const loop = require("../dist/supervisor/loop");
-const { buildPrompt, buildResumePrompt } = require("../dist/supervisor/worker");
+const { buildPrompt, buildResumePrompt } = require("../dist/supervisor/worker/worker");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-wake-"));

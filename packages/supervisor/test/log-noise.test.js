@@ -7,8 +7,8 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { parseWorkerLog } = require(join(PKG, "dist/supervisor/workerLog.js"));
-const { buildThreadMessages } = require(join(PKG, "dist/supervisor/board.js"));
+const { parseWorkerLog } = require(join(PKG, "dist/supervisor/worker/workerLog.js"));
+const { buildThreadMessages } = require(join(PKG, "dist/supervisor/board"));
 
 const POLICY = [
   '[WB-Policy] keep base safe: "echo"',

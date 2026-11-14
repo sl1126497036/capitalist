@@ -335,7 +335,8 @@ const EN = {
   "实际调用 {m}": "actually calls {m}",
   "日志没有上下文读数": "the log has no context reading",
   "日志里没有原因": "no reason in the log",
-  "暂无监工记录": "No supervisor records yet",
+  "暂无监工记录，发送指令创建新的任务单":
+    "No supervisor records yet. Send a command to create a new dispatch.",
   "未完成：{list}": "Unfinished: {list}",
   "未开始": "not started",
   "未记录": "not recorded",
@@ -366,6 +367,7 @@ const EN = {
     "This round's process exited; waiting for the next dispatch ({why})",
   "这个进程尚无消息": "This process has no messages yet",
   "本阶段分片均已完成": "all shards in this stage are complete",
+  "进程异常": "Process failed",
   "进程异常 {why}": "Process failed {why}",
   "重派 {n} 次": "redispatched {n} times",
   "附件": "attachment",
@@ -641,8 +643,8 @@ const EN = {
     "Once chosen, Dispatch model applies to every later dispatch until changed or cleared",
   "顶部的并行度与上下文读数可点击切换":
     "Click the concurrency and context readings at the top to switch them",
-  "发消息可指定技能，作用于下一张派单，如“下一条派单加上 caveman-scene 技能”":
-    "A message can name a skill for the next dispatch, e.g. “add the caveman-scene skill to the next dispatch”",
+  "发消息可指定技能，作用于下一张派单，如“下一条派单加上 caveman 技能”":
+    "A message can name a skill for the next dispatch, e.g. “add the caveman skill to the next dispatch”",
   "消息卡片上的“#”可引用该条信息，引用随下一条消息一起发出":
     "The “#” on a message card quotes it; the quote goes out with your next message",
   "点击“中断”可结束当前进程并重派；“中断”时勾选“同时登记阻塞”则不再重派":

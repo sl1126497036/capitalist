@@ -10,7 +10,7 @@ const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const PKG = resolve(__dirname, "..");
-const { detectWorkerHost } = require(join(PKG, "dist/supervisor/worker.js"));
+const { detectWorkerHost } = require(join(PKG, "dist/supervisor/worker/worker.js"));
 const { currentHost, siblings } = require(
   join(PKG, "dist/agent/registry.js"),
 );

@@ -12,9 +12,9 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { buildBrief } from "../core/brief";
-import { runCheck } from "../core/checks";
-import { appendDirective, activeTakeover, listDirectives, releaseShard, takeoverShard } from "../core/commands";
+import { buildBrief } from "../core/message/brief";
+import { runCheck } from "../core/contract/checks";
+import { appendDirective, activeTakeover, listDirectives, releaseShard, takeoverShard } from "../core/dispatch/commands";
 import {
   contractNames,
   instanceLeaseStatus,
@@ -23,17 +23,17 @@ import {
   loadContract,
   nextStageId,
   stageById,
-} from "../core/contract";
-import { enterStage, newState } from "../core/init";
-import { INBOX_LEDGER, readInbox } from "../core/inbox";
-import { appendJsonl, readJson, readJsonl, writeJson } from "../core/json";
-import { recordEvent, recordViolation } from "../core/ledger";
-import { findRoot, isInside, supervisorDir } from "../core/paths";
+} from "../core/contract/contract";
+import { enterStage, newState } from "../core/contract/init";
+import { INBOX_LEDGER, readInbox } from "../core/dispatch/inbox";
+import { appendJsonl, readJson, readJsonl, writeJson } from "../core/record/json";
+import { recordEvent, recordViolation } from "../core/record/ledger";
+import { findRoot, isInside, supervisorDir } from "../core/record/paths";
 import { skillDirs } from "../agent/locations";
-import { describeMode, modeNames, normalizeMode } from "../core/permission";
+import { describeMode, modeNames, normalizeMode } from "../core/guard/permission";
 import { generateContract, describeGenerated } from "../supervisor/genContract";
-import { loadState, resolveModeFor, saveState, statePath, supervisorDisplayState, SUPERVISOR_STATE_LABEL, updateState } from "../core/state";
-import { applyMerges, ensureTaskForDispatch, planMerges, readTasks, summaryLine, syncTaskForDispatch, taskSummary, type TaskState } from "../core/tasks";
+import { loadState, resolveModeFor, saveState, statePath, supervisorDisplayState, SUPERVISOR_STATE_LABEL, updateState } from "../core/record/state";
+import { applyMerges, ensureTaskForDispatch, planMerges, readTasks, summaryLine, syncTaskForDispatch, taskSummary, type TaskState } from "../core/record/tasks";
 import {
   cmdAnswer,
   cmdBlock,
@@ -49,21 +49,21 @@ import {
   cmdSetNext,
   cmdUnblock,
   cmdUpdate,
-} from "./records";
-import { clearStopFlag, isSupervisorAlive, loadSupervisor, loadWorker, pausedDispatches, pidAlive, readDispatches } from "../core/supervisor";
+} from "./cmd/records";
+import { clearStopFlag, isSupervisorAlive, loadSupervisor, loadWorker, pausedDispatches, pidAlive, readDispatches } from "../core/record/supervisor";
 import { all } from "../agent/registry";
 import { deriveCapabilities } from "../agent/contract";
 import { flagBool, flagNumber, flagString, flagTokens, parse, positionalText, type Parsed } from "./args";
-import { loadOrDie, rootOrDie } from "./context";
+import { loadOrDie, rootOrDie } from "./cmd/context";
 import { die, write } from "./output";
 import { COMMAND_HELP, HELP, VERSION } from "./help";
-import { cmdBoard, cmdFeed } from "./boardCmd";
-import { cmdAuthCheck } from "./authCheck";
-import { cmdGate, cmdJustify, cmdLocalCheck } from "./precheck";
-import { cmdClose, cmdNext, cmdPromote, cmdReport, cmdStopWorker, cmdSuperviseStop, cmdWake, cmdWorkers, detachSupervisor } from "./proc";
-import { cmdLock } from "./lockCmd";
-import { cmdReload } from "./reloadCmd";
-import { cmdTree } from "./tree";
+import { cmdBoard, cmdFeed } from "./cmd/boardCmd";
+import { cmdAuthCheck } from "./cmd/authCheck";
+import { cmdGate, cmdJustify, cmdLocalCheck } from "./cmd/precheck";
+import { cmdClose, cmdNext, cmdPromote, cmdReport, cmdStopWorker, cmdSuperviseStop, cmdWake, cmdWorkers, detachSupervisor } from "./cmd/proc";
+import { cmdLock } from "./cmd/lockCmd";
+import { cmdReload } from "./cmd/reloadCmd";
+import { cmdTree } from "./cmd/tree";
 
 function cmdStart(p: Parsed): number {
   const target = p.positional[0] ?? die("用法：capitalist start <目标> --contract <任务列表名>");
@@ -553,7 +553,7 @@ function cmdSay(p: Parsed): number {
    * 认这条话。落错字段的后果是那句话永久领不到（见 core/commands 的 Directive.thread）。
    */
   const lane = flagString(p, "lane") || undefined;
-  /* 血缘：无分片单靠它认领这条话，见 core/commands.ts 的 directiveMatches。 */
+  /* 血缘：无分片单靠它认领这条话，见 core/dispatch/commands.ts 的 directiveMatches。 */
   const lineage = flagString(p, "lineage") || undefined;
   /* 目标派单由看板按工作进程解析后传入，也接受分片名。 */
   const target = flagString(p, "target") || undefined;
@@ -955,7 +955,7 @@ async function main(): Promise<number> {
       return 0;
     }
     case "serve": {
-      const { cmdServe } = await import("./serveCmd");
+      const { cmdServe } = await import("./cmd/serveCmd");
       return await cmdServe(p);
     }
     case "install": {
@@ -1010,7 +1010,7 @@ async function main(): Promise<number> {
        * 监工、对话通道与工作进程共用。令牌不进 argv、不写文件、不写日志、不写 supervisor.json。
        */
       {
-        const tok = await import("../supervisor/officialToken");
+        const tok = await import("../supervisor/channel/officialToken");
         if (!tok.tokenInjectionEnabled()) {
           write("[监工] 未下发宿主令牌：工作进程与对话通道使用宿主自身的登录态。\n");
           try {
@@ -1071,7 +1071,7 @@ async function main(): Promise<number> {
         write("（工作区未就绪时 worker 可能停在确认页，不会自动执行；按上述说明修复后启动。）\n");
       }
 
-      const { detectWorkerHost } = await import("../supervisor/worker");
+      const { detectWorkerHost } = await import("../supervisor/worker/worker");
       const { ensureHooks } = await import("../install/install");
       /*
        * `--agent` 显式声明监工运行所在的宿主，优先级高于环境特征。
@@ -1189,13 +1189,13 @@ async function main(): Promise<number> {
      * 后台常驻进程的启动时序纠缠。输出不含令牌，只给长度。
      */
     case "auth-probe": {
-      const tok = await import("../supervisor/officialToken");
+      const tok = await import("../supervisor/channel/officialToken");
       const source = tok.warmHostToken();
       write(`${JSON.stringify({ source, ...tok.hostTokenDiag() }, null, 2)}\n`);
       return source === "none" ? 1 : 0;
     }
     case "auth-check": {
-      const { cmdAuthCheck } = await import("./authCheck");
+      const { cmdAuthCheck } = await import("./cmd/authCheck");
       return cmdAuthCheck(p);
     }
     /*
@@ -1212,7 +1212,7 @@ async function main(): Promise<number> {
       if (!gRoot || !Number.isInteger(gPid) || gPid <= 0) {
         return die("用法：capitalist guard <root> <capitalist-pid>（内部命令，由监工自动拉起）");
       }
-      const { runGuard } = await import("../supervisor/guard");
+      const { runGuard } = await import("../supervisor/worker/guard");
       runGuard(gRoot, gPid);
       // 常驻：main() 一 resolve，入口就会 process.exit，守护进程需拦截该行为。
       return await new Promise<number>(() => {});

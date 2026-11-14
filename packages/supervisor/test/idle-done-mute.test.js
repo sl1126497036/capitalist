@@ -7,9 +7,9 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const board = require(join(PKG, "dist/supervisor/board.js"));
-const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));
-const { recordEvent } = require(join(PKG, "dist/core/ledger.js"));
+const board = require(join(PKG, "dist/supervisor/board"));
+const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { recordEvent } = require(join(PKG, "dist/core/record/ledger.js"));
 
 const STAGE = "WORK";
 

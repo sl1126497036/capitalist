@@ -5,9 +5,9 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const cmds = require("../dist/core/commands");
-const { createTaskRoot } = require("../dist/core/init");
+const capitalist = require("../dist/core/record/supervisor");
+const cmds = require("../dist/core/dispatch/commands");
+const { createTaskRoot } = require("../dist/core/contract/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-wno-"));

@@ -3,7 +3,7 @@ import { appendFileSync, existsSync, readFileSync, unlinkSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadWorker, workerLogPath } from "../core/supervisor";
+import { loadWorker, workerLogPath } from "../core/record/supervisor";
 
 /** 连续多少次检测不到监工才判定为孤儿。 */
 export const MISS_LIMIT = 2;

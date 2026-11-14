@@ -5,7 +5,7 @@ const { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } = require("n
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const { nextRotatingDefaultModel, DEFAULT_MODEL_ROTATION } = require("../dist/core/supervisor");
+const { nextRotatingDefaultModel, DEFAULT_MODEL_ROTATION } = require("../dist/core/record/supervisor");
 const {
   keywordsOf,
   loadMemories,
@@ -13,8 +13,8 @@ const {
   memoriesFor,
   rememberLesson,
   withLessons,
-} = require("../dist/supervisor/memory");
-const { workerUsage } = require("../dist/supervisor/usage");
+} = require("../dist/supervisor/context/memory");
+const { workerUsage } = require("../dist/supervisor/usage/usage");
 
 function scratch(name = "capitalist-lessons-") {
   const root = mkdtempSync(join(tmpdir(), name));

@@ -9,12 +9,12 @@
 import { join } from "node:path";
 
 import type { HookDecision, HookFacet, UnifiedEvent } from "./contract";
-import { autoAdopt, loadWatchRules } from "../core/autowatch";
-import { buildBrief, type BriefLang } from "../core/brief";
-import { runCheck } from "../core/checks";
-import { claimDirectives, directiveRef, laneKeyOf } from "../core/commands";
-import { type Contract, evaluate, isLastStage, loadContract } from "../core/contract";
-import { readJsonl } from "../core/json";
+import { autoAdopt, loadWatchRules } from "../core/platform/autowatch";
+import { buildBrief, type BriefLang } from "../core/message/brief";
+import { runCheck } from "../core/contract/checks";
+import { claimDirectives, directiveRef, laneKeyOf } from "../core/dispatch/commands";
+import { type Contract, evaluate, isLastStage, loadContract } from "../core/contract/contract";
+import { readJsonl } from "../core/record/json";
 import {
   currentSession,
   openViolations,
@@ -22,20 +22,20 @@ import {
   recordReview,
   recordViolation as writeViolation,
   touchSession,
-} from "../core/ledger";
-import { detectAction, extractLocalPaths, localCheck, localDeleteCheck, normLocal, tightenLocal } from "../core/localGuard";
+} from "../core/record/ledger";
+import { detectAction, extractLocalPaths, localCheck, localDeleteCheck, normLocal, tightenLocal } from "../core/guard/localGuard";
 import {
   acquireWithWait,
   checkStale,
   noteRead,
   release as releaseLock,
   releaseTransient,
-} from "../core/fileLock";
-import { findRoot, supervisorDir } from "../core/paths";
+} from "../core/record/fileLock";
+import { findRoot, supervisorDir } from "../core/record/paths";
 import { skillDirs, watchConfigPath } from "./locations";
-import { decide } from "../core/permission";
-import { loadState, resolveModeFor } from "../core/state";
-import { isSupervisorAlive, listWorkers, loadWorker, readDispatches, touchWorker } from "../core/supervisor";
+import { decide } from "../core/guard/permission";
+import { loadState, resolveModeFor } from "../core/record/state";
+import { isSupervisorAlive, listWorkers, loadWorker, readDispatches, touchWorker } from "../core/record/supervisor";
 import type { ActionKind, GateResult, LocalDecision } from "../core/types";
 
 /**

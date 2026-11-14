@@ -7,8 +7,8 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const { readNextModel } = require(join(PKG, "dist/supervisor/loop.js"));
-const board = require(join(PKG, "dist/supervisor/board.js"));
-const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));
+const board = require(join(PKG, "dist/supervisor/board"));
+const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-next-model-"));

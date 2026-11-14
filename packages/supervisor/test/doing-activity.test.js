@@ -4,7 +4,7 @@ const assert = require("node:assert");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { parseWorkerLog } = require(join(PKG, "dist/supervisor/workerLog.js"));
+const { parseWorkerLog } = require(join(PKG, "dist/supervisor/worker/workerLog.js"));
 const {
   doingOfAction,
   supervisorActivityOf,
@@ -12,7 +12,7 @@ const {
   currentSupervisorAction,
   isTestCommand,
   isBuildCommand,
-} = require(join(PKG, "dist/supervisor/activity.js"));
+} = require(join(PKG, "dist/supervisor/worker/activity.js"));
 
 const line = (ev) => JSON.stringify(ev);
 const assistant = (content) => line({ type: "assistant", message: { role: "assistant", content } });

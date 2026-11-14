@@ -10,9 +10,9 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
-const { loadState } = require("../dist/core/state");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { loadState } = require("../dist/core/record/state");
 const loop = require("../dist/supervisor/loop");
 const board = require("../dist/supervisor/board");
 

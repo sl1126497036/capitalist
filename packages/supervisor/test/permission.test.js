@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const { decide, normalizeMode, modeNames, severity, resolveMode } = require("../dist/core/permission");
+const { decide, normalizeMode, modeNames, severity, resolveMode } = require("../dist/core/guard/permission");
 
 test("未知档位名 fail-closed 到 deny，不回落 default", () => {
   assert.equal(decide("plan_mode_typo", "allow", "write"), "deny");

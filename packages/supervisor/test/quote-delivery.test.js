@@ -5,9 +5,9 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
-const { claimDirectives, spliceDirectives, listDirectives } = require("../dist/core/commands");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { claimDirectives, spliceDirectives, listDirectives } = require("../dist/core/dispatch/commands");
 const { runCommand, buildThreadMessages } = require("../dist/supervisor/board");
 
 /*

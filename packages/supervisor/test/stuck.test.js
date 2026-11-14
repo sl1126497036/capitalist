@@ -5,10 +5,10 @@ const { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } = requir
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
-const { listDirectives } = require("../dist/core/commands");
-const stuckMod = require("../dist/supervisor/stuck");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { listDirectives } = require("../dist/core/dispatch/commands");
+const stuckMod = require("../dist/supervisor/worker/stuck");
 const loop = require("../dist/supervisor/loop");
 
 function sandbox() {
@@ -151,7 +151,7 @@ test("原地打转：日志持续增长也会判卡点，并在本轮写入指�
   assert.equal(listDirectives(root).length, 1);
 
   /* 模拟 hook 在下一个工具调用前领走这条指导。 */
-  const taken = require("../dist/core/commands").claimDirectives(root, {
+  const taken = require("../dist/core/dispatch/commands").claimDirectives(root, {
     dispatchId: "D-stuck1",
     shard: "",
     stage: "S0",
@@ -170,8 +170,8 @@ test("原地打转：日志持续增长也会判卡点，并在本轮写入指�
   after = capitalist.loadWorker(root, "W-stuck");
   assert.equal(after.stuck.delivered, true);
   assert.equal(after.stuck.channel, "consumed");
-  const { readJsonl } = require("../dist/core/json");
-  const { eventsPath } = require("../dist/core/ledger");
+  const { readJsonl } = require("../dist/core/record/json");
+  const { eventsPath } = require("../dist/core/record/ledger");
   const events = readJsonl(eventsPath(root));
   assert.ok(
     events.some((e) => e.event === "stuck_guidance_delivered"),
@@ -317,7 +317,7 @@ test("输出续心跳：每段输出后刷新心跳，状态从 starting 置为 
   capitalist.appendDispatch(base, d);
   capitalist.claimDispatch(base, "D-out1", "W-out");
 
-  const { launchWorker } = require("../dist/supervisor/worker");
+  const { launchWorker } = require("../dist/supervisor/worker/worker");
   const launched = launchWorker({
     root: base,
     target: "输出续心跳",

@@ -203,10 +203,23 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 
 ```
 packages/supervisor/    npm 包：引擎、宿主实现、CLI、安装器
-  src/core/             契约、红线、本机边界、档位、阶段闸、台账
-  src/host/             接口 + 注册表 + 分派；impl/<id>/ 每个宿主一个目录
-  src/cli/              capitalist 命令行
-  src/supervisor/       常驻监工进程：派单循环、工作进程、看板
+  src/core/             被各层依赖的底座
+    record/             落盘协议、任务根状态、台账、路径、文件锁
+    dispatch/           派单队列、树重建、收件箱、预占
+    contract/           契约加载、红线检查、任务根创建
+    guard/              权限、配额、上下文窗口、本机边界
+    message/            消息、附件、通道状态
+    platform/           HTTP、启动器通道、自动纳管
+  src/agent/            接口 + 注册表 + 分派；impl/<id>/ 每个宿主一个目录
+  src/cli/              capitalist 命令行；cmd/ 各子命令实现
+  src/supervisor/       常驻监工进程
+    board/              看板：鉴权、路由、SSE、静态产物
+    worker/             工作进程拉起、日志、卡点、收尾
+    judge/              申报裁决、车道分配、模型策略
+    usage/              用量、成本、任务编号与标题
+    context/            重载上下文、项目记忆、术语
+    channel/            模型调用、指令通道、子进程令牌
+    view/               看板与 CLI 共用的投影
   contracts/            内置契约：minimal
 skill/                  agent 手册（安装到各宿主的 skills 目录）
 ```
