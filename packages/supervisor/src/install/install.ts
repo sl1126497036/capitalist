@@ -19,8 +19,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { writeJson } from "../core/json";
-import { BRIDGE_PLATFORM, bridgeLogPath, startBridgeNow } from "../core/bridge";
+import { writeJson } from "../core/record/json";
+import { BRIDGE_PLATFORM, bridgeLogPath, startBridgeNow } from "../core/platform/bridge";
 import type { HostImpl, InstallContext, InstallEntry } from "../agent/contract";
 import { all, byId, normalize } from "../agent/registry";
 import { watchConfigPath } from "../agent/locations";

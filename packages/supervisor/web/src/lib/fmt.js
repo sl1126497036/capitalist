@@ -1,8 +1,8 @@
 /**
  * 展示层格式化：只改写已有字段，不推断、不补值，缺数据的指标由调用方显示破折号。
- * 事件标签与指令名取自服务端 src/supervisor/terms.ts 的中英对照表。
+ * 事件标签与指令名取自服务端 src/supervisor/context/terms.ts 的中英对照表。
  */
-import { CMD_ZH, EVENT_ZH, EVENT_ZH_FALLBACK } from "../../../src/supervisor/terms.ts";
+import { CMD_ZH, EVENT_ZH, EVENT_ZH_FALLBACK } from "../../../src/supervisor/context/terms.ts";
 import { lang, t } from "./i18n.js";
 import { rejectTail } from "./rejectTail.js";
 
@@ -88,7 +88,7 @@ export function msgRef(m) {
 
 
 /**
- * 监工事件类型 -> 界面标签。事件名经 src/supervisor/terms.ts 转换，不直接上屏。
+ * 监工事件类型 -> 界面标签。事件名经 src/supervisor/context/terms.ts 转换，不直接上屏。
  * 未收录的事件显示“监工记录”，不套用“其他事件”回落词。
  */
 export function evtTag(m) {

@@ -128,7 +128,7 @@ const PATH_SAMPLES = [
 ];
 
 test("Python 与 TS 抽出的本机路径一致", { skip: !hasPython() && "未找到 Python 引擎，跳过一致性对比" }, () => {
-  const { extractLocalPaths } = require("../dist/core/localGuard");
+  const { extractLocalPaths } = require("../dist/core/guard/localGuard");
   const code = [
     "import importlib.util, json, sys",
     `spec = importlib.util.spec_from_file_location("capitalist", r"${PY_SUPERVISOR}")`,

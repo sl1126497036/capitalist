@@ -16,8 +16,8 @@ const {
   loadSessions,
   touchSession,
   retireSession,
-} = require("../dist/core/ledger");
-const { loadState, updateState } = require("../dist/core/state");
+} = require("../dist/core/record/ledger");
+const { loadState, updateState } = require("../dist/core/record/state");
 
 function tmpRoot(extra = {}) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-ledger-"));

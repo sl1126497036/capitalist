@@ -17,8 +17,8 @@ const { mkdirSync, mkdtempSync, writeFileSync, utimesSync } = require("node:fs")
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const ledger = require("../dist/supervisor/creditLedger");
-const { clearFsCache } = require("../dist/core/fsCache");
+const ledger = require("../dist/supervisor/usage/creditLedger");
+const { clearFsCache } = require("../dist/core/record/fsCache");
 
 const now = Date.now();
 const isoAgo = (ms) => new Date(now - ms).toISOString();

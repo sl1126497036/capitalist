@@ -5,9 +5,9 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
-const { promoteTask } = require("../dist/core/commands");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { promoteTask } = require("../dist/core/dispatch/commands");
 const { runCommand } = require("../dist/supervisor/board");
 
 function sandbox() {
@@ -109,7 +109,7 @@ test("看板接口：promote 走同一套原语，回执说清越过了几张", 
 
 
 
-const preempt = require("../dist/core/preempt");
+const preempt = require("../dist/core/dispatch/preempt");
 
 test("立即执行回执：没有别的立即执行运行中时说会腾槽，有的话说排在谁后面", () => {
   const root = sandbox();

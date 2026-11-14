@@ -16,7 +16,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { loadContract } = require(join(PKG, "dist/core/contract.js"));
+const { loadContract } = require(join(PKG, "dist/core/contract/contract.js"));
 const {
   applyResumePlan,
   beginReload,
@@ -28,8 +28,8 @@ const {
   reloadStatus,
   sessionPath,
   snapshotPath,
-} = require(join(PKG, "dist/supervisor/reload.js"));
-const { readDispatches } = require(join(PKG, "dist/core/supervisor.js"));
+} = require(join(PKG, "dist/supervisor/context/reload.js"));
+const { readDispatches } = require(join(PKG, "dist/core/record/supervisor.js"));
 
 const CONTRACT_CONTEXT = "工作根 D:/demo。禁止 git 写操作。只改 src/ 下的文件。";
 
@@ -263,7 +263,7 @@ test("重载：代次递增、换会话、结束清标记、active 会被看到"
 
   const sum1 = await beginReload(root, contract);
   assert.equal(sum1.gen, 1);
-  assert.equal(sum1.session_id, "capitalist-chat-r1");
+  assert.match(sum1.session_id, /^capitalist-chat-w[0-9a-f]{8}-r1$/, "本工作区的第一次重载");
   assert.equal(sum1.skip, 1);
   assert.equal(sum1.reverify, 2);
   assert.ok(existsSync(snapshotPath(root)));
@@ -271,11 +271,12 @@ test("重载：代次递增、换会话、结束清标记、active 会被看到"
   assert.ok(ctxText.includes("阶段目标"), "简报要把契约原文标成阶段目标，不是待办清单");
   assert.ok(ctxText.includes("以派单为准"), "简报要声明冲突时以派单为准");
   assert.equal(reloadStatus(root).active, false, "重载结束后标记必须清掉");
-  assert.equal(reloadSessionId(root), "capitalist-chat-r1");
+  assert.equal(reloadSessionId(root), sum1.session_id);
 
   const sum2 = await beginReload(root, contract);
   assert.equal(sum2.gen, 2);
-  assert.equal(reloadSessionId(root), "capitalist-chat-r2", "换代次必须换会话");
+  assert.match(reloadSessionId(root), /^capitalist-chat-w[0-9a-f]{8}-r2$/, "换代次必须换会话");
+  assert.notEqual(sum2.session_id, sum1.session_id, "两代会话 id 不同");
 });
 
 test("旧阶段的待确认单只记录、不派复验（派了会被当过期单作废）", () => {

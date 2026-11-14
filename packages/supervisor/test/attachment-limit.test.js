@@ -6,10 +6,10 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));
-const { appendDispatch, readDispatches } = require(join(PKG, "dist/core/supervisor.js"));
-const { bindAttachments } = require(join(PKG, "dist/core/attachments.js"));
-const { spliceDirectives } = require(join(PKG, "dist/core/commands.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { appendDispatch, readDispatches } = require(join(PKG, "dist/core/record/supervisor.js"));
+const { bindAttachments } = require(join(PKG, "dist/core/message/attachments.js"));
+const { spliceDirectives } = require(join(PKG, "dist/core/dispatch/commands.js"));
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-attlimit-"));

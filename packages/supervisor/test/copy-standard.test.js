@@ -10,7 +10,7 @@ const { join, resolve } = require("node:path");
 const PKG = resolve(__dirname, "..");
 const { __testing } = require(join(PKG, "dist/supervisor/loop.js"));
 const { withCopyStandard } = __testing;
-const memory = require(join(PKG, "dist/supervisor/memory.js"));
+const memory = require(join(PKG, "dist/supervisor/context/memory.js"));
 
 /* 措辞样本：真实使用时由人在看板/记忆里写入这一条，内容可改，代码不内置。 */
 const NOTE =

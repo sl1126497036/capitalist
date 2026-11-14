@@ -2,7 +2,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { buildPrompt, buildResumePrompt, buildGroundingBlock } = require("../dist/supervisor/worker");
+const { buildPrompt, buildResumePrompt, buildGroundingBlock } = require("../dist/supervisor/worker/worker");
 
 const CN = ["一", "二", "三", "四", "五", "六", "七", "八"];
 const DISPATCH = {

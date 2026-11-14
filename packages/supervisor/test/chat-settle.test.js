@@ -15,11 +15,11 @@ const {
   requirementHints,
   settleChat,
   unhandledFromEvents,
-} = require(join(PKG, "dist/supervisor/chatSettle.js"));
-const { eventsPath } = require(join(PKG, "dist/core/ledger.js"));
-const { recordUserMessage } = require(join(PKG, "dist/core/messages.js"));
-const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board.js"));
-const { readJsonl } = require(join(PKG, "dist/core/json.js"));
+} = require(join(PKG, "dist/supervisor/view/chatSettle.js"));
+const { eventsPath } = require(join(PKG, "dist/core/record/ledger.js"));
+const { recordUserMessage } = require(join(PKG, "dist/core/message/messages.js"));
+const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
+const { readJsonl } = require(join(PKG, "dist/core/record/json.js"));
 
 function sandbox(name = "capitalist-chat-settle-") {
   return mkdtempSync(join(tmpdir(), name));

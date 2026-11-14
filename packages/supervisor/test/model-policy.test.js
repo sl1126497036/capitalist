@@ -5,7 +5,7 @@ const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const { resolveModel, normalizeModelName, modelRulesOf } = require("../dist/supervisor/modelPolicy");
+const { resolveModel, normalizeModelName, modelRulesOf } = require("../dist/supervisor/judge/modelPolicy");
 
 const DEFAULT = "deepseek-v4.1-flash";
 
@@ -74,7 +74,7 @@ test("平台声明的默认档自己不在禁用名单里（否则会绕死自�
 });
 
 test("从日志里认出实际用过的模型（用来核对有没有回退）", () => {
-  const { modelsInLog, deniedModelsUsed } = require("../dist/supervisor/modelPolicy");
+  const { modelsInLog, deniedModelsUsed } = require("../dist/supervisor/judge/modelPolicy");
   const log = [
     '{"type":"assistant","message":{"model":"deepseek-v4.1-flash"}}',
     '{"type":"assistant","message":{"model":"glm-5.3-flash"}}',

@@ -17,11 +17,11 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { recordUserMessage } = require(join(PKG, "dist/core/messages.js"));
-const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board.js"));
-const { severeSupervisorEventLines, supervisorChatTurnSessionId } = require(join(PKG, "dist/supervisor/reload.js"));
-const { eventsPath, recordEvent } = require(join(PKG, "dist/core/ledger.js"));
-const { readJsonl } = require(join(PKG, "dist/core/json.js"));
+const { recordUserMessage } = require(join(PKG, "dist/core/message/messages.js"));
+const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
+const { severeSupervisorEventLines, supervisorChatTurnSessionId } = require(join(PKG, "dist/supervisor/context/reload.js"));
+const { eventsPath, recordEvent } = require(join(PKG, "dist/core/record/ledger.js"));
+const { readJsonl } = require(join(PKG, "dist/core/record/json.js"));
 
 function sandbox(name = "capitalist-msg-quote-") {
   return mkdtempSync(join(tmpdir(), name));
@@ -110,7 +110,7 @@ test("严重异常摘要：最多 max 条，取最近的", () => {
   assert.ok(lines[4].includes("D-11"));
 });
 
-test("单轮注入上限：没有宿主会话记录时沿用当前会话 id", () => {
+test("单轮注入上限：没有会话记录时为本工作区新建会话", () => {
   const root = sandbox();
   recordEvent(root, "supervisor_tick", { n: 1 });
   const prevProfile = process.env.USERPROFILE;
@@ -118,7 +118,7 @@ test("单轮注入上限：没有宿主会话记录时沿用当前会话 id", ()
   process.env.USERPROFILE = root;
   process.env.HOME = root;
   try {
-    assert.strictEqual(supervisorChatTurnSessionId(root), "capitalist-chat");
+    assert.match(supervisorChatTurnSessionId(root), /^capitalist-chat-w[0-9a-f]{8}$/);
   } finally {
     if (prevProfile === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = prevProfile;

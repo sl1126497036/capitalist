@@ -26,7 +26,7 @@ test("auth：已移除，不再提供磁盘令牌入口", () => {
 });
 
 test("令牌模块：不引用落盘实现", () => {
-  const src = readFileSync(join(__dirname, "..", "dist", "supervisor", "officialToken.js"), "utf8");
+  const src = readFileSync(join(__dirname, "..", "dist", "supervisor", "channel", "officialToken.js"), "utf8");
   assert.ok(!src.includes("hostToken.js"), "令牌模块不得引用落盘的令牌文件模块");
 });
 
@@ -40,6 +40,6 @@ test("令牌只由插件自己读取：不提供外部传入通道", () => {
 });
 
 test("令牌模块：不提供导出入口", () => {
-  const src = readFileSync(join(__dirname, "..", "dist", "supervisor", "officialToken.js"), "utf8");
+  const src = readFileSync(join(__dirname, "..", "dist", "supervisor", "channel", "officialToken.js"), "utf8");
   assert.ok(!src.includes("auth export"), "不得保留导出令牌的命令");
 });

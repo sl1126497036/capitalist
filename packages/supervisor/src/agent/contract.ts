@@ -2,8 +2,7 @@
  * 宿主契约：一个 agent 提供哪些能力，才可被本引擎监督。
  *
  * 本文件是 impl 唯一允许依赖的类型来源，因此只写中性词：宿主、impl、facet、能力。
- * 产品名、配置目录名、CLI 参数只出现在 `host/impl/` 下的实现里，
- * 分层与目录约定见 docs/architecture/impl-layer.md。
+ * 产品名、配置目录名、CLI 参数只出现在 `agent/impl/` 下的实现里，这条由 `test/layering.test.js` 守住。
  *
  * 五个生命周期点固定。原生事件映射不上时返回 null，表示该宿主缺这项能力。
  */

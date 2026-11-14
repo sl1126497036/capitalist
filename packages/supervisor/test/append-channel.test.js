@@ -5,16 +5,16 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const cmds = require("../dist/core/commands");
-const { createTaskRoot } = require("../dist/core/init");
-const { recordEvent } = require("../dist/core/ledger");
-const { loadState, updateState } = require("../dist/core/state");
+const capitalist = require("../dist/core/record/supervisor");
+const cmds = require("../dist/core/dispatch/commands");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { recordEvent } = require("../dist/core/record/ledger");
+const { loadState, updateState } = require("../dist/core/record/state");
 const dispatch = require("../dist/agent/dispatch").dispatch;
 const { byId } = require("../dist/agent/registry");
 const { buildThreadMessages, buildSupervisorLog } = require("../dist/supervisor/board");
-const { appendSupervisorDirective, listSupervisorDirectives, markSupervisorDirective } = require("../dist/supervisor/direct");
-const { assignThreadNos } = require("../dist/supervisor/threadNo");
+const { appendSupervisorDirective, listSupervisorDirectives, markSupervisorDirective } = require("../dist/supervisor/channel/direct");
+const { assignThreadNos } = require("../dist/supervisor/usage/threadNo");
 const loop = require("../dist/supervisor/loop");
 
 const hook = byId("generic").hook;
@@ -146,7 +146,7 @@ test("送达留痕进台账：direct_deliver 事件带派单与进程归属", ()
   withWorkerEnv(root, () => {
     dispatch(hook, workerEvent(root));
   });
-  const events = require("../dist/core/json").readJsonl(join(root, ".capitalist", "events.jsonl"));
+  const events = require("../dist/core/record/json").readJsonl(join(root, ".capitalist", "events.jsonl"));
   const hit = events.filter((e) => String(e.event ?? e.kind) === "direct_deliver");
   assert.equal(hit.length, 1, "一次送达只记一条事件");
   assert.equal(hit[0].dispatch, "D-append1");

@@ -5,7 +5,7 @@ const assert = require("node:assert");
 const { resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { isRestartSupervisorDispatch } = require(resolve(PKG, "dist/core/restartIntent.js"));
+const { isRestartSupervisorDispatch } = require(resolve(PKG, "dist/core/record/restartIntent.js"));
 
 const RESTART = [
   "重启监工，让新构建生效",

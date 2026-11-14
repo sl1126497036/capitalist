@@ -12,7 +12,7 @@ const { mkdtempSync, mkdirSync, writeFileSync, existsSync } = require("node:fs")
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const { loadWatchRules, matchWatchDir, autoAdopt } = require("../dist/core/autowatch");
+const { loadWatchRules, matchWatchDir, autoAdopt } = require("../dist/core/platform/autowatch");
 
 const RULES = [
   { match: ["cases", "targets"], contract: "dev", exclude: ["tools", "tmp"] },

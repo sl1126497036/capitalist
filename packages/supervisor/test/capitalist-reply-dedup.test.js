@@ -5,8 +5,8 @@ const { mkdtempSync, mkdirSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const { recordEvent } = require("../dist/core/ledger");
-const { appendSupervisorDirective } = require("../dist/supervisor/direct");
+const { recordEvent } = require("../dist/core/record/ledger");
+const { appendSupervisorDirective } = require("../dist/supervisor/channel/direct");
 const { buildSupervisorLog } = require("../dist/supervisor/board");
 
 function scratch() {

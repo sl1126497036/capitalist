@@ -6,9 +6,9 @@ const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const { extractLocalPaths, localCheck, extractDeleteArgs, detectAction } = require("../dist/core/localGuard");
-const { evaluate, loadContract, nextStageId, isLastStage, stageIds } = require("../dist/core/contract");
-const { runCheck } = require("../dist/core/checks");
+const { extractLocalPaths, localCheck, extractDeleteArgs, detectAction } = require("../dist/core/guard/localGuard");
+const { evaluate, loadContract, nextStageId, isLastStage, stageIds } = require("../dist/core/contract/contract");
+const { runCheck } = require("../dist/core/contract/checks");
 
 const ROOT = join(tmpdir(), "capitalist-guard-root");
 const minimal = loadContract("minimal");

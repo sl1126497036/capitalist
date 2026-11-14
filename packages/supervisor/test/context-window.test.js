@@ -7,10 +7,10 @@ const { mkdirSync, mkdtempSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const limits = require("../dist/core/limits");
-const usage = require("../dist/supervisor/usage");
-const reload = require("../dist/supervisor/reload");
-const lane = require("../dist/supervisor/sessionLane");
+const limits = require("../dist/core/guard/limits");
+const usage = require("../dist/supervisor/usage/usage");
+const reload = require("../dist/supervisor/context/reload");
+const lane = require("../dist/supervisor/judge/sessionLane");
 
 const MODEL = "deepseek-v4.1-flash";
 

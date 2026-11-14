@@ -2,7 +2,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { bindAttachments } = require("../dist/core/attachments");
+const { bindAttachments } = require("../dist/core/message/attachments");
 
 const A = ".capitalist/attachments/M-1-1.png";
 const B = ".capitalist/attachments/M-1-2.png";

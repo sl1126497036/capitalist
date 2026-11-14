@@ -197,10 +197,23 @@ Not applicable: single-turn Q&A and one-off scripts; actions run directly in a t
 
 ```
 packages/supervisor/    npm package: engine, host implementations, CLI, installer
-  src/core/             contracts, redlines, local boundaries, permission modes, stage gates, ledger
+  src/core/             base layer everything depends on
+    record/             on-disk protocol, task root state, ledger, paths, file locks
+    dispatch/           dispatch queue, tree rebuild, inbox, preemption
+    contract/           contract loading, redline checks, task root creation
+    guard/              permissions, quotas, context window, local boundaries
+    message/            messages, attachments, channel state
+    platform/           HTTP, launcher channel, auto-adoption
   src/agent/            interfaces + registry + dispatch; impl/<id>/ one directory per host
-  src/cli/              capitalist command line
-  src/supervisor/       resident supervisor: dispatch loop, work processes, board
+  src/cli/              capitalist command line; cmd/ subcommand implementations
+  src/supervisor/       resident supervisor
+    board/              board: auth, routing, SSE, static assets
+    worker/             worker launch, logs, stuck detection, teardown
+    judge/              triage, lane assignment, model policy
+    usage/              usage, cost, task numbering and titles
+    context/            reload context, project memory, terms
+    channel/            model calls, directive channel, subprocess tokens
+    view/               projections shared by board and CLI
   contracts/            built-in contracts: minimal
 skill/                  agent manual (installed into each host's skills directory)
 ```

@@ -1,0 +1,12 @@
+{
+  "src/supervisor/loop.ts": 6588,
+  "src/supervisor/context/reload.ts": 1948,
+  "src/core/record/supervisor.ts": 1756,
+  "src/cli/main.ts": 1308,
+  "src/supervisor/worker/worker.ts": 1218,
+  "src/supervisor/channel/llm.ts": 1052,
+  "src/core/dispatch/commands.ts": 1051,
+  "src/core/contract/contract.ts": 972,
+  "src/agent/dispatch.ts": 956,
+  "src/supervisor/usage/usage.ts": 935
+}

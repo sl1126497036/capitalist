@@ -5,7 +5,7 @@ const assert = require("node:assert");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { laneKeyOf } = require(join(PKG, "dist/core/commands.js"));
+const { laneKeyOf } = require(join(PKG, "dist/core/dispatch/commands.js"));
 
 test("lineage 为空串时回退到派单 id，不落 main", () => {
   const key = laneKeyOf({ stage: "U1", shard: "", lineage: "", id: "D-mw24vv03ykh" });

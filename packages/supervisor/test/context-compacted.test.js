@@ -13,11 +13,11 @@ const {
   ctxDropIsCompaction,
   recordSupervisorContext,
   readSupervisorContext,
-} = require(join(PKG, "dist/supervisor/reload.js"));
-const { loadContract } = require(join(PKG, "dist/core/contract.js"));
-const { zhEvent } = require(join(PKG, "dist/supervisor/terms.js"));
-const { supervisorActivityOf } = require(join(PKG, "dist/supervisor/activity.js"));
-const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board.js"));
+} = require(join(PKG, "dist/supervisor/context/reload.js"));
+const { loadContract } = require(join(PKG, "dist/core/contract/contract.js"));
+const { zhEvent } = require(join(PKG, "dist/supervisor/context/terms.js"));
+const { supervisorActivityOf } = require(join(PKG, "dist/supervisor/worker/activity.js"));
+const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-compact-"));
@@ -76,7 +76,7 @@ test("同代同口径骤降 -> 一条 inferred 事件，字段齐全", () => {
   assert.equal(e.kind, "context_compacted", "kind 与 event 双写");
   assert.equal(e.event, "context_compacted");
   assert.equal(e.scope, "capitalist");
-  assert.equal(e.session, "capitalist-chat", "未重载过时是默认会话");
+  assert.match(e.session, /^capitalist-chat-w[0-9a-f]{8}$/, "未重载过时是本工作区的基线会话");
   assert.equal(e.before_used, 240_000);
   assert.equal(e.after_used, 120_000);
   assert.equal(e.limit, 600_000, "生效上限 = min(配置 1M, 读数窗口 600k)");
@@ -148,7 +148,7 @@ test("重载 -> reload 来源的压缩事件，进入监工流并显示“已压
   assert.equal(e.source, "reload");
   assert.equal(e.before_used, 520_000);
   assert.equal(e.after_used, null, "新会话还没有读数，不能拿 0 冒充");
-  assert.equal(e.session, "capitalist-chat", "压缩发生在被换掉的会话上");
+  assert.match(e.session, /^capitalist-chat-w[0-9a-f]{8}$/, "压缩发生在被换掉的基线会话上");
   assert.equal(e.next_session, summary.session_id);
   assert.equal(e.limit, 600_000, "生效上限 = min(配置 1M, 读数窗口 600k)");
   assert.ok(e.at);

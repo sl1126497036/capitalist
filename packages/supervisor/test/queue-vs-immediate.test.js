@@ -5,9 +5,9 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const preempt = require("../dist/core/preempt");
-const { createTaskRoot } = require("../dist/core/init");
+const capitalist = require("../dist/core/record/supervisor");
+const preempt = require("../dist/core/dispatch/preempt");
+const { createTaskRoot } = require("../dist/core/contract/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-queue-"));

@@ -5,10 +5,10 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const capitalist = require("../dist/core/supervisor");
-const { createTaskRoot } = require("../dist/core/init");
-const { appendSection } = require("../dist/core/commands");
-const worker = require("../dist/supervisor/worker");
+const capitalist = require("../dist/core/record/supervisor");
+const { createTaskRoot } = require("../dist/core/contract/init");
+const { appendSection } = require("../dist/core/dispatch/commands");
+const worker = require("../dist/supervisor/worker/worker");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-blocker-"));
