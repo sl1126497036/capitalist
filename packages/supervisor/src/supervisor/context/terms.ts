@@ -46,6 +46,8 @@ export const EVENT_ZH: Readonly<Record<string, string>> = Object.freeze({
   supervisor_reply: "监工回话",
   /* 上下文压缩：重载（source=reload）与读数推断（source=inferred）共用同一标签。 */
   context_compacted: "已压缩",
+  /* 任务根的会话记录缺失：判定为新的生命周期，换新会话。 */
+  chat_session_new: "新建会话",
   mq_message: "申报",
   mq_triage: "申报回执",
   takeover: "人工接管",

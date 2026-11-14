@@ -10,6 +10,7 @@
  * 边界：只写 `.capitalist/reload/` 与复验单，不改 state、不推进阶段、不动契约；阶段推进与门槛判定只在 loop.ts 的 step 里发生。
  */
 
+import { randomBytes } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -381,6 +382,14 @@ interface SessionRecord {
   session_id: string;
   at: string;
   brief_chars: number;
+  /**
+   * 工作区标识：任务根本次生命周期的随机短串，写入会话 id。
+   *
+   * `session.json` 在 `.capitalist/reload/` 下，随 `.capitalist` 删除；文件缺失即新的
+   * 生命周期，换新标识，不续接同一目录上一轮的会话记录。历史记录缺该字段，首次读取
+   * 时补写，原有会话 id 不变。
+   */
+  workspace?: string;
 }
 
 interface LedgerEntry {
@@ -1243,7 +1252,7 @@ export function estimateSessionContextTokens(sessionId: string): number | null {
 
 /** 当前监工对话会话的代次（session.json 的 gen）。 */
 function currentSupervisorGen(root: string): number {
-  const sess = readJson<SessionRecord | null>(sessionPath(root), null);
+  const sess = readSessionRecord(root);
   return Math.max(0, Number(sess?.gen ?? 0));
 }
 
@@ -1522,17 +1531,148 @@ export function reloadStatus(root: string): ReloadStatus {
   };
 }
 
-/** 重载后的监工对话会话 id；换会话即丢弃旧会话的历史输出，未重载过时沿用 `capitalist-chat`。 */
+/** 监工对话会话 id 的公共前缀。hook 按该前缀识别对话层会话，换代与重载后不变。 */
+export const CHAT_SESSION_PREFIX = "capitalist-chat";
+
+/** 会话 id 中的工作区标识。历史记录没有该标识时提取为空串。 */
+const WORKSPACE_IN_ID = new RegExp(`^${CHAT_SESSION_PREFIX}-w([a-f0-9]{6,16})(?:-|$)`);
+
+/** 生成工作区标识：8 位十六进制，可区分同一目录下的多次生命周期。 */
+function freshWorkspace(): string {
+  return randomBytes(4).toString("hex");
+}
+
+/**
+ * 取会话记录所属的工作区标识。
+ *
+ * 优先读记录上的 `workspace`，其次从带标识的会话 id 还原；两处都没有（历史记录）
+ * 返回空串，由调用方决定生成新标识还是沿用旧 id。
+ */
+function workspaceOf(sess: SessionRecord | null): string {
+  const own = String(sess?.workspace ?? "").trim();
+  if (/^[a-f0-9]{6,16}$/.test(own)) return own;
+  return WORKSPACE_IN_ID.exec(String(sess?.session_id ?? "").trim())?.[1] ?? "";
+}
+
+/** 该工作区的基线会话 id。 */
+function chatSessionBase(ws: string): string {
+  return `${CHAT_SESSION_PREFIX}-w${ws}`;
+}
+
+/**
+ * 读会话记录。
+ *
+ * 文件不存在时直接返回 null，不看读缓存：`readJson` 的缓存有效期 300ms 且只有写路径
+ * 会使其失效，用户删掉 `.capitalist` 后立刻再读会取到上一轮的记录，把新工作区误判成
+ * 旧工作区，续接本应丢弃的历史。存在性判断必须先于缓存。
+ */
+function readSessionRecord(root: string): SessionRecord | null {
+  const file = sessionPath(root);
+  if (!existsSync(file)) return null;
+  return readJson<SessionRecord | null>(file, null);
+}
+
+/** 该工作区的第 `gen` 代会话，供超限换代与清空列表使用。 */
+function chatSessionGen(ws: string, gen: number): string {
+  return `${chatSessionBase(ws)}-c${gen}`;
+}
+
+/** 该工作区的第 `gen` 代重载会话。 */
+function chatSessionReload(ws: string, gen: number): string {
+  return `${chatSessionBase(ws)}-r${gen}`;
+}
+
+/**
+ * 换到该工作区的下一代会话，并落盘 `session.json`。
+ *
+ * 三处调用（超限换代、完整重载、清空列表）共用本函数，会话 id 的构造口径只有一份。
+ * 缺失工作区标识的历史记录在此补写新标识，旧会话 id 不再沿用，台账不受影响。
+ *
+ * `briefChars` 是写入新记录的简报长度，由调用方指定：换代沿用上一代的值，重载用压缩后的
+ * 长度，清空列表写 0。本函数不做推断。
+ */
+export function rotateChatSession(
+  root: string,
+  kind: "gen" | "reload",
+  briefChars = 0,
+  at = new Date().toISOString(),
+): SessionRecord {
+  const prev = readSessionRecord(root);
+  const ws = workspaceOf(prev) || freshWorkspace();
+  const gen = Math.max(0, Number(prev?.gen ?? 0)) + 1;
+  const rec: SessionRecord = {
+    gen,
+    session_id: kind === "reload" ? chatSessionReload(ws, gen) : chatSessionGen(ws, gen),
+    at,
+    brief_chars: Number.isFinite(briefChars) ? briefChars : 0,
+    workspace: ws,
+  };
+  writeJson(sessionPath(root), rec);
+  return rec;
+}
+
+/**
+ * 落盘失败时本轮沿用的会话 id，按任务根记录。
+ *
+ * `session.json` 写不进去说明任务根不可写，此时每轮新建 id 会使对话层丢失全部历史。
+ * 同一进程内复用同一 id，可能落在旧会话上；跨进程重新生成，该状态本身已属异常，
+ * 不再为其维护额外状态。
+ */
+const unsavedSession = new Map<string, string>();
+
+/**
+ * 监工对话当前使用的会话 id。
+ *
+ * 有记录沿用记录上的 id；历史记录缺工作区标识时补写新标识，原有 id 不变，
+ * 正在使用的任务根不因升级丢上下文。
+ *
+ * 无记录表示新的生命周期：`.capitalist` 已被删除，或该目录从未有过对话。此时生成
+ * 新标识并立即落盘，与同一目录上一轮的会话记录不再重名。此前回退到固定的
+ * `capitalist-chat`，与宿主库里上一轮同名记录重名，会把该目录历次对话的全部历史
+ * 重新送进模型。
+ */
 export function reloadSessionId(root: string): string {
-  const sess = readJson<SessionRecord | null>(sessionPath(root), null);
+  const sess = readSessionRecord(root);
   const id = String(sess?.session_id ?? "").trim();
-  return id || "capitalist-chat";
+  if (id) {
+    unsavedSession.delete(root);
+    if (!workspaceOf(sess)) {
+      /* 历史记录：只补标识，会话 id 与代次原样保留。 */
+      const ws = freshWorkspace();
+      try {
+        writeJson(sessionPath(root), { ...sess, workspace: ws });
+      } catch {
+        /* 补写失败不影响本轮对话，下次再试 */
+      }
+    }
+    return id;
+  }
+
+  const ws = freshWorkspace();
+  const fresh = chatSessionBase(ws);
+  try {
+    writeJson(sessionPath(root), {
+      gen: 0,
+      session_id: fresh,
+      at: new Date().toISOString(),
+      brief_chars: 0,
+      workspace: ws,
+    });
+    unsavedSession.delete(root);
+  } catch {
+    /* 写不进去也返回新 id：本轮用空会话，不回退到与旧记录重名的固定 id。 */
+    const memo = unsavedSession.get(root);
+    if (memo) return memo;
+    unsavedSession.set(root, fresh);
+  }
+  recordEvent(root, "chat_session_new", { scope: "capitalist", session: fresh, workspace: ws, previous: "" });
+  return fresh;
 }
 
 /**
  * 监工对话单轮注入的历史上限（token）。
  * 与自动重载（按上下文占比触发）并列：此处在每轮对话前按会话记录体量换代，超限即换新会话 id
- * （`capitalist-chat-c<gen>`），为下一轮注入量设定上界。换代只裁历史，不写快照、不动派单队列。
+ * （`capitalist-chat-w<ws>-c<gen>`），为下一轮注入量设定上界。换代只裁历史，不写快照、不动派单队列。
  * token 估算用 {@link estimateSessionContextTokens}（带 size/mtime 缓存）；估算不可用时按会话文件字节数判断。
  */
 export const CAPITALIST_CHAT_TURN_TOKEN_CAP = 600_000;
@@ -1547,7 +1687,7 @@ function supervisorChatCapOf(root: string): number {
 }
 
 /**
- * 监工对话该用哪个会话 id。
+ * 监工对话单轮所用的会话 id。
  * 未超上限沿用当前会话（`reloadSessionId`）；超限则换代：gen + 1，写 `session.json`，
  * 落一条 `context_compacted` 事件（`source: "turn_cap"`），新会话从空上下文开始。
  * 换代只换会话 id，不写快照、不动派单队列；完整重载由 {@link beginReload} 负责。
@@ -1569,16 +1709,12 @@ export function supervisorChatTurnSessionId(root: string): string {
   const over = tokens !== null ? tokens > cap : chars > CAPITALIST_CHAT_TURN_CHAR_CAP;
   if (!over) return id;
 
-  const prev = readJson<SessionRecord | null>(sessionPath(root), null);
+  const prev = readSessionRecord(root);
   const gen = Math.max(0, Number(prev?.gen ?? 0)) + 1;
-  const next = `capitalist-chat-c${gen}`;
+  /* 会话 id 由 rotateChatSession 统一构造，代次与工作区标识随其生成。 */
+  let next = "";
   try {
-    writeJson(sessionPath(root), {
-      gen,
-      session_id: next,
-      at: new Date().toISOString(),
-      brief_chars: Number(prev?.brief_chars ?? 0),
-    });
+    next = rotateChatSession(root, "gen", Number(prev?.brief_chars ?? 0)).session_id;
   } catch {
     return id;
   }
@@ -1823,7 +1959,7 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
     );
   }
 
-  const prev = readJson<SessionRecord | null>(sessionPath(root), null);
+  const prev = readSessionRecord(root);
   const gen = Number(prev?.gen ?? 0) + 1;
   const startedAt = new Date().toISOString();
   const trigger = String(opts.trigger ?? "manual");
@@ -1832,7 +1968,8 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
    * 这两份必须在换 session.json 之前取，否则读到的已经是新会话。
    */
   const ctxBefore = readSupervisorContext(root);
-  const prevSessionId = String(prev?.session_id ?? "").trim() || "capitalist-chat";
+  /* 无记录时先由 reloadSessionId 建出基线会话，压缩事件才有起点。 */
+  const prevSessionId = String(prev?.session_id ?? "").trim() || reloadSessionId(root);
   const limitBefore = effectiveSupervisorContextLimit(
     supervisorContextConfigLimit(root),
     supervisorContextModelWindow(root, ctxBefore),
@@ -1858,14 +1995,8 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
   // 历史副本：重载可以复盘。文件名带 gen 与时间，不覆盖上一代。
   writeJson(join(historyDir(root), `gen-${gen}-${startedAt.replace(/[:.]/g, "-")}.json`), snap);
 
-  // 3. 新会话：换 id 即换上下文，老会话不再被读
-  const session: SessionRecord = {
-    gen,
-    session_id: `capitalist-chat-r${gen}`,
-    at: startedAt,
-    brief_chars: afterChars,
-  };
-  writeJson(sessionPath(root), session);
+  // 3. 新会话：换 id 即换上下文，老会话不再被读。代次与工作区标识由 rotateChatSession 统一生成。
+  const session = rotateChatSession(root, "reload", afterChars, startedAt);
 
   // 4. 恢复计划
   const plan = buildResumePlan(snap);

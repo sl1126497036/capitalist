@@ -297,6 +297,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           "- 用中文，简短直接，一到三句；不要客套，不要复述用户的话",
           "- 思考过程也用中文写：界面会把推理过程原样展开给用户看",
           "- 只依据本会话已有的上下文和下面这条消息回答；不知道就回答不知道，不编造",
+          "- 会话归属：本会话续接派单执行进程，与 WorkBuddy 窗口的对话互不共享上下文。",
+          "  被问是否与 WorkBuddy 窗口共用会话时，答不是，并说明这是执行进程的会话；运行环境中的 WorkBuddy 变量继承自启动方，不代表同一会话。",
+          "  用户没问就不主动提。",
           "- 这一单已经结束：只回答问题，不要改文件、不要改派单；需要继续动手时，说明需要在队列里重开这一单",
           "- 不要用任何 Markdown：不用粗体星号、不用井号标题、不用三反引号，行首不加列表符号",
           "- 不要提内部文件名和路径（以 .capitalist/ 开头的那种），也不要提任务列表、分片、收工条件、闸门判据、阻塞编号这类内部词",
@@ -408,6 +411,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         "- 陈述语气：写明对象与结果。不用第二人称“你”，不用“已记这一单，没打断它”这类口语化说法，",
         "  不拟人、不承诺、不陈述自身工作。",
         "- 只依据上面的状态回答；状态里没有的信息就回答“不知道”，不编造",
+        "- 会话归属：每轮对话由监工单独启动一个进程，与 WorkBuddy 窗口的对话互不共享上下文。",
+        "  被问是否与 WorkBuddy 窗口共用会话时，答不是，并说明这是监工的对话；运行环境中的 WorkBuddy 变量继承自启动方，不代表同一会话。",
+        "  用户没问就不主动提。",
         "- 心跳流水（supervisor_tick）不作为状态来源；用户问“为什么没动 / 卡在哪 / 是不是坏了”时，",
         "  读台账和日志查明，属对话层职责——直接查比派单更快且更准。",
         "- 但“对谁做”必须落到具体对象：以用户所指的那个东西为准（哪个、哪一处），不按类别推断。",
@@ -458,7 +464,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ? liveSession || workerSessionId(String(me.stage ?? ""), String(me.shard ?? ""))
         : /*
            * 监工会话（capitalist-chat 系）：每一轮进来先过单轮注入上限。会话记录超限时
-           * 换代到 `capitalist-chat-c<gen>`，不让历史与历史轮次的工具输出无限累积重发
+           * 换代到 `capitalist-chat-w<ws>-c<gen>`，不让历史与历史轮次的工具输出无限累积重发
            * （reload.ts 的 supervisorChatTurnSessionId；换代会落 context_compacted 事件）。
            */
           supervisorChatTurnSessionId(ctx.opts.root);

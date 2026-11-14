@@ -270,7 +270,7 @@ export const COMMAND_HELP: Record<string, string> = {
     每片的最后状态与未完成条目、用户未处理的插话、未裁决提问、重派计数
   - 压缩成 .capitalist/reload/context.md：移除心跳 / 重复 tick / 已完成条目详情 / 一次性调试输出；
     保留需求原文、未完成项、决策结论、待复验清单
-  - 切换监工对话会话（capitalist-chat-r<gen>），原会话中的工具输出不再读取
+  - 切换监工对话会话（capitalist-chat-w<ws>-r<gen>），原会话中的工具输出不再读取
   - 写 .capitalist/reload/resume.json：done_verified 不重派；done_unverified（已做但未验证）
     由监工下一 tick 派 source=reverify 的复验单，不按完成处理
   - 重载期间看板监工面板显示“监工重载中”，结束后隐藏（.capitalist/reload/active.json）

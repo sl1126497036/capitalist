@@ -110,7 +110,7 @@ test("严重异常摘要：最多 max 条，取最近的", () => {
   assert.ok(lines[4].includes("D-11"));
 });
 
-test("单轮注入上限：没有宿主会话记录时沿用当前会话 id", () => {
+test("单轮注入上限：没有会话记录时为本工作区新建会话", () => {
   const root = sandbox();
   recordEvent(root, "supervisor_tick", { n: 1 });
   const prevProfile = process.env.USERPROFILE;
@@ -118,7 +118,7 @@ test("单轮注入上限：没有宿主会话记录时沿用当前会话 id", ()
   process.env.USERPROFILE = root;
   process.env.HOME = root;
   try {
-    assert.strictEqual(supervisorChatTurnSessionId(root), "capitalist-chat");
+    assert.match(supervisorChatTurnSessionId(root), /^capitalist-chat-w[0-9a-f]{8}$/);
   } finally {
     if (prevProfile === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = prevProfile;

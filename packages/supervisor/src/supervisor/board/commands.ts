@@ -2,14 +2,14 @@
 import { archiveFinished, listWorkers, loadWorker, loadSupervisor, readDispatches, setWorkerModel, wakeDispatch, workerModelPath } from "../../core/record/supervisor";
 import { isWorkerRef, promoteTask, stopWorker } from "../../core/dispatch/commands";
 import { loadState, updateState } from "../../core/record/state";
-import { writeJson, readJson } from "../../core/record/json";
+import { readJson } from "../../core/record/json";
 import { recordEvent } from "../../core/record/ledger";
 import type { ShotRef } from "../../core/message/messages";
 import { unlinkSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import { resolveModel } from "../judge/modelPolicy";
-import { sessionPath } from "../context/reload";
+import { rotateChatSession } from "../context/reload";
 import { laneBaseId } from "../judge/sessionLane";
 import { cBad, cId, cStr, type CommandResult } from "./cmdArgs";
 import { clearPause, quoteDispatchLabel, reopenDispatch, resolveQuoteText, runCli, sayArgsOf, setPause, shardOfThread, workerOfThread, writeQuotedDirect } from "./cmdQuote";
@@ -647,15 +647,8 @@ export function runCommand(root: string, raw: unknown): CommandResult {
       }
       let sessionId = "";
       try {
-        const prev = readJson<{ gen?: number } | null>(sessionPath(root), null);
-        const gen = Math.max(0, Number(prev?.gen ?? 0)) + 1;
-        sessionId = `capitalist-chat-c${gen}`;
-        writeJson(sessionPath(root), {
-          gen,
-          session_id: sessionId,
-          at: new Date().toISOString(),
-          brief_chars: 0,
-        });
+        /* 换会话与本工作区换代共用 rotateChatSession，会话 id 构造口径只有一份。 */
+        sessionId = rotateChatSession(root, "gen", 0).session_id;
       } catch {
         /** 换会话失败不让清空列表本身失败。 */
       }
