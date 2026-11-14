@@ -7,7 +7,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { buildThreadMessages } = require(join(PKG, "dist/supervisor/board.js"));
+const { buildThreadMessages } = require(join(PKG, "dist/supervisor/board"));
 const { appendDirective, listDirectives } = require(join(PKG, "dist/core/commands.js"));
 const { appendDispatch, readDispatches } = require(join(PKG, "dist/core/supervisor.js"));
 const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));

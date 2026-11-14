@@ -17,10 +17,12 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import { LEGACY_ACCEPTANCE_DIR } from "../agent/impl/shared/hostHints";
+import { errText, sleep } from "../core/text";
 import { byId } from "../agent/registry";
 import { rotationCandidates } from "../agent/modelCatalog";
 
 import { runCheck } from "../core/checks";
+import { clearBoardModuleCache } from "./boardCache";
 import { askModel, AUTH_REQUIRED_TEXT, isQuotaText, looksLikeAuth, looksLikeQuota, QUOTA_EXHAUSTED_TEXT } from "./llm";
 import {
   activeTakeover,
@@ -1028,11 +1030,6 @@ interface DispatchEx extends Dispatch {
  */
 type ServeFn = (opts: ServeOptions) => Promise<Served>;
 
-/** 提取异常消息；非 Error 也能读成文本。 */
-function errText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 /**
  * 取一个正毫秒值：显式参数 > 环境变量 > 缺省值。
  * 非有限值或非正数一律视为未提供并回落，0 与 NaN 不作有效值（会关闭重启节流）。
@@ -1084,30 +1081,6 @@ function boardBuildStamp(): { stamp: string; files: number } | null {
     }
   }
   return { stamp: `${files}:${sum}`, files };
-}
-
-/**
- * 清掉看板产物的模块缓存，否则 `require("./board")` 仍取回启动时的旧模块。
- * 范围是 board 依赖树里位于 `dist/supervisor` 下的模块（含 `board.js` 及其分片），
- * 不含 `dist/core`（其共享可变状态清除后会使 loop 与 board 各持一份实例），也不含 `loop.js` 自身。
- * `dist/core` 的更新须靠完整重启。
- */
-function clearBoardModuleCache(): void {
-  const supervisorDir = __dirname;
-  const targets = new Set<string>();
-  const walk = (id: string): void => {
-    if (targets.has(id)) return;
-    targets.add(id);
-    const m = require.cache[id];
-    if (m) for (const c of m.children) walk(c.id);
-  };
-  walk(join(supervisorDir, "board.js"));
-  for (const id of targets) {
-    /* 不清 loop.js 自身，避免两套调度并存。 */
-    if (id === __filename) continue;
-    if (!id.startsWith(supervisorDir)) continue;
-    delete require.cache[id];
-  }
 }
 
 /**
@@ -1436,7 +1409,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
    * 预检在关旧服务之前，挡住无法运行的新产物。
    */
   const loadBoardModule = async (): Promise<{ ok: true; serve: ServeFn } | { ok: false; message: string }> => {
-    clearBoardModuleCache();
+    clearBoardModuleCache(__dirname, __filename);
     try {
       const mod = (await import("./board")) as { serveBoard?: ServeFn };
       if (typeof mod.serveBoard !== "function") return { ok: false, message: "board 模块没有导出 serveBoard" };
@@ -6513,10 +6486,6 @@ async function reviewLooping(args: {
   const saysProgress = /推进|progress|正常/i.test(t);
   if (saysLoop && !saysProgress) return { kill: true, why: t.slice(0, 120), reviewed: true };
   return { kill: false, why: t.slice(0, 120) || "(模型没说清楚)", reviewed: true };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

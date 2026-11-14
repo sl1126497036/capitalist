@@ -7,7 +7,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const board = require(join(PKG, "dist/supervisor/board.js"));
+const board = require(join(PKG, "dist/supervisor/board"));
 const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));
 const { supervisorDir } = require(join(PKG, "dist/core/paths.js"));
 

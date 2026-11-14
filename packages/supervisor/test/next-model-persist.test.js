@@ -7,7 +7,7 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const { readNextModel } = require(join(PKG, "dist/supervisor/loop.js"));
-const board = require(join(PKG, "dist/supervisor/board.js"));
+const board = require(join(PKG, "dist/supervisor/board"));
 const { createTaskRoot } = require(join(PKG, "dist/core/init.js"));
 
 function sandbox() {

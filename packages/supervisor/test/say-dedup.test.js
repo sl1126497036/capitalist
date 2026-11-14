@@ -7,7 +7,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { serveBoard } = require(join(PKG, "dist/supervisor/board.js"));
+const { serveBoard } = require(join(PKG, "dist/supervisor/board"));
 const { recordEvent } = require(join(PKG, "dist/core/ledger.js"));
 
 const TEXT = "这条消息只该出现一次";

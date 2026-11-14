@@ -17,7 +17,7 @@ const {
 const { loadContract } = require(join(PKG, "dist/core/contract.js"));
 const { zhEvent } = require(join(PKG, "dist/supervisor/terms.js"));
 const { supervisorActivityOf } = require(join(PKG, "dist/supervisor/activity.js"));
-const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board.js"));
+const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-compact-"));

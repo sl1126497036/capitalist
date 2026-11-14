@@ -18,7 +18,7 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const { recordUserMessage } = require(join(PKG, "dist/core/messages.js"));
-const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board.js"));
+const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 const { severeSupervisorEventLines, supervisorChatTurnSessionId } = require(join(PKG, "dist/supervisor/reload.js"));
 const { eventsPath, recordEvent } = require(join(PKG, "dist/core/ledger.js"));
 const { readJsonl } = require(join(PKG, "dist/core/json.js"));

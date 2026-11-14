@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import { readJson } from "../core/json";
 import { supervisorDir } from "../core/paths";
+import { clipLine } from "../core/text";
 import { dispatchForest, listWorkers, parentOf, pendingPrerequisites, readDispatches, type Dispatch } from "../core/supervisor";
 import { workerUsage } from "./usage";
 import { shardTitle, summarizeTitle } from "./taskTitle";
@@ -135,11 +136,6 @@ export interface ForestView {
 
 const MAX_REASON = 120;
 
-function clip(text: string, max = MAX_REASON): string {
-  const s = String(text ?? "").replace(/\s+/g, " ").trim();
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
-}
-
 /** 派单标题口径与 board.ts 的 `dispatchTitle` 一致：依次取 title、分片短名、正文摘要，不回落到分片 id。 */
 function ledgerTitle(d: Dispatch): string {
   const v = (d as unknown as Record<string, unknown>).title;
@@ -151,13 +147,13 @@ function ledgerTitle(d: Dispatch): string {
 /** 失败原因摘要：优先取复盘理由，其次取台账备注。 */
 function failureReason(d: Dispatch): string {
   const r = (d as unknown as Record<string, unknown>).retry_why;
-  if (typeof r === "string" && r.trim()) return clip(r);
-  return clip(String(d.note ?? ""));
+  if (typeof r === "string" && r.trim()) return clipLine(r, MAX_REASON);
+  return clipLine(String(d.note ?? ""), MAX_REASON);
 }
 
 /** 结项原因：取台账备注，缺失时按状态给默认说明。 */
 function closeReason(d: Dispatch): string {
-  const note = clip(String(d.note ?? ""));
+  const note = clipLine(String(d.note ?? ""), MAX_REASON);
   if (note) return note;
   return String(d.status ?? "") === "superseded" ? "阶段已推进，本单的验收口径不再适用" : "";
 }

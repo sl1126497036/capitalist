@@ -24,6 +24,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { clipText, sleep } from "../core/text";
 
 import { dirs } from "../agent/registry";
 import { hhmmOf } from "../core/clock";
@@ -400,11 +401,6 @@ function fileChars(file: string): number {
 }
 
 /** 截断到 n 字符，超出以省略号收尾。 */
-function clip(text: string, n: number): string {
-  const s = String(text ?? "");
-  return s.length > n ? `${s.slice(0, n)}…` : s;
-}
-
 /** 单行化：快照里的 title / why 要能进表格，不携带换行。 */
 function oneLine(text: string): string {
   return String(text ?? "").replace(/\s+/g, " ").trim();
@@ -745,7 +741,7 @@ function classifyItem(
     status: String(d.status ?? ""),
     attempt: Number(d.attempt ?? 1),
     at: String(d.at ?? ""),
-    note: clip(oneLine(String(d.review_note ?? d.note ?? "")), 160),
+    note: clipText(oneLine(String(d.review_note ?? d.note ?? "")), 160),
     reverify: d.source === "reverify",
   }));
 
@@ -758,7 +754,7 @@ function classifyItem(
     stage,
     shard,
     title: oneLine(title || (last as (Dispatch & { title?: string }) | undefined)?.title || shard || stage),
-    action: clip(String(action || last?.action || ""), 4000),
+    action: clipText(String(action || last?.action || ""), 4000),
     retries,
     failures,
     in_contract: inContract,
@@ -892,7 +888,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   if (unfinished.length === 0) L.push("(无)");
   for (const i of unfinished) {
     const fail = i.failures > 0 ? `｜连续失败 ${i.failures} 次` : "";
-    L.push(`- [${i.state}] ${i.stage}/${i.shard || "-"} ${i.title}：${clip(i.why, 120)}${fail}｜阶段原要求（历史）：${clip(oneLine(i.action), 300)}`);
+    L.push(`- [${i.state}] ${i.stage}/${i.shard || "-"} ${i.title}：${clipText(i.why, 120)}${fail}｜阶段原要求（历史）：${clipText(oneLine(i.action), 300)}`);
   }
   L.push("");
 
@@ -908,7 +904,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   const done = snap.items.filter((i) => i.state === "done_verified");
   L.push("## 已完成（不重派；只留标题与依据）");
   if (done.length === 0) L.push("(无)");
-  for (const i of done) L.push(`- ${i.stage}/${i.shard || "-"} ${i.title}（${clip(i.why, 100)}）`);
+  for (const i of done) L.push(`- ${i.stage}/${i.shard || "-"} ${i.title}（${clipText(i.why, 100)}）`);
   L.push("");
 
   L.push("## 用户未处理的插话（原话，按它执行）");
@@ -1007,7 +1003,7 @@ function reverifyAction(item: ResumeReverifyItem): string {
     `上一轮已报完成，但没有可核对的确认（${item.why}），不能直接当完成。`,
     "做三件事：1) 按下面的原要求逐条核对是否真的做到；2) 每条给出证据（命令输出、文件与行号、截图路径），结论用 capitalist ledger add 入账；",
     "3) 成立就在回报里写“已验证”，不重写已经通过的实现，不动别的分片的文件；不成立就说清缺哪条。",
-    `原要求：${clip(oneLine(item.action), 1200)}`,
+    `原要求：${clipText(oneLine(item.action), 1200)}`,
   ].join("\n");
 }
 
@@ -1084,7 +1080,7 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
       at: new Date().toISOString(),
       stage: item.stage,
       shard: item.shard,
-      title: `复验 · ${clip(item.title, 40)}`,
+      title: `复验 · ${clipText(item.title, 40)}`,
       action: reverifyAction(item),
       status: "open",
       source: "reverify",
@@ -1780,12 +1776,6 @@ function writeMarker(root: string, gen: number, phase: string, startedAt: string
     trigger,
   };
   writeJson(activePath(root), marker);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 /** `capitalist reload` 的入参。 */

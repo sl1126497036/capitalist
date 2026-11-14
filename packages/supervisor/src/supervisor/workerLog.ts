@@ -4,6 +4,8 @@
  * 判定顺序：`LOG_KEEP` 优先；stream 模式只认 JSON 事件，其余按宿主诊断过滤；纯文本模式按 `LOG_NOISE` 过滤。模式由日志内容判定，不依赖配置，使同一份日志在两处判定一致。
  */
 
+import { clipText } from "../core/text";
+
 /**
  * 工作进程当前动作的枚举，仅取日志可直接读出的 reply / command / waiting；界面按它出状态词。
  *
@@ -218,8 +220,8 @@ export function toolArgBrief(toolName: string, input: unknown): string {
     const flat = cmd.split(String.fromCharCode(10)).join(" ").replace(/[ ]+/g, " ").trim();
     /* 描述文字优先于命令原文。 */
     const described = inputDescription(o);
-    if (described !== "") return clip(described, 72);
-    if (!SHELL_TOOL.test(toolName.toLowerCase())) return clip(flat, 72);
+    if (described !== "") return clipText(described, 72);
+    if (!SHELL_TOOL.test(toolName.toLowerCase())) return clipText(flat, 72);
     /* 命令含源码或文档路径时，摘要直接给出该路径。 */
     const fileHit = flat.match(/[A-Za-z0-9_./-]+\.(?:md|ts|tsx|js|mjs|cjs|json|html|css|yml|yaml|txt)/);
     const bare = flat.replace(/^cd\s+\S+\s*&&\s*/, "").replace(/^cd\s+\S+\s*;\s*/, "");
@@ -230,24 +232,19 @@ export function toolArgBrief(toolName: string, input: unknown): string {
 
     /* 取首段有效命令，跳过 cd、变量准备与等待段并剥离 timeout；整条仅等待时显示“等待”。 */
     const { intent, waiting } = summarizeCommand(flat);
-    if (intent !== "") return `执行 ${clip(intent, 32)}`;
+    if (intent !== "") return `执行 ${clipText(intent, 32)}`;
     return waiting ? "等待" : "执行命令";
   }
   const pattern = o.pattern;
-  if (typeof pattern === "string" && pattern !== "") return `搜索 ${clip(pattern, 48)}`;
+  if (typeof pattern === "string" && pattern !== "") return `搜索 ${clipText(pattern, 48)}`;
   const url = o.url;
-  if (typeof url === "string" && url !== "") return `联网 ${clip(url, 60)}`;
+  if (typeof url === "string" && url !== "") return `联网 ${clipText(url, 60)}`;
   const query = o.query;
-  if (typeof query === "string" && query !== "") return `检索 ${clip(query, 48)}`;
-  return verb || clip(JSON.stringify(input), 60);
+  if (typeof query === "string" && query !== "") return `检索 ${clipText(query, 48)}`;
+  return verb || clipText(JSON.stringify(input), 60);
 }
 
 /** 截断长文本并标明截断。 */
-function clip(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return `${text.slice(0, max)}…`;
-}
-
 /** 仅命令类与外部类工具映射为动作；本地读写工具返回 null，界面按无法判定处理。 */
 function toolAction(name: string, input: unknown): WorkerAction | null {
   const n = String(name || "").trim();

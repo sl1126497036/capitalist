@@ -18,7 +18,7 @@ const {
 } = require(join(PKG, "dist/supervisor/chatSettle.js"));
 const { eventsPath } = require(join(PKG, "dist/core/ledger.js"));
 const { recordUserMessage } = require(join(PKG, "dist/core/messages.js"));
-const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board.js"));
+const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 const { readJsonl } = require(join(PKG, "dist/core/json.js"));
 
 function sandbox(name = "capitalist-chat-settle-") {

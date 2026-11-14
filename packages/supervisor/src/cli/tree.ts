@@ -1,6 +1,7 @@
 
 import { dependenciesSettled, dispatchForest, dispatchPaused, openQueue, parentOf, pausedDispatches, readDispatches, type Dispatch } from "../core/supervisor";
 import { findRoot } from "../core/paths";
+import { clipLine } from "../core/text";
 import { buildForestView } from "../supervisor/forestView";
 import { applyRebuild, planRebuild } from "../core/rebuildTree";
 import { flagBool, flagString, type Parsed } from "./args";
@@ -21,11 +22,6 @@ const STATE_MARK: Record<string, string> = {
   failed: "败",
   closed: "关",
 };
-
-function clip(s: string, n: number): string {
-  const t = String(s ?? "").replace(/\s+/g, " ").trim();
-  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
-}
 
 /**
  * 打印森林。数据取 `buildForestView`（与界面同一份），不在这里另算一遍，
@@ -60,7 +56,7 @@ function listTrees(root: string, all = false): number {
       const indent = "  ".repeat(n.depth + 1);
       const stuck = n.stuckOn ? `  ← 等 ${n.stuckOn}` : "";
       const block = n.blocked && n.blockedBy !== n.id ? `  [断在 ${n.blockedBy}]` : "";
-      process.stdout.write(`${indent}[${mark}] ${n.id} ${clip(n.title, 34)}${stuck}${block}\n`);
+      process.stdout.write(`${indent}[${mark}] ${n.id} ${clipLine(n.title, 34)}${stuck}${block}\n`);
     }
   }
   if (done > 0 && !all) {
@@ -82,7 +78,7 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
 
   for (const g of plan.groups) {
     const flag = g.settledBy ? `已完成于 ${g.settledBy}` : `未完成 -> 代表 ${g.representative}`;
-    process.stdout.write(`· ${clip(g.label, 38)}  [${g.members.length} 条] ${flag}\n`);
+    process.stdout.write(`· ${clipLine(g.label, 38)}  [${g.members.length} 条] ${flag}\n`);
   }
   process.stdout.write("\n");
 
@@ -91,7 +87,7 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
     if (it.action === "keep" || !it.pending) continue;
     const verb = it.action === "close" ? "关" : "开";
     const parent = it.parent ? `  -> 父 ${it.parent}` : "";
-    process.stdout.write(`  ${verb} ${it.id}  ${clip(it.title, 30)}  ${clip(it.reason, 44)}${parent}\n`);
+    process.stdout.write(`  ${verb} ${it.id}  ${clipLine(it.title, 30)}  ${clipLine(it.reason, 44)}${parent}\n`);
   }
 
   if (plan.edges.length > 0) {
@@ -99,7 +95,7 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
     if (landed.length > 0) {
       process.stdout.write("\n树边：\n");
       for (const e of landed) {
-        process.stdout.write(`  ${e.child} ← ${e.parent}   ${clip(e.why, 60)}\n`);
+        process.stdout.write(`  ${e.child} ← ${e.parent}   ${clipLine(e.why, 60)}\n`);
       }
     }
   }
@@ -141,7 +137,7 @@ export function cmdTree(p: Parsed): number {
     } else {
       for (const d of q) {
         const why = parentOf(d) ? `父 ${parentOf(d)}` : "根";
-        process.stdout.write(`${String(d.id)}  [${why}]  ${clip(String(d.action ?? ""), 40)}\n`);
+        process.stdout.write(`${String(d.id)}  [${why}]  ${clipLine(String(d.action ?? ""), 40)}\n`);
       }
     }
     const paused = pausedDispatches(root).length;
