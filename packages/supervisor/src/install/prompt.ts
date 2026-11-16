@@ -12,6 +12,7 @@ import { createInterface } from "node:readline/promises";
 
 import type { HostId } from "../agent/contract";
 import { all, normalize } from "../agent/registry";
+import { VERSION } from "../cli/help";
 import { hostInstalled } from "./install";
 
 /** 大号标识。只在交互安装 / 卸载时打印，管道与 CI 的输出里不出现。 */
@@ -116,21 +117,18 @@ export async function pickAgents(opts: {
   root: string;
 }): Promise<HostId[] | null> {
   const verb = opts.action === "install" ? "安装" : "卸载";
-  const lines: string[] = [
-    "",
-    BANNER,
-    "",
-    `  选择要${verb}的 agent（可多选，编号以空格分隔）`,
-    "",
-  ];
-  /* 标签按最大宽度补齐，使已安装标记对齐为一列。 */
+  /* 缩进统一两格：标题、版本行、选项、输入提示同基准。 */
+  const lines: string[] = ["", BANNER, ""];
+  if (VERSION) lines.push(`  capitalist ${VERSION}`);
+  lines.push("", `  选择要${verb}的 agent（可多选，编号以空格分隔）`, "");
+  /* 标签按最大宽度加 2 补齐，最短与最长标签同标记至少隔 4 个空格，标记列保持对齐。 */
   const labelWidth = Math.max(...AGENT_GROUPS.map((group) => group.label.length));
   AGENT_GROUPS.forEach((group, index) => {
     const mark = groupInstalled(group, opts.root) ? "✓ 已安装" : "";
-    lines.push(`    ${index + 1}) ${group.label.padEnd(labelWidth, " ")}  ${mark}`.trimEnd());
+    lines.push(`  ${index + 1}) ${group.label.padEnd(labelWidth + 2, " ")}  ${mark}`.trimEnd());
   });
-  lines.push(`    ${AGENT_GROUPS.length + 1}) 全部${verb}`);
-  lines.push("    0) 取消");
+  lines.push(`  ${AGENT_GROUPS.length + 1}) 全部${verb}`);
+  lines.push("  0) 取消");
   lines.push("");
   process.stdout.write(`${lines.join("\n")}\n`);
 

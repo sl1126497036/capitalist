@@ -1,16 +1,21 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { splitMessageRefs } from "../../lib/msgRefs.js";
+import { parseMarkdown } from "../../lib/markdown.js";
 import { t } from "../../lib/i18n.js";
+import MdBlocks from "./MdBlocks.js";
 
 const props = defineProps({
   text: { type: String, default: "" },
   /** Map<原始编号, { no, threadId, title, status, stage, dispatch, worker }> */
   refs: { type: Map, default: () => new Map() },
+  /** 是否按受控 Markdown 渲染；结构化事件正文保持纯文本。 */
+  md: { type: Boolean, default: false },
 });
 const emit = defineEmits(["pick"]);
 
 const segs = computed(() => splitMessageRefs(props.text));
+const blocks = computed(() => (props.md ? parseMarkdown(props.text) : []));
 
 function entry(raw) {
   const m = props.refs;

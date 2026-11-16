@@ -1501,7 +1501,6 @@
   color: var(--t4);
   /* 派单与裁决按条换行，正文保留原始换行。 */
   white-space: pre-wrap;
-  white-space: pre-wrap;
   word-break: break-word;
 
   overflow-wrap: anywhere;

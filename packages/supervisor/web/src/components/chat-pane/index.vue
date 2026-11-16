@@ -2587,6 +2587,13 @@ const truncNote = computed(() => {
 
 const bubblePlacement = (c) => (c === "user" || c === "human" ? "end" : "start");
 const isBlock = (v) => v.c === "sys" || v.c === "think" || (v.fold && v.c === "worker");
+/*
+ * 正文是否按 Markdown 渲染。
+ *
+ * 自然语言正文（用户、监工、工作进程输出、思考过程）按 Markdown 渲染；引擎诊断与工具调用摘要
+ * 是程序拼装的状态快照，缩进与符号有意义，按纯文本显示。
+ */
+const mdOf = (v) => Boolean(v) && v.c !== "engine" && v.c !== "tool";
 const blockText = (v) => String((v && v.m && v.m.text) ?? "");
 const blockTag = (v) => {
   /* 申报单独成标签，不归入监工消息。 */

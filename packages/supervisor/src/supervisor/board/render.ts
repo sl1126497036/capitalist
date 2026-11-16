@@ -59,9 +59,10 @@ export function toolSummary(e: Record<string, unknown>): { text: string; cmd: st
   return { text: short ? `${verb} ${short}` : verb, cmd };
 }
 
+/** 纯数字 id 是宿主直接拿进程号当 worker 标识，显示加 `p` 前缀；`#` 只留给任务编号。 */
 export function workerLabel(id: string): string {
   const s = String(id ?? "").trim();
-  return /^\d+$/.test(s) ? `#${s}` : s;
+  return /^\d+$/.test(s) ? `p${s}` : s;
 }
 
 export function targetFromText(root: string, text: string): string {

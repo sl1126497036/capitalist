@@ -463,7 +463,7 @@
               <div v-if="rdupOpen[v.ref]" class="rdupwrap">
                 <div v-for="it in v.items" :key="it.ref" class="rduprow">
                   <span class="rdtime">{{ stamp(it.at) }}</span>
-                  <span class="rdtext"><MsgText :text="it.text" :refs="refIndex" @pick="emit('pick', $event)"/></span>
+                  <div class="rdtext"><MsgText :text="it.text" :refs="refIndex" md @pick="emit('pick', $event)"/></div>
                 </div>
               </div>
             </div>
@@ -537,7 +537,7 @@
                   </span>
                   </button>
                   <div v-if="thinkOpen[v.ref]" class="btxt thinkbody">
-                    <MsgText :text="blockText(v)" :refs="refIndex" @pick="emit('pick', $event)"/>
+                    <MsgText :text="blockText(v)" :refs="refIndex" md @pick="emit('pick', $event)"/>
                   </div>
                 </div>
               </template>
@@ -559,7 +559,7 @@
               <template v-else>
                 <div v-if="foldedOf(v)" class="bpeek">{{ blockParts(v.m).sum }}</div>
                 <div v-else class="btxt" :class="{ clamp: v.fold && !v.full }">
-                  <MsgText :text="blockText(v)" :refs="refIndex" @pick="emit('pick', $event)"/>
+                  <MsgText :text="blockText(v)" :refs="refIndex" :md="mdOf(v)" @pick="emit('pick', $event)"/>
                 </div>
                 <div v-if="v.fold && !foldedOf(v)" class="bfoot">
                   <span>{{ blockParts(v.m).meta }}</span>
@@ -617,7 +617,7 @@
                     </button>
                   </div>
                   <div v-if="content" class="ctxt">
-                    <MsgText :text="content" :refs="refIndex" @pick="emit('pick', $event)"/>
+                    <MsgText :text="content" :refs="refIndex" :md="mdOf(v)" @pick="emit('pick', $event)"/>
                   </div>
                   <div class="bmeta">
                     <button

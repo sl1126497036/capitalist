@@ -3,46 +3,24 @@
 }
 
 /*
- * 引用标记的文字色与底色跟随所在气泡（currentColor 低透明度），
- * 使深色与浅色气泡下都保持对比度，无需为主题分别定义。
+ * Markdown 正文自带块级换行与间距，关闭外层的 pre-wrap：
+ * 否则段落缩进与行距叠加，降低长日志的可读性。
+ *
+ * 正文内部的 .md-* 规则放在全局样式（styles/app.css）：这些节点由渲染函数生成，
+ * 不带组件的 scopeId，写在 scoped 样式里匹配不到。
  */
-.mref {
-  display: inline;
-  margin: 0 1px;
-  padding: 0 var(--s4);
-  border: 1px solid currentColor;
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, currentColor 14%, transparent);
-  color: inherit;
-  font-family: var(--num);
-  font-size: 0.94em;
-  line-height: 1.5;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.mref:hover {
-  color: var(--t1);
-  border-color: var(--accent);
-}
-.mref:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.mtx.md {
+  display: block;
+  white-space: normal;
 }
 
-/* 技能色块：与单号引用同形，换用强调色区分。 */
-.mskill {
-  display: inline;
-  margin: 0 1px;
-  padding: 0 var(--s4);
-  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-  font-family: var(--num);
-  font-size: 0.94em;
-  line-height: 1.5;
-  white-space: nowrap;
-}
+/*
+ * 引用标记的文字色与底色跟随所在气泡（currentColor 低透明度），
+ * 使深色与浅色气泡下都保持对比度，无需为主题分别定义。
+ *
+ * .mref / .mskill 与 .md-* 同放全局样式：Markdown 分支里的按钮由渲染函数生成，
+ * 不带组件的 scopeId。
+ */
 
 .mrc {
   position: fixed;
