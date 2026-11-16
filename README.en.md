@@ -7,18 +7,22 @@
 [中文](README.md)
 </div>
 
-An AI automated multi-task scheduling plugin: each task keeps its own context and tasks can run concurrently, all coordinated by a supervisor process that maintains a separate in-process context and memory for every task while scheduling. Designed and tested by hand, coded with Deepseek-V4.1-Flash.
+An AI automated task scheduling plugin: long task flows are broken down automatically, multiple tasks are allocated, and similar tasks run as concurrent shards. Once a task is issued, a task tree is generated automatically, each task keeps its own context, and a supervisor process schedules everything, maintaining a separate context and memory per task. Designed, tested and reviewed by hand; coded with Deepseek-V4.1-Flash.
+
+The project is still in testing and not yet stable.
 
 ## What it does
 
 `capitalist` is a cross-agent AI plugin that automates AI process scheduling and helps the user verify task results.
 
+
 | Agent pain point | What this plugin does |
-|---|---|
-| Long tasks getting interrupted | The supervisor acts as the user: it adjudicates long tasks, lets work proceed, blocks violations, and reports on acceptance |
-| Long contexts getting polluted | Every work process holds its own pid, session and context, sharing nothing; `capitalist reload` writes a progress snapshot, compacts heartbeats and completed items, switches session and produces a resume plan |
-| Parallel work colliding | Parallel file operations are locked; for tasks with a contract, each `parallel` shard maps to one work process and changes are isolated per shard |
-| Instructions having to be repeated | The host hook injects the current stage, unmet items and the next action at prompt submission. No user intervention is needed |
+|----|---|
+| Long tasks getting interrupted | The supervisor plays the user: it breaks long tasks down, decides on its own, and lets tasks pass, blocks them, or reports for acceptance |
+| Long contexts getting polluted | Every work process is separate, each with its own session and context, sharing nothing |
+| Parallel work colliding | Parallel file operations are locked; for tasks with a contract, each shard maps to one work process and the change scope is isolated per shard |
+| Instructions having to be repeated | The host hook injects the current stage, unmet items and the next action at input submission. The supervisor generates and optimizes prompts automatically from the work content, with no user intervention needed |
+
 
 ## Install
 
@@ -34,6 +38,7 @@ For `--agent` values see the "Supported hosts" table. Installation items are wri
 `capitalist install` must be run once after `npm i -g`: only then are the hook and the manual written, and hosts do not load the plugin without it.
 
 Requirements: Node.js ≥ 18.17; macOS / Windows; the work-process host must offer a non-interactive entry point (`claude -p`, `codebuddy -p`).
+
 
 ### Install troubleshooting
 
@@ -51,6 +56,8 @@ Requirements: Node.js ≥ 18.17; macOS / Windows; the work-process host must off
 - Starting the supervisor requires `--detach`. The host moves a long command to the background and returns immediately; the credentials are read while that command runs, which is when the authorization prompt can be triggered. On macOS the user must grant authorization; without `--detach`, or without authorization, the host reports "chat channel unavailable".
 - WorkBuddy and CodeBuddy are installed together: the plugin runs in the WorkBuddy desktop app, work processes are carried by the CodeBuddy CLI, and the account credentials come from CodeBuddy.
 - WorkBuddy restricts file access to the credential directory (Settings → Security → File security). Failing to allow it can break chat and dispatch.
+
+
 
 ## Quick use from a host
 
@@ -80,12 +87,11 @@ You can: create a custom contract with frontend and backend as two `parallel` sh
 ### 2. Security tasks: batch dispatch and split by domain
 
 For security tasks a skill can drive vulnerability hunting across several sites in one dispatch, with the supervisor enforcing redlines and accepting results as the skill requires; alternatively, split by site and dispatch by subdomain once asset collection is done.
-
 You can split multiple sites into shards per site, split a single site into later-stage shards per subdomain, or dispatch several src hunting instructions in one go.
-
 ## Runtime panel
-
 ![Supervisor panel](board.png)
+
+
 
 ## Details
 
