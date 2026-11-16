@@ -149,7 +149,11 @@ const zombies = computed(() => {
   return Array.isArray(arr) ? arr.length : null;
 });
 
-/** 明细只列出本项目拉起过的进程，不含其它项目的 node 进程。 */
+/**
+ * 明细只列出本项目拉起过的进程，不含其它项目的 node 进程。
+ *
+ * 进程号前缀固定为 `p`：`#` 已被任务编号占用（`#07`、`#12`），避免混淆。
+ */
 const zombieTip = computed(() => {
   const arr = ov.value?.unreclaimed_detail;
   if (!Array.isArray(arr) || arr.length === 0) {
@@ -158,7 +162,7 @@ const zombieTip = computed(() => {
   return arr
     .map((x) => {
       const when = String(x.at ?? "").slice(0, 19).replace("T", " ");
-      return `#${x.pid} ${x.kind} ${x.id}\n   ${t("起于 {t}", { t: when || t("未知") })}\n   ${x.why}`;
+      return `p${x.pid} ${x.kind} ${x.id}\n   ${t("起于 {t}", { t: when || t("未知") })}\n   ${x.why}`;
     })
     .join("\n");
 });

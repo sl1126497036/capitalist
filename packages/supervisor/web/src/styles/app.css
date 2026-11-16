@@ -134,3 +134,141 @@ body {
   opacity: 1;
   transform: none;
 }
+
+/*
+ * 消息正文的 Markdown 排版。
+ *
+ * 放在全局样式而非组件 scoped 样式：这些节点由 msg-text 的渲染函数生成，不带组件的
+ * scopeId，scoped 选择器匹配不到。类名统一 md- 前缀，与组件内的 .mtx 根元素配合使用。
+ */
+
+/* 单号与技能色块：纯文本与 Markdown 两条渲染路径共用，颜色跟随所在气泡。 */
+.mref {
+  display: inline;
+  margin: 0 1px;
+  padding: 0 var(--s4);
+  border: 1px solid currentColor;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: inherit;
+  font-family: var(--num);
+  font-size: 0.94em;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mref:hover {
+  color: var(--t1);
+  border-color: var(--accent);
+}
+.mref:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.mskill {
+  display: inline;
+  margin: 0 1px;
+  padding: 0 var(--s4);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-family: var(--num);
+  font-size: 0.94em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.md-line {
+  white-space: pre-wrap;
+}
+
+.md-p + .md-p {
+  margin-top: var(--s6);
+}
+
+.md-h {
+  font-weight: 600;
+  color: var(--t1);
+  line-height: 1.4;
+}
+.md-h1,
+.md-h2 {
+  font-size: 1.06em;
+}
+.md-h + .md-p,
+.md-p + .md-h,
+.md-ul + .md-p,
+.md-p + .md-ul,
+.md-ol + .md-p,
+.md-p + .md-ol,
+.md-pre + .md-p,
+.md-p + .md-pre {
+  margin-top: var(--s6);
+}
+
+.md-ul,
+.md-ol {
+  margin: var(--s4) 0 0;
+  padding-left: 1.4em;
+}
+.md-ul li,
+.md-ol li {
+  margin-top: 2px;
+}
+.md-ul {
+  list-style: disc;
+}
+.md-ol {
+  list-style: decimal;
+}
+
+.md-quote {
+  margin: var(--s6) 0 0;
+  padding-left: var(--s8);
+  border-left: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  color: inherit;
+  opacity: 0.9;
+}
+
+.md-pre {
+  margin: var(--s6) 0 0;
+  padding: var(--s6) var(--s8);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: var(--r-row);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  overflow-x: auto;
+  font-family: var(--num);
+  font-size: var(--f-meta);
+  line-height: 1.5;
+  white-space: pre;
+}
+.md-pre code {
+  font: inherit;
+  color: inherit;
+}
+
+.md-hr {
+  margin: var(--s8) 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+
+/* 行内代码与正文同色系，不用强调色。 */
+.md-code {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-family: var(--num);
+  font-size: 0.94em;
+}
+
+.md-a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-a:hover {
+  color: var(--accent-2);
+}

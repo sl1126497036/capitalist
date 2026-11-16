@@ -1,17 +1,26 @@
-<span class="mtx">
-  <template v-for="(s, i) in segs" :key="i">
-    <button
-      v-if="s.type === 'ref' && entry(s.raw)"
-      class="mref"
-      type="button"
-      aria-haspopup="dialog"
-      :aria-expanded="card && card.raw === s.raw ? 'true' : 'false'"
-      :aria-label="t('查看任务 #{no}', { no: entry(s.raw).no })"
-      @click.stop="openRef($event, s.raw)"
-      >#{{ entry(s.raw).no }}</button
-    >
-    <span v-else-if="s.type === 'skill'" class="mskill" :title="s.raw">{{ s.name || "skill" }}</span>
-    <span v-else>{{ s.type === "ref" ? s.raw : s.text }}</span>
+<span class="mtx" :class="{ md }">
+  <MdBlocks
+    v-if="md"
+    :blocks="blocks"
+    :entry="entry"
+    :active-ref="card ? card.raw : ''"
+    :on-ref="openRef"
+  />
+  <template v-else>
+    <template v-for="(s, i) in segs" :key="i">
+      <button
+        v-if="s.type === 'ref' && entry(s.raw)"
+        class="mref"
+        type="button"
+        aria-haspopup="dialog"
+        :aria-expanded="card && card.raw === s.raw ? 'true' : 'false'"
+        :aria-label="t('查看任务 #{no}', { no: entry(s.raw).no })"
+        @click.stop="openRef($event, s.raw)"
+        >#{{ entry(s.raw).no }}</button
+      >
+      <span v-else-if="s.type === 'skill'" class="mskill" :title="s.raw">{{ s.name || "skill" }}</span>
+      <span v-else>{{ s.type === "ref" ? s.raw : s.text }}</span>
+    </template>
   </template>
 </span>
 

@@ -29,6 +29,7 @@ description: capitalist（监工进程）。监工是独立进程（capitalist s
 
 ## 2. 启动监工
 
+启动命令必须在系统node环境中执行，沙箱node存在权限问题
 ```bash
 # WorkBuddy 必须加 --detach，否则 codebuddy -p 无凭证权限会导致无法使用
 capitalist supervise "<目标>" --agent workbuddy --detach
