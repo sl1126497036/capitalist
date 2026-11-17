@@ -139,6 +139,8 @@ export interface ThreadMessage {
   event?: string;
   /** 附件路径只取本条记录写入时的值，缺失即无图，不回退到上一条或全局。 */
   atts?: string[];
+  /** 随带的技能名，气泡上按标签展示；缺失表示没选技能。 */
+  skills?: string[];
   /** id 必须与 buildThreadsPage 的线程 id 一致（阶段/分片，空分片用 main）。 */
   jump?: { id: string; label: string };
   /** 曝光层级由服务端按事件类型判定，前端不另判。 */

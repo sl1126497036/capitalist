@@ -77,6 +77,13 @@ export interface ForestNodeView {
   parent: string;
   /** 阻塞来源：等前置时为前置 id，断链时为断链祖先 id，否则空串。 */
   stuckOn: string;
+  /**
+   * 等待的前置单编号（如 `05`）。
+   *
+   * `stuckOn` 是台账 id（`D-…`），界面上写“等待 #D-…”既不像任务号也读不通；
+   * 编号表能查到就填这里，查不到留空串，由前端退回显示 id 本身。
+   */
+  stuckOnNo: string;
   /** 自身失败、处于环上或祖先失败时置真；运行中或待验收的节点不标记。 */
   blocked: boolean;
   /** 断链的祖先 id（含自己失败的情况）；未断链为空串。 */
@@ -212,6 +219,7 @@ function walkTree(
     const chain = breakAt || (ownBreak ? id : "");
     const blocked = Boolean(chain) && (ownBreak || state === "queued" || state === "waiting");
     const info = infoOf?.(d) ?? { model: "", started_at: "", ended_at: "" };
+    const waitingOn = !blocked && state === "waiting" ? stuckOf(d) : "";
     nodes.push({
       id,
       no: noOf?.(id) ?? "",
@@ -227,7 +235,8 @@ function walkTree(
       depth,
       parent: depth === 0 ? "" : parentOf(d),
       /* 失败节点自身的 `chain` 等于其 id，不写入 `stuckOn`，避免显示为自环。 */
-      stuckOn: blocked ? (chain === id ? "" : chain) : state === "waiting" ? stuckOf(d) : "",
+      stuckOn: blocked ? (chain === id ? "" : chain) : waitingOn,
+      stuckOnNo: waitingOn ? (noOf?.(waitingOn) ?? "") : "",
       blocked,
       blockedBy: blocked ? chain : "",
       inCycle: cycleSet.has(id),

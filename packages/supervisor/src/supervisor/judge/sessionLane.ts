@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { recordEvent } from "../../core/record/ledger";
+import { supervisorDir } from "../../core/record/paths";
 import { resolveContextWindow } from "../../core/guard/limits";
 import type { Dispatch, WorkerRecord } from "../../core/record/supervisor";
 import type { WorkerSession } from "../../agent/contract";
@@ -43,7 +44,7 @@ const CTX_FALLBACK_LIMIT = 180_000;
 const CTX_UNKNOWN_MAX_RESUME = 2;
 /** `.capitalist/sessions` 目录。 */
 export function sessionsDir(root: string): string {
-  return join(root, ".capitalist", "sessions");
+  return join(supervisorDir(root), "sessions");
 }
 
 function basePath(root: string, base: string): string {

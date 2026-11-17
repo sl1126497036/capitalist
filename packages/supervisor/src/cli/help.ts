@@ -63,7 +63,7 @@ const HELP_GROUPS: HelpGroup[] = [
     items: [
       {
         cmd: "start <目标>",
-        brief: ["创建或续用任务根。省略契约时回落到 minimal"],
+        brief: ["创建或续用任务根。省略契约时缺省 minimal"],
         opts: [
           { f: "--contract <名|路径>", d: ["契约名或路径"] },
           { f: "--root <目录>", d: ["任务根目录"] },
@@ -87,7 +87,7 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       {
         cmd: "adopt",
-        brief: ["为已有任务根更换契约，回落契约转为正式契约"],
+        brief: ["为已有任务根更换契约，此后按正式契约执行"],
         opts: [
           { f: "--contract <名|路径>", d: ["新契约"] },
           { f: "--keep-stage", d: ["保留当前阶段"] },
@@ -236,7 +236,7 @@ const HELP_GROUPS: HelpGroup[] = [
           { f: "--worker-model <模型>", d: ["工作进程使用的模型"] },
           {
             f: "--effort <档位>",
-            d: ["推理强度，缺省 high；只改思考深度，不改模型；", "非法值回落到 high 并在启动时输出说明"],
+            d: ["推理强度，缺省 high；只改思考深度，不改模型；", "非法值改用 high 并在启动时输出说明"],
           },
           {
             f: "--capitalist-model <模型>",

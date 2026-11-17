@@ -37,6 +37,7 @@ import {
   listDirectives,
   promoteTask,
   spliceDirectives,
+  splitDirectiveTag,
   takeoverShard,
 } from "../core/dispatch/commands";
 import {
@@ -81,6 +82,7 @@ import { createTaskRoot, enterStage } from "../core/contract/init";
 import { markChannelDown, markChannelUp, readChannelDown } from "../core/message/channel";
 import { appendJsonl, pruneTempFiles, readJson, readJsonl, writeJson, writeJsonl } from "../core/record/json";
 import { recordEvent, recordEventThrottled } from "../core/record/ledger";
+import { type PauseFile, pausePath, readPause } from "../core/record/pause";
 /* 文件写锁供调度查询占用，避免派单命中已被占用的文件。 */
 import { reap as reapFileLocks, releaseAll as releaseFileLocks, writeHolderOf } from "../core/record/fileLock";
 import { extractLocalPaths } from "../core/guard/localGuard";
@@ -138,6 +140,7 @@ import {
   prerequisitesOf,
   pruneWorkers,
   readDispatches,
+  requeueDispatch,
   saveSupervisor,
   saveWorker,
   stopRequested,
@@ -609,7 +612,7 @@ const FAILURE_RULES: Array<{ cause: FailureCause; re: RegExp; fixable: boolean; 
 function workerLogTail(root: string, worker: string, lines = 200): string {
   if (!worker) return "";
   try {
-    const raw = readFileSync(join(root, ".capitalist", "workers", `${worker}.log`), "utf8");
+    const raw = readFileSync(join(supervisorDir(root), "workers", `${worker}.log`), "utf8");
     /* 先剥纯思考行再截窗口：思考 JSON 单行很长，不过滤会占满窗口把 429 说明切掉。 */
     const clean = withoutThinking(raw.split(/\r?\n/).filter((l) => l.trim()));
     return clean.lines.slice(-lines).join("\n").slice(-24000);
@@ -930,7 +933,7 @@ async function judgeRetry(
   const wid = String(d.worker ?? "");
   if (wid) {
     try {
-      const raw = readFileSync(join(root, ".capitalist", "workers", `${wid}.log`), "utf8");
+      const raw = readFileSync(join(supervisorDir(root), "workers", `${wid}.log`), "utf8");
       /* 须先过滤全量思考 JSON 再取尾部：思考行单行很长，先取尾部会把真正的报错挤出字符预算。 */
       const clean = withoutThinking(raw.split(/\r?\n/).filter((l) => l.trim()));
       const tail = tailWithinChars(clean.lines, 1800);
@@ -1677,7 +1680,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
        * 轮次开头先判断用户是否已经关掉。这一轮后面要写心跳与状态，
        * 放在写入之后检查会把删掉的目录重新建出来。
        */
-      if (!existsSync(join(opts.root, ".capitalist", "supervisor.json"))) {
+      if (!existsSync(join(supervisorDir(opts.root), "supervisor.json"))) {
         out("[监工] 任务根已删除，退出");
         break;
       }
@@ -1942,7 +1945,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
           to: fb,
           reason: "阶段 id 在当前任务列表中不存在",
         });
-        out(`[监工] 当前阶段 ${state.stage} 不在新任务列表中，回落到首个未达标阶段 ${fb}`);
+        out(`[监工] 当前阶段 ${state.stage} 不在新任务列表中，改用首个未达标阶段 ${fb}`);
         updateState(opts.root, (s) => enterStage(s, stageById(contract, fb)!));
         supersedeStaleDispatches(opts.root, contract, fb, out);
       }
@@ -2027,17 +2030,6 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       // 模型启动失败回退会补开新派单，暂停期间一并停掉。
       if (!pause) handleModelFallback(opts.root, contract, chosenHost, wopts, out);
       /* 复验单须先入队，排在本 调度轮次 的 step 之前，使在途状态阻止阶段推进。 */
-      /* 契约文件被外部改动时按 mtime 留痕并播报。 */
-      if (!pause) {
-        const cc = noteContractChange(opts.root);
-        if (cc) {
-          out(
-            `[监工] 契约文件已更新（${cc.from.slice(0, 16).replace("T", " ")} -> ${cc.to.slice(0, 16).replace("T", " ")}` +
-              `${cc.gap_hours === null ? "" : `，间隔 ${cc.gap_hours} 小时`}），已按新内容重读`,
-          );
-          recordEvent(opts.root, "contract_changed", { from: cc.from, to: cc.to, gap_hours: cc.gap_hours });
-        }
-      }
       /* 契约文件被外部改动时按 mtime 留痕并播报。 */
       if (!pause) {
         const cc = noteContractChange(opts.root);
@@ -2314,7 +2306,7 @@ export async function handleStuckWorker(
     logStallSec: opts.stuckSec,
     nowMs,
   });
-  const logFile = w.log || join(root, ".capitalist", "workers", `${w.id}.log`);
+  const logFile = w.log || join(supervisorDir(root), "workers", `${w.id}.log`);
   /* 心跳与日志正常的原地重复进程无法靠静默判据发现，故日志新鲜时仍按节流探测重复度。 */
   const looped = opts.looped ?? (live.alive ? probeLooping(w, logFile, nowMs) : { looping: false, sample: "", times: 0, tail: [] });
 
@@ -2489,7 +2481,7 @@ export function refreshLaneUsage(root: string, dispatches: readonly Dispatch[]):
     const lane = laneOfWorker(w);
     if (!lane) continue;
     alive.add(w.id);
-    const log = w.log || join(root, ".capitalist", "workers", `${w.id}.log`);
+    const log = w.log || join(supervisorDir(root), "workers", `${w.id}.log`);
     const size = logBytes(log);
     if (size <= 0) continue;
     if (laneUsageSeen.get(w.id) === size) continue;
@@ -2546,7 +2538,7 @@ async function reap(
      */
     if (!gone) {
       /* 同步预判跳过健康且无卡点记录的进程，避免对每个健康进程 await 使 reap 提前让出执行权。 */
-      const logFile = w.log || join(root, ".capitalist", "workers", `${w.id}.log`);
+      const logFile = w.log || join(supervisorDir(root), "workers", `${w.id}.log`);
       const looped = stale || w.stuck ? undefined : probeLooping(w, logFile, Date.now());
       if (!stale && !w.stuck && !looped?.looping) continue;
 
@@ -3235,13 +3227,12 @@ async function applyOneDirective(
     const wantNow = Boolean(nowM);
     const argClean = nowM ? boundArg.text.slice(nowM[0].length).trim() : boundArg.text;
     /*
-     * 分类标签写在正文最前的方括号内，作为会话车道键：同类共用键以复用上下文，
-     * 无标签落 `misc` 车道。标签由派单时给出，非固定枚举。
+     * 分类标签写在正文最前的方括号内，作为会话键：同类共用一个键以复用上下文，
+     * 无标签归入 `misc`。标签由派单时给出，不是固定枚举。拆标签的规则统一在
+     * `splitDirectiveTag`，展示侧沿用同一份，避免界面把标签当正文一起显示。
      */
-    const tagM = /^\[([^\]\n]{1,24})\]\s*([\s\S]+)$/.exec(argClean);
-    const tag = tagM ? String(tagM[1]).trim() : "";
-    const body = tagM ? String(tagM[2]).trim() : argClean;
-    /* 暂停期间不派单，含插队单；拒绝并说明原因。 */
+    const { tag, body } = splitDirectiveTag(argClean);
+    /* 暂停期间不派单，插入执行的单也在内；拒绝并说明原因。 */
     if (readPause(root) !== null) {
       return reject(
         "监工处于暂停派单：这条不会执行。先恢复派单（看板指标条的“恢复调度”按钮，或 capitalist resume），再发一次。",
@@ -3415,6 +3406,11 @@ async function applyOneDirective(
       ...new Set([...(bound.msgId ? [bound.msgId] : []), ...taken.map((x) => String(x.msg_id ?? "")).filter(Boolean)]),
     ];
     const actionText = withAcceptance(root, spliceDirectives(body, taken));
+    /*
+     * 派单模型：面板设定的 next_model 优先，其次使用宿主默认档。
+     * 插入执行的单没有契约分片可以继承模型设定，不在这里确定就只能使用启动参数，面板上选择的模型会失效。
+     */
+    const adhocModel = defaultDispatchModel(root, undefined);
     const adhoc = {
       id,
       at: new Date().toISOString(),
@@ -3436,6 +3432,7 @@ async function applyOneDirective(
       ...(afterIds.length ? { after: afterIds } : {}),
       /* `parent` 与 `parent_reason` 一起落盘，缺理由时重启后无法判定该依赖是否为必需。 */
       ...(parentId ? { parent: parentId, parent_reason: parentWhy } : {}),
+      ...(adhocModel ? { model: adhocModel } : {}),
     } as Dispatch;
     adhoc.lineage = adhoc.lineage ?? adhoc.id;
     appendDispatch(root, adhoc);
@@ -3452,7 +3449,7 @@ async function applyOneDirective(
       action: actionText,
       source: "adhoc",
       attempt: 1,
-      model: "",
+      model: adhocModel ?? "",
       directives: taken.length,
       urgent: true,
       tag,
@@ -3609,8 +3606,11 @@ async function applyOneDirective(
     const shard = stageParallel(contract, state.stage).find((s) => s.id === arg);
     if (!shard) {
       const have = stageParallel(contract, state.stage).map((s) => s.id);
+      /* 参数是编号时多半想重开整单：直接指到 redo，免得再猜一次。 */
+      const asNo = /^\s*#?\s*(\d{1,4})\s*$/.exec(arg);
       return reject(
-        `本阶段（${state.stage}）没有分片“${arg}”。可用分片：${have.length ? have.join(" / ") : "（本阶段没有分片）"}`,
+        `本阶段（${state.stage}）没有分片“${arg}”。可用分片：${have.length ? have.join(" / ") : "（本阶段没有分片）"}`
+          + (asNo ? `；retry 只重跑分片，返工整单用 DO: redo #${asNo[1]}` : ""),
       );
     }
     const rows = readDispatches(root).filter((x) => x.stage === state.stage && (x.shard ?? "") === arg);
@@ -3621,6 +3621,47 @@ async function applyOneDirective(
     const attempt = shardRetry(rows).failures + 1;
     createOpenShardDispatch(root, contract, state, shard, wopts, out, attempt);
     return { ok: true, reason: "", detail: `已重派 ${state.stage}/${arg}（第 ${attempt} 次）` };
+  }
+
+  /*
+   * redo：把已经结束的一单重开，沿用原单 id、原编号与对应的会话。
+   *
+   * 与 dispatch 的差别是“同一件事返工”还是“新开一单”：dispatch 会占一个新编号、任务链上多一条，
+   * redo 复用原单，编号与会话都不变。上下文接近会话上限时应当用 dispatch，
+   * 让新单以新会话起步；否则重开会让上下文继续增长。
+   */
+  if (action === "redo") {
+    const m = /^\s*#?\s*(\d{1,4})\b/.exec(arg || "");
+    const rows = readDispatches(root);
+    const hit = m
+      ? /* 重开的目标通常是已结束的单，必须允许 done，否则会被“在途”过滤掉。 */
+        dispatchOfThreadNo(root, Number(m[1]), rows, { includeDone: true })
+      : (() => {
+          const want = String(d.target ?? "").trim();
+          return want ? rows.find((x) => String(x.id) === want) : undefined;
+        })();
+    if (!hit) {
+      return reject(
+        m ? `没有 #${m[1]} 这一单（编号看【任务编号表】）` : "redo 要写编号：`DO: redo #<编号>`",
+      );
+    }
+    const label = m ? `#${m[1]}` : String(hit.id).slice(-6);
+    if (hit.status === "open" || hit.status === "claimed") {
+      return reject(`${label} 还在执行（${hit.status}），不用重开；要改要求用 amend`);
+    }
+    const next = requeueDispatch(root, String(hit.id), "监工重开原单");
+    if (!next) return reject("重开失败：这一单的记录写入冲突");
+    recordEvent(root, "dispatch_reopened", {
+      dispatch: String(hit.id),
+      by: "supervisor-direct",
+      directive: d.id,
+    });
+    return {
+      ok: true,
+      reason: "",
+      detail: `已重开 ${label}：沿用原单与原会话，下一轮调度拉起`,
+      dispatch: String(hit.id),
+    };
   }
 
   if (action === "skip") {
@@ -4595,7 +4636,7 @@ function requeueAdhoc(root: string, state: TaskState, out: (s: string) => void):
  * 空文件、坏文件或空 model 返回空串，调用方回落契约与默认模型。
  */
 export function readNextModel(root: string): string {
-  const p = join(root, ".capitalist", "next_model.json");
+  const p = join(supervisorDir(root), "next_model.json");
   try {
     if (!existsSync(p)) return "";
     const j = readJson<{ model?: string }>(p, {});
@@ -5715,7 +5756,7 @@ function userAskedRecently(root: string, shardId: string): boolean {
   if (!shardId) return false;
   try {
     const rows = readJsonl<{ at?: string; shard?: string; text?: string }>(
-      join(root, ".capitalist", "direct.jsonl"),
+      join(supervisorDir(root), "direct.jsonl"),
     );
     const since = Date.now() - 30 * 60_000;
     return rows.some((r) => {
@@ -6170,7 +6211,7 @@ export function applyVerdict(args: {
     const w = d.worker ? loadWorker(root, d.worker) : null;
     const aliveNow = Boolean(w && w.pid > 0 && pidAlive(w.pid));
     if (aliveNow) {
-      writeJson(join(root, ".capitalist", "inbox", `reject-${d.id}.json`), {
+      writeJson(join(supervisorDir(root), "inbox", `reject-${d.id}.json`), {
         at: new Date().toISOString(),
         why: String(verdict.why ?? ""),
         by: "supervisor",
@@ -6201,28 +6242,8 @@ export function applyVerdict(args: {
 }
 
 
-/** `.capitalist/pause.json` 的内容：存在即处于暂停态，删除即恢复。 */
-export interface PauseFile {
-  at: string;
-  reason: string;
-  by?: string;
-}
-
-/** 暂停文件的绝对路径：`<root>/.capitalist/pause.json`。 */
-export function pausePath(root: string): string {
-  return join(supervisorDir(root), "pause.json");
-}
-
-/** 读暂停文件。文件缺失或损坏均视为未暂停。 */
-export function readPause(root: string): PauseFile | null {
-  const raw = readJson<Partial<PauseFile> | null>(pausePath(root), null);
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  return {
-    at: String(raw.at ?? ""),
-    reason: String(raw.reason ?? ""),
-    ...(raw.by === undefined ? {} : { by: String(raw.by) }),
-  };
-}
+/** 暂停标记的类型、路径与读取实现在 `core/record/pause.ts`，此处仅对外转发。 */
+export { type PauseFile, pausePath, readPause };
 
 
 /** 记一条欠账：可选项未达标但允许推进；写入 state 供 status 输出与终审清算。 */

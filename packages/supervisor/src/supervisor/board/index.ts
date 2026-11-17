@@ -11,16 +11,18 @@ import { ServerResponse, createServer, IncomingMessage } from "node:http";
 import { resolve, join } from "node:path";
 
 import { readJson, writeJson } from "../../core/record/json";
-import { pidAlive } from "../../core/record/fileLock";
+import { pidAlive } from "../../core/record/supervisor";
+import { supervisorDir } from "../../core/record/paths";
 import { SupervisorRecord, listWorkers, WorkerRecord, loadSupervisor } from "../../core/record/supervisor";
 import { reapOrphans } from "../worker/reapOrphans";
 import { parseWorkerLog } from "../worker/workerLog";
 import { handleCapitalistChat } from "./routes/chat";
 import { handleCommand, handleCapitalistCommand, handleConfirmDispatch } from "./routes/command";
 import { handleFsList, handleAttachments, handleUpload, handleAttachment } from "./routes/files";
+import { handleSkills } from "./routes/skills";
 import { handleThreads, handleThreadMessage } from "./routes/threads";
 import { handleTasks, handleForest, handleMetrics, handleUsage, handleModels, handleOverview, handleState, handleMq, handleCtxWindow, handleAlerts, handleSupervisorSelf, handleCapitalistEvents, handleMemory, handleUnhandled, handleSupervisor } from "./routes/views";
-import { threadsPageCache } from "./threads";
+import { clearThreadsCaches } from "./threads";
 import { clearSourceCache } from "./sources";
 import { messageContextCache } from "./messages";
 import { clearSupervisorLogCache } from "./supervisorLog";
@@ -84,12 +86,10 @@ export type { ServeOptions, Served } from "./types";
 
 function invalidateBoardCaches(): void {
   clearSourceCache();
-  threadsPageCache.clear();
+  clearThreadsCaches();
   messageContextCache.clear();
   clearSupervisorLogCache();
-}
-
-const RESTART_DELAY_MS = 3000;
+}const RESTART_DELAY_MS = 3000;
 
 /** 监工被强制结束后，由看板收掉它拉起的工作进程。 */
 function watchOrphanSupervisors(root: string, out: (s: string) => void): () => void {
@@ -143,7 +143,7 @@ function workerGone(w: WorkerRecord): boolean {
 
 async function reclaimStaleBoard(root: string, port: number): Promise<boolean> {
   try {
-    const rec = readJson<{ pid?: number; port?: number; root?: string } | null>(join(root, ".capitalist", "board.pid"), null);
+    const rec = readJson<{ pid?: number; port?: number; root?: string } | null>(join(supervisorDir(root), "board.pid"), null);
     if (!rec || !rec.pid || Number(rec.port) !== port) return false;
     if (rec.root && resolve(rec.root) !== resolve(root)) return false;
     try {
@@ -169,17 +169,26 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
   configureBoardAuth(loadOrCreateBoardKey(opts.root, opts.newKey === true), opts.secure === true);
 
   const viewCache = new Map<string, { at: number; val: unknown }>();
-  const cachedView = <T,>(key: string, ttlMs: number, build: () => T): T => {
-    const now = Date.now();
-    const hit = viewCache.get(key);
-    if (hit !== undefined && now - hit.at < ttlMs) return hit.val as T;
-    const val = build();
-    viewCache.set(key, { at: now, val });
-    if (viewCache.size > 64) {
-      for (const [k, v] of viewCache) if (now - v.at > 60_000) viewCache.delete(k);
-    }
-    return val;
-  };
+  /*
+   * 视图缓存把构建结果按 key 存 1～4 秒，写动作必须能立刻作废它。
+   *
+   * `/api/threads` 的 TTL 是 4000ms：命令结束后前端立刻重新拉列表时，
+   * 若不清这里，仍会拿到命令前的页面，表现为“蒙版撤了、列表过几秒才变”。
+   */
+  const cachedView = Object.assign(
+    <T,>(key: string, ttlMs: number, build: () => T): T => {
+      const now = Date.now();
+      const hit = viewCache.get(key);
+      if (hit !== undefined && now - hit.at < ttlMs) return hit.val as T;
+      const val = build();
+      viewCache.set(key, { at: now, val });
+      if (viewCache.size > 64) {
+        for (const [k, v] of viewCache) if (now - v.at > 60_000) viewCache.delete(k);
+      }
+      return val;
+    },
+    { clear: (): void => viewCache.clear() },
+  );
   const stopOrphanWatch = watchOrphanSupervisors(opts.root, (s) => {
     opts.out?.(s);
   });
@@ -310,7 +319,10 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
      * 前端在操作后立刻重新拉数据；缓存仍留着上一轮的线程列表或派单快照时，
      * 界面停在被操作之前的状态，操作没有反应。写请求进入时清空，下一次 GET 重建。
      */
-    if (req.method !== "GET" && req.method !== "HEAD" && url.startsWith("/api/")) invalidateBoardCaches();
+    if (req.method !== "GET" && req.method !== "HEAD" && url.startsWith("/api/")) {
+      invalidateBoardCaches();
+      cachedView.clear();
+    }
     if (url === "/stream" || url.startsWith("/stream?")) {
       sse(req, res);
       return;
@@ -338,6 +350,11 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
     }
     if (url.startsWith("/api/fs-list")) {
       handleFsList({ req, res, url, opts, cachedView });
+      return;
+    }
+    /** 技能下拉的数据源；与工作进程注入提示词的扫描同源。 */
+    if (url === "/api/skills" || url.startsWith("/api/skills?")) {
+      handleSkills({ req, res, url, opts, cachedView });
       return;
     }
     if (url === "/api/overview" || url.startsWith("/api/overview?")) {
@@ -449,7 +466,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
     });
     if (bound) {
       try {
-        writeJson(join(opts.root, ".capitalist", "board.pid"), {
+        writeJson(join(supervisorDir(opts.root), "board.pid"), {
           pid: process.pid,
           port,
           root: opts.root,

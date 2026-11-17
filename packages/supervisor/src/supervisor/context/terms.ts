@@ -42,7 +42,7 @@ export const EVENT_ZH: Readonly<Record<string, string>> = Object.freeze({
   model_fallback: "模型回退",
   supervisor_cmd: "指令回执",
   supervisor_answer: "回答",
-  supervisor_chat_ask: "用户发言",
+  supervisor_chat_ask: "用户指令",
   supervisor_reply: "监工回话",
   /* 上下文压缩：重载（source=reload）与读数推断（source=inferred）共用同一标签。 */
   context_compacted: "已压缩",

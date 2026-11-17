@@ -8,7 +8,25 @@
   white-space: nowrap;
 }
 
+/*
+ * 中间信息整体收缩。
+ *
+ * 宽度不够时从右往左整格隐藏，不让每格各自压缩：逐格压缩会把每格截成
+ * “排… C”，既读不出值，也看不出缺少哪一项。内部的格保持 `flex: 0 0 auto`，
+ * 由这里的 `overflow: hidden` 负责裁掉右侧整格。
+ */
+.mdata {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s10);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .mcell {
+  /* 每格保持完整宽度，不在格内省略。 */
   flex: 0 0 auto;
   display: inline-flex;
   align-items: baseline;
@@ -86,7 +104,9 @@
 }
 
 .macts {
+  /* 关停、重启、停止调度不参与收缩：窗口再窄也要点得到。 */
   flex: 0 0 auto;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: var(--s4);
@@ -96,6 +116,8 @@
 }
 
 .mbtn {
+  /* 按钮本身不压缩：文案已设为 nowrap，压缩后只会显示为不完整的“停止调”。 */
+  flex: 0 0 auto;
   height: 20px;
   padding: 0 var(--s7);
   border: 1px solid var(--line-2);
@@ -137,8 +159,13 @@
   color: var(--bad);
 }
 
+/*
+ * 窄屏只收起提示条。
+ *
+ * 操作按钮不参与隐藏：窗口变窄后无法点击关停与重启，会失去对监工的控制。
+ * 空间不够时先收起提示条，指标信息由 .mdata 整格裁掉，按钮始终可点。
+ */
 @media (max-width: 1099px) {
-  .macts,
   .mnote {
     display: none;
   }

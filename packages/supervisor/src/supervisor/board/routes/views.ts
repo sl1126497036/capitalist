@@ -4,7 +4,7 @@
  * 只做收发与入参校验，业务逻辑在 threads / views / commands 各层。
  */
 
-import { BoardCtx, parseSince } from "../types";
+import { BoardCtx, isLoopback, parseSince, sendJson } from "../types";
 import { buildForestView } from "../../view/forestView";
 import { forestNoOf } from "../cmdContext";
 import { overviewJson } from "../overview";
@@ -110,8 +110,7 @@ return;
 
 /** /api/mq */
 export function handleMq(ctx: BoardCtx): void {
-const peer = ctx.req.socket.remoteAddress ?? "";
-const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+const loopback = isLoopback(ctx);
 if (!loopback) {
   ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
   ctx.res.end(JSON.stringify({ error: "申报接口只接受本机回环地址" }));
@@ -174,29 +173,24 @@ return;
 
 /** /api/unhandled */
 export function handleUnhandled(ctx: BoardCtx): void {
-const jsonReply = (obj: unknown, code = 200): void => {
-  ctx.res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-  ctx.res.end(JSON.stringify(obj));
-};
 let root = ctx.opts.root;
 try {
   root = rootFromUrl(ctx.url, ctx.opts.root);
 } catch (err) {
-  jsonReply({ error: String(err instanceof Error ? err.message : err) }, 500);
+  sendJson(ctx, { error: String(err instanceof Error ? err.message : err) }, 500);
   return;
 }
 if (ctx.req.method !== "POST") {
   try {
-    jsonReply({ ok: true, root, items: listUnhandled(root) });
+    sendJson(ctx, { ok: true, root, items: listUnhandled(root) });
   } catch (err) {
-    jsonReply({ error: String(err instanceof Error ? err.message : err) }, 500);
+    sendJson(ctx, { error: String(err instanceof Error ? err.message : err) }, 500);
   }
   return;
 }
-const peer = ctx.req.socket.remoteAddress ?? "";
-const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+const loopback = isLoopback(ctx);
 if (!loopback) {
-  jsonReply({ error: "该接口只接受本机回环地址" }, 403);
+  sendJson(ctx, { error: "该接口只接受本机回环地址" }, 403);
   return;
 }
 let raw = "";
@@ -209,7 +203,7 @@ ctx.req.on("end", () => {
   try {
     body = raw.trim() ? (JSON.parse(raw) as Record<string, unknown>) : {};
   } catch {
-    jsonReply({ error: "请求体不是合法 JSON" }, 400);
+    sendJson(ctx, { error: "请求体不是合法 JSON" }, 400);
     return;
   }
   const wanted = typeof body.root === "string" && body.root.trim() ? resolve(body.root.trim()) : "";
@@ -217,18 +211,18 @@ ctx.req.on("end", () => {
   const msgId = String(body.msg_id ?? "").trim();
   const op = String(body.op ?? "").trim();
   if (!msgId) {
-    jsonReply({ error: "msg_id 必填" }, 400);
+    sendJson(ctx, { error: "msg_id 必填" }, 400);
     return;
   }
   try {
     const hit = listUnhandled(targetRoot).find((u) => u.msg_id === msgId);
     if (!hit) {
-      jsonReply({ error: "这条发言已处置，或不在未建单列表里" }, 409);
+      sendJson(ctx, { error: "指令已处置或不在未建单列表里：刷新列表后重试" }, 409);
       return;
     }
     if (op === "dismiss") {
       dismissChat(targetRoot, { msg_id: msgId });
-      jsonReply({ ok: true, root: targetRoot, msg_id: msgId, items: listUnhandled(targetRoot) });
+      sendJson(ctx, { ok: true, root: targetRoot, msg_id: msgId, items: listUnhandled(targetRoot) });
       return;
     }
     if (op === "dispatch") {
@@ -243,7 +237,7 @@ ctx.req.on("end", () => {
         atts,
       });
       if (!w.ok) {
-        jsonReply({ error: `建单失败：${w.error}`, root: targetRoot, msg_id: msgId }, 400);
+        sendJson(ctx, { error: `建单失败：${w.error}`, root: targetRoot, msg_id: msgId }, 400);
         return;
       }
       settleChat(targetRoot, {
@@ -254,7 +248,7 @@ ctx.req.on("end", () => {
         dispatch: String(w.rec?.id ?? ""),
         action: "dispatch",
       });
-      jsonReply({
+      sendJson(ctx, {
         ok: true,
         root: targetRoot,
         msg_id: msgId,
@@ -263,9 +257,9 @@ ctx.req.on("end", () => {
       });
       return;
     }
-    jsonReply({ error: `未知操作：${op || "(空)"}（dispatch / dismiss）` }, 400);
+    sendJson(ctx, { error: `未知操作：${op || "(空)"}（dispatch / dismiss）` }, 400);
   } catch (err) {
-    jsonReply({ error: String(err instanceof Error ? err.message : err) }, 500);
+    sendJson(ctx, { error: String(err instanceof Error ? err.message : err) }, 500);
   }
 });
 return;
@@ -273,23 +267,18 @@ return;
 
 /** /api/memory */
 export function handleMemory(ctx: BoardCtx): void {
-const peer = ctx.req.socket.remoteAddress ?? "";
-const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
-const jsonReply = (obj: unknown, code = 200): void => {
-  ctx.res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-  ctx.res.end(JSON.stringify(obj));
-};
+const loopback = isLoopback(ctx);
 if (ctx.req.method !== "POST") {
   try {
     const root = rootFromUrl(ctx.url, ctx.opts.root);
-    jsonReply({ ok: true, root, ...memorySnapshot(root) });
+    sendJson(ctx, { ok: true, root, ...memorySnapshot(root) });
   } catch (err) {
-    jsonReply({ error: String(err instanceof Error ? err.message : err) }, 500);
+    sendJson(ctx, { error: String(err instanceof Error ? err.message : err) }, 500);
   }
   return;
 }
 if (!loopback) {
-  jsonReply({ error: "记忆接口只接受本机回环地址" }, 403);
+  sendJson(ctx, { error: "记忆接口只接受本机回环地址" }, 403);
   return;
 }
 let raw = "";
@@ -302,7 +291,7 @@ ctx.req.on("end", () => {
   try {
     body = raw.trim() ? (JSON.parse(raw) as Record<string, unknown>) : {};
   } catch {
-    jsonReply({ error: "请求体不是合法 JSON" }, 400);
+    sendJson(ctx, { error: "请求体不是合法 JSON" }, 400);
     return;
   }
   const wanted = typeof body.root === "string" && body.root.trim() ? resolve(body.root.trim()) : "";
@@ -314,50 +303,50 @@ ctx.req.on("end", () => {
   try {
     if (op === "add") {
       if (!note.trim()) {
-        jsonReply({ error: "note 必填" }, 400);
+        sendJson(ctx, { error: "note 必填" }, 400);
         return;
       }
       if (body.kind !== undefined && !kind) {
-        jsonReply({ error: "kind 只能是 habit / blocker" }, 400);
+        sendJson(ctx, { error: "kind 只能是 habit / blocker" }, 400);
         return;
       }
       const made = addMemory(root, note, kind ?? "habit");
       if (!made) {
-        jsonReply({ error: "正文为空，没有可保存的内容" }, 400);
+        sendJson(ctx, { error: "正文为空，没有可保存的内容" }, 400);
         return;
       }
-      jsonReply({ ok: true, root, id: made.id, ...memorySnapshot(root) });
+      sendJson(ctx, { ok: true, root, id: made.id, ...memorySnapshot(root) });
       return;
     }
     if (op === "update") {
       if (!id) {
-        jsonReply({ error: "id 必填" }, 400);
+        sendJson(ctx, { error: "id 必填" }, 400);
         return;
       }
       if (body.kind !== undefined && !kind) {
-        jsonReply({ error: "kind 只能是 habit / blocker" }, 400);
+        sendJson(ctx, { error: "kind 只能是 habit / blocker" }, 400);
         return;
       }
       const next = updateMemory(root, id, { ...(body.note !== undefined ? { note } : {}), ...(kind ? { kind } : {}) });
       if (!next) {
-        jsonReply({ error: "条目不存在，或改完正文为空" }, 400);
+        sendJson(ctx, { error: "条目不存在，或改完正文为空" }, 400);
         return;
       }
-      jsonReply({ ok: true, root, id: next.id, ...memorySnapshot(root) });
+      sendJson(ctx, { ok: true, root, id: next.id, ...memorySnapshot(root) });
       return;
     }
     if (op === "delete") {
       if (!id) {
-        jsonReply({ error: "id 必填" }, 400);
+        sendJson(ctx, { error: "id 必填" }, 400);
         return;
       }
       const gone = deleteMemory(root, id);
-      jsonReply({ ok: gone, root, id, ...memorySnapshot(root), ...(gone ? {} : { error: "条目不存在" }) }, gone ? 200 : 404);
+      sendJson(ctx, { ok: gone, root, id, ...memorySnapshot(root), ...(gone ? {} : { error: "条目不存在" }) }, gone ? 200 : 404);
       return;
     }
-    jsonReply({ error: `未知操作：${op || "(空)"}（add / update / delete）` }, 400);
+    sendJson(ctx, { error: `未知操作：${op || "(空)"}（add / update / delete）` }, 400);
   } catch (err) {
-    jsonReply({ error: String(err instanceof Error ? err.message : err) }, 500);
+    sendJson(ctx, { error: String(err instanceof Error ? err.message : err) }, 500);
   }
 });
 return;
@@ -365,17 +354,12 @@ return;
 
 /** /api/ctx-window */
 export function handleCtxWindow(ctx: BoardCtx): void {
-const peer = ctx.req.socket.remoteAddress ?? "";
-const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+const loopback = isLoopback(ctx);
 if (!loopback) {
   ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
   ctx.res.end(JSON.stringify({ error: "该接口只接受本机回环地址" }));
   return;
 }
-const reply = (code: number, body: unknown): void => {
-  ctx.res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-  ctx.res.end(JSON.stringify(body));
-};
 /* 作用域：supervisor 是监工自己，其余为工作进程 id；监工与各工作进程互不影响。 */
 const q = ctx.url.indexOf("?") >= 0 ? new URLSearchParams(ctx.url.slice(ctx.url.indexOf("?") + 1)) : new URLSearchParams();
 const scopeOfQuery = (): string => {
@@ -390,7 +374,7 @@ const modelOfScope = (scope: string): string => {
 if (ctx.req.method === "GET") {
   const scope = scopeOfQuery();
   const curModel = modelOfScope(scope);
-  reply(200, {
+  sendJson(ctx, {
     scope,
     window: readCtxWindow(ctx.opts.root, scope),
     chosen: readCtxWindowChosen(ctx.opts.root, scope),
@@ -398,7 +382,7 @@ if (ctx.req.method === "GET") {
     presets: CTX_WINDOW_PRESETS,
     model: curModel,
     real: modelRealWindow(curModel, null),
-  });
+  }, 200);
   return;
 }
 if (ctx.req.method !== "POST") {
@@ -416,19 +400,19 @@ ctx.req.on("end", () => {
   try {
     parsed = body.trim() ? (JSON.parse(body) as typeof parsed) : {};
   } catch {
-    reply(400, { error: "JSON 解析失败" });
+    sendJson(ctx, { error: "JSON 解析失败" }, 400);
     return;
   }
   const want = Math.round(Number(parsed.window));
   if (!isCtxWindowPreset(want)) {
-    reply(400, { error: "只能是 300k / 600k / 1M 三档" });
+    sendJson(ctx, { error: "只能是 300k / 600k / 1M 三档" }, 400);
     return;
   }
   const scope = String(parsed.scope ?? "").trim() || scopeOfQuery();
   const curModel = modelOfScope(scope);
   const check = ctxWindowSupported(curModel, null, want);
   if (!check.supported && !parsed.force) {
-    reply(409, {
+    sendJson(ctx, {
       supported: false,
       scope,
       window: want,
@@ -437,11 +421,11 @@ ctx.req.on("end", () => {
       message: check.real
         ? `${curModel} 的窗口是 ${Math.round(check.real / 1000)}k，设不到 ${Math.round(want / 1000)}k。`
         : `${curModel} 没有窗口读数，无法确认是否支持 ${Math.round(want / 1000)}k。`,
-    });
+    }, 409);
     return;
   }
   const ok = writeCtxWindow(ctx.opts.root, want, scope);
-  reply(ok ? 200 : 500, { ok, scope, window: want, supported: check.supported });
+  sendJson(ctx, { ok, scope, window: want, supported: check.supported }, ok ? 200 : 500);
 });
 return;
 }

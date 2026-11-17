@@ -1,5 +1,6 @@
 /**
- * 主题令牌：本文件为默认主题，其余三套由 themes.css 按 :root[data-theme] 覆盖。
+ * 主题令牌：本文件的 :root 为星云深空，仅作无 data-theme 时的备用配色；其余三套由 themes.css
+ * 按 :root[data-theme] 覆盖。默认主题为薄雾灰，取值见 lib/theme.js。
  * 组件样式只引用变量，不写色值字面量；新增颜色令牌须同步覆盖全部主题。
  */
 :root {

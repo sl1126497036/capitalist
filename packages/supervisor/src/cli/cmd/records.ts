@@ -28,6 +28,7 @@ import {
 } from "../../core/record/ledger";
 import { appendMq, wakeSupervisor } from "../../core/dispatch/mq";
 import { findRoot, supervisorDir } from "../../core/record/paths";
+import { sleepSync } from "../../core/record/process";
 import { loadWorker } from "../../core/record/supervisor";
 import { parseWorkerLog } from "../../supervisor/worker/workerLog";
 import { skillDirs } from "../../agent/locations";
@@ -684,19 +685,6 @@ export function cmdFire(p: Parsed): number {
 
   process.stdout.write(`已发枪：${basename(reqFile)}\n`);
   return 0;
-}
-
-/**
- * 同步睡眠。
- *
- * fire 是命令行工具，等完再返回。
- */
-function sleepSync(ms: number): void {
-  try {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-  } catch {
-    /* 环境不支持时放弃等待：限速是保护目标，不是正确性前提 */
-  }
 }
 
 function reportHits(hits: readonly RedlineHit[]): void {

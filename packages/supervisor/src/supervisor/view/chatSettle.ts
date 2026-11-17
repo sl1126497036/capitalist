@@ -1,12 +1,12 @@
 /**
- * 面板发言的处置台账。命中要求特征只标记，不自动建单；动作由界面触发。
- * 只记录从当前开始处理的发言，不回填历史 `supervisor_chat_ask`。
+ * 面板指令的处置台账。命中要求特征只标记，不自动建单；动作由界面触发。
+ * 只记录从当前开始处理的指令，不回填历史 `supervisor_chat_ask`。
  */
 
 import { readJsonl } from "../../core/record/json";
 import { eventsPath, recordEvent } from "../../core/record/ledger";
 
-/** 一轮发言最终落到的分支。四个动作分支 + 只回答。 */
+/** 一轮指令最终落到的分支。四种动作分支与只回答。 */
 export type ChatVerdict = "dispatched" | "amended" | "queued" | "promoted" | "answered_only";
 
 export const CHAT_VERDICTS: readonly ChatVerdict[] = [
@@ -63,19 +63,19 @@ export function chatVerdictOf(action: string, arg: string): ChatVerdict {
 }
 
 export interface ChatSettleInput {
-  /** 这条发言的消息标识（`M-…`）。 */
+  /** 指令的消息标识（`M-…`）。 */
   msg_id: string;
   verdict: ChatVerdict;
-  /** 发言原文：要求特征按它判定，不采用模型复述。 */
+  /** 指令原文：要求特征按它判定，不采用模型复述。 */
   text: string;
-  /** 发言所在会话（空串 = 监工会话）。 */
+  /** 指令所在会话（空串 = 监工会话）。 */
   thread?: string;
   /**
    * 动作记录 id：调度指令记 `SD-…`，追加到既有单记目标派单 id。
    * 没有产生动作时留空。
    */
   dispatch?: string;
-  /** 一条发言落成多张单时的全部指令 id；首张同时写入 `dispatch`。 */
+  /** 一条指令落成多张单时的全部指令 id；首张同时写入 `dispatch`。 */
   dispatches?: string[];
   /** 动作名（dispatch / amend 等），便于追溯。 */
   action?: string;
@@ -122,7 +122,7 @@ export function settleChat(
   return { unhandled: true, hints };
 }
 
-/** 标记“已答复，不需要动作”的发言，不再列入未建单列表。 */
+/** 标记“已答复，不需要动作”的指令，不再列入未建单列表。 */
 export function dismissChat(root: string, input: { msg_id: string; reason?: string }): boolean {
   const msgId = String(input.msg_id ?? "").trim();
   if (!msgId) return false;
@@ -133,7 +133,7 @@ export function dismissChat(root: string, input: { msg_id: string; reason?: stri
   return true;
 }
 
-/** 一条待处理的发言。 */
+/** 一条待处理的指令。 */
 export interface UnhandledChat {
   msg_id: string;
   text: string;
@@ -143,7 +143,7 @@ export interface UnhandledChat {
 }
 
 /**
- * 按台账顺序还原待处理发言，后写入的记录覆盖先写入的。
+ * 按台账顺序还原待处理指令，后写入的记录覆盖先写入的。
  * `chat_unhandled` 入列，`chat_dismissed` 与非 `answered_only` 的 `chat_settled` 出列。
  */
 export function unhandledFromEvents(rows: Array<Record<string, unknown>>): UnhandledChat[] {
@@ -175,7 +175,7 @@ export function unhandledFromEvents(rows: Array<Record<string, unknown>>): Unhan
   return [...pending.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 
-/** 读整本事件台账，列出待处理的发言（时间倒序）。 */
+/** 读整本事件台账，列出待处理的指令（时间倒序）。 */
 export function listUnhandled(root: string): UnhandledChat[] {
   return unhandledFromEvents(readJsonl<Record<string, unknown>>(eventsPath(root)));
 }

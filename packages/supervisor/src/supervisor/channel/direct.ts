@@ -26,6 +26,8 @@ export const CAPITALIST_ACTIONS = [
   "reload",
   "concurrency",
   "retry",
+  /* 重开已结束的一单：沿用原单 id、编号与对应的会话（`DO: redo #03`）。 */
+  "redo",
   /* 置顶并抢占槽位：`DO: promote #03`。 */
   "promote",
   /* 插到排队队首，不抢占槽位；与 promote 的立即执行不同。 */
@@ -128,7 +130,9 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     if (/^(set-next|setnext|next|下一步|设置下一步)$/.test(head)) return "set-next";
     if (/^(amend|追加|补充|更正|改口)$/.test(head)) return "amend";
     if (/^(concurrency|parallel|并行|并行度)$/.test(head)) return "concurrency";
-    if (/^(retry|重派|重试)$/.test(head)) return "retry";
+    /* 允许动作名带“任务 / 单”后缀：界面与对话里常见“重派任务 #02”“重开这一单”。 */
+    if (/^(retry|重派|重试)(任务|单)?$/.test(head)) return "retry";
+    if (/^(redo|重开|返工|重新执行|重新跑|再来一遍)(任务|单)?$/.test(head)) return "redo";
     if (/^(queue|插队|排前面|排到前面|插到前面)$/.test(head)) return "queue";
     if (/^(skip|跳过)$/.test(head)) return "skip";
     if (/^(diagnose|诊断|自查|排查|查因)$/.test(head)) return "diagnose";
@@ -138,7 +142,21 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     if (/^(instruct|自然语言|照办|照我说的)$/.test(head)) return "instruct";
     return null;
   };
-  const action = pick();
+  let action = pick();
+
+  /*
+   * 口语里的“重派 #02”指的是整单返工，而 retry 只重跑分片，两者参数形态不同：
+   * 带 `#编号` 的转给 redo，参数统一为 `#N`（redo 只认开头编号）；
+   * 不带井号的（如“重派 s2”）仍按 retry 处理。
+   */
+  if (action === "retry") {
+    const hashed = /#\s*(\d{1,4})\b/.exec(rest);
+    if (hashed) {
+      action = "redo";
+      rest = `#${hashed[1]}`;
+    }
+  }
+
   if (!action) {
     /*
      * 看板可能下发不带动作名的自然语言，整句中文按自然语言调度处理。

@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { basename, join } from "node:path";
 
 import { skillDirs } from "../agent/locations";
+import { supervisorDir } from "../core/record/paths";
 import { askModel } from "./channel/llm";
 
 /** 生成结果。`ok:false` 时调用方应退回内置契约。 */
@@ -106,7 +107,7 @@ export async function generateContract(opts: {
   out?: string;
   effort?: string;
 }): Promise<GenContractResult> {
-  const dir = join(opts.root, ".capitalist", "contracts");
+  const dir = join(supervisorDir(opts.root), "contracts");
   const path = opts.out ?? join(dir, `generated-${new Date().toISOString().replace(/[:.]/g, "-")}.contract.json`);
   const skills = loadedSkills(opts.root);
   const prompt = [
@@ -181,7 +182,7 @@ export async function generateContract(opts: {
 
 /** 逐条列出阶段名，供核对契约与目标是否一致。 */
 export function describeGenerated(r: GenContractResult): string {
-  if (!r.ok) return `[契约] 未能生成，回落内置清单：${r.why}`;
+  if (!r.ok) return `[契约] 未能生成，改用内置清单：${r.why}`;
   return (
     `[契约] 按目标生成了 ${r.stages.length} 个阶段：` +
     r.stages.map((s) => `${s.id} ${s.name}`).join(" / ") +

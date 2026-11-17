@@ -6,12 +6,10 @@
 
 import { spawnSync } from "node:child_process";
 
-import { pidAlive } from "../../core/record/supervisor";
+import { pidAlive, sleepSync } from "../../core/record/process";
 
 /** 主线程内的阻塞等待；判死与回收走同步路径，不使用 await。 */
-export function sleepSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
+export { sleepSync };
 
 /** 轮询等待进程退出；到期仍活着返回 false。 */
 export function waitExit(pid: number, timeoutMs: number): boolean {

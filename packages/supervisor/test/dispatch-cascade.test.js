@@ -110,7 +110,7 @@ function scene(root, { log = "worker 崩了：unexpected exit" } = {}) {
   put(root, "G1", { status: "open", parent: "C1", parent_reason: "要 C1 的产物" });
   /* 已完成的子孙：既成事实，不许被改成失败。 */
   put(root, "D1", { status: "done", parent: "P2", parent_reason: "要 P2 的产物" });
-  /* 另一棵树：与这条子树无关，不该被牵连。 */
+  /* 另一棵树：与这棵子树无关，不该被牵连。 */
   put(root, "T2", { status: "open" });
 
   const p2 = fakeWorker(root, "W-p2", "P2");

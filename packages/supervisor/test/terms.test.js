@@ -7,7 +7,7 @@
  * 2. 消息正文里的 worker / exit / pid / SIGTERM / hook 全部换成中文，
  *    `open` / `gone` 这类原始状态也不许直接摆出来；
  * 3. 标签表只有 `src/supervisor/terms.ts` 一份，前端 `fmt.js` 直接读它。
- *    谁再抄一张表出来，这条测试会拦住（抄表就会漂移）。
+ *    谁再抄一张表出来，本测试会拦住（抄表就会漂移）。
  *
  * 空状态图标不放在这里（那是 .vue 的渲染口径），交付时用 SSR 探针验。
  */
@@ -46,7 +46,7 @@ test("术语表：每条事件 / 指令 / 状态都有中文，dispatch_retry �
     assert.match(label, CJK, `指令 ${key} 的名字没有中文`);
   }
 
-  /* 未知值不许回落原始枚举：回落一次，界面上就多一行机器话。 */
+  /* 未知值不显示原始枚举：显示一次，界面上就多一行机器文本。 */
   assert.equal(terms.zhEvent("whatever_new_event"), "其他事件");
   assert.equal(terms.zhCommand("whatever_new_action"), "其他指令");
   assert.equal(terms.zhStatus("whatever_new_status"), "未知状态");
@@ -138,7 +138,12 @@ test("监工自己落的指令：英文动作名翻成中文，用户原话不�
     const user = msgs.find((m) => m.id === "SC-SD-2");
     assert.ok(capitalist && user, "两条指令都应回显");
     assert.equal(capitalist.role, "supervisor");
-    assert.match(capitalist.text, /^调度指令：已派单 \[ui\] 把消息里的编号做成引用$/, capitalist.text);
+    /*
+     * 正文最前的方括号是分类标签（调度用的会话键），只在调度侧使用。界面上写出来会让读者把它
+     * 当成正文的一部分：`插队派单 [supervisor-copy] 按…` 读起来像多了个来历不明的词。
+     */
+    assert.match(capitalist.text, /^调度指令：已派单 把消息里的编号做成引用$/, capitalist.text);
+    assert.ok(!capitalist.text.includes("[ui]"), "标签不该出现在界面上");
     assert.equal(user.role, "user");
     assert.equal(user.text, "pause 我先自己看一眼", "用户原话被改写了");
   } finally {

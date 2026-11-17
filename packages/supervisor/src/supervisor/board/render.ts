@@ -8,6 +8,7 @@ import { ThreadMessage, describeEvent } from "./snapshot";
 import { zh } from "./zh";
 import { isShellTool, summarizeCommand } from "../worker/workerLog";
 import { dispatchOfThreadNo } from "../usage/threadNo";
+import { splitDirectiveTag } from "../../core/dispatch/commands";
 export const MQ_KIND_LABEL: Record<string, string> = {
   stuck: "卡住",
   question: "要方向",
@@ -94,7 +95,8 @@ export function mqTriageText(e: Record<string, unknown>): string {
 
 export function cmdReceiptText(e: Record<string, unknown>): string {
   const label = zh.cmd(e.action, e.urgent);
-  const arg = String(e.arg ?? "").trim();
+  /* 指令参数里可能带分类标签（`[supervisor-copy] …`），那是调度用的会话键，不进界面。 */
+  const arg = splitDirectiveTag(String(e.arg ?? "").trim()).body;
   const ok = e.ok === true;
   const reason = String(e.reason ?? "").trim();
   const detail = String(e.detail ?? "").trim();

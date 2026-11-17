@@ -26,7 +26,8 @@ import {
 } from "../core/contract/contract";
 import { enterStage, newState } from "../core/contract/init";
 import { INBOX_LEDGER, readInbox } from "../core/dispatch/inbox";
-import { appendJsonl, readJson, readJsonl, writeJson } from "../core/record/json";
+import { appendJsonl, readJsonl, writeJson } from "../core/record/json";
+import { type PauseFile, pausePath, readPause } from "../core/record/pause";
 import { recordEvent, recordViolation } from "../core/record/ledger";
 import { findRoot, isInside, supervisorDir } from "../core/record/paths";
 import { skillDirs } from "../agent/locations";
@@ -134,7 +135,7 @@ function createRoot(target: string, spec: string, fallback: boolean, rootArg?: s
   if (fallback) {
     const others = contractNames(skillDirs()).filter((n) => n !== "generic").join("|") || "…";
     write(
-      `\n未指定领域任务列表，已回落到通用任务列表（generic）。\n` +
+      `\n未指定领域任务列表，已使用通用任务列表（generic）。\n` +
         `      通用红线生效，但“这个领域什么算做完”没有定义。\n` +
         `      若这是明确领域任务：capitalist adopt --contract <${others}>\n`,
     );
@@ -640,29 +641,6 @@ function cmdRelease(p: Parsed): number {
 }
 
 
-/** `.capitalist/pause.json` 的内容：存在即处于暂停态，删除即恢复。 */
-interface PauseFile {
-  at: string;
-  reason: string;
-  by?: string;
-}
-
-/** 暂停文件的绝对路径：`<root>/.capitalist/pause.json`。 */
-function pausePath(root: string): string {
-  return join(supervisorDir(root), "pause.json");
-}
-
-/** 读暂停文件；缺失或损坏都视为未暂停（不因写坏一次把状态卡死）。 */
-function readPause(root: string): PauseFile | null {
-  const raw = readJson<Partial<PauseFile> | null>(pausePath(root), null);
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  return {
-    at: String(raw.at ?? ""),
-    reason: String(raw.reason ?? ""),
-    ...(raw.by === undefined ? {} : { by: String(raw.by) }),
-  };
-}
-
 /** 手动暂停派单。 */
 function cmdPause(p: Parsed): number {
   const root = rootOrDie(p);
@@ -1118,7 +1096,7 @@ async function main(): Promise<number> {
         process.platform !== "win32";
       const skipHooks = !wantHooks || flagBool(p, "no-hooks");
       if (skipHooks) {
-        write("[监工] 不装 hook：心跳由“pid + 日志增长”回落，红线预检走工作进程档位\n");
+        write("[监工] 未安装 hook：心跳按“pid + 日志增长”判定，红线预检使用工作进程档位\n");
       }
       if (healHosts.length > 0 && !skipHooks) {
         // 写项目级 settings.local.json：用户级那份由宿主自己维护，hooks 键保不住。

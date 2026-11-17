@@ -113,7 +113,7 @@ test("判定脑车道：首轮 fresh，之后同一条会话，轮次累加", ()
   assert.equal(second.gen, 0);
 
   const lane = JSON.parse(readFileSync(join(root, ".capitalist", "brain", `${base}.json`), "utf8"));
-  assert.equal(lane.turns, 2, "每调一次记一轮，占用估不出来时靠它兜底换代");
+  assert.equal(lane.turns, 2, "每调用一次记一轮，占用无法估算时用它决定是否更换会话");
 });
 
 test("判定脑车道：不同车道互不影响", () => {

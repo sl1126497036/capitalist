@@ -10,10 +10,11 @@ import { closeSync, existsSync, openSync, readSync, rmSync, statSync } from "nod
 import { join } from "node:path";
 import { readJson } from "../../core/record/json";
 import { supervisorDir } from "../../core/record/paths";
+import { pidAlive, sleepSync } from "../../core/record/process";
 import { BRIDGE_PLATFORM, askBridge } from "../../core/platform/bridge";
 
 import { supervisorDisplayState, SUPERVISOR_STATE_LABEL } from "../../core/record/state";
-import { closeTask, promoteTask, stopWorker, listDirectives, directiveMatches, directiveRef, isDirectiveOpen, markDirectiveOutcome, DIRECTIVE_OUTCOMES, type DirectiveOutcome } from "../../core/dispatch/commands";
+import { closeTask, promoteTask, stopWorker, listDirectives, directiveMatches, directiveRef, isDirectiveOpen, markDirectiveOutcome, dropDirectivesFor, DIRECTIVE_OUTCOMES, type DirectiveOutcome } from "../../core/dispatch/commands";
 import { dispatchOfThreadNo } from "../../supervisor/usage/threadNo";
 import { recordEvent } from "../../core/record/ledger";
 import { appendMq, wakeSupervisor } from "../../core/dispatch/mq";
@@ -75,13 +76,23 @@ export async function detachSupervisor(root: string): Promise<number> {
   }
 
   if (!pid) {
+    /*
+     * 后台监工的输出去 `.capitalist/supervisor.log`。
+     *
+     * 原先用 `stdio: "ignore"`，进程退出后没有任何可查的东西——连报错文案里让用户
+     * “查看 supervisor.log”都无从看起，两次排查都只能靠猜。留言留档后，崩溃栈与
+     * 最后一条 tick 都能对上时间。
+     */
+    const logFd = openSync(join(supervisorDir(root), "supervisor.log"), "a");
     const child = spawn(process.execPath, [entry, ...args], {
       cwd: process.cwd(),
       detached: true,
-      stdio: "ignore",
+      stdio: ["ignore", logFd, logFd],
       // 后台起监工时不要弹控制台窗口：这是“脱离终端”的进程，弹窗只会打断用户。
       windowsHide: true,
     });
+    /* fd 已复制给子进程，父进程这份可以关掉。 */
+    closeSync(logFd);
     child.unref();
     pid = child.pid ?? 0;
     if (!pid) die("未取得后台进程 pid，请在前台执行 capitalist supervise");
@@ -114,21 +125,6 @@ export async function detachSupervisor(root: string): Promise<number> {
 
 /** detach 后观察多久再下结论。 */
 const DETACH_PROBE_MS = 12_000;
-
-/** 同步等待。派单结论需立即返回，此路径不使用异步。 */
-function sleepSync(ms: number): void {
-  const sab = new SharedArrayBuffer(4);
-  Atomics.wait(new Int32Array(sab), 0, 0, ms);
-}
-
-function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * 等后台监工写出第一份心跳。
@@ -257,7 +253,7 @@ async function awaitVerdict(
   maxMs: number,
 ): Promise<"accepted" | "rejected" | "error" | "timeout"> {
   const t0 = Date.now();
-  const rejectFile = join(root, ".capitalist", "inbox", `reject-${id}.json`);
+  const rejectFile = join(supervisorDir(root), "inbox", `reject-${id}.json`);
   for (;;) {
     if (Date.now() - t0 >= maxMs) return "timeout";
     /* 3 秒一次：监工调度周期为 5 秒，更密的轮询没有收益。 */
@@ -718,6 +714,17 @@ export function cmdClose(p: Parsed): number {
         "已 done / failed / closed 的单不能再关）",
     );
   }
+  /*
+   * 结束任务即终止这一单的追加投递。
+   *
+   * 否则每轮调度都会看到“未消费的追加且目标已结束”，把刚关掉的单翻回 open 补投递，
+   * 用户看到的就是取消后立刻变回“待重派”。用户手动结束是明确意图，优先级高于补投递。
+   */
+  const dropped = dropDirectivesFor(
+    root,
+    String(r.dispatch),
+    reason ? `用户结项：${reason}` : "用户手动结项，追加内容不再投递",
+  );
 
   if (flagBool(p, "json")) {
     writeJson({ ok: true, ...r });
@@ -731,6 +738,9 @@ export function cmdClose(p: Parsed): number {
         : "这一单还在排队，没有运行中的进程，已从队列撤下。\n") +
       `记录：.capitalist/inbox/dispatch.jsonl 该单状态 closed（closed_at / closed_by / note），` +
       `事件 dispatch_closed 已写入 .capitalist/events.jsonl。\n` +
+      (dropped.length
+        ? `${dropped.length} 条指向它的追加内容已标记不再投递（否则会把它翻回 open）。\n`
+        : "") +
       "后果：监工不再为它补单；要重开请用 capitalist update inbox/dispatch <id> status open。\n",
   );
   return 0;

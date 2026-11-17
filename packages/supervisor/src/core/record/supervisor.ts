@@ -27,6 +27,7 @@ import { attachmentsIn, withAttachmentLines } from "../message/attachments";
 import { readJson, readJsonl, writeJson, writeJsonl } from "./json";
 import { statCached } from "./fsCache";
 import { supervisorDir } from "./paths";
+import { pidAlive } from "./process";
 import { syncTaskForDispatch } from "./tasks";
 
 /** 监工进程状态。`done` 表示末阶段门槛已达标，监工据此退出。 */
@@ -667,13 +668,13 @@ export function archiveFinished(
   /*
    * 分档与界面使用同一套口径。
    *
-   * 手动取消的派单（`closed_by: "user"` 与固定 note）在看板归入“已完成”档，
-   * 台账中的原始状态仍可能是 `failed`。后端的异常清理按同一分档过滤。
+   * 手动取消的派单（`closed_by: "user"`）在看板归入“已完成”档，台账中的原始状态仍可能是
+   * `failed`。只按 `closed_by` 判：`note` 会带用户填写的理由，按固定文案匹配会漏掉这类单。
    */
   const rows0 = readDispatches(root);
   const canceledDispatch = new Set(
     rows0
-      .filter((d) => d.status === "closed" && d.closed_by === "user" && d.note === "用户手动结项")
+      .filter((d) => d.status === "closed" && d.closed_by === "user")
       .map((d) => d.id),
   );
   const failedDispatch = new Set(
@@ -779,17 +780,9 @@ const DEFAULT_WORKER_RECORD_MAX_AGE_MS = 24 * 3600 * 1000;
 /**
  * pid 是否还活着。只作辅助：pid 会被复用，最终判活仍看心跳。
  *
- * @param pid 进程号。非正整数按不存在处理。
+ * 实现在 `./process`；此处转发，保持既有导入路径可用。
  */
-export function pidAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+export { pidAlive };
 
 /**
  * 日志“还在写”的默认阈值：五分钟。

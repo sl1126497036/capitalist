@@ -474,7 +474,7 @@ function normSay(s) {
     .toLowerCase();
 }
 
-function pushEcho(thread, text, attachments) {
+function pushEcho(thread, text, attachments, skills) {
   echoSeq += 1;
   const item = {
     id: `L-${Date.now().toString(36)}-${echoSeq}`,
@@ -486,6 +486,8 @@ function pushEcho(thread, text, attachments) {
     thread: String(thread || ""),
     local: true,
     attachments: Array.isArray(attachments) ? attachments : [],
+    /* 生成消息时选中的技能：本地回显与刷新后回读的气泡都按这一项展示。 */
+    skills: Array.isArray(skills) ? skills : [],
   };
   echoes.value = [...echoes.value, item];
   return item;
@@ -901,7 +903,7 @@ function onHotkey(e) {
 }
 
 /* /api/capitalist-chat 为流式响应：正文逐字追加，思考与工具调用各占一行，返回最终的 done 事件供调用方收尾。 */
-async function streamChat(text, thread, onDelta, via = "", quote = null) {
+async function streamChat(text, thread, onDelta, via = "", quote = null, skills = []) {
   const res = await fetch("./api/capitalist-chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -911,6 +913,8 @@ async function streamChat(text, thread, onDelta, via = "", quote = null) {
       thread: thread || "",
       via: via || "",
       ...(quote && quote.ref ? { quote: quote.ref, quote_text: String(quote.text || "").slice(0, 200) } : {}),
+      /* 界面选中的技能：后端写进派单正文，工作进程据此加载对应 SKILL.md。 */
+      ...(Array.isArray(skills) && skills.length ? { skills } : {}),
     }),
   });
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -948,7 +952,7 @@ function setNotice(next) {
   talkSeq += 1;
   notice.value = next;
 }
-async function talkTo(text, thread, via = "", quote = null) {
+async function talkTo(text, thread, via = "", quote = null, skills = []) {
   /* 多条消息可并行发送，活行只保留最后发起那一路的响应，较早的响应忽略。 */
   const mine = (talkSeq += 1);
   /* 流式回执按会话隔离；监工对话归一为 "capitalist"，与 chat-pane 的 sel 一致，避免混入工作进程气泡。 */
@@ -1013,8 +1017,13 @@ async function talkTo(text, thread, via = "", quote = null) {
         live1(() => {
           notice.value = { text: String(d.text || $t("对话失败")), bad: true, thread: owner };
         });
+      } else if (d.kind === "preempted") {
+        /* 新一轮已接管本轮：本条要求未执行，提示让用户知道它仍需被处理。 */
+        live1(() => {
+          notice.value = { text: String(d.text || $t("已被新消息打断")), bad: false, thread: owner };
+        });
       }
-    }, via, quote);
+    }, via, quote, skills);
     if (done) {
       const applied = String(done.applied || "");
       /* 上屏正文取服务端算好的 display 字段，前端不另行拼接。 */
@@ -1037,15 +1046,18 @@ async function talkTo(text, thread, via = "", quote = null) {
       notice.value = { text: `${$t("对话失败")} ${e instanceof Error ? e.message : String(e)}`, bad: true, thread: owner };
     });
   } finally {
-    const rest = new Set(talkBusy.value);
-    rest.delete(owner);
-    talkBusy.value = rest;
+    /* 只有最新一轮才清占用标记：被抢占的旧轮先收尾，不能把新轮的标记一起删掉。 */
+    if (mine === talkSeq) {
+      const rest = new Set(talkBusy.value);
+      rest.delete(owner);
+      talkBusy.value = rest;
+    }
   }
 }
 
-/** quote 为 {ref, text}，随监工会话请求一并发送。 */
-async function sendSupervisor(text, quote = null) {
-  await talkTo(text, "", "", quote);
+/** quote 为 {ref, text}，随监工会话请求一并发送；skills 为界面选中的技能名。 */
+async function sendSupervisor(text, quote = null, skills = []) {
+  await talkTo(text, "", "", quote, skills);
 }
 
 /** 追加消息只登记待办，不中断当前进程；quote 为 {ref, text}。 */
@@ -1072,11 +1084,11 @@ async function say(text, quote) {
 /* 先插入本地回显再发请求：输入框随即清空并可继续输入，请求只影响活行。 */
 async function onSend(text, quoteRef, meta) {
   const thread = isSupervisor.value ? "capitalist" : sel.value;
-  pushEcho(thread, meta?.text || text, meta?.attachments || []);
+  pushEcho(thread, meta?.text || text, meta?.attachments || [], meta?.skills || []);
   inflight.value += 1;
   try {
     if (isSupervisor.value || !curThread.value) {
-      await sendSupervisor(text, quoteRef);
+      await sendSupervisor(text, quoteRef, meta?.skills || []);
     } else {
       const t = curThread.value;
       /* 进程已结束也走这条对话接口：服务端在原会话里接着答，不会把一句问话变回一次重开。 */
@@ -1105,13 +1117,15 @@ async function onInterject({ text, alsoBlock, quote }) {
       });
       if (!b.ok) setNotice({ text: `${$t("登记阻塞失败")} ${b.data.error || $t("未知原因")}`, bad: true });
     }
-    const r = await postJson("./api/command", { action: "stop-worker", id: t.worker || t.id, shard: t.shard || "" });
-    setNotice(
-      r.ok
-        ? { text: `${$t("已中断")} ${r.data.worker || t.id} ${r.data.effective || $t("下一轮调度重派")}`, bad: false }
-        : { text: `${$t("中断失败")} ${r.data.error || r.data.reason || $t("未知原因")}`, bad: true },
-    );
-    load();
+    /* 中断的最后一步同样走统一路径：先刷新再弹回执，卡片要先变成已停止。 */
+    await applyAction({
+      action: "stop-worker",
+      body: { id: t.worker || t.id, shard: t.shard || "" },
+      text: (d, ok) =>
+        ok
+          ? `${$t("已中断")} ${d.worker || t.id} ${d.effective || $t("下一轮调度重派")}`
+          : `${$t("中断失败")} ${d.error || d.reason || $t("未知原因")}`,
+    });
   } finally {
     inflight.value -= 1;
     pruneEchoes();
@@ -1119,16 +1133,14 @@ async function onInterject({ text, alsoBlock, quote }) {
 }
 
 /** 交还监工按钮只在人工介入期间显示。 */
-async function onHandback() {
+function onHandback() {
   const t = curThread.value;
-  if (!t) return;
-  const r = await postJson("./api/command", { action: "release", id: t.id, shard: t.shard || "" });
-  setNotice(
-    r.ok
-      ? { text: $t("已交还监工，下一轮调度起恢复自动裁定"), bad: false }
-      : { text: `${$t("交还失败")} ${r.data.error || $t("未知原因")}`, bad: true },
-  );
-  load();
+  if (!t) return null;
+  return applyAction({
+    action: "release",
+    body: { id: t.id, shard: t.shard || "" },
+    text: (d, ok) => (ok ? $t("已交还监工，下一轮调度起恢复自动裁定") : `${$t("交还失败")} ${d.error || $t("未知原因")}`),
+  });
 }
 
 /* 结项由后端把派单置为 closed（运行中先结单再 SIGTERM，排队直接撤下）；请求期间单号写入 cardStopBusy 供 QueuePane 铺蒙版，同一时刻只允许一张卡处于请求中。 */
@@ -1139,65 +1151,105 @@ function holdBusy(startedAt) {
   return left > 0 ? new Promise((r) => setTimeout(r, left)) : Promise.resolve();
 }
 
-const cardStopBusy = ref("");
-async function onCloseTask({ id, shard, title }) {
-  if (!id || cardStopBusy.value) return;
+/*
+ * 所有卡片动作共用一个忙碌键：取消、清除、置顶、唤醒都会改队列，
+ * 服务端回执与列表刷新不是同一拍。请求期间铺蒙版，用户才知道动作已被接受。
+ */
+const cardBusy = ref("");
+
+/*
+ * 看板动作的统一执行路径。
+ *
+ * 顺序固定为：铺蒙版 → 发请求 → 刷新列表 → 弹回执 → 撤蒙版。
+ * 取消、清除、置顶、唤醒、整档清空、交还监工都经由同一条路径执行，不再各写一份：
+ * 此前四份实现各自复制这套顺序，任何一处出错（回执先于刷新、load 未等待）都要修四次。
+ *
+ * @param key    铺蒙版的卡片键；空串表示不铺蒙版
+ * @param action 接口动作名
+ * @param body   除 action 外的请求字段
+ * @param toast  true 走页顶浮层，false 走页面级回执条
+ * @param text   (data, ok) => 回执文案；返回空串则不弹
+ * @param after  列表刷新之后、弹回执之前执行的界面收尾（如切回监工流）
+ */
+async function applyAction({ key = "", action, body = {}, toast = false, text, after }) {
+  if (cardBusy.value) return null;
   const startedAt = Date.now();
-  cardStopBusy.value = id;
+  if (key) cardBusy.value = key;
   try {
-    const r = await postJson("./api/command", { action: "close", id, shard: shard || "" });
-    /* 结项与清除的回执走页面级浮层，不进会话流，避免被监工当作用户消息读入。 */
-    showToast(
-      r.ok
-        ? r.data.effective || `${$t("已结项")} ${r.data.dispatch || id} ${$t("监工不再为它补单")}`
-        : `${$t("结项失败")} ${r.data.error || r.data.reason || $t("未知原因")}`,
-      !r.ok,
-    );
-    if (sel.value && (sel.value === id || curThread.value?.dispatch === id)) {
-      /* 关闭当前选中线程时回到监工流。 */
-      pickSupervisor();
+    const r = await postJson("./api/command", { action, ...body });
+    /* 列表先刷新到位：回执若先到，用户会在“卡片还没变”的画面上读到结果。 */
+    await load();
+    if (after) after(r);
+    const msg = String(text?.(r.data, r.ok) ?? "");
+    if (msg) {
+      if (toast) showToast(msg, !r.ok);
+      else setNotice({ text: msg, bad: !r.ok });
     }
-    load();
+    return r;
   } finally {
-    await holdBusy(startedAt);
-    cardStopBusy.value = "";
+    if (key) {
+      await holdBusy(startedAt);
+      cardBusy.value = "";
+    }
   }
 }
 
+/* 结束任务由后端把派单置为 closed（运行中的先结束再发送 SIGTERM，排队中的直接撤下）。 */
+function onCloseTask({ id, shard, title }) {
+  if (!id) return null;
+  return applyAction({
+    key: id,
+    action: "close",
+    body: { shard: shard || "" },
+    /* 结项与清除的回执走页面级浮层，不进会话流，避免被监工当作用户消息读入。 */
+    toast: true,
+    text: (d, ok) =>
+      ok
+        ? d.effective || `${$t("已结项")} ${d.dispatch || id} ${$t("监工不再为它补单")}`
+        : `${$t("结项失败")} ${d.error || d.reason || $t("未知原因")}`,
+    after: () => {
+      /* 关闭当前选中线程时回到监工流。 */
+      if (sel.value && (sel.value === id || curThread.value?.dispatch === id)) pickSupervisor();
+    },
+  });
+}
+
 /* 确认框在 QueuePane，App 只发指令并按结果回报；回执按后端 promote 返回的 preempt 与越单数生成，前端不判定。 */
-async function onPromoteTask({ id, shard, title }) {
-  if (!id) return;
-  const r = await postJson("./api/command", { action: "promote", id, shard: shard || "" });
-  setNotice(
-    r.ok
-      ? { text: r.data.effective || r.data.detail || `${$t("已置顶")} ${title || r.data.dispatch || id}`, bad: false }
-      : { text: `${$t("插队失败")} ${r.data.error || r.data.reason || $t("未知原因")}`, bad: true },
-  );
-  load();
+function onPromoteTask({ id, shard, title }) {
+  if (!id) return null;
+  return applyAction({
+    key: id,
+    action: "promote",
+    body: { shard: shard || "" },
+    text: (d, ok) =>
+      ok
+        ? d.effective || d.detail || `${$t("已置顶")} ${title || d.dispatch || id}`
+        : `${$t("插队失败")} ${d.error || d.reason || $t("未知原因")}`,
+  });
 }
 
 /* 唤醒同样使用页面级回执；暂停单可能已过时，回执说明“下一轮调度 起参与调度”。 */
-async function onWakeTask({ id, shard, title }) {
-  if (!id) return;
-  const r = await postJson("./api/command", { action: "wake", id, shard: shard || "" });
-  setNotice(
-    r.ok
-      ? { text: r.data.effective || r.data.detail || `${$t("已唤醒")} ${title || r.data.dispatch || id}`, bad: false }
-      : { text: `${$t("唤醒失败")} ${r.data.error || r.data.reason || $t("未知原因")}`, bad: true },
-  );
-  load();
+function onWakeTask({ id, shard, title }) {
+  if (!id) return null;
+  return applyAction({
+    key: id,
+    action: "wake",
+    body: { shard: shard || "" },
+    text: (d, ok) =>
+      ok
+        ? d.effective || d.detail || `${$t("已唤醒")} ${title || d.dispatch || id}`
+        : `${$t("唤醒失败")} ${d.error || d.reason || $t("未知原因")}`,
+  });
 }
 
 /* bucket 取界面筛选档名（all / done / bad）；后端只归档已结束记录，运行中与排队的保留。 */
-async function onClearThreads(bucket) {
-  const r = await postJson("./api/command", { action: "clear-threads", bucket: String(bucket || "all") });
-  showToast(
-    r.ok
-      ? r.data.effective || $t("已清空")
-      : `${$t("清空失败")} ${r.data.error || r.data.reason || $t("未知原因")}`,
-    !r.ok,
-  );
-  load();
+function onClearThreads(bucket) {
+  return applyAction({
+    action: "clear-threads",
+    body: { bucket: String(bucket || "all") },
+    toast: true,
+    text: (d, ok) => (ok ? d.effective || $t("已清空") : `${$t("清空失败")} ${d.error || d.reason || $t("未知原因")}`),
+  });
 }
 
 /* 清除类操作反馈走页顶浮层并自动消失；bad 为 true 时停留更久。 */
@@ -1212,26 +1264,20 @@ function showToast(text, bad = false) {
 }
 onUnmounted(() => clearTimeout(toastTimer));
 
-/* 清除单卡由后端先结项（异常单）再打标记，不删记录；请求期间卡 id 写入 cardBusy 供按钮显示进行态，结果只走 showToast。 */
-const cardBusy = ref("");
-async function onClearCard({ key }) {
-  if (!key || cardBusy.value) return;
-  const startedAt = Date.now();
-  cardBusy.value = key;
-  try {
-    const r = await postJson("./api/command", { action: "clear-thread", key });
-    showToast(
-      r.ok
-        ? r.data.effective || $t("已清除该任务卡")
-        : `${$t("清除失败")} ${r.data.error || r.data.reason || $t("未知原因")}`,
-      !r.ok,
-    );
-    if (sel.value === key) pickSupervisor();
-    load();
-  } finally {
-    await holdBusy(startedAt);
-    cardBusy.value = "";
-  }
+/* 清除单卡由后端先结项（异常单）再打标记，不删记录；结果只走 showToast。
+   忙碌键复用上面那个统一的 cardBusy。 */
+function onClearCard({ key }) {
+  if (!key) return null;
+  return applyAction({
+    key,
+    action: "clear-thread",
+    body: { key },
+    toast: true,
+    text: (d, ok) => (ok ? d.effective || $t("已清除该任务卡") : `${$t("清除失败")} ${d.error || d.reason || $t("未知原因")}`),
+    after: () => {
+      if (sel.value === key) pickSupervisor();
+    },
+  });
 }
 
 /* 状态行只统计服务端给出的运行中进程数（含将起、已领），不受筛选与搜索影响。 */
@@ -1371,8 +1417,10 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
         :inert="queueCollapsed"
         :aria-hidden="queueCollapsed ? 'true' : 'false'"
       >
-        <!-- 监工 tab 与任务队列同属左栏，顶栏不渲染；数量多时整行横向滚动、不换行。 -->
+        <!-- 监工 tab 与任务队列同属左栏，顶栏不渲染；数量多时整行横向滚动，不换行。
+             只有一个监工时，这一行只重复顶部已有的名字，因此不渲染；存在多个监工时才显示切换入口。 -->
         <SupervisorStrip
+          v-if="tasks.length > 1"
           class="q-supervisor-strip"
           :tasks="tasks"
           :current="root"
@@ -1391,7 +1439,6 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
           :capitalist-unread="supervisorUnread"
           :collapsed="queueCollapsed"
           :busy-key="cardBusy"
-          :stop-busy="cardStopBusy"
           @pick="pickThread"
           @capitalist="pickSupervisor"
           @refresh="load"
@@ -1514,7 +1561,8 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
   flex-direction: column;
   padding: var(--s16) var(--s16) 0;
   background: var(--surface-2);
-  border-radius: 0 18px 16px 16px;
+  /* 顶部两角贴窗口，不画圆角：左上本来就为 0，右上单独设 18px 会在深色底上留下缺口。 */
+  border-radius: 0 0 16px 16px;
   overflow: hidden;
 }
 
@@ -1522,15 +1570,20 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
-  border-top: 1px solid var(--line-3);
+  /* 左右两栏各自是完整圆角卡片，卡片顶边即分隔线；此处不再画整行横线，
+     否则会与两张卡片的边框形成两条平行线。底部留白使卡片下圆角不被窗口裁掉。 */
+  padding-bottom: var(--s10);
 }
 
-/* 只改变外壳宽度，内部 .queue 固定 330 不重排；右栏 flex:1 随之铺满。 */
 .leftwrap {
   flex: 0 0 auto;
+  /* 只改变外壳宽度，内部 .queue 固定 330 不重排；右栏 flex:1 随之铺满。 */
   width: var(--w-left);
   /* 窗口窄于左栏宽度时左栏让位，分隔条跟随其右边界。 */
   max-width: 100%;
+  /* 与右栏同为一套圆角卡片：任务队列不再是独立面板，监工 tab 条落在卡片内部。 */
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
   /* 左栏高度受 .body 约束，内部自行滚动，避免列高把整页顶开。 */
   display: flex;
   flex-direction: column;
@@ -1540,6 +1593,8 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
 }
 .leftwrap.collapsed {
   width: 0;
+  /* 收起后只剩 2px 边框，会在左缘留一道竖线；边框一并收掉。 */
+  border-width: 0;
 }
 .leftwrap.dragging {
   transition: none;
@@ -1576,6 +1631,8 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
   touch-action: none;
   outline: none;
 }
+/* 两栏各是带边框的圆角卡片，中间已由两条边框表达分界；
+   中线默认透明，只在悬停与拖拽时出现，作为可拖动的提示。 */
 .splitter::before {
   content: "";
   position: absolute;
@@ -1583,16 +1640,16 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
   bottom: 0;
   left: 3px;
   width: 1px;
-  background: var(--line-3);
+  background: transparent;
   pointer-events: none;
   transition: background 160ms ease;
 }
 .splitter:hover::before,
-.splitter:focus-visible::before,
-.splitter.dragging::before {
-  background: var(--info-line);
+.splitter:focus-visible::before {
+  background: var(--line-3);
 }
 .splitter.dragging::before {
+  background: var(--info-line);
   width: 2px;
   left: 2px;
 }

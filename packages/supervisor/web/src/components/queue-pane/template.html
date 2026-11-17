@@ -173,13 +173,15 @@
         </span>
         <!-- 状态词绝对定位在 .row 下；.mt 有 overflow:hidden，放里面会被裁切。 -->
         <span v-if="r.word" class="tb" :class="`tb-${r.tone}`">{{ r.word }}</span>
-        <!-- 操作蒙版 inset:0 不参与布局，收到响应后由上层清掉 busyKey / stopBusy 撤除，避免重复下发。 -->
+        <!-- 操作蒙版 inset:0 不参与布局，收到响应后由上层清掉 busyKey / stopBusy 撤除，避免重复下发。
+             只给动态图标不给文案：动作名已经在确认框里说明，蒙版负责表达“正在执行”。 -->
         <span
-          v-if="busyKey === r.t.id || (stopBusy && stopBusy === (r.t.dispatch || r.t.id))"
+          v-if="busyKey && (busyKey === r.t.id || busyKey === (r.t.dispatch || ''))"
           class="cardbusy"
           role="status"
           aria-live="polite"
-        >{{ busyKey === r.t.id ? t("清除中") : canPromote(r.t) ? t("取消中") : t("关闭中") }}</span>
+          :aria-label="t('正在执行')"
+        ></span>
         <span
           v-if="r.retry"
           class="rp"

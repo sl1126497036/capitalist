@@ -19,7 +19,7 @@ import { assignThreadNos, threadNoLabel, threadNoOf } from "../usage/threadNo";
 /**
  * 看板线程视图层：线程列表、消息流、任务分桶与已读水位。
  *
- * 这里只做「读盘 → 组装 DTO」，不发 HTTP、不写台账。HTTP 与路由留在 index.ts，
+ * 这里只做读盘与组装视图对象，不发 HTTP、不写台账。HTTP 与路由留在 index.ts，
  * 命令执行在 commands 层，三者不互相引用，避免形成环。
  */
 
@@ -167,6 +167,12 @@ export function taskCounts(root: string): TaskCounts {
   return buildThreadsPage(root, Number.MAX_SAFE_INTEGER).counts;
 }
 
+/**
+ * 取消判定的默认说明。
+ *
+ * 只作为写库时的默认 note，**不再作为判定条件**：用户在取消时填的理由会覆盖它，
+ * 按 note 文案判会让“填了理由的取消”落到已完成档。
+ */
 export const CANCEL_NOTE = "用户手动结项";
 
 export const CANCELED_KEEP_MS = 24 * 3600 * 1000;
@@ -211,6 +217,46 @@ export function threadDoingOf(d: Dispatch | undefined, worker: WorkerRecord, ali
   if (d?.status === "reported") return "report";
   if (!alive) return "";
   return doingOfAction(workerActionOf(worker.log));
+}
+
+/**
+ * 归档态占位线程：取消与作废的单没有工作进程，只按派单记录生成一行。
+ *
+ * 两种状态的字段完全一致，差别只在 status；合并成一个工厂，避免以后再抄第三份。
+ * 字段顺序与合并前保持一致，接口输出的键序不变。
+ *
+ * @param held 该分片是否被人工接管。判定依赖调用方作用域内的接管快照，故由调用方传入。
+ */
+function archivedThread(
+  key: string,
+  d: Dispatch,
+  status: "canceled" | "superseded",
+  held: boolean,
+): ThreadSummary {
+  return {
+    id: key,
+    no: "",
+    stuck_on: "",
+    stuck_on_no: "",
+    shard: d.shard ?? "",
+    lineage: String((d as { lineage?: string }).lineage ?? d.id),
+    stage: d.stage,
+    status,
+    model: dispatchModel(d),
+    worker: "",
+    last_at: "",
+    last_role: "",
+    last: "",
+    unread: 0,
+    held,
+    started_at: d.at,
+    dispatch: d.id,
+    title: dispatchTitle(d),
+    output_bytes: 0,
+    duration_sec: 0,
+    spawn_count: 0,
+    usage: noUsage(d.at, dispatchModel(d)),
+  };
 }
 
 export function buildThreadsPageUncached(
@@ -308,8 +354,8 @@ export function buildThreadsPageUncached(
 
   for (const d of dispatches) {
     if (d.status !== "closed") continue;
+    /* 只看是谁结的项：note 是可被用户理由覆盖的自由文本，按它判会让取消显示成已完成。 */
     if (String(d.closed_by ?? "") !== "user") continue;
-    if (String(d.note ?? "") !== CANCEL_NOTE) continue;
     const closedAt = Date.parse(String(d.closed_at ?? d.done_at ?? d.at ?? ""));
     if (Number.isFinite(closedAt) && Date.now() - closedAt > CANCELED_KEEP_MS) continue;
 
@@ -326,30 +372,7 @@ export function buildThreadsPageUncached(
       continue;
     }
 
-    threads.set(key, {
-      id: key,
-      no: "",
-      stuck_on: "",
-      stuck_on_no: "",
-      shard: d.shard ?? "",
-      lineage: String((d as { lineage?: string }).lineage ?? d.id),
-      stage: d.stage,
-      status: "canceled",
-      model: dispatchModel(d),
-      worker: "",
-      last_at: "",
-      last_role: "",
-      last: "",
-      unread: 0,
-      held: isHeld(d.shard),
-      started_at: d.at,
-      dispatch: d.id,
-      title: dispatchTitle(d),
-      output_bytes: 0,
-      duration_sec: 0,
-      spawn_count: 0,
-      usage: noUsage(d.at, dispatchModel(d)),
-    });
+    threads.set(key, archivedThread(key, d, "canceled", isHeld(d.shard)));
   }
 
   /*
@@ -364,30 +387,7 @@ export function buildThreadsPageUncached(
     if (Number.isFinite(supersededAt) && Date.now() - supersededAt > CANCELED_KEEP_MS) continue;
     const key = taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? ""));
     if (threads.has(key)) continue;
-    threads.set(key, {
-      id: key,
-      no: "",
-      stuck_on: "",
-      stuck_on_no: "",
-      shard: d.shard ?? "",
-      lineage: String((d as { lineage?: string }).lineage ?? d.id),
-      stage: d.stage,
-      status: "superseded",
-      model: dispatchModel(d),
-      worker: "",
-      last_at: "",
-      last_role: "",
-      last: "",
-      unread: 0,
-      held: isHeld(d.shard),
-      started_at: d.at,
-      dispatch: d.id,
-      title: dispatchTitle(d),
-      output_bytes: 0,
-      duration_sec: 0,
-      spawn_count: 0,
-      usage: noUsage(d.at, dispatchModel(d)),
-    });
+    threads.set(key, archivedThread(key, d, "superseded", isHeld(d.shard)));
   }
 
   for (const d of dispatches) {
@@ -672,6 +672,17 @@ export function buildThreadsPageUncached(
 
 export const THREADS_PAGE_TTL_MS = 1_000;
 export const threadsPageCache = new Map<string, { at: number; page: ReturnType<typeof buildThreadsPageUncached> }>();
+
+/**
+ * 清线程列表与状态计数的读缓存。
+ *
+ * 两处都要清：状态行的数字来自 taskCountsCache，它有自己的 3 秒 TTL，
+ * 只清 threadsPageCache 会出现“卡片变了、顶部计数没变”。
+ */
+export function clearThreadsCaches(): void {
+  threadsPageCache.clear();
+  taskCountsCache.clear();
+}
 
 export function cloneThreadsPage(page: ReturnType<typeof buildThreadsPageUncached>): ReturnType<typeof buildThreadsPageUncached> {
   return {

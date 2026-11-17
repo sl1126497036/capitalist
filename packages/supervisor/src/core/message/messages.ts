@@ -29,7 +29,15 @@ export function newMessageId(now = Date.now()): string {
  */
 export function recordUserMessage(
   root: string,
-  input: { text: string; thread?: string; atts?: string[]; quote?: string; quoteText?: string },
+  input: {
+    text: string;
+    thread?: string;
+    atts?: string[];
+    quote?: string;
+    quoteText?: string;
+    /** 界面选中的技能名：记进消息流，气泡据此显示随带的技能。 */
+    skills?: string[];
+  },
 ): UserMessage {
   /** 图在这里编一次号（`[附件] x.png` -> `[图1] x.png`），之后所有环节照抄这一套。 */
   let text = numberAttachmentLines(String(input.text ?? ""));
@@ -49,12 +57,14 @@ export function recordUserMessage(
   }
   const quote = String(input.quote ?? "").trim();
   const quoteText = String(input.quoteText ?? "").trim();
+  const skills = Array.isArray(input.skills) ? input.skills.map((s) => String(s).trim()).filter(Boolean) : [];
   recordEvent(root, "supervisor_chat_ask", {
     msg_id: id,
     text,
     thread: input.thread ?? "",
     from: "user",
     atts,
+    ...(skills.length ? { skills } : {}),
     ...(quote ? { quote } : {}),
     ...(quote ? { quote_text: quoteText } : {}),
   });

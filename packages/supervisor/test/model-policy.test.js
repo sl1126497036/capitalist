@@ -70,7 +70,7 @@ test("配置能追加禁用名单（并集，不能减）", () => {
 test("平台声明的默认档自己不在禁用名单里（否则会绕死自己）", () => {
   const rules = modelRulesOf(undefined, "codebuddy");
   assert.ok(rules);
-  assert.ok(!rules.deny.includes(normalizeModelName(rules.def)), "默认档被自己禁用会让每次调用都回落到一个禁用值");
+  assert.ok(!rules.deny.includes(normalizeModelName(rules.def)), "默认档被自己禁用会让每次调用都改用禁用值");
 });
 
 test("从日志里认出实际用过的模型（用来核对有没有回退）", () => {

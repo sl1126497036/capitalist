@@ -33,13 +33,33 @@ export interface Served {
 }
 
 /** 单次请求的共享上下文：路由函数只从这里取依赖。 */
+/**
+ * 短时视图缓存。
+ *
+ * `clear` 挂在函数上而不是单独加一个 ctx 字段：路由分发每处都手写
+ * `{ req, res, url, opts, cachedView }`，多一个字段要改二十处调用点，
+ * 挂在已有对象上则写动作只需要 `ctx.cachedView.clear()`。
+ */
+export type CachedView = (<T>(key: string, ttlMs: number, build: () => T) => T) & { clear: () => void };
+
 export interface BoardCtx {
   req: IncomingMessage;
   res: ServerResponse;
   url: string;
   opts: ServeOptions;
   /** 短时视图缓存：同一轮轮询里多个视图只算一次。 */
-  cachedView: <T>(key: string, ttlMs: number, build: () => T) => T;
+  cachedView: CachedView;
+}
+
+/**
+ * 请求是否来自本机回环地址。
+ *
+ * 指令、记忆、上传这类接口只对本机开放；判定集中在此处，避免各路由各写一份字面量比较，
+ * 漏改一处就等于放宽一个接口的边界。
+ */
+export function isLoopback(ctx: BoardCtx): boolean {
+  const peer = ctx.req.socket.remoteAddress ?? "";
+  return peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
 }
 
 /** 统一的 JSON 响应：写头 + 序列化，避免每个路由重复三行样板。 */

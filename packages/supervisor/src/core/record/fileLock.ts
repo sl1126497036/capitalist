@@ -14,6 +14,9 @@ import {
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 
+import { pidAlive, sleepSync } from "./process";
+import { supervisorDir } from "./paths";
+
 export type LockMode = "read" | "write";
 
 /** 单条锁。`depth` 用于重入，`beat` 用于判活。 */
@@ -88,17 +91,17 @@ const DEFAULT_TTL = 600;
 
 /** 锁表路径。 */
 export function lockTablePath(root: string): string {
-  return join(root, ".capitalist", "locks", "files.json");
+  return join(supervisorDir(root), "locks", "files.json");
 }
 
 /** 元锁路径：保护锁表本身的读改写。 */
 function metaLockPath(root: string): string {
-  return join(root, ".capitalist", "locks", "files.lock");
+  return join(supervisorDir(root), "locks", "files.lock");
 }
 
 /** 读版本台账。 */
 export function readLedgerPath(root: string): string {
-  return join(root, ".capitalist", "locks", "reads.jsonl");
+  return join(supervisorDir(root), "locks", "reads.jsonl");
 }
 
 /**
@@ -118,7 +121,7 @@ function emptyTable(): LockTable {
 
 /** 元锁：跨进程互斥地读改写锁表。 */
 function withTableLock<T>(root: string, fn: () => T): T {
-  const dir = join(root, ".capitalist", "locks");
+  const dir = join(supervisorDir(root), "locks");
   try {
     mkdirSync(dir, { recursive: true });
   } catch {
@@ -150,13 +153,6 @@ function withTableLock<T>(root: string, fn: () => T): T {
       /* ignore */
     }
   }
-}
-
-/** 同步睡眠（Atomics.wait 不烧 CPU；hook 进程里没有别的事可做）。 */
-export function sleepSync(ms: number): void {
-  if (ms <= 0) return;
-  const sab = new SharedArrayBuffer(4);
-  Atomics.wait(new Int32Array(sab), 0, 0, ms);
 }
 
 export function readTable(root: string): LockTable {
@@ -191,16 +187,8 @@ function writeTable(root: string, table: LockTable): void {
   }
 }
 
-/** 进程还在不在（判活用）。Windows 上 `process.kill(pid, 0)` 对已退出的进程会抛。 */
-export function pidAlive(pid: number): boolean {
-  if (!Number.isFinite(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
+/** 判活与同步睡眠实现在 `./process`，此处转发以保持既有导入路径可用。 */
+export { pidAlive, sleepSync };
 
 function expired(entry: LockEntry, now: number): boolean {
   const beat = Date.parse(entry.beat);
@@ -549,7 +537,7 @@ export function checkStale(root: string, holder: string, path: string): StaleRes
 function recentWriter(root: string, path: string, holder: string): string {
   const key = lockKey(path);
   try {
-    const p = join(root, ".capitalist", "events.jsonl");
+    const p = join(supervisorDir(root), "events.jsonl");
     if (!existsSync(p)) return "";
     const lines = readFileSync(p, "utf8").split("\n");
     for (let i = lines.length - 1; i >= Math.max(0, lines.length - 400); i -= 1) {

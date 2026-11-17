@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { CloseOutlined, DeleteOutlined, PlayCircleOutlined, SearchOutlined, ThunderboltOutlined } from "@ant-design/icons-vue";
-import { dur, hhmm } from "../../lib/fmt.js";
+import { dur, hhmm, shortRoot } from "../../lib/fmt.js";
 import { t } from "../../lib/i18n.js";
 /* 局部形参 t 会遮蔽模块级文案函数，取文案统一走 tr。 */
 const tr = t;
@@ -28,17 +28,17 @@ const props = defineProps({
   supervisorUnread: { type: Number, default: 0 },
   collapsed: { type: Boolean, default: false },
   root: { type: String, default: "" },
-  /** busyKey 标记清除请求中的卡，收到响应后由上层清除。 */
+  /**
+   * busyKey 标记正在执行动作的卡：取消、清除、置顶、唤醒共用这一个键，
+   * 命中线程键或派单 id 都算。收到响应后由上层清空，蒙版随之撤除。
+   */
   busyKey: { type: String, default: "" },
-  /** stopBusy 与 busyKey 分开两个键：文案不同，且同一时刻只允许一张卡处于请求中。 */
-  stopBusy: { type: String, default: "" },
 });
 const emit = defineEmits(["pick", "capitalist", "refresh", "close", "promote", "wake", "stats", "clear", "clearCard", "forest"]);
 
 
 const supervisorTitle = computed(() => {
-  const p = String(props.root || "").replace(/[\\/]+$/, "");
-  const name = p.split(/[\\/]/).pop() || "";
+  const name = shortRoot(props.root);
   return name ? tr("{name}-监工", { name }) : tr("监工");
 });
 
@@ -110,12 +110,11 @@ function cell(t) {
     if (t?.doing) return { tone: "run", kind: "word", text: workerDoingText(t.doing) };
     return { tone: "run", kind: "word", text: tr("运行中") };
   }
-  /* 结束态词条取 lib/status.js，与详情面板同一口径。 */
+  /* 结束态词条取 lib/status.js，与详情面板同一口径。
+     完成态不在这里放耗时：耗时已在第二行的“耗时”字段里，占位符只会让格子空着，
+     读起来像状态缺失；状态位统一写“已完成”。 */
   const ended = endedKind(t);
-  if (ended === "done") {
-    const secs = closedSecs(t);
-    return secs === null ? { tone: "done", ...NA_DUR } : { tone: "done", kind: "dur", text: dur(secs) };
-  }
+  if (ended === "done") return { tone: "done", kind: "word", text: tr("已完成") };
   if (ended === "wakeup") return { tone: "warn", kind: "word", text: tr("待重派") };
   /* 排队区分等待前置单与普通排队；stuck_on 与 stuck_on_no 由后端下发，前端不读 after、不自行推导。 */
   if (s === "queued" || s === "open") {
@@ -136,9 +135,6 @@ function cell(t) {
   if (s === "held") return { tone: "warn", kind: "word", text: tr("接管中") };
   return { tone: "idle", kind: "word", text: tr("待调度") };
 }
-
-/* 占位文案随语言变化，用 getter 取值。 */
-const NA_DUR = { kind: "na", get text() { return tr("无采样"); } };
 
 /** 运行时长从调度时刻算起；duration_sec 为下限，重启后可能滞后。 */
 function liveSecs(t) {

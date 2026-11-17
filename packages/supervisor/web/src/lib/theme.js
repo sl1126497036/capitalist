@@ -6,7 +6,8 @@
 import { ref } from "vue";
 
 const KEY = "capitalist.theme";
-const DEFAULT = "nebula";
+/* 默认主题取薄雾灰；index.html 的 data-theme 与之保持一致，避免首帧用上无主题的配色。 */
+const DEFAULT = "mist";
 
 /** 浅色主题集合，供原生控件与 antd 算法判断。 */
 const LIGHT_IDS = new Set(["dawn", "mist"]);
@@ -78,5 +79,5 @@ export function setTheme(id) {
 }
 
 export function themeById(id) {
-  return THEMES.find((t) => t.id === id) || THEMES[0];
+  return THEMES.find((t) => t.id === id) || THEMES.find((t) => t.id === DEFAULT) || THEMES[0];
 }

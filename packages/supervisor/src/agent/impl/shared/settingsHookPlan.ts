@@ -23,6 +23,16 @@ const TOOL_MATCHER = "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|Glo
 
 /** 生成一条命令。`id` 是注册表键，写进 `--agent`，必须与 impl 的 id 一致。 */
 function commandFor(id: string, event: string, ctx: InstallContext): string {
+  /*
+   * 非 Windows 使用 PATH 中的 bin（package.json 的 bin 已声明 `capitalist-hook`）：
+   * 命令不再绑定 node 与包内路径，更换 node 版本、升级或移动安装位置都不受影响。
+   * 旧写法用 node 绝对路径直接调用，包更换目录后指向不存在的文件，升级时也无法被识别为过期。
+   *
+   * Windows 保留绝对路径：宿主可能经 Git Bash 执行，npm 的 .cmd shim 在部分宿主里不可用。
+   */
+  if (ctx.platform !== "win32") {
+    return `capitalist-hook ${event} --agent ${id} --from ${ctx.marker}`;
+  }
   const entry = ctx.entry.replace(/\\/g, "/");
   const node = ctx.node.replace(/\\/g, "/");
   return `"${node}" "${entry}" ${event} --agent ${id} --from ${ctx.marker}`;

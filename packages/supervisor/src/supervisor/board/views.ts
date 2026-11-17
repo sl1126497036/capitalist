@@ -11,11 +11,12 @@ import { SupervisorActivityKind, SupervisorAction, supervisorActivityOf, current
 import { loadSupervisor, listWorkers, pidAlive, supervisorStaleSec, readDispatches } from "../../core/record/supervisor";
 import { loadState } from "../../core/record/state";
 import { loadContract, stageById } from "../../core/contract/contract";
-import { tokenTotals, ThreadCostRow, costRowsWith, pickCurrentCostRows, costTotals } from "./stats";
+import { tokenTotals, usageTotalsOf, type UsageTotals, ThreadCostRow, costRowsWith, pickCurrentCostRows, costTotals } from "./stats";
 import { readPendingMq } from "../../core/dispatch/mq";
 import { balanceView, BalanceView } from "../usage/balance";
 import { readSupervisorModelUsed } from "./assets";
-import { readNextModel, readPause } from "../loop";
+import { readNextModel } from "../loop";
+import { readPause } from "../../core/record/pause";
 import { TaskSummary as TaskPoolSummary } from "../../core/record/tasks";
 import { ContextView, buildContextView } from "../usage/usage";
 import { readQuotaState } from "../../core/guard/quota";
@@ -283,17 +284,7 @@ export interface SupervisorStatusView {
   pending_asks: number;
   heartbeat_note: string;
   reload: ReloadStatus;
-  usage: {
-    total_input_tokens: number | null;
-    total_output_tokens: number | null;
-    total_tokens: number | null;
-    total_cache_read_tokens: number | null;
-    reported_runs: number;
-    unreported_runs: number;
-    billing_unit: string;
-    total_credit: number | null;
-    credit_unit: string;
-  };
+  usage: UsageTotals;
   context: SupervisorContextView;
   model: string;
   model_version: string;
@@ -382,21 +373,8 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
     pending_asks: pendingAsks,
     heartbeat_note: heartbeatSummary(root, 6),
     reload,
-    usage: {
-      total_input_tokens: tokens.total_input_tokens,
-      total_output_tokens: tokens.total_output_tokens,
-      total_tokens: tokens.total_tokens,
-      total_cache_read_tokens: tokens.total_cache_read_tokens,
-      reported_runs: tokens.usage_reported,
-      unreported_runs: tokens.usage_unreported,
-      billing_unit: tokens.billing_unit,
-      total_credit: tokens.total_credit,
-      /*
-       * 单位回退取账号额度读数：未派发工作进程时没有日志可汇总，`tokens.credit_unit`
-       * 为空时界面回落显示 token，与宿主按积分计费的单位不一致。
-       */
-      credit_unit: tokens.credit_unit || balanceView(root).credit_unit,
-    },
+    /* 单位回退取账号额度读数，理由见 stats.usageTotalsOf 的说明。 */
+    usage: usageTotalsOf(tokens, balanceView(root).credit_unit),
     context: buildSupervisorContextView(root),
     /*
      * 最近一次派单的模型优先；没有派单时用监工对话上一次实际跑的模型。
@@ -491,17 +469,7 @@ export interface BoardMetrics {
   credit_unavailable_reason: string;
   balance: BalanceView;
   context: ContextView;
-  usage: {
-    total_input_tokens: number | null;
-    total_output_tokens: number | null;
-    total_tokens: number | null;
-    total_cache_read_tokens: number | null;
-    reported_runs: number;
-    unreported_runs: number;
-    billing_unit: string;
-    total_credit: number | null;
-    credit_unit: string;
-  };
+  usage: UsageTotals;
   paused: boolean;
   paused_since: string | null;
   threads: ThreadCostRow[];
@@ -566,18 +534,7 @@ export function buildMetrics(root: string): BoardMetrics {
     credit_unavailable_reason: balance.reason,
     balance,
     context: buildContextView(root),
-    usage: {
-      total_input_tokens: tokens.total_input_tokens,
-      total_output_tokens: tokens.total_output_tokens,
-      total_tokens: tokens.total_tokens,
-      total_cache_read_tokens: tokens.total_cache_read_tokens,
-      reported_runs: tokens.usage_reported,
-      unreported_runs: tokens.usage_unreported,
-      billing_unit: tokens.billing_unit,
-      total_credit: tokens.total_credit,
-      /* 同 `/api/supervisor`：无工作进程记录时使用账号额度单位，避免回退为 token。 */
-      credit_unit: tokens.credit_unit || balance.credit_unit,
-    },
+    usage: usageTotalsOf(tokens, balance.credit_unit),
     paused: pause !== null,
     paused_since: pause ? pause.at || null : null,
     threads: currentRows,

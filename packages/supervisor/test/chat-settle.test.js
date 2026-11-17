@@ -58,7 +58,7 @@ test("四条动作分支 + 只回答：每一种 verdict 都落一条 chat_settl
   assert.strictEqual(rows[4].dispatch, undefined, "只回答不该有 dispatch");
 });
 
-test("失败路径同样落账：登记失败按 answered_only 记，并带上原因", () => {
+test("失败路径同样记录：登记失败按 answered_only 记，并带上原因", () => {
   const root = sandbox();
   const r = settleChat(root, {
     msg_id: "M-fail",
@@ -143,7 +143,7 @@ test("时间倒序：后处理的排在前面", () => {
   assert.deepStrictEqual(unhandledFromEvents(rows).map((x) => x.msg_id), ["M-new", "M-old"]);
 });
 
-test("不回填存量：没有 chat_unhandled 的历史发言不会被算成待处理", () => {
+test("不回填存量：没有 chat_unhandled 的历史指令不会被算成待处理", () => {
   const rows = [
     { event: "supervisor_chat_ask", msg_id: "M-legacy", text: "把这里改成两列", at: "2026-11-03T05:00:00.000Z" },
     { event: "supervisor_reply", text: "好的", at: "2026-11-03T05:00:05.000Z" },
@@ -171,14 +171,14 @@ test("动作 -> verdict 映射：dispatch/amend/queue/promote 各归各类，--n
   assert.strictEqual(chatVerdictOf("pause", ""), "dispatched");
 });
 
-test("没有 msg_id 的调用不落账（老入口不带标识）", () => {
+test("没有 msg_id 的调用不记录（老入口不带标识）", () => {
   const root = sandbox();
   const r = settleChat(root, { msg_id: "", verdict: "answered_only", text: "改成两列" });
   assert.strictEqual(r.unhandled, false);
   assert.strictEqual(readJsonl(eventsPath(root)).length, 0);
 });
 
-test("对话流投影：未建单的发言在 capitalist-events 里带 unhandled 标记，纯提问不带", () => {
+test("对话流投影：未建单的指令在 capitalist-events 里带 unhandled 标记，纯提问不带", () => {
   const root = sandbox();
   const asked = recordUserMessage(root, { text: "新消息挪到中间，这里上方" });
   settleChat(root, { msg_id: asked.id, verdict: "answered_only", text: "新消息挪到中间，这里上方" });
@@ -189,7 +189,7 @@ test("对话流投影：未建单的发言在 capitalist-events 里带 unhandled
   const reqMsg = log.messages.find((m) => m.role === "user" && m.text === "新消息挪到中间，这里上方");
   const plainMsg = log.messages.find((m) => m.role === "user" && m.text === "这一单现运行中到哪一步了？");
   assert.ok(reqMsg, "要求那条应出现在监工流里");
-  assert.strictEqual(reqMsg.unhandled, true, "带要求特征、没建单的发言要挂未建单标记");
+  assert.strictEqual(reqMsg.unhandled, true, "带要求特征、没建单的指令要挂未建单标记");
   assert.strictEqual(reqMsg.msg_id, asked.id, "标记要带 msg_id，前端靠它回查原话");
   assert.ok(plainMsg, "纯提问也要照常上屏");
   assert.strictEqual(plainMsg.unhandled, undefined, "纯提问不该出现未建单标记");

@@ -21,6 +21,7 @@ import {
   RightOutlined,
   SendOutlined,
   ThunderboltOutlined,
+  ToolOutlined,
   UpOutlined,
 } from "@ant-design/icons-vue";
 import { loadModels, setNextModel, setWorkerModel } from "../../lib/models.js";
@@ -40,6 +41,7 @@ import {
   isSupervisorSpeech,
   msgRef,
   sayStatus,
+  shortRoot,
 } from "../../lib/fmt.js";
 import { rejectTail } from "../../lib/rejectTail.js";
 import { dedupeMessages, isBlankMessage } from "../../lib/msgDedup.js";
@@ -56,6 +58,7 @@ import {supervisorActivityText, workerDoingText} from "../../lib/doing.js";
 import EmptyState from "../empty-state";
 import MetricBar from "../metric-bar";
 import MsgText from "../msg-text";
+import SkillPicker from "../skill-picker";
 
 const props = defineProps({
   /** "capitalist" 或线程 id */
@@ -103,8 +106,7 @@ const emit = defineEmits(["send", "capitalist", "handback", "interject", "pick",
 
 /* 会话标题取任务根目录最后一段；根不可用时退回“监工”，不拼出“-监工”。 */
 const supervisorTitle = computed(() => {
-  const p = String(props.root || "").replace(/[\\/]+$/, "");
-  const name = p.split(/[\\/]/).pop() || "";
+  const name = shortRoot(props.root);
   return name ? tr("{name}-监工", { name }) : tr("监工");
 });
 
@@ -509,6 +511,7 @@ const view = computed(() => {
           full: true,
           text: "",
           atts: [],
+          skills: [],
           items: items.map((x) => ({
             ref: msgRef(x),
             at: x.at,
@@ -544,6 +547,8 @@ const view = computed(() => {
         full,
         text: att.text || (att.list.length ? "" : m.text),
         atts: att.list,
+        /* 随带的技能：气泡按标签展示，取值来自消息流里的 skills 字段。 */
+        skills: Array.isArray(m.skills) ? m.skills : [],
         assoc,
         assocId,
         card,
@@ -551,7 +556,7 @@ const view = computed(() => {
         jump: c === "supervisorsay" && String(m.no || "") !== "",
       };
     })
-    .filter((v) => v.c === "redispatch" || v.text.trim() !== "" || v.atts.length > 0);
+    .filter((v) => v.c === "redispatch" || v.text.trim() !== "" || v.atts.length > 0 || v.skills.length > 0);
 });
 
 const rdupOpen = reactive({});
@@ -1774,18 +1779,28 @@ const pickCanUp = computed(() => {
   return up.length > 0 && up !== p;
 });
 
+/** 取一层的目录内容，不写回输入框：键入联动与显式跳转共用同一份取数。 */
+async function fetchPick(rel) {
+  const q = rel ? `?path=${encodeURIComponent(rel)}` : "";
+  const r = await fetch(`./api/fs-list${q}`);
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+
+function applyPick(d) {
+  pickAbs.value = String(d.path || "");
+  pickRel.value = String(d.rel || "");
+  pickOutside.value = Boolean(d.outside);
+  pickEntries.value = Array.isArray(d.entries) ? d.entries : [];
+}
+
 async function loadPick(rel) {
   pickLoading.value = true;
   try {
-    const q = rel ? `?path=${encodeURIComponent(rel)}` : "";
-    const r = await fetch(`./api/fs-list${q}`);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-    pickAbs.value = String(d.path || "");
-    pickRel.value = String(d.rel || "");
-    pickOutside.value = Boolean(d.outside);
+    const d = await fetchPick(rel);
+    applyPick(d);
     pickPathInput.value = pickRel.value;
-    pickEntries.value = Array.isArray(d.entries) ? d.entries : [];
   } catch (e) {
     pickEntries.value = [];
     pickAbs.value = e instanceof Error ? e.message : String(e);
@@ -1795,10 +1810,44 @@ async function loadPick(rel) {
   }
 }
 
+/*
+ * 键入联动：把输入拆成“目录 + 前缀”，列该目录内容并按前缀过滤。
+ *
+ * 每次按键都请求一次目录开销过大，按 140ms 合并请求；层级尚未输完整时保留上一次的列表，
+ * 避免列表闪为空白。输入以分隔符结尾表示进入这一层，不按前缀过滤。
+ */
+let pickTyping = 0;
+function onPickInput(v) {
+  pickPathInput.value = String(v || "");
+  window.clearTimeout(pickTyping);
+  pickTyping = window.setTimeout(() => void pickFollow(pickPathInput.value), 140);
+}
+
+async function pickFollow(raw) {
+  const v = String(raw || "");
+  const endsWithSep = /[\\/]$/.test(v);
+  const dir = endsWithSep
+    ? v.replace(/[\\/]+$/, "") || "/"
+    : v.replace(/[\\/][^\\/]*$/, "");
+  const prefix = endsWithSep ? "" : v.split(/[\\/]/).pop() || "";
+  try {
+    const d = await fetchPick(dir);
+    applyPick(d);
+    const all = Array.isArray(d.entries) ? d.entries : [];
+    pickEntries.value = prefix
+      ? all.filter((e) => String(e.name || "").toLowerCase().startsWith(prefix.toLowerCase()))
+      : all;
+  } catch {
+    /* 目标层级不存在或不可读：保留上一次的列表。 */
+  }
+}
+
 /** 回车跳转时相对路径按任务根解析，绝对路径直接传入（后端按 isAbsolute 判定）。 */
 function pickJump() {
   const v = String(pickPathInput.value || "").trim();
   if (!v) return;
+  /* 取消在途的键入联动，否则它会把刚跳转的目录按旧前缀重新过滤。 */
+  window.clearTimeout(pickTyping);
   void loadPick(v);
 }
 
@@ -1977,7 +2026,19 @@ async function pickNext(m) {
   }
 }
 
-/* pointerdown 捕获阶段按下即关闭弹层，排除弹层自身与触发按钮，避免点击后又被 click 重新打开。 */
+/*
+ * 已选技能由 SkillPicker 通过 v-model 维护，这里只持有这份数组：
+ * 随消息一起提交、输入区上方的标签读它、发送后清空。搜索与列表状态留在组件内部。
+ */
+const pickedSkills = ref([]);
+
+/** 取消某个已选技能（输入区标签上的 ×）。 */
+function removeSkill(name) {
+  pickedSkills.value = pickedSkills.value.filter((x) => x !== name);
+}
+
+/* pointerdown 捕获阶段按下即关闭弹层，排除弹层自身与触发按钮，避免点击后又被 click 重新打开。
+   技能弹层由 SkillPicker 自己处理，不在此列。 */
 function closePops(e) {
   if (!modelOpen.value && !nextOpen.value && !pickOpen.value && !memOpen.value) return;
   const t = e.target;
@@ -2425,6 +2486,8 @@ function submit() {
     attachments: atts.map((a) => ({path: a.path, url: a.url, thumb: a.thumb || "", name: a.name})),
     /* 监工介入开启时消息交由监工处理，不直接登记给工作进程。 */
     via: viaSupervisor.value && !isSupervisor.value ? "capitalist" : "",
+    /* 选中的技能随消息下发：监工面板进派单正文，工作进程会话并入补充内容。 */
+    skills: pickedSkills.value.slice(),
   };
   const fire = () => {
     /* 提交介入动作时立即亮“介入中”；仅本会话进程存活才交给监工，已退出时不亮该状态。 */
@@ -2433,6 +2496,11 @@ function submit() {
     emit("send", payload, quoteOut, meta);
     draft.value = "";
     attachments.value = [];
+    /*
+     * 技能按条生效：消息发出后清空输入区，否则下一条会沿用同一批技能。
+     * 已选内容改由发出后的气泡展示。
+     */
+    pickedSkills.value = [];
     /* 附件批次随消息发出后，上一批的失败重试不并入新草稿。 */
     uploadFails.value = [];
     draftGen += 1;
@@ -2578,12 +2646,13 @@ const refIndex = computed(() => {
   return ix;
 });
 
-const truncNote = computed(() => {
-  const shown = props.messages.length;
-  const total = Math.max(shown, Number(props.total) || 0);
-  if (!props.truncated || total <= shown) return "";
-  return tr("仅显示最近 {a} 条（共 {b} 条），更早记录见任务目录", { a: shown, b: total });
-});
+/*
+ * 不再渲染“仅显示最近 N 条”横幅。
+ *
+ * 它按 total 与当前条数比较来显示，而轮询每轮都会改这两个数，判定在临界值反复翻转，
+ * 表现为横幅反复出现与隐藏；计数包含折叠块中的条目，与屏幕上可见的条数不一致。
+ * 更早记录是否存在由“展开更早的消息”按钮表达，需要时可以点击。
+ */
 
 const bubblePlacement = (c) => (c === "user" || c === "human" ? "end" : "start");
 const isBlock = (v) => v.c === "sys" || v.c === "think" || (v.fold && v.c === "worker");

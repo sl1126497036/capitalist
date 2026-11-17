@@ -4,7 +4,7 @@
  * 只处理 HTTP 收发与入参校验，指令执行交给命令层。
  */
 
-import { BoardCtx } from "../types";
+import { BoardCtx, isLoopback, sendJson } from "../types";
 import { hostOverrideOf } from "../../../agent/registry";
 import { WorkerHost } from "../../worker/worker";
 import { bindAttachments } from "../../../core/message/attachments";
@@ -18,13 +18,14 @@ import { enterSupervisorAction } from "../../worker/activity";
 import { chatVerdictOf, settleChat, ChatVerdict } from "../../view/chatSettle";
 import { appendSupervisorDirective } from "../../channel/direct";
 import { askModelStream, isQuotaText, parseReply } from "../../channel/llm";
-import { readPause } from "../../loop";
+import { readPause } from "../../../core/record/pause";
 import { memoryLines } from "../../context/memory";
 import { supervisorReplyView } from "../../view/msgView";
 import { estimateSessionContextTokens, recentUserLines, recordSupervisorContext, reloadBrief, severeSupervisorEventLines, supervisorChatTurnSessionId } from "../../context/reload";
 import { dispatchNoTable } from "../../usage/threadNo";
 import { noteSupervisorModelUsed } from "../assets";
 import { cStr, cId, pickShots } from "../cmdArgs";
+import { preemptedPromptLines, replyPreempted } from "../chatPreempt";
 import { taskNoLines, workerRuntimeLines, workerDigest, settledLines } from "../cmdContext";
 import { writeQuotedDirect, runCli, resolveQuoteText, quoteDispatchLabel, sayArgsOf } from "../cmdQuote";
 import { serializeSupervisorChat, supervisorPolicy, workerSessionId } from "../commands";
@@ -34,10 +35,16 @@ import { dispatchTitle } from "../snapshot";
 import { dispatchModel, readDispatchesBoard } from "../sources";
 import { buildThreads } from "../threads";
 import { buildSupervisorStatus } from "../views";
+import { findSkill, listSkills } from "../../skills";
+
+/**
+ * 会携带技能的动作：这些动作最终把正文下发成派单，技能名随正文一起下发。
+ * `skip` / `set-next` 等不改派单正文的动作不追加，避免写入无关记录。
+ */
+const SKILL_ACTIONS = new Set(["dispatch", "amend", "fix", "diagnose"]);
 
 export function handleCapitalistChat(ctx: BoardCtx): void {
-  const peer = ctx.req.socket.remoteAddress ?? "";
-  const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+  const loopback = isLoopback(ctx);
   if (!loopback) {
     ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
     ctx.res.end(JSON.stringify({ error: "对话接口只接受本机回环地址" }));
@@ -61,31 +68,49 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         return "";
       }
     })();
-    const exec = async (): Promise<void> => {
-      const json = (obj: unknown, code = 200): void => {
-        ctx.res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        ctx.res.end(JSON.stringify(obj));
-      };
+    const exec = async (signal: AbortSignal): Promise<void> => {
       let text = "";
       let thread = "";
       let via = "";
       let quote = "";
       let quoteFallback = "";
+      let skills: string[] = [];
       try {
-        const body = JSON.parse(raw) as { text?: string; thread?: string; via?: string; quote?: string; quote_text?: string };
+        const body = JSON.parse(raw) as {
+          text?: string;
+          thread?: string;
+          via?: string;
+          quote?: string;
+          quote_text?: string;
+          skills?: unknown[];
+        };
         text = String(body.text ?? "").trim();
         thread = String(body.thread ?? "").trim();
         via = String(body.via ?? "").trim();
         quote = cId(body.quote, "quote") ?? "";
         quoteFallback = cStr(body.quote_text);
+        /* 界面选中的技能：只取名字，最多五个，顺序即用户在界面上的选择顺序。 */
+        skills = Array.isArray(body.skills)
+          ? body.skills.map((s) => String(s ?? "").trim()).filter(Boolean).slice(0, 5)
+          : [];
       } catch {
-        json({ error: "请求体不是合法 JSON" }, 400);
+        sendJson(ctx, { error: "请求体不是合法 JSON" }, 400);
         return;
       }
       if (!text) {
-        json({ error: "没有内容" }, 400);
+        sendJson(ctx, { error: "没有内容" }, 400);
         return;
       }
+
+      /**
+       * 用户在界面选中的技能，随派单正文下发。
+       *
+       * 工作进程按正文里的技能名匹配并注入对应 SKILL.md，所以固定写进正文，
+       * 不依赖对话层改写。
+       */
+      const skillLine = skills.length
+        ? `\n\n使用技能：${skills.join("、")}（按该技能的 SKILL.md 执行）`
+        : "";
 
       const state = loadState(ctx.opts.root);
       const capitalist = buildSupervisorStatus(ctx.opts.root);
@@ -153,9 +178,18 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         : [];
 
       if (thread && via !== "capitalist") {
+        /*
+         * 技能随补充内容一起注入。
+         *
+         * 下发经 `say`，正文会并入该单的动作，工作进程在下一个动作间隙收到；正文里
+         * 出现技能名，它才会按名加载对应 SKILL.md。消息流记的是原文，技能另记一份，
+         * 气泡据此展示，技能行不写入正文。
+         */
+        const sayText = skills.length ? `${text}${skillLine}` : text;
         const userMsg = recordUserMessage(ctx.opts.root, {
           text,
           thread,
+          ...(skills.length ? { skills } : {}),
           ...(quote ? { quote } : {}),
           ...(quote ? { quoteText: resolveQuoteText(ctx.opts.root, thread, quote, quoteFallback) } : {}),
         });
@@ -230,7 +264,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           let sayErr = "";
           if (quote) {
             sayOk = writeQuotedDirect(ctx.opts.root, {
-              text,
+              text: sayText,
               shard: String(me?.shard ?? ""),
               thread,
               quote,
@@ -249,7 +283,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             }
           } else {
             const sayArgs = sayArgsOf({
-              text,
+              text: sayText,
               thread,
               msgId: userMsg.id,
               shard: String(me?.shard ?? ""),
@@ -329,11 +363,16 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           effort: loadSupervisor(ctx.opts.root)?.effort ?? "high",
           model: dispatchModel(disp ?? undefined) || undefined,
           ...(ctx.opts.token ? { token: ctx.opts.token } : {}),
+          signal,
           onDelta: (d) => sse(d),
         }).finally(() => {
           clearInterval(beat);
           leaveChat();
         });
+        if (r.aborted) {
+          replyPreempted(ctx, { msgId: userMsg.id, text, thread, from: "worker", sse });
+          return;
+        }
         if (!r.ok) {
           const quota = isQuotaText(r.text);
           if (quota) markQuotaExhausted(ctx.opts.root, r.text);
@@ -352,16 +391,20 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       }
 
       const brief = reloadBrief(ctx.opts.root);
-      /** 先把发言记入流，再算候选图；顺序反了本条消息的图不在编号表里。 */
+      /** 先把指令记入流，再算候选图；顺序反了本条消息的图不在编号表里。 */
       const userMsg = recordUserMessage(ctx.opts.root, {
         text,
         thread,
+        ...(skills.length ? { skills } : {}),
         ...(quote ? { quote } : {}),
         ...(quote ? { quoteText: resolveQuoteText(ctx.opts.root, thread, quote, quoteFallback) } : {}),
       });
       const past = recentShots(ctx.opts.root, { thread });
       const ownShots = past.filter((s) => s.msg_id === userMsg.id);
       const shots = ownShots.map((s, i) => ({ ...s, index: i + 1 }));
+
+      /** 队列为空：没有派单在执行，没有排队项，没有失败项，属待命态。 */
+      const idleQueue = running.length === 0 && queued === 0 && failed === 0;
 
       const contextLines = [
         `阶段：${state?.stage ?? "?"}${capitalist.stage_name ? ` ${capitalist.stage_name}` : ""}`,
@@ -378,12 +421,14 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
               ]
             : [];
         })(),
+        ...preemptedPromptLines(ctx.opts.root),
         ...settledLines(ctx.opts.root),
         `并行度：${capitalist.parallel ?? "?"} ｜ 运行中 ${running.length} 个${
           running.length
             ? `（${running.map((t) => `#${t.no} ${t.title || t.shard || t.id}${t.worker ? ` · ${t.worker}` : ""}`).join("、")}）`
             : ""
         } ｜ 排队 ${queued} ｜ 异常 ${failed}`,
+        ...(idleQueue ? ["队列状态：空（待命，没有派单在执行，也没有排队项）"] : []),
         `下一步：${state?.next_action ? String(state.next_action).slice(0, 300) : "(空)"}`,
         `线程总数：${threads.length} ｜ 已完成 ${threads.filter((t) => t.status === "done" || t.status === "exited").length}`,
         ...(brief
@@ -399,11 +444,43 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         })(),
       ].join("\n");
 
+      /**
+       * 可用技能：技能不专属工作进程。
+       *
+       * 监工自己动手的场合（查状态、写契约、改文案）读完 SKILL.md 直接执行；
+       * 需要落地的改动把技能名写进派单正文，工作进程按名加载全文。由模型按技能说明与
+       * 用户描述判断归谁，判断不了时问用户，不预设归属。
+       */
+      const skillLines = (() => {
+        const list = listSkills(ctx.opts.root);
+        if (!list.length) return [];
+        return [
+          "",
+          "【可用技能】技能既可能由监工自己执行，也可能派给工作进程，按技能说明与用户描述判断；判断不了时问用户。",
+          "  监工自己动手时先读该技能的 SKILL.md（宿主配置目录下 <技能名>/SKILL.md）再执行；",
+          "  需要落地的改动把技能名写进派单正文，工作进程会按名加载该技能全文。",
+          ...list.slice(0, 40).map((s) => `  - ${s.name}${s.desc ? `：${s.desc}` : ""}`),
+        ];
+      })();
+
       const prompt = [
         "你是 capitalist 监工的对话层，直接回复用户提问。",
         "",
         "【当前真实状态】",
         contextLines,
+        ...(skills.length
+          ? [
+              "",
+              `【用户在界面选中的技能】${skills
+                .map((s) => {
+                  const hit = findSkill(ctx.opts.root, s);
+                  return hit ? `${s}（${hit.path}）` : s;
+                })
+                .join("、")}`,
+              "派单时沿用这个名字，不改写成别的技能；需要监工自己执行时按上面的路径读 SKILL.md。",
+            ]
+          : []),
+        ...skillLines,
         "",
         "【怎么回答】",
         "- 用中文，简短直接，一到三句，不要客套、不要重复用户的话",
@@ -419,6 +496,15 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         "- 但“对谁做”必须落到具体对象：以用户所指的那个东西为准（哪个、哪一处），不按类别推断。",
         "  写派单前先确认是**哪一个**、能把它的位置指出来；指不出唯一对象时 capitalist ask，不猜测",
         "- 用户输入按指令执行；不纠正用户表述，不解释识别规则",
+        ...(idleQueue
+          ? [
+              "",
+              "【当前处于待命，队列为空】",
+              "- 没有派单在执行，也没有排队项。用户打招呼或问状态时，说明当前空闲，并提示可以直接描述要做的事，",
+              "  或选择一个技能，随消息一起派发。",
+              "- 不写“收工”“条件满足”“可以结束”：没有开工就不存在收工。阶段门槛、占位文件、值守条件这类说法也不写。",
+            ]
+          : []),
         "",
         "【格式硬要求，逐条执行】",
         "1. 排版用 Markdown：加粗写 **文字**，列表行首写 - 或 1.，代码用反引号；不用表格、缩进代码块与 HTML 标签。",
@@ -484,11 +570,17 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         effort: loadSupervisor(ctx.opts.root)?.effort ?? "high",
         model: loadSupervisor(ctx.opts.root)?.supervisor_model || undefined,
         ...(ctx.opts.token ? { token: ctx.opts.token } : {}),
+        signal,
         onDelta: (d) => sse(d),
       }).finally(() => {
         clearInterval(beat);
         leaveChat();
       });
+      /* 新消息抢占了这一轮：按“未执行”收尾，要求仍留在待处理清单里。 */
+      if (r.aborted) {
+        replyPreempted(ctx, { msgId: userMsg.id, text, thread, from: "supervisor", sse });
+        return;
+      }
       if (!me) {
         if (r.context_used) {
           recordSupervisorContext(ctx.opts.root, r.context_used, r.context_window ?? 0, r.context_model ?? "");
@@ -563,7 +655,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
            * 推翻说明随单进入正文：工作进程与验收需要知道本次是刻意推翻旧口径，
            * 否则会按“两套并存”处理。回执仍用原文，不把该行带进气泡。
            */
-          const directiveArg = act.revoke ? `${arg}\n\n本次作废：${act.revoke}` : arg;
+          const withSkill = SKILL_ACTIONS.has(String(act.action)) ? `${arg}${skillLine}` : arg;
+          const directiveArg = act.revoke ? `${withSkill}\n\n本次作废：${act.revoke}` : withSkill;
           /** skip 把整个阶段记成欠账跳过，不代为确认。 */
           const w = appendSupervisorDirective(ctx.opts.root, {
             action: act.action,
@@ -663,7 +756,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       sse({ kind: "done", reply: display, display, want, applied, ...(settled.unhandled ? { unhandled: true } : {}) });
       ctx.res.end();
     };
-    if (askedThread) void exec();
+    if (askedThread) void exec(new AbortController().signal);
     else void serializeSupervisorChat(exec);
   });
 }

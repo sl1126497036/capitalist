@@ -13,7 +13,7 @@ const { applyVerdict } = require(join(PKG, "dist/supervisor/loop.js"));
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-verdict-fb-"));
-  createTaskRoot({ target: "判定兜底", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "判定默认", contractSpec: "minimal", root: base });
   return { base, clean: () => rmSync(base, { recursive: true, force: true }) };
 }
 

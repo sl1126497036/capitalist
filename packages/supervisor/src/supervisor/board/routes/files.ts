@@ -4,7 +4,7 @@
  * 只做收发与入参校验，业务逻辑在 threads / views / commands 各层。
  */
 
-import type { BoardCtx } from "../types";
+import { isLoopback, sendJson, type BoardCtx } from "../types";
 import { appendJsonl, readJsonl } from "../../../core/record/json";
 import { supervisorDir } from "../../../core/record/paths";
 import { BOARD_WEB_TYPES } from "../assets";
@@ -15,8 +15,7 @@ import { all } from "../../../agent/registry";
 
 /** /api/upload */
 export function handleUpload(ctx: BoardCtx): void {
-const peer = ctx.req.socket.remoteAddress ?? "";
-const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+const loopback = isLoopback(ctx);
 if (!loopback) {
   ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
   ctx.res.end(JSON.stringify({ error: "上传接口只接受本机回环地址" }));
@@ -33,21 +32,17 @@ ctx.req.on("data", (chunk: Buffer) => {
   if (raw.length > 12_000_000) ctx.req.destroy();
 });
 ctx.req.on("end", () => {
-  const json = (obj: unknown, code = 200): void => {
-    ctx.res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-    ctx.res.end(JSON.stringify(obj));
-  };
   let payload: { name?: string; dataUrl?: string; thread?: string; tag?: string };
   try {
     payload = JSON.parse(raw) as { name?: string; dataUrl?: string; thread?: string; tag?: string };
   } catch {
-    json({ error: "请求体不是合法 JSON" }, 400);
+    sendJson(ctx, { error: "请求体不是合法 JSON" }, 400);
     return;
   }
   const dataUrl = String(payload.dataUrl ?? "");
   const m = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl);
   if (!m) {
-    json({ error: "只接受 png / jpeg / webp / gif 的 base64 data URL" }, 400);
+    sendJson(ctx, { error: "只接受 png / jpeg / webp / gif 的 base64 data URL" }, 400);
     return;
   }
   const mime = m[1] as string;
@@ -56,15 +51,15 @@ ctx.req.on("end", () => {
   try {
     buf = Buffer.from((m[2] as string).replace(/\s+/g, ""), "base64");
   } catch {
-    json({ error: "base64 解码失败" }, 400);
+    sendJson(ctx, { error: "base64 解码失败" }, 400);
     return;
   }
   if (buf.length === 0) {
-    json({ error: "图片为空" }, 400);
+    sendJson(ctx, { error: "图片为空" }, 400);
     return;
   }
   if (buf.length > 8_000_000) {
-    json({ error: `图片太大（${buf.length} 字节，上限 8MB）` }, 413);
+    sendJson(ctx, { error: `图片太大（${buf.length} 字节，上限 8MB）` }, 413);
     return;
   }
   try {
@@ -85,9 +80,9 @@ ctx.req.on("end", () => {
       name: String(payload.name ?? "").slice(0, 120),
     };
     appendJsonl(join(dir, "index.jsonl"), attMeta);
-    json({ ok: true, path: rel, bytes: buf.length, mime, thread: attMeta.thread, tag: attMeta.tag });
+    sendJson(ctx, { ok: true, path: rel, bytes: buf.length, mime, thread: attMeta.thread, tag: attMeta.tag });
   } catch (err) {
-    json({ error: `保存失败：${String(err instanceof Error ? err.message : err)}` }, 500);
+    sendJson(ctx, { error: `保存失败：${String(err instanceof Error ? err.message : err)}` }, 500);
   }
 });
 return;
@@ -155,8 +150,7 @@ return;
 export function handleFsList(ctx: BoardCtx): void {
 try {
   /** 该接口能列本机目录，只接受本机回环来源。 */
-  const peer = ctx.req.socket.remoteAddress ?? "";
-  const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+  const loopback = isLoopback(ctx);
   if (!loopback) {
     ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
     ctx.res.end(JSON.stringify({ error: "目录浏览只接受本机回环地址" }));

@@ -215,6 +215,11 @@ export interface AskModelOptions {
    * 回退到文件读取会静默返回空值，表现为“登录状态失效”。
    */
   token?: string | undefined;
+  /**
+   * 中止信号：上层收到新的用户消息时用它掐断正在提交的回执或报告，
+   * 让用户要求优先得到处理。中止后子进程被结束，本轮按 `aborted` 返回。
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -239,6 +244,13 @@ export interface AskModelResult {
   context_window?: number;
   /** 这条读数对应的模型名（modelUsage 的键）；宿主没报时缺省。 */
   context_model?: string;
+  /**
+   * 本轮被调用方的中止信号掐断。
+   *
+   * 与“通道故障”分开：中止是预期内的结果，调用方据此收尾（提示用户本轮被打断），
+   * 不按错误上报，也不重试。
+   */
+  aborted?: boolean;
 }
 
 /** 从 assistant 行取 `message.model`；宿主没给时返回空串。 */
@@ -605,6 +617,8 @@ export async function askModelStream(
   opts: AskModelOptions & { onDelta: (d: StreamDelta) => void },
 ): Promise<AskModelResult> {
   const host = resolveChatHost(opts.host);
+  /* 还没起进程就已经被抢占：直接返回，不产生一次模型调用，也不必关心通道是否可用。 */
+  if (opts.signal?.aborted) return { ok: false, aborted: true, text: "" };
   const bin = findBin(host);
   if (!bin) return { ok: false, text: `找不到 ${host} 可执行文件，对话通道不可用` };
 
@@ -657,10 +671,13 @@ export async function askModelStream(
     /* 上游拒绝（额度 / 限流）说明；非空表示正文为错误说明。 */
     let quotaHit = "";
     let stopTimers = (): void => {};
+    /** 摘掉中止监听；本轮已结束时必须摘掉，否则上层复用的信号会留着一条死引用。 */
+    let detachAbort = (): void => {};
     const done = (r: AskModelResult): void => {
       if (settled) return;
       settled = true;
       stopTimers();
+      detachAbort();
       resolve({
         ...r,
         ...(ctxUsed !== undefined ? { context_used: ctxUsed } : {}),
@@ -677,6 +694,39 @@ export async function askModelStream(
       /* 同上：prompt 走 argv，stdin 留空。 */
       stdio: ["ignore", "pipe", "pipe"],
     });
+
+    /*
+     * 抢占：上层收到新的用户消息时中止本轮。
+     *
+     * 先发 SIGTERM 让宿主自己收尾；2 秒后仍未退出则 SIGKILL，避免一个已经没人等的
+     * 模型进程继续占用端口与额度。返回 `aborted` 而不返回错误，调用方据此把这一轮
+     * 收成“被新消息打断”，不按通道故障上报。
+     */
+    const onAbort = (): void => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        /* 已退出 */
+      }
+      const hard = setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* 已退出 */
+        }
+      }, 2_000);
+      /* 不阻止进程退出：本轮已经结束，不需要为强杀计时器保活。 */
+      hard.unref?.();
+      done({ ok: false, aborted: true, text: "" });
+    };
+    if (opts.signal) {
+      /* 起进程这段时间内被抢占的，信号已经处于 aborted，监听不会再回调，需补判一次。 */
+      if (opts.signal.aborted) onAbort();
+      else {
+        opts.signal.addEventListener("abort", onAbort, { once: true });
+        detachAbort = () => opts.signal?.removeEventListener("abort", onAbort);
+      }
+    }
 
     /* 空闲超时语义与 {@link askModel} 一致：有输出即重置计时。流式版逐段输出，整体耗时长于一次性返回。 */
     const idleMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;

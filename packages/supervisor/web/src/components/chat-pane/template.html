@@ -375,7 +375,6 @@
 
       <div class="streamwrap">
         <div ref="streamEl" class="stream" role="log" :aria-label="t('消息流')" @scroll.passive="onScroll">
-          <div v-if="truncNote" class="trunc">{{ truncNote }}</div>
           <button v-if="canLoadOlder" type="button" class="olderbtn" @click="emit('loadOlder')">
             {{ t("展开更早的消息") }}
           </button>
@@ -616,6 +615,12 @@
                     </span>
                     </button>
                   </div>
+                  <!-- 随带的技能：发送后输入区已清空，带有哪些技能只在这里显示。 -->
+                  <div v-if="v.skills.length" class="bskills">
+                    <span v-for="s in v.skills" :key="s" class="bskill">
+                      <ToolOutlined aria-hidden="true"/>{{ s }}
+                    </span>
+                  </div>
                   <div v-if="content" class="ctxt">
                     <MsgText :text="content" :refs="refIndex" :md="mdOf(v)" @pick="emit('pick', $event)"/>
                   </div>
@@ -743,6 +748,19 @@
           <button class="uret" type="button" @click="retryUploads">{{ t("重试") }}</button>
         </span>
       </div>
+      <!-- 已选技能贴在输入框上方：选中状态要在输入区可见，否则无法确认会带哪些技能。 -->
+      <div v-if="pickedSkills.length" class="skillchips">
+        <span v-for="n in pickedSkills" :key="n" class="skillchip">
+          <ToolOutlined class="skillchipic" aria-hidden="true"/>
+          {{ n }}
+          <button
+            class="skillchipx"
+            type="button"
+            :aria-label="t('取消该技能')"
+            @click.stop="removeSkill(n)"
+          >×</button>
+        </span>
+      </div>
       <div class="inputrow">
         <div class="inputbox">
           <textarea
@@ -792,7 +810,7 @@
           >
             <div class="pickhd">
               <button class="pickup" type="button" :disabled="!pickCanUp" @click.stop="pickGoUp">
-                <ArrowUpOutlined aria-hidden="true"/>
+                <UpOutlined aria-hidden="true"/>
               </button>
               <input
                 class="pickpath"
@@ -801,7 +819,7 @@
                 spellcheck="false"
                 :placeholder="t('相对路径或绝对路径，回车跳转')"
                 @click.stop
-                @input="pickPathInput = $event.target.value"
+                @input="onPickInput($event.target.value)"
                 @keydown.enter.stop="pickJump"
                 @keydown.esc.stop="pickOpen = false"
               />
@@ -828,6 +846,7 @@
             </div>
           </div>
         </span>
+        <SkillPicker v-model="pickedSkills"/>
         <span v-if="isSupervisor" class="pickwrap">
           <button
             ref="nextBtnEl"

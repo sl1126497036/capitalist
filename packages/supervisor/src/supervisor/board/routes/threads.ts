@@ -125,7 +125,7 @@ export function handleThreadMessage(ctx: BoardCtx): void {
       const n = String(e.event ?? e.kind ?? "");
       return (n === "supervisor_chat_ask" || n === "supervisor_reply") && talkIds.has(String(e.thread ?? ""));
     });
-    /** 同一句用户发言会落 supervisor_chat_ask 与 direct.jsonl 两条记录，按正文归一判同去重。 */
+    /** 同一句用户指令会落 supervisor_chat_ask 与 direct.jsonl 两条记录，按正文归一判同去重。 */
     const normTalk = (s: unknown): string =>
       String(s ?? "")
         .replace(/^\[附件\][^\n]*$/gm, "")

@@ -848,7 +848,8 @@
   margin-top: 8px;
 }
 
-/* 蒙版铺满整卡：inset:0 不占布局，自身接指针避免重复下发，role="status" 供读屏播报。 */
+/* 蒙版铺满整卡：inset:0 不占布局，自身接指针避免重复下发，role="status" 供读屏播报。
+   只放一个转圈图标、不带文案：动作名在确认框里已经说过，这里只表达“正在执行”。 */
 .cardbusy {
   position: absolute;
   inset: 0;
@@ -856,19 +857,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--s6);
   border-radius: inherit;
-  background: rgba(9, 13, 24, 0.72);
-  color: var(--t1);
-  font-family: var(--font);
-  font-size: var(--f-tiny);
-  letter-spacing: 0.4px;
-  cursor: progress;
+  background: rgba(9, 13, 24, 0.66);
 }
 .cardbusy::before {
   content: "";
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 2px solid var(--line-2);
   border-top-color: var(--accent-2);

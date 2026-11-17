@@ -9,6 +9,7 @@ import { TRUST_PRESET, createWorkspaceFacet } from "../shared/dirTrust";
 import { settingsHookInstall } from "../shared/settingsHookPlan";
 import { winBinNames, winShellForShim, gitBashAvailable } from "../shared/workerCommon";
 import { TENCENT_MODEL_POLICY } from "../shared/modelPolicy";
+import { TENCENT_SESSION_ENV_DROP_NAMES } from "../shared/tencentEnv";
 
 const LABEL = "CodeBuddy";
 
@@ -106,15 +107,7 @@ export const impl: HostImpl = {
     /* CLI 认这个变量作为 Bearer 令牌：设置后不再读客户端保存的凭证文件。 */
     authEnvVar: "CODEBUDDY_AUTH_TOKEN",
     envDropPrefixes: ["SERVER__", "ACC_PRODUCT_CONFIG"],
-    envDropNames: [
-      "CODEBUDDY_HOST",
-      "CODEBUDDY_SESSION_ID",
-      "CODEBUDDY_CONVERSATION_MESSAGE_ID",
-      "CODEBUDDY_CONVERSATION_REQUEST_ID",
-      "CODEBUDDY_TOOL_CALL_ID",
-      "CODEBUDDY_MCP_CONFIG",
-      "CODEBUDDY_DOCUMENT_IPC_ADDRESS",
-    ],
+    envDropNames: ["CODEBUDDY_HOST", ...TENCENT_SESSION_ENV_DROP_NAMES],
     binNames: (platform) => winBinNames(platform, "codebuddy"),
     // prompt 走 argv，不走 stdin：`-p` 的 stdin 要承载首次进入目录的信任确认，两者共用
     // 一条管道时 prompt 会被当作确认读掉，进程随后读到 EOF 空转。

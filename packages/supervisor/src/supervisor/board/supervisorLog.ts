@@ -1,4 +1,5 @@
 import { readDispatches } from "../../core/record/supervisor";
+import { splitDirectiveTag } from "../../core/dispatch/commands";
 import { readTasks, taskSummary as poolSummary, type TaskSummary as TaskPoolSummary } from "../../core/record/tasks";
 import { unhandledFromEvents } from "../view/chatSettle";
 import { listSupervisorDirectives, SupervisorDirective } from "../channel/direct";
@@ -134,7 +135,8 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
     case "supervisor_cmd": {
       const ok = e.ok === true;
       const action = zh.cmd(e.action, e.urgent);
-      const arg = String(e.arg ?? "");
+      /* 分类标签是调度用的会话键，只在调度侧使用，不上界面。 */
+      const arg = splitDirectiveTag(String(e.arg ?? "")).body;
       const tail = ok ? String(e.detail ?? "") : String(e.reason ?? "");
       return `指令 ${action}${arg ? ` ${arg}` : ""}：${ok ? "已执行" : "被拒"}${tail ? `（${tail}）` : ""}`;
     }
@@ -328,6 +330,10 @@ export function buildSupervisorLog(
       ...(name !== "supervisor_reply" && Array.isArray((e as { atts?: unknown }).atts)
         ? { atts: ((e as { atts: unknown[] }).atts ?? []).map((x) => String(x)).filter(Boolean) }
         : {}),
+      /* 技能随用户指令一起记下，气泡按标签显示；监工回复没有这一项。 */
+      ...(name === "supervisor_chat_ask" && Array.isArray((e as { skills?: unknown }).skills)
+        ? { skills: ((e as { skills: unknown[] }).skills ?? []).map((x) => String(x)).filter(Boolean) }
+        : {}),
       ...(name === "mq_message" ? jumpOf(e) : {}),
       ...(name === "supervisor_reply" && String((e as { directive?: unknown }).directive ?? "")
         ? (() => {
@@ -417,10 +423,14 @@ export function buildSupervisorLog(
     const fromSupervisor = r.via === "capitalist";
     const rawText = String(r.text ?? "");
     const actionName = String(r.action ?? "");
-    const shownText =
-      fromSupervisor && actionName && rawText.toLowerCase().startsWith(actionName.toLowerCase())
-        ? `${zh.cmd(actionName, r.result?.urgent)}${rawText.slice(actionName.length)}`
-        : rawText;
+    const shownText = (() => {
+      if (!fromSupervisor || !actionName || !rawText.toLowerCase().startsWith(actionName.toLowerCase())) {
+        return rawText;
+      }
+      /* 动作名换成中文后，正文开头的分类标签（`[supervisor-copy]`）要一并去掉：那是调度用的会话键。 */
+      const rest = splitDirectiveTag(rawText.slice(actionName.length).trim()).body;
+      return [zh.cmd(actionName, r.result?.urgent), rest].filter(Boolean).join(" ");
+    })();
     /** 指令自带的图只归这条指令。 */
     const scAtts = attachmentsOf({ atts: (r as unknown as { atts?: unknown }).atts, text: r.text });
     const scTarget = (() => {

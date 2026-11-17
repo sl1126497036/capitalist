@@ -1,0 +1,61 @@
+<span class="skwrap">
+  <button
+    ref="btnEl"
+    class="skbtn"
+    :class="{ on: picked.length > 0 }"
+    type="button"
+    :aria-expanded="open ? 'true' : 'false'"
+    :title="t('随消息下发的技能')"
+    @click.stop="toggle"
+  >
+    <ToolOutlined aria-hidden="true"/>
+    <span>{{ label }}</span>
+  </button>
+
+  <div
+    v-if="open"
+    class="skbox"
+    role="dialog"
+    :aria-label="t('选择技能')"
+    :style="{ left: pos.left, bottom: pos.bottom }"
+    @click.stop
+  >
+    <div class="skhd">
+      <input
+        class="skin"
+        :value="query"
+        spellcheck="false"
+        :placeholder="t('搜索技能：名称或说明')"
+        @click.stop
+        @input="query = $event.target.value"
+        @keydown.esc.stop="open = false"
+      />
+      <button class="skx" type="button" @click.stop="open = false">×</button>
+    </div>
+    <div class="sklist" role="listbox" aria-multiselectable="true">
+      <div v-if="loading" class="skempty">{{ t("正在加载技能…") }}</div>
+      <template v-else>
+        <button
+          v-for="s in filtered"
+          :key="s.name"
+          class="skrow"
+          :class="{ on: picked.includes(s.name) }"
+          type="button"
+          role="option"
+          :aria-selected="picked.includes(s.name) ? 'true' : 'false'"
+          @click.stop="pick(s.name)"
+        >
+          <span class="skname">{{ s.name }}</span>
+          <em v-if="s.desc" class="skdesc">{{ s.desc }}</em>
+          <span v-if="picked.includes(s.name)" class="sktick" aria-hidden="true">
+            <CheckOutlined/>
+          </span>
+        </button>
+        <div v-if="note" class="skempty">{{ note }}</div>
+        <div v-else-if="!filtered.length" class="skempty">
+          {{ query.trim() ? t("没有匹配的技能") : t("没有可用的技能") }}
+        </div>
+      </template>
+    </div>
+  </div>
+</span>

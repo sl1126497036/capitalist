@@ -3,7 +3,7 @@ import { loadState } from "../../core/record/state";
 import { listWorkers, loadSupervisor, pidAlive, readDispatches } from "../../core/record/supervisor";
 import { balanceView } from "../usage/balance";
 import { UsageFigures } from "../usage/usage";
-import { threadCostRows, tokenTotals } from "./stats";
+import { threadCostRows, tokenTotals, usageTotalsOf, type UsageTotals } from "./stats";
 import { workingSetBytes, humanBytes, resourceSample, ResourceSampleView } from "./sysmon";
 import { TaskCounts, taskCounts } from "./threads";
 import { TaskSummary, supervisorStateOf } from "./views";
@@ -25,17 +25,7 @@ export interface BoardOverview {
   credit_source: string;
   credit_stale: string;
   credit_unavailable_reason: string;
-  usage: {
-    total_input_tokens: number | null;
-    total_output_tokens: number | null;
-    total_tokens: number | null;
-    total_cache_read_tokens: number | null;
-    reported_runs: number;
-    unreported_runs: number;
-    billing_unit: string;
-    total_credit: number | null;
-    credit_unit: string;
-  };
+  usage: UsageTotals;
   /** WorkingSet 之和，一个进程都读不到时为 null。 */
   memory_bytes: number | null;
   memory_human: string;
@@ -195,18 +185,7 @@ export function buildOverview(roots: string[]): BoardOverview {
     credit_source: balance.source,
     credit_stale: balance.stale,
     credit_unavailable_reason: balance.reason,
-    usage: {
-      total_input_tokens: tokens.total_input_tokens,
-      total_output_tokens: tokens.total_output_tokens,
-      total_tokens: tokens.total_tokens,
-      total_cache_read_tokens: tokens.total_cache_read_tokens,
-      reported_runs: tokens.usage_reported,
-      unreported_runs: tokens.usage_unreported,
-      billing_unit: tokens.billing_unit,
-      total_credit: tokens.total_credit,
-      /* 同 `/api/supervisor`：无工作进程记录时使用账号额度单位，避免回退为 token。 */
-      credit_unit: tokens.credit_unit || balance.credit_unit,
-    },
+    usage: usageTotalsOf(tokens, balance.credit_unit),
     memory_bytes: bytes,
     memory_human: humanBytes(bytes),
     memory_pressure_percent: res.memory_pressure_percent,

@@ -65,9 +65,11 @@
   flex-direction: column;
   gap: var(--s10);
 
-  padding: 0 0 var(--s12) var(--s16);
+  /* 左右内边距对称：右侧原先为 0，输入框与发送按钮直接贴卡片边框。 */
+  padding: 0 var(--s16) var(--s12);
   background: var(--chat-bg);
   border: 1px solid var(--line);
+  /* 圆角卡片，与左栏任务队列同一形状；顶边不再依赖页面级横线。 */
   border-radius: var(--r-card);
   min-height: 0;
   position: relative;
@@ -568,6 +570,9 @@
   padding: 0 var(--s4) 0 0;
   font-size: var(--f-tiny);
   color: var(--t7);
+  /* 分界只做到“与底色略有差别”：取正文色 3%，与底色接近。
+     比 --line-3（8%）更浅，不做渐变阴影，仍是 1px 实线。 */
+  border-bottom: 1px solid color-mix(in srgb, var(--t1) 3%, transparent);
 }
 
 .pausecard {
@@ -913,6 +918,7 @@
 }
 
 .mcell-end {
+  /* 与中间各格一致保持完整宽度；宽度不够时由 .mdata 从右往左整格裁掉。 */
   flex: 0 0 auto;
   display: inline-flex;
   align-items: baseline;
@@ -1132,6 +1138,12 @@
 
   padding-bottom: 36px;
   padding-right: 2px;
+}
+
+/* 消息区滚动条单独收窄：全局 8px 在高分屏上仍然偏粗，这里设为 6px。
+   只改宽度，thumb 的颜色与悬停显示沿用全局规则，避免覆盖后滚动条整体消失。 */
+.stream::-webkit-scrollbar {
+  width: 6px;
 }
 
 .chatload {
@@ -2369,16 +2381,12 @@
   overflow: hidden;
 }
 
-.liverow::before {
-  content: "";
-  flex: 0 0 auto;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.55;
-}
-
+/*
+ * 活跃行不再在文字前放圆点。
+ *
+ * 这个 4px 圆点只是装饰，运行中与异常状态已由 `.run` `.bad` `.warn` 的字色与文案表达；
+ * 它位于胶囊最左侧，与文字、三点动画并列时显得杂乱。
+ */
 .liverow.run {
   color: var(--accent-2);
 }
@@ -2663,6 +2671,8 @@
   white-space: nowrap;
   overflow: hidden;
   position: relative;
+  /* 提示文字按本行实际宽度决定是否显示，见下方 @container 规则。 */
+  container-type: inline-size;
 }
 
 .pickwrap {
@@ -3052,6 +3062,75 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+
+/*
+ * 已选技能：贴在输入框上方。
+ *
+ * 选中状态要在输入区可见：只看底部按钮的数字，无法确认会带哪些技能。
+ * 发送后即清空，带走的技能改由气泡上的标签展示。
+ */
+.skillchips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s5);
+  padding: 2px 0;
+}
+.skillchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: 1px var(--s6);
+  border: 1px solid var(--select-line);
+  border-radius: var(--r-pill);
+  background: var(--select-bg);
+  font-size: var(--f-tiny);
+  line-height: 1.6;
+  color: var(--t2);
+}
+.skillchipic {
+  font-size: var(--f-tiny);
+  color: var(--t7);
+}
+.skillchipx {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--f-tiny);
+  line-height: 1;
+  color: var(--t7);
+  cursor: pointer;
+}
+.skillchipx:hover {
+  color: var(--t1);
+}
+
+/*
+ * 气泡上的技能标签。
+ *
+ * 发送后输入区即清空，带走的技能只能从气泡上读。字色取 `currentColor`，
+ * 不用主题灰阶：气泡底色随角色变化（本人消息为深蓝灰），固定灰阶在深色底上对比不足。
+ * 描边跟随同色，整体略微压暗，层级靠字号与透明度区分，不靠字色。
+ */
+.bskills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  margin-bottom: var(--s4);
+}
+.bskill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: 0 var(--s6);
+  border: 1px solid currentColor;
+  border-radius: var(--r-pill);
+  font-size: var(--f-meta);
+  line-height: 1.6;
+  color: inherit;
+  opacity: 0.9;
 }
 
 .picklist {
@@ -3477,6 +3556,19 @@
 
 .chint .fhint.fhint-warn .fhint-busy {
   color: inherit;
+}
+
+/*
+ * 宽度不够时不再显示提示。
+ *
+ * 提示绝对居中叠在按钮行上，只按百分比限制最大宽度；监工面板增加一个技能按钮后，
+ * 窄窗口下它会遮住“派单模型”“技能”两个按钮，文字与控件重叠。
+ * 按本行实际宽度判定：放不下整行控件与提示时收起提示，按钮始终可点。
+ */
+@container (max-width: 1180px) {
+  .chint .fhint {
+    display: none;
+  }
 }
 
 .hintswap-enter-active,

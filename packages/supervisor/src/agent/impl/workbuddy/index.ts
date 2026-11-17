@@ -28,6 +28,7 @@ import { TRUST_PRESET, createWorkspaceFacet } from "../shared/dirTrust";
 import { settingsHookInstall } from "../shared/settingsHookPlan";
 import { winBinNames, winShellForShim, gitBashAvailable } from "../shared/workerCommon";
 import { TENCENT_MODEL_POLICY } from "../shared/modelPolicy";
+import { TENCENT_SESSION_ENV_DROP_NAMES } from "../shared/tencentEnv";
 
 const LABEL = "WorkBuddy";
 
@@ -76,15 +77,7 @@ export const impl: HostImpl = {
      * 剔除后 CLI 回到自身身份，用 CodeBuddy 的独立凭证认证。重新登录不能解决这个问题。
      */
     envDropPrefixes: ["SERVER__", "ACC_PRODUCT_CONFIG"],
-    envDropNames: [
-      "WORKBUDDY_SESSION_ID",
-      "CODEBUDDY_SESSION_ID",
-      "CODEBUDDY_CONVERSATION_MESSAGE_ID",
-      "CODEBUDDY_CONVERSATION_REQUEST_ID",
-      "CODEBUDDY_TOOL_CALL_ID",
-      "CODEBUDDY_MCP_CONFIG",
-      "CODEBUDDY_DOCUMENT_IPC_ADDRESS",
-    ],
+    envDropNames: ["WORKBUDDY_SESSION_ID", ...TENCENT_SESSION_ENV_DROP_NAMES],
     // 无 detectPriority：Electron 壳没有可靠的非交互入口，不能参与自动探测。
     binNames: (platform) => winBinNames(platform, "workbuddy"),
     argv: ({ prompt, model }) => ["-p", prompt, ...(model ? ["--model", model] : [])],

@@ -9,6 +9,7 @@ const { join } = require("node:path");
 const { extractLocalPaths, localCheck, extractDeleteArgs, detectAction } = require("../dist/core/guard/localGuard");
 const { evaluate, loadContract, nextStageId, isLastStage, stageIds } = require("../dist/core/contract/contract");
 const { runCheck } = require("../dist/core/contract/checks");
+const { writeJson } = require("../dist/core/record/json");
 
 const ROOT = join(tmpdir(), "capitalist-guard-root");
 const minimal = loadContract("minimal");
@@ -61,7 +62,7 @@ test("敏感路径按 POSIX 写法命中（/etc / /var/log 是契约里真实存
   assert.equal(hit.decision, "deny");
 });
 
-test("~/.ssh 下的普通文件也拦（不靠文件名兜底）", () => {
+test("~/.ssh 下的普通文件也拦（不靠文件名判断）", () => {
   // `id_rsa` 会在 sensitive_names 里命中；`config` 不在，只能靠 sensitive_paths 判定
   const hit = localCheck(minimal, ROOT, ["~/.ssh/config"], "read");
   assert.equal(hit.decision, "deny");
@@ -120,23 +121,28 @@ test("skip_if 让只读检索不误判", () => {
 });
 
 
-test("mtime_after_stage：缺时间字段时回落 created_at，而不是永远失败", () => {
+test("mtime_after_stage：缺时间字段时改用 created_at，而不是判定失败", () => {
   const root = tmpRoot();
   const file = join(root, "memory.md");
   writeFileSync(file, "x", "utf8");
 
+  /*
+   * 两次检查之间要改同一份 state.json。走 `writeJson` 而不是裸 `writeFileSync`：
+   * 前者会失效读缓存，后者不会，间隔小于 300ms 时第二次检查会读到上一次的内容，
+   * 判定随机翻车。断言本身不变。
+   */
   // 只有 created_at（老任务根 / 手工建根）
-  writeFileSync(
-    join(root, ".capitalist", "state.json"),
-    JSON.stringify({ stage: "S5", created_at: new Date(Date.now() - 60_000).toISOString() }),
-  );
+  writeJson(join(root, ".capitalist", "state.json"), {
+    stage: "S5",
+    created_at: new Date(Date.now() - 60_000).toISOString(),
+  });
   assert.equal(runCheck({ type: "mtime_after_stage", path: "memory.md" }, root).ok, true);
 
   // 阶段在本文件上次修改之后才进入 -> 没更新过
-  writeFileSync(
-    join(root, ".capitalist", "state.json"),
-    JSON.stringify({ stage: "S5", stage_entered_at_ts: Math.floor(Date.now() / 1000) + 60 }),
-  );
+  writeJson(join(root, ".capitalist", "state.json"), {
+    stage: "S5",
+    stage_entered_at_ts: Math.floor(Date.now() / 1000) + 60,
+  });
   assert.equal(runCheck({ type: "mtime_after_stage", path: "memory.md" }, root).ok, false);
 });
 
@@ -199,7 +205,7 @@ test("report_assert：数值不符时 missing 里同时有字段名、期望值�
     {
       type: "report_assert",
       file: ".workbuddy/reports/visual-audit.json",
-      // 只错一条，也要把这一条单独列出来：一版实现可能只差一处，报告要指出差在哪。
+      // 只错一条，也要把它单独列出来：一版实现可能只差一处，报告要指出差在哪。
       assert: [
         { path: "header", op: "near", value: 999, tol: 1 },
         { path: "leftColumn", op: "equals", value: 322 },
@@ -249,7 +255,7 @@ test("report_assert：路径允许 .capitalist/ 前缀与直接路径两种写�
   const root = tmpRoot();
   writeFileSync(join(root, ".capitalist", "audit.json"), JSON.stringify({ header: 88 }), "utf8");
 
-  // 直接写 .capitalist/...：resolveListFile 先试 .capitalist/.capitalist/... 再回落任务根，两种都命中同一份
+  // 直接写 .capitalist/...：resolveListFile 先试 .capitalist/.capitalist/... 再改用任务根，两种都命中同一份
   assert.equal(
     runCheck({ type: "report_assert", file: ".capitalist/audit.json", assert: [{ path: "header", op: "equals", value: 88 }] }, root).ok,
     true,

@@ -109,7 +109,7 @@ export function costRowOf(w: WorkerRecord, dispatches: Dispatch[], nowSec = Date
     String(d?.attempt ?? 0),
     dispatches.length,
     logStats(w.log).size,
-    // 积分摊算可能晚于收工落账，结构指纹包含积分值。
+    // 积分分摊可能晚于结束记录，结构指纹包含积分值。
     String(root ? creditOfWorker(root, w.id) ?? "" : ""),
   ].join("|");
   if (!live) {
@@ -263,5 +263,47 @@ export function tokenTotals(figs: readonly UsageFigures[]): {
     billing_unit: credit !== null ? "credit" : cost !== null && cost > 0 ? "usd" : input !== null ? "token" : "",
     total_credit: credit,
     credit_unit: credit !== null ? (figs.map((f) => f.credit_unit).find(Boolean) || "积分") : "",
+  };
+}
+
+/**
+ * 视图层用量合计。
+ *
+ * 字段名与外发形状（监工状态、指标、全局概览三处接口共用）。三处视图原先各写一遍
+ * interface 与 9 行字段映射，改一处必然漂移，故收敛到本模块。
+ */
+export interface UsageTotals {
+  total_input_tokens: number | null;
+  total_output_tokens: number | null;
+  total_tokens: number | null;
+  total_cache_read_tokens: number | null;
+  reported_runs: number;
+  unreported_runs: number;
+  billing_unit: string;
+  total_credit: number | null;
+  credit_unit: string;
+}
+
+/**
+ * 把 {@link tokenTotals} 的读数转成外发字段。
+ *
+ * @param tokens 用量读数。
+ * @param fallbackCreditUnit 无工作进程读数时的单位回退：取账号额度单位。`tokens.credit_unit`
+ *   为空时若改用 token，与宿主按积分计费的口径不一致。
+ */
+export function usageTotalsOf(
+  tokens: ReturnType<typeof tokenTotals>,
+  fallbackCreditUnit: string,
+): UsageTotals {
+  return {
+    total_input_tokens: tokens.total_input_tokens,
+    total_output_tokens: tokens.total_output_tokens,
+    total_tokens: tokens.total_tokens,
+    total_cache_read_tokens: tokens.total_cache_read_tokens,
+    reported_runs: tokens.usage_reported,
+    unreported_runs: tokens.usage_unreported,
+    billing_unit: tokens.billing_unit,
+    total_credit: tokens.total_credit,
+    credit_unit: tokens.credit_unit || fallbackCreditUnit,
   };
 }

@@ -900,6 +900,24 @@ function onStop(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
 /** 入口。异常一律放行，并把降级写进事件台账。 */
 export function dispatch(hook: HookFacet, event: UnifiedEvent): HookDecision {
   try {
+    /*
+     * 只接管监工拉起的进程：工作进程由 worker.ts 注入 CAPITALIST_WORKER_ID，
+     * 人自己开的会话没有这个变量。
+     *
+     * 这道判断排在“监工是否在线”之前。监工可能正在运行，但用户在同一个仓库里用自己的会话
+     * 执行命令时，不该被边界检查要求登记理由。理由是为工作进程保留记录的，人的操作没有
+     * 执行者会读这份理由。没有这道判断，仓库里常驻的 hook 会把每个会话都当成受管进程，
+     * 这也是“没开监工也在登记理由”的来源（残留的 supervisor.json 会被判为在线）。
+     */
+    if (!process.env.CAPITALIST_WORKER_ID) return hook.passthrough();
+
+    /*
+     * 监工不在线时整个 hook 不接管：hook 是监工的判定层，没有监工就没有可执行的契约。
+     * 没有这道判断，监工停掉后仓库里残留的 hook 仍会拦命令、往上下文注入简报。
+     */
+    const watchRoot = findRoot(event.cwd);
+    if (watchRoot && !isSupervisorAlive(watchRoot)) return hook.passthrough();
+
     let ctx = loadCtx(event);
 
     // 未纳管目录：注入类事件先尝试自动纳管，再决定是否输出未纳管提示。

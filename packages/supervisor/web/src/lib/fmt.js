@@ -36,19 +36,6 @@ export function dur(sec) {
   return h > 0 ? `${h}:${p2(m)}:${p2(s)}` : `${p2(m)}:${p2(s)}`;
 }
 
-/** 线程状态 -> 左栏状态点色号与右侧文案。 */
-export function rowState(t) {
-  const s = String(t?.status || "");
-  const alive = s === "running" || s === "starting";
-  if (s === "failed") return { tone: "bad", text: t("异常"), secs: 0 };
-  if (alive) return { tone: "run", text: "", secs: t?.duration_sec || 0 };
-  /* 服务端在已派未领时下发 status=queued，须单列为一态。 */
-  if (s === "queued") return { tone: "wait", text: t("排队"), secs: 0 };
-  if (s === "exited") return { tone: "done", text: "", secs: t?.duration_sec || 0 };
-  if (s === "done") return { tone: "done", text: "", secs: t?.duration_sec || 0 };
-  return { tone: "idle", text: t("待调度"), secs: 0 };
-}
-
 /** 监工方块的状态点色号。 */
 export function supervisorTone(task) {
   const s = String(task?.status || "");
@@ -58,16 +45,6 @@ export function supervisorTone(task) {
   if (s === "done") return "done";
   return "idle";
 }
-
-export function supervisorWord(task) {
-  const s = String(task?.status || "");
-  if (Number(task?.blocked || 0) > 0) return t("待裁决");
-  if (s === "running") return t("运行中");
-  if (s === "queued") return t("排队");
-  if (s === "done") return t("已完成");
-  return t("空闲");
-}
-
 
 /** 内容指纹（djb2）；服务端未给 id 时作为回落身份，避免同秒消息冲突。 */
 export function hash(s) {
@@ -116,7 +93,7 @@ export function evtReceipt(m) {
   return no ? `${base} #${no}` : base;
 }
 
-/** 发言判据：派单消息两处都算监工发言，其余按当前视图判。 */
+/** 消息判据：派单消息两处都算监工消息，其余按当前视图判。 */
 export function isSupervisorSpeech(m, supervisorView) {
   if (!m || m.role !== "supervisor") return false;
   if (m.kind === "dispatch") return true;

@@ -78,18 +78,21 @@ The supervisor panel is recommended for task supervision and scheduling. The sta
 
 Tasks can be issued from the host directly or from the supervisor panel.
 
-### 1. Coding tasks: frontend and backend in parallel
+### 1. Literary creation
+
+For literary creation, the historical setting, story outline, character relationships and the detailed content of each chapter can be handed to separate processes, with the supervisor accepting and advancing the work as required.
+
+### 2. Coding tasks: frontend and backend in parallel
 
 For coding tasks the supervisor can let frontend and backend proceed independently and start integration and automated-test processes once both are done.
 
 You can: create a custom contract with frontend and backend as two `parallel` shards, one dispatch and one work process each; put integration and automated tests in later stages, which advance automatically once the previous stage is done.
 
-### 2. Security tasks: batch dispatch and split by domain
+### 3. Security tasks: batch dispatch and split by domain
 
 For security tasks a skill can drive vulnerability hunting across several sites in one dispatch, with the supervisor enforcing redlines and accepting results as the skill requires; alternatively, split by site and dispatch by subdomain once asset collection is done.
 You can split multiple sites into shards per site, split a single site into later-stage shards per subdomain, or dispatch several src hunting instructions in one go.
-## Runtime panel
-![Supervisor panel](board.png)
+
 
 
 

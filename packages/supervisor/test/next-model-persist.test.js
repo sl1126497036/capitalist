@@ -29,7 +29,7 @@ test("readNextModel 只读不删：派单消费后设定仍在", () => {
   assert.ok(existsSync(join(root, ".capitalist", "next_model.json")), "读两次也不能删");
 });
 
-test("没有设定 / 坏文件都回落到空串，不抛错", () => {
+test("没有设定 / 坏文件都返回空串，不抛错", () => {
   const root = sandbox();
   assert.equal(readNextModel(root), "");
   writeFileSync(join(root, ".capitalist", "next_model.json"), "{ 不是 json");

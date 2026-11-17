@@ -1,5 +1,10 @@
 <!-- 停止调度与关停按 props.root 发指令；顶栏账号菜单的暂停调度只对默认根生效。 -->
 <span class="mbar" role="group" :aria-label="t('监工指标')">
+  <!--
+    中间信息作为一个整体参与收缩：内部每格保持完整宽度，宽度不够时由外层容器从右往左
+    整格隐藏。逐格压缩会把每格截成“排… C”，既读不出值，也看不出缺少哪一项。
+  -->
+  <span class="mdata">
   <span class="mcell mcell-model">
     <em>{{ t("模型") }}</em>
     <button
@@ -37,6 +42,7 @@
   <span v-if="note" class="mnote" :class="{ bad: noteBad }" role="status">{{ note }}</span>
 
   <slot name="end" />
+  </span>
 
   <span class="macts">
     <button

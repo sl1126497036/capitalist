@@ -1,6 +1,6 @@
 /**
  * 工作进程宿主按当前宿主所属的族挑选。
- * 判据：当前宿主按注入变量判定、同族才可顶替、无可选时不回落。
+ * 判据：当前宿主按注入变量判定、同族才可接替、无可选时不接替。
  */
 
 const test = require("node:test");
@@ -71,7 +71,7 @@ test("WorkBuddy 里没有同族 CLI 时不跨族借用 Claude", () => {
       assert.strictEqual(
         detectWorkerHost(),
         null,
-        "PATH 上只有 claude 时必须返回 null，不得回落",
+        "PATH 上只有 claude 时必须返回 null，不得接替",
       );
     });
   } finally {

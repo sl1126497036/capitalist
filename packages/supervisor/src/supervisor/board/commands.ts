@@ -4,6 +4,7 @@ import { isWorkerRef, promoteTask, stopWorker } from "../../core/dispatch/comman
 import { loadState, updateState } from "../../core/record/state";
 import { readJson } from "../../core/record/json";
 import { recordEvent } from "../../core/record/ledger";
+import { supervisorDir } from "../../core/record/paths";
 import type { ShotRef } from "../../core/message/messages";
 import { unlinkSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -20,7 +21,7 @@ import { buildThreads } from "./threads";
 /**
  * 看板命令执行：把界面上的操作翻译成监工指令或台账写入。
  *
- * 只做「校验入参 → 落盘 / 调 CLI」，不碰 HTTP，也不组装视图。
+ * 只做“校验入参 → 写记录 / 调 CLI”，不碰 HTTP，也不组装视图。
  * 状态写入沿用 core 与 supervisor 的既有入口，不另开写路径。
  */
 export const COMMAND_ACTIONS = new Set([
@@ -48,17 +49,17 @@ export function workerSessionId(stage: string, shard: string): string {
 
 export function clearRuntimeLedger(root: string): { dir: string; moved: number; stage: string } {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const dir = join(root, ".capitalist", "archive", `clear-${stamp}`);
+  const dir = join(supervisorDir(root), "archive", `clear-${stamp}`);
   let moved = 0;
   try {
     mkdirSync(dir, { recursive: true });
     const targets = [
-      join(root, ".capitalist", "tasks.jsonl"),
-      join(root, ".capitalist", "inbox", "dispatch.jsonl"),
-      join(root, ".capitalist", "workers", "index.jsonl"),
-      join(root, ".capitalist", "direct.jsonl"),
-      join(root, ".capitalist", "supervisor-direct.jsonl"),
-      join(root, ".capitalist", "events.jsonl"),
+      join(supervisorDir(root), "tasks.jsonl"),
+      join(supervisorDir(root), "inbox", "dispatch.jsonl"),
+      join(supervisorDir(root), "workers", "index.jsonl"),
+      join(supervisorDir(root), "direct.jsonl"),
+      join(supervisorDir(root), "supervisor-direct.jsonl"),
+      join(supervisorDir(root), "events.jsonl"),
     ];
     for (const f of targets) {
       try {
@@ -93,16 +94,33 @@ export function clearRuntimeLedger(root: string): { dir: string; moved: number; 
   return { dir, moved, stage };
 }
 
-/** 监工会话同一时刻只允许一条在调模型，顺序按发送顺序；带 thread 的工作进程会话仍并发。 */
+/**
+ * 监工会话串行：同一时刻只允许一条在调模型，顺序按发送顺序；带 thread 的工作进程会话仍并发。
+ *
+ * 新消息进来时先掐断**正在跑**的那一轮，让用户最新的要求马上得到处理：正在提交的回执或
+ * 报告往往要跑几十秒，按顺序等它结束会让用户以为消息没被收到。排队中的消息不受影响——
+ * 中断的是过程，不是要求，用户连发的每一条仍会被依次处理。
+ */
 let supervisorChatChain: Promise<void> = Promise.resolve();
+/** 当前真正在跑的那一轮；只有轮到它开始执行时才赋值，排队中的不算。 */
+let activeSupervisorChat: AbortController | null = null;
 
-export function serializeSupervisorChat<T>(fn: () => Promise<T>): Promise<T> {
-  const run = supervisorChatChain.then(fn, fn);
-  supervisorChatChain = run.then(
+export function serializeSupervisorChat<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  activeSupervisorChat?.abort();
+  const ctl = new AbortController();
+  const run = (): Promise<T> => {
+    activeSupervisorChat = ctl;
+    return fn(ctl.signal).finally(() => {
+      /* 只在仍属于自己时清空：更晚的那一轮可能已经接手。 */
+      if (activeSupervisorChat === ctl) activeSupervisorChat = null;
+    });
+  };
+  const queued = supervisorChatChain.then(run, run);
+  supervisorChatChain = queued.then(
     () => undefined,
     () => undefined,
   );
-  return run;
+  return queued;
 }
 
 export function supervisorPolicy(opts: {
@@ -220,7 +238,14 @@ export function supervisorPolicy(opts: {
     "  DO: diagnose <查什么>  /  DO: fix <卡在哪>   查根因 / 查完直接修",
     "  DO: pause  /  DO: resume  /  DO: retry <分片>  /  DO: concurrency <数字>  /  DO: reload",
     "  DO: promote #<编号>   把这张排队中的单置顶并立刻执行（槽满时挂起一张运行中的任务腾槽）",
+    "  DO: redo #<编号>   重开已经结束的那一单，沿用原单、原编号与原会话",
     "  没写成动作行就没有执行。不要声称已追加或已派单，回执由系统在动作执行后给出。",
+    "",
+    "【返工用 redo，不要新开单】用户说“重派 / 再做一遍 / 返工”，指的都是已有的那一单：",
+    "  写 `DO: redo #<编号>`。它沿用原单与其对应的会话，上下文缓存仍可复用，任务列表也不会多出一条。",
+    "  只有上下文即将超过窗口六成时才改用 `DO: dispatch` 新开一单，",
+    "  让新会话从空上下文起步。此时重开会让上下文继续增长。",
+    "  改了这条口径就在回复里写明原因（上下文余量不足），不要静默换单。",
     "",
     "【重派前先核对卡点】retry 一个失败过（或中途被结）的任务之前，必须先核对原任务的卡点：",
     "  上次失败的原因、阻塞项（缺依赖、缺权限、前置单未完成、要求矛盾等）现在是否已经消除。",

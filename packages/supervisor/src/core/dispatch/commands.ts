@@ -7,17 +7,10 @@ import { attachmentsIn, stripAttachments } from "../message/attachments";
 import { appendJsonl, readJson, readJsonl, writeJson, writeJsonl } from "../record/json";
 import { recordEvent } from "../record/ledger";
 import { supervisorDir } from "../record/paths";
+import { sleepSync } from "../record/process";
 import { closeDispatch, compareQueueOrder, finishDispatch, loadWorker, pidAlive, promoteDispatch, readDispatches, requeueDispatch, saveWorker } from "../record/supervisor";
 import { leaseEnded, readPreemptLease } from "./preempt";
 import type { Dispatch, WorkerRecord } from "../record/supervisor";
-
-/** 同步睡眠用的共享缓冲：`Atomics.wait` 是 Node 里唯一不依赖定时器的阻塞睡眠原语。 */
-const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
-
-/** 同步睡眠指定毫秒。锁重试之间用它，避免引入异步调用链。 */
-function sleepSync(ms: number): void {
-  Atomics.wait(sleepBuf, 0, 0, ms);
-}
 
 /** 延迟回收整棵进程树（不阻塞调用方）。 */
 function reapTreeLater(pid: number, delayMs = 2500): void {
@@ -212,6 +205,22 @@ export function directiveByRef(root: string, ref: string): Directive | undefined
 /** 插话队列的绝对路径：`<root>/.capitalist/direct.jsonl`。 */
 export function directPath(root: string): string {
   return join(supervisorDir(root), "direct.jsonl");
+}
+
+/**
+ * 指令正文最前面的分类标签，形如 `[supervisor-copy] 正文`。
+ *
+ * 标签决定这张单使用哪条工作进程会话（同类共用一条上下文），是内部调度信息。派单侧按它拆出
+ * `tag` 与干净正文，展示侧必须沿用同一规则：两边各写一份判断，就会出现“派单正文干净、
+ * 界面上却还挂着标签”这种对不上的情况。
+ */
+const DIRECTIVE_TAG = /^\[([^\]\n]{1,24})\]\s*([\s\S]+)$/;
+
+/** 拆出分类标签与正文；无标签时 tag 为空、body 为原文。 */
+export function splitDirectiveTag(text: string): { tag: string; body: string } {
+  const raw = String(text ?? "");
+  const m = DIRECTIVE_TAG.exec(raw);
+  return m ? { tag: String(m[1]).trim(), body: String(m[2]).trim() } : { tag: "", body: raw };
 }
 
 /**

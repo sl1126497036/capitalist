@@ -31,7 +31,7 @@ function eventsOf(root, name) {
   return readJsonl(eventsPath(root)).filter((e) => String(e.event ?? e.kind) === name);
 }
 
-test("带引用的发言：quote 与原文摘要随 supervisor_chat_ask 持久化", () => {
+test("带引用的指令：quote 与原文摘要随 supervisor_chat_ask 持久化", () => {
   const root = sandbox();
   recordUserMessage(root, {
     text: "按这张图改",
@@ -44,7 +44,7 @@ test("带引用的发言：quote 与原文摘要随 supervisor_chat_ask 持久�
   assert.strictEqual(rows[0].quote_text, "把顶栏改成一行");
 });
 
-test("不带引用的发言：不写 quote 字段（老行为不变）", () => {
+test("不带引用的指令：不写 quote 字段（老行为不变）", () => {
   const root = sandbox();
   recordUserMessage(root, { text: "现在什么情况" });
   const rows = eventsOf(root, "supervisor_chat_ask");
@@ -62,7 +62,7 @@ test("重建路径：buildSupervisorLog 把引用原样下发", () => {
   });
   const log = buildSupervisorLog(root, { limit: 50 });
   const hit = log.messages.find((m) => String(m.msg_id ?? "").startsWith("M-"));
-  assert.ok(hit, "用户发言应出现在监工流里");
+  assert.ok(hit, "用户指令应出现在监工流里");
   assert.strictEqual(hit.quote, "SE-abc123");
   assert.strictEqual(hit.quote_text, "把顶栏改成一行");
 });

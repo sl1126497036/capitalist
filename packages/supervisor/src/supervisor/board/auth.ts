@@ -10,6 +10,8 @@ import { IncomingMessage, ServerResponse } from "node:http";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { supervisorDir } from "../../core/record/paths";
+
 let boardKey = "";
 /**
  * 是否校验访问 key（安全模式）。
@@ -21,7 +23,7 @@ let boardSecure = false;
 export const BOARD_KEY_COOKIE = "supervisor_board_key";
 
 export function boardKeyPath(root: string): string {
-  return join(root, ".capitalist", "board.key");
+  return join(supervisorDir(root), "board.key");
 }
 
 export function loadOrCreateBoardKey(root: string, forceNew: boolean): string {
@@ -35,7 +37,7 @@ export function loadOrCreateBoardKey(root: string, forceNew: boolean): string {
   }
   const key = randomBytes(18).toString("base64url");
   try {
-    mkdirSync(join(root, ".capitalist"), { recursive: true });
+    mkdirSync(supervisorDir(root), { recursive: true });
     writeFileSync(p, `${key}\n`, "utf8");
   } catch {
   }

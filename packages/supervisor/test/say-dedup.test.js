@@ -1,4 +1,4 @@
-/** 用户发言的去重：同一条消息在消息流里只渲染一次。 */
+/** 用户指令的去重：同一消息在消息流里只渲染一次。 */
 
 const test = require("node:test");
 const assert = require("node:assert");
@@ -65,7 +65,7 @@ test("同一次发送的双通路记录只出一条气泡", async () => {
   }
 });
 
-test("老指令不吞十分钟后同文的新发言", async () => {
+test("老指令不吞十分钟后同文的新指令", async () => {
   const root = scratch();
   try {
     seedDirect(root, [

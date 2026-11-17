@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { loadWorker, workerLogPath } from "../core/record/supervisor";
+import { supervisorDir } from "../core/record/paths";
 
 /** 连续多少次检测不到监工才判定为孤儿。 */
 export const MISS_LIMIT = 2;
@@ -42,7 +43,7 @@ function workerEnv(): { root: string; id: string } | null {
  */
 function guardStatePath(supervisorPid: number): string {
   const w = workerEnv();
-  if (w) return join(w.root, ".capitalist", "workers", `${w.id}${GUARD_SUFFIX}`);
+  if (w) return join(supervisorDir(w.root), "workers", `${w.id}${GUARD_SUFFIX}`);
   return join(tmpdir(), `capitalist-guard-${supervisorPid}.json`);
 }
 

@@ -34,10 +34,14 @@ import {
   touchWorker,
   workerLogPath,
 } from "../../core/record/supervisor";
+import { supervisorDir } from "../../core/record/paths";
 import type { HostImpl, WorkerSession } from "../../agent/contract";
 import { byId, currentHost, siblings, workerByKey, workerHosts } from "../../agent/registry";
 import { laneOfWorker, pickLane } from "../judge/sessionLane";
 import { closeOutRules } from "../judge/closeOut";
+import { listSkills } from "../skills";
+
+export { listSkills };
 import { buildPreflightBlock, hasPreflight, preflightAtOf } from "./preflight";
 import { bindAttachments } from "../../core/message/attachments";
 
@@ -263,12 +267,17 @@ export function parseWorkerCmd(tpl: string, prompt: string): { bin: string; args
  * 宿主用 `--resume <id>` 续接会话。
  */
 export function resolveSession(root: string, dispatch: Dispatch): WorkerSession {
-  /* 会话身份与闸门交给 `sessionLane`，这里只判定当前车道是否被占用：同一车道同时只允许一个活进程续接，否则两条执行流会写乱同一份上下文。 */
+  /* 会话身份与占用判定交给 `sessionLane`，这里只判定当前会话是否被占用：同一会话同时只允许一个进程续用，否则两条执行流会写乱同一份上下文。 */
   return pickLane(root, dispatch, (sessionId) =>
     listWorkers(root).some(
       (w) =>
         (w.status === "running" || w.status === "starting") &&
         laneOfWorker(w) === sessionId &&
+        /*
+         * `w.pid` 为 0 表示当时没有取到 pid。旧实现直接调 `process.kill(0, 0)`，POSIX 下那会
+         * 探测整个进程组且恒返回成功，把“没取到 pid”当成“还在运行”，长期占用会话；
+         * 现在按不存在处理，会话可以正常复用。
+         */
         (w.mode === "visible" || pidAlive(w.pid)),
     ),
   );
@@ -611,62 +620,10 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
   ].join("\n");
 }
 
-/** 技能目录的相对位置；项目级与用户级各扫一遍。 */
-const SKILL_DIRS = [join(".workbuddy", "skills"), join(".claude", "skills"), join(".codebuddy", "skills")];
+/* 技能清单的扫描见 `./skills`：看板下拉与工作进程共用同一份，避免两处口径不一致。 */
 
-/** 派单可附带的技能上限，避免提示词被目录清单占满。 */
-const SKILL_LIMIT = 30;
 /** 单个技能正文注入上限：超出部分不注入，改由工作进程按路径读取。 */
 const SKILL_BODY_LIMIT = 20_000;
-
-/** 说明取用长度：够判断相关性，又不会挤占清单。 */
-const SKILL_DESC_LIMIT = 42;
-
-/**
- * 取技能的一行说明。
- *
- * 只读 frontmatter 的 `description`，不解析正文；缺失时返回空串。
- */
-function skillSummary(file: string): string {
-  try {
-    const head = readFileSync(file, "utf8").slice(0, 4000);
-    const m = /^description:\s*(.+)$/m.exec(head);
-    if (!m) return "";
-    const d = String(m[1]).trim().replace(/^["']|["']$/g, "");
-    /* 多行描述以 YAML 块标记起头，正文在后续缩进行，不在此处取。 */
-    if (/^[>|][+-]?$/.test(d)) return "";
-    return d.length > SKILL_DESC_LIMIT ? `${d.slice(0, SKILL_DESC_LIMIT)}…` : d;
-  } catch {
-    return "";
-  }
-}
-
-/**
- * 列出可用于本单的技能。
- *
- * 只返回路径与一行说明，正文由工作进程按需加载。监工自身的操作手册属于监工侧，不下发。
- */
-export function listSkills(root: string): { name: string; dir: string; path: string; desc: string }[] {
-  const dirs = [...SKILL_DIRS.map((p) => join(root, p)), ...SKILL_DIRS.map((p) => join(homedir(), p))];
-  const seen = new Set<string>();
-  const out: { name: string; dir: string; path: string; desc: string }[] = [];
-  for (const dir of dirs) {
-    let names: string[] = [];
-    try {
-      names = readdirSync(dir);
-    } catch {
-      continue;
-    }
-    for (const n of names) {
-      if (n === "capitalist") continue;
-      const file = join(dir, n, "SKILL.md");
-      if (seen.has(file) || !existsSync(file)) continue;
-      seen.add(file);
-      out.push({ name: n, dir, path: file, desc: skillSummary(file) });
-    }
-  }
-  return out.sort((a, b) => a.name.localeCompare(b.name)).slice(0, SKILL_LIMIT);
-}
 
 /**
  * 派单正文是否点名该技能。
@@ -792,7 +749,7 @@ export function quoteShellArg(a: string): string {
  */
 function writeWorkerBrief(root: string, workerId: string, text: string): void {
   try {
-    const dir = join(root, ".capitalist", "brief");
+    const dir = join(supervisorDir(root), "brief");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${workerId}.md`), text, "utf8");
   } catch {
@@ -1023,16 +980,6 @@ function logGrowth(log: string, baseline: number): number {
   }
 }
 
-/** 进程是否还在（信号 0 只探测存在性，不真的发信号）。 */
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * 拉起后的静默自检：非交互模式下的失败常无输出或仅以退出码 0 结束，监工只能看到心跳超时，无法区分端口冲突、认证失效与单例锁冲突。
  * 固定时长后日志正文仍为空时，补记一条诊断，写入进程存活、日志增量、argv 规模与是否含换行、令牌是否注入等事实。
@@ -1055,7 +1002,8 @@ function watchSilentStart(
 
     const lines = [
       `[silent] 拉起后${Math.round(delayMs / 1000)}秒日志仍无正文，工作进程没有进入会话`,
-      `[silent] 进程${pid}${isAlive(pid) ? "仍存活" : "已退出"}，日志增量0字节`,
+      /* `child.pid` 缺失时 pid 为 0，判活按“已退出”处理：没有取到 pid 就说明没有启动。 */
+      `[silent] 进程${pid}${pidAlive(pid) ? "仍存活" : "已退出"}，日志增量0字节`,
       `[silent] 参数${args.length}项、共${argvChars}字符，${multiline ? "含换行" : "不含换行"}`,
       `[silent] 令牌变量${hasToken ? "已注入" : "未注入"}`,
       "",

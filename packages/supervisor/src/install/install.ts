@@ -337,12 +337,33 @@ export interface HealResult {
   failed: { id: string; message: string }[];
 }
 
-/** 计划里的每个事件是否都已有本安装器的条目。 */
+/**
+ * 两条条目是否等价：matcher 与每条 hook 的命令串都要完全一致。
+ *
+ * 只判断有没有本安装器写入的条目并不够：旧版写的是绝对路径命令，新版可能更换写法或路径，
+ * 旧条目仍会被识别为自有条目，于是一直返回“已装好”，升级时不会改写这些旧命令。
+ */
+function sameEntry(a: InstallEntry, b: InstallEntry): boolean {
+  if (String(a?.matcher ?? "") !== String(b?.matcher ?? "")) return false;
+  const cmdOf = (e: InstallEntry): string =>
+    (Array.isArray(e?.hooks) ? e.hooks : []).map((h) => String(h?.command ?? "")).join("\u0000");
+  return cmdOf(a) === cmdOf(b);
+}
+
+/**
+ * 计划里的每条条目是否都已按当前写法存在。
+ *
+ * 逐条比对而不是只看事件级“有自有条目”，这样旧格式与路径变更能被判为不完整，
+ * `ensureHooks` 才会重写；配置已经是最新写法时仍返回 true，保持幂等。
+ */
 function hooksComplete(data: Record<string, unknown>, plan: Record<string, InstallEntry[]>): boolean {
   const hooks = (data.hooks && typeof data.hooks === "object" ? data.hooks : {}) as Record<string, unknown>;
   for (const event of Object.keys(plan)) {
     const rows = hooks[event];
-    if (!Array.isArray(rows) || !rows.some((e) => isOurs(e))) return false;
+    if (!Array.isArray(rows)) return false;
+    for (const want of plan[event] ?? []) {
+      if (!rows.some((e) => isOurs(e) && sameEntry(e as InstallEntry, want))) return false;
+    }
   }
   return true;
 }

@@ -7,7 +7,7 @@
 export const DUP_WINDOW_MS = 5_000;
 
 /**
- * 跨台账判同窗口。同一句发言由 `S-`（direct.jsonl 待办登记）与 `CH-`（events.jsonl
+ * 跨台账判同窗口。同一句指令由 `S-`（direct.jsonl 待办登记）与 `CH-`（events.jsonl
  * 对话记录）各记一次，两次落盘间隔一轮监工循环或一次模型往返，故放宽到 2 分钟。
  */
 export const CROSS_SOURCE_WINDOW_MS = 120_000;
@@ -29,7 +29,7 @@ function windowOf(a, b) {
 const SPEAKERS = new Set(["user", "supervisor"]);
 
 /**
- * 归一时同时识别 `[附件]` 与 `[图N]` 两种前缀：服务端落账会把前者改写为后者，
+ * 归一时同时识别 `[附件]` 与 `[图N]` 两种前缀：服务端记录时会把前者改写为后者，
  * 本地回显仍保留原写法。保留标点，避免不同句子被判同。
  */
 export function normSaid(text) {
@@ -72,7 +72,7 @@ export function dedupeMessages(list) {
     }
     const kept = out[hit];
     if (Math.abs(atOf(kept) - atOf(m)) >= windowOf(kept, m)) {
-      /* 超出窗口视为新发言。 */
+      /* 超出窗口视为新指令。 */
       out.push(m);
       seen.set(key, out.length - 1);
       continue;

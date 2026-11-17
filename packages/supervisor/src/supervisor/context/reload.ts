@@ -1743,15 +1743,21 @@ const SEVERE_SUPERVISOR_EVENT =
 /** 台账尾部窗口（字节）：严重异常摘要只从这里找，不全量解析台账。 */
 const SEVERE_EVENT_TAIL_BYTES = 512_000;
 
-/** 从台账尾部取最近的严重异常，一行一条（时间正序，最多 {@link max} 条）；无严重异常时返回空数组。 */
-export function severeSupervisorEventLines(root: string, max = 8): string[] {
-  const file = join(supervisorDir(root), "events.jsonl");
+/**
+ * 从 JSONL 台账尾部读出可解析的记录行。
+ *
+ * 只读尾部一段：`events.jsonl` 随任务增长到几十 MB，取最近几条不需要全量解析。
+ * 半行写入（进程在写一半时被杀）按坏行跳过，不让一条脏数据废掉整段上下文。
+ *
+ * @param maxBytes 尾部窗口上限，实际读取量不超过文件大小。
+ */
+function tailJsonRows(file: string, maxBytes: number): Array<Record<string, unknown>> {
   let buf = "";
   try {
     const size = statSync(file).size;
     const handle = openSync(file, "r");
     try {
-      const want = Math.min(size, SEVERE_EVENT_TAIL_BYTES);
+      const want = Math.min(size, maxBytes);
       const b = Buffer.alloc(want);
       readSync(handle, b, 0, want, size - want);
       buf = b.toString("utf8");
@@ -1772,6 +1778,12 @@ export function severeSupervisorEventLines(root: string, max = 8): string[] {
       /* 半行写入跳过，避免解析不完整记录 */
     }
   }
+  return rows;
+}
+
+/** 从台账尾部取最近的严重异常，一行一条（时间正序，最多 {@link max} 条）；无严重异常时返回空数组。 */
+export function severeSupervisorEventLines(root: string, max = 8): string[] {
+  const rows = tailJsonRows(join(supervisorDir(root), "events.jsonl"), SEVERE_EVENT_TAIL_BYTES);
   const out: string[] = [];
   /* 事件名与说明完全相同的只留最近一条，兼容老台账里未节流的成堆重复；不同原因各占一行。 */
   const seen = new Set<string>();
@@ -1796,37 +1808,11 @@ export function severeSupervisorEventLines(root: string, max = 8): string[] {
 }
 
 /**
- * 把用户最近几条发言原文摆进监工上下文。
- * 只取 `supervisor_chat_ask` 且 from=user 的发言，压成一行、截断，最多 {@link max} 条；附件行不进本段，路径由截图段单独给出。
+ * 把用户最近几条指令原文摆进监工上下文。
+ * 只取 `supervisor_chat_ask` 且 from=user 的指令，压成一行、截断，最多 {@link max} 条；附件行不进本段，路径由截图段单独给出。
  */
 export function recentUserLines(root: string, max = 6): string[] {
-  const file = join(supervisorDir(root), "events.jsonl");
-  let buf = "";
-  try {
-    const size = statSync(file).size;
-    const handle = openSync(file, "r");
-    try {
-      const want = Math.min(size, 262_144);
-      const b = Buffer.alloc(want);
-      readSync(handle, b, 0, want, size - want);
-      buf = b.toString("utf8");
-    } finally {
-      closeSync(handle);
-    }
-  } catch {
-    return [];
-  }
-  const rows: Array<Record<string, unknown>> = [];
-  for (const line of buf.split("\n")) {
-    const s = line.trim();
-    if (!s.startsWith("{")) continue;
-    try {
-      const o = JSON.parse(s) as Record<string, unknown>;
-      if (o && typeof o === "object") rows.push(o);
-    } catch {
-      /* 半行写入跳过，避免解析不完整记录 */
-    }
-  }
+  const rows = tailJsonRows(join(supervisorDir(root), "events.jsonl"), 262_144);
   const out: string[] = [];
   for (let i = rows.length - 1; i >= 0 && out.length < max; i -= 1) {
     const e = rows[i]!;

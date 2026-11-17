@@ -4,13 +4,17 @@
  * 只做收发与入参校验，业务逻辑在 threads / views / commands 各层。
  */
 
-import { BoardCtx } from "../types";
+import { BoardCtx, isLoopback, sendJson } from "../types";
 import { hostOverrideOf } from "../../../agent/registry";
 import { writeJson } from "../../../core/record/json";
 import { recordEvent } from "../../../core/record/ledger";
+import { supervisorDir } from "../../../core/record/paths";
 import { loadSupervisor, requestSupervisorStop, saveSupervisor, finishDispatch, readDispatches } from "../../../core/record/supervisor";
 import { appendSupervisorDirective } from "../../channel/direct";
-import { listTaskRoots } from "../sources";
+import { listTaskRoots, clearSourceCache } from "../sources";
+import { clearThreadsCaches } from "../threads";
+import { messageContextCache } from "../messages";
+import { clearSupervisorLogCache } from "../supervisorLog";
 import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -18,8 +22,7 @@ import { runCommand } from "../commands";
 
 /** /api/capitalist-command */
 export function handleCapitalistCommand(ctx: BoardCtx): void {
-const peer = ctx.req.socket.remoteAddress ?? "";
-const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+const loopback = isLoopback(ctx);
 if (!loopback) {
   ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
   ctx.res.end(JSON.stringify({ error: "指令接口只接受本机回环地址" }));
@@ -216,7 +219,7 @@ ctx.req.on("end", () => {
 
   if (input.action === "next-model") {
     const model = String(input.arg ?? "").trim();
-    const p = join(targetRoot, ".capitalist", "next_model.json");
+    const p = join(supervisorDir(targetRoot), "next_model.json");
     try {
       if (!model) rmSync(p, { force: true });
       else writeJson(p, { model, at: new Date().toISOString(), by: "user" });
@@ -315,10 +318,25 @@ const RESTART_COOLDOWN_MS = 15_000;
 const restartAt = new Map<string, number>();
 
 /** /api/command */
+/**
+ * 命令执行完再清一次读缓存。
+ *
+ * 请求进来时（index.ts 的写请求钩子）已经清过一次，但命令本身可能持续数百毫秒，
+ * 期间看板轮询会把命令前的台账重新灌进缓存。最要紧的是 `cachedView`：
+ * `/api/threads` 的视图缓存 TTL 是 4000ms，不清它，前端命令后的第一次刷新
+ * 仍会拿到旧列表，看起来就是“蒙版撤了、列表过几秒才变”。
+ */
+function invalidateAfterCommand(ctx: BoardCtx): void {
+  ctx.cachedView.clear();
+  clearSourceCache();
+  clearThreadsCaches();
+  messageContextCache.clear();
+  clearSupervisorLogCache();
+}
+
 export function handleCommand(ctx: BoardCtx): void {
 // 写操作只接受本机回环来源。
-const peer = ctx.req.socket.remoteAddress ?? "";
-const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+const loopback = isLoopback(ctx);
 if (!loopback) {
   ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
   ctx.res.end(JSON.stringify({ error: "命令接口只接受本机回环地址" }));
@@ -344,6 +362,7 @@ ctx.req.on("end", () => {
     return;
   }
   const r = runCommand(ctx.opts.root, parsed);
+  invalidateAfterCommand(ctx);
   ctx.res.writeHead(r.status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   ctx.res.end(JSON.stringify(r.body));
 });
@@ -352,8 +371,7 @@ return;
 
 /** /api/confirm-dispatch */
 export function handleConfirmDispatch(ctx: BoardCtx): void {
-const peer = ctx.req.socket.remoteAddress ?? "";
-const loopback = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1";
+const loopback = isLoopback(ctx);
 if (!loopback) {
   ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
   ctx.res.end(JSON.stringify({ error: "结单接口只接受本机回环地址" }));
@@ -370,30 +388,26 @@ ctx.req.on("data", (c: Buffer) => {
   if (raw.length > 10_000) ctx.req.destroy();
 });
 ctx.req.on("end", () => {
-  const json = (obj: unknown, code = 200): void => {
-    ctx.res.writeHead(code, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-    ctx.res.end(JSON.stringify(obj));
-  };
   let id = "";
   try {
     id = String((JSON.parse(raw) as { id?: string }).id ?? "").trim();
   } catch {
-    json({ error: "请求体不是合法 JSON" }, 400);
+    sendJson(ctx, { error: "请求体不是合法 JSON" }, 400);
     return;
   }
   if (!id) {
-    json({ error: "缺少派单 id" }, 400);
+    sendJson(ctx, { error: "缺少派单 id" }, 400);
     return;
   }
   const cur = readDispatches(ctx.opts.root).find((d) => String(d.id) === id);
   if (!cur) {
-    json({ error: `没有这张单：${id}` }, 404);
+    sendJson(ctx, { error: `没有这张单：${id}` }, 404);
     return;
   }
   const note = String(cur.review_note ?? cur.note ?? "") || "用户确认结单";
   const done = finishDispatch(ctx.opts.root, id, "done", note);
   if (!done) {
-    json({ error: `这张单已经结过了：${id}` }, 409);
+    sendJson(ctx, { error: `这张单已经结过了：${id}` }, 409);
     return;
   }
   recordEvent(ctx.opts.root, "dispatch_confirmed", {
@@ -402,7 +416,8 @@ ctx.req.on("end", () => {
     shard: done.shard ?? "",
     worker: done.worker ?? "",
   });
-  json({ ok: true, id });
+  invalidateAfterCommand(ctx);
+  sendJson(ctx, { ok: true, id });
 });
 return;
 }

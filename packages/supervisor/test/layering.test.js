@@ -98,10 +98,10 @@ test("规则4：impl 清单与目录一一对应，且 id 等于目录名", () =
   }
 
   const falls = registry.all().filter((impl) => impl.fallback);
-  assert.equal(falls.length, 1, "兜底 impl 必须恰好一个");
+  assert.equal(falls.length, 1, "默认 impl 必须恰好一个");
 });
 
-test("规则4：未知 id 返回 null 而不是抛，也不静默回落", () => {
+test("规则4：未知 id 返回 null 而不是抛，也不静默改用默认", () => {
   const registry = require("../dist/agent/registry");
   assert.equal(registry.byId("definitely-not-a-host"), null);
   assert.equal(registry.normalize("definitely-not-a-host"), null);

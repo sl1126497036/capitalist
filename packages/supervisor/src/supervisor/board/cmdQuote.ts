@@ -5,7 +5,7 @@ import { recordEvent } from "../../core/record/ledger";
 import { newMessageId } from "../../core/message/messages";
 import { loadState } from "../../core/record/state";
 import { clearStopFlag, listWorkers, readDispatches, Dispatch } from "../../core/record/supervisor";
-import { pausePath } from "../loop";
+import { pausePath } from "../../core/record/pause";
 import { dispatchNoTable } from "../usage/threadNo";
 import { buildThreadMessages } from "./messages";
 import { buildThreads } from "./threads";
@@ -153,7 +153,7 @@ export function runCli(args: string[]): { code: number; stdout: string; stderr: 
   };
 }
 
-/** 暂停落 .capitalist/pause.json，形状与 capitalist pause 一致，读方只有 loop.ts 的 readPause。 */
+/** 暂停落 .capitalist/pause.json，形状与 capitalist pause 一致，读方统一走 core/record/pause 的 readPause。 */
 export function setPause(root: string, reason: string): void {
   const rec = { at: new Date().toISOString(), reason: reason || "看板暂停调度", by: "board" };
   writeJson(pausePath(root), rec);
@@ -174,8 +174,26 @@ export function clearPause(root: string): void {
 }
 
 export function workerOfThread(root: string, threadId: string, shard: string): string {
-  const t = buildThreads(root).find((x) => x.id === threadId);
-  if (t && t.worker) return t.worker;
+  const id = String(threadId ?? "").trim();
+  /*
+   * 入参可能是线程 id（t/xxxx），也可能是工作进程 id（"4"）：
+   * 看板的中断与换模型按钮下发的是 `t.worker || t.id`，直接拿进程 id 来找。
+   * 先按进程 id 查一次，再按线程解析；都不中才改按分片查找。
+   */
+  if (id) {
+    const direct = listWorkers(root).find(
+      (w) => String(w.id) === id && (w.status === "running" || w.status === "starting"),
+    );
+    if (direct) return direct.id;
+  }
+  const t = id ? buildThreads(root).find((x) => x.id === id) : undefined;
+  /* 线程上的 worker 可能已经退出（历史线程），只有仍在运行/启动中的才可作为中断目标。 */
+  if (t && t.worker) {
+    const live = listWorkers(root).find(
+      (w) => String(w.id) === String(t.worker) && (w.status === "running" || w.status === "starting"),
+    );
+    if (live) return live.id;
+  }
   if (shard) {
     const w = listWorkers(root)
       .filter((x) => (x.shard ?? "") === shard && (x.status === "running" || x.status === "starting"))
