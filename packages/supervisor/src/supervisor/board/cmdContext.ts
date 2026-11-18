@@ -98,7 +98,7 @@ export function workerDigest(w: { log?: string }): string {
     const ed = [...edits];
     if (ed.length) out.push(`改过 ${ed.slice(0, 2).join("、")}${ed.length > 2 ? ` 等 ${ed.length} 处` : ""}`);
     if (runs) out.push(`执行过 ${runs} 步`);
-    if (out.length === 0) out.push(reads.size ? `查过 ${reads.size} 处，还没动手` : "刚开始，还没动手");
+    if (out.length === 0) out.push(reads.size ? `查过 ${reads.size} 处，尚未开始修改` : "刚开始，尚未开始修改");
     return out.join("；").slice(0, 64);
   } catch {
     return "";

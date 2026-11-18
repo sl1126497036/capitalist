@@ -118,7 +118,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       const needs = String(e.needs ?? "none");
       return [
         `收到申报：${label}`,
-        shard ? `分片 ${shard}` : "整阶段",
+        shard ? `分片 ${shard}` : "",
         fromLabel,
         sev === "critical" ? "严重" : "",
         needs === "decision" ? "等裁决" : needs === "intervention" ? "等干预" : "",

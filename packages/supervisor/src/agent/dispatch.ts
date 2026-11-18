@@ -240,11 +240,11 @@ function deliverPendingDirectives(
     [
       `【用户追加 · 派单 ${dispatchId}】执行期间收到用户追加的内容，本次工具调用暂停一次以完成送达。`,
       `编号：${directiveShortRef(rec)}`,
-      "先判断这条是不是对“这一单”的要求，然后按结论处理：",
+      "先判断是否属于本单要求，再按结论处理：",
       "  是 -> 按下面的内容调整做法（与原要求冲突时以追加内容为准），然后继续原任务；",
       "  不是 -> 不要改这一单的做法，但收尾时必须把这个编号报成 not_mine 并说明该归哪一单。",
       `回报方式：capitalist report … --outcome "${directiveShortRef(rec)}=done"` +
-        "（也可 not_mine / blocked，多条用分号隔开）。没给结论的这一单过不了收工闸。",
+        "（也可 not_mine / blocked，多条用分号隔开）。未给出结论的本单无法通过收工闸。",
       "被暂停的调用仍需执行时重新发起。",
       "",
       rec.text,
@@ -490,10 +490,10 @@ function guardFileLock(
         [
           `【文件锁】${p} 现在由 ${who} 拿着${mode === "write" ? "写锁" : "读锁"}，等了 ${cfg.waitMs}ms 没等到，前面还排着 ${r.ahead ?? 0} 个。`,
           "",
-          "不要死等，也不要反复重试同一个调用：",
+          "不要无限等待，也不要反复重试同一个调用：",
           "  1) 先做不涉及这个文件的事（读别的、改别的、跑测试）；",
           "  2) 确实只剩这一件事，过一会儿再试一次；",
-          `  3) 一直拿不到就 capitalist ask "${p} 被 ${who} 长期占用" 登记后停手，等监工裁决。`,
+          `  3) 持续无法获取时，capitalist ask "${p} 被 ${who} 长期占用" 登记后停止执行，等待监工裁决。`,
         ].join("\n"),
         event.point,
         event.sessionId,
@@ -517,7 +517,7 @@ function guardFileLock(
           `【文件已被改】${p} 在读取之后被${st.by ? ` ${st.by} ` : "别人"}改过了。`,
           st.why ? `· ${st.why}` : "",
           "",
-          "先重新 Read 这个文件，基于新内容再改；不要拿旧内容覆盖别人的改动。",
+          "先重新 Read 这个文件，基于新内容再改；不要用旧内容覆盖他人的改动。",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -599,6 +599,27 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
   const lang = pickLang(event.prompt);
   const stage = ctx.contract.stages.find((s) => s.id === ctx.state.stage);
   const check = runCheck(stage?.done as Record<string, unknown> | undefined, ctx.root);
+
+  const wid = workerId();
+  if (wid) {
+    // 工作进程的存活由监工按心跳判定，不续写心跳时长任务会被当作死进程回收。
+    touchWorker(ctx.root, wid, { status: "running", stage: ctx.state.stage });
+    /*
+     * 工作进程上下文只含“这一单”，不注入全局简报。全局阶段状态、门槛、下一步属于监工视角，
+     * 灌进工作进程会与派单正文里的任务说明混在一起，形成“上面是监工、下面又是工作进程”的杂糅。
+     * 派单正文由 worker 启动 argv 的 buildPrompt 生成，与本处注入互不相干。
+     */
+    return hook.inject(
+      `${
+        lang === "zh"
+          ? `【capitalist · worker ${wid}】（监工已派单；只做这一单，结束时 capitalist report）`
+          : `【capitalist · worker ${wid}】(dispatched; do only this task, run \`capitalist report\` when done)`
+      }\n${THINK_LANG[lang]}`,
+      event.point,
+      event.sessionId,
+    );
+  }
+
   const brief = buildBrief({
     root: ctx.root,
     state: ctx.state,
@@ -607,22 +628,6 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
     missing: check.missing,
     lang,
   });
-
-  const wid = workerId();
-  if (wid) {
-    // 工作进程的存活由监工按心跳判定，不续写心跳时长任务会被当作死进程回收。
-    touchWorker(ctx.root, wid, { status: "running", stage: ctx.state.stage });
-    return hook.inject(
-      `${
-        lang === "zh"
-          ? `【capitalist · worker ${wid}】（监工已派单；只做这一单，结束时 capitalist report）`
-          : `【capitalist · worker ${wid}】(dispatched; do only this task, run \`capitalist report\` when done)`
-      }\n${brief}\n\n${THINK_LANG[lang]}`,
-      event.point,
-      event.sessionId,
-    );
-  }
-
   return hook.inject(`${INJECT_HEAD[lang]}\n${brief}\n\n${INJECT_RULES[lang]}`, event.point, event.sessionId);
 }
 
@@ -683,7 +688,7 @@ function onStop(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
         "反复越界时按以下顺序处理：\n" +
         '  1) capitalist ask "<重复原因>" 登记后停止执行，等待监工裁决\n' +
         "  2) 确认已改正后：capitalist correct --rule <规则>\n" +
-        "继续跑只会把问题带进下一阶段。",
+        "继续执行只会将问题带入下一阶段。",
       event.point,
       event.sessionId,
     );

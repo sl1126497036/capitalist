@@ -64,15 +64,15 @@ export interface TriageInput {
 function buildPrompt(input: TriageInput): string {
   const m = input.msg;
   return [
-    "你是 capitalist 监工的判定层。一个工作进程刚刚发来一条申报，你要决定监工怎么处理。",
+    "你是 capitalist 监工的判定层。工作进程刚发来一条申报，你要决定监工怎么处理。",
     "",
     "【这一单原本要做什么】",
     String(input.action || "(未记录)").slice(0, 900),
     "",
-    "【它申报了什么】",
+    "【工作进程申报了什么】",
     `类型：${m.kind} ｜ 自报严重度：${m.severity} ｜ 是否需要监工：${m.needs}`,
     `内容：${String(m.text || "").slice(0, 1200)}`,
-    ...(m.evidence ? ["", "【它给的证据】", String(m.evidence).slice(0, 1600)] : []),
+    ...(m.evidence ? ["", "【工作进程提供的证据】", String(m.evidence).slice(0, 1600)] : []),
     "",
     "【当前局面】",
     `阶段：${input.state.stage} ｜ 运行中 ${input.live}/${input.capacity} 个进程 ｜ 这一片已失败 ${input.failures} 次`,
@@ -81,13 +81,13 @@ function buildPrompt(input: TriageInput): string {
     "",
     "【可选动作，只能选一个】",
     "continue    不影响推进（误报、已知问题、可自行解决）",
-    "nudge       方向或做法偏了，无需重开：给出简要纠正，继续执行",
+    "nudge       方向或做法有偏差，无需重开：给出简要纠正，继续执行",
     "requeue     这一单的做法走不通，需要重开（问题出在“要求本身做不到”时，",
     "            选 escalate，重开无法解决该问题）",
-    "pause_shard 继续做下去代价更大（正在改错地方、正在扩大破坏面），先停这一片",
+    "pause_shard 继续做下去代价更大（正在改错地方、正在扩大破坏面），先暂停这一片",
     "escalate    需人工裁决：红线风险、权限、需求自相矛盾、代价不可逆",
     "accept      只用于类型 done：报告与证据足以结束",
-    "reject      只用于类型 done：报告不足以结束（没证据、只做了表面、与原要求不符）",
+    "reject      只用于类型 done：报告不足以结束（无证据、仅完成表面工作、与要求不符）",
     "",
     "【判断要求】",
     "- 以证据为准，不只看申报内容。申报“已全部完成”但证据无产出的，判 reject。",
@@ -98,7 +98,7 @@ function buildPrompt(input: TriageInput): string {
     "【输出格式，三行，一行都不能少】",
     "DECISION: <上面七选一>",
     "WHY: <一句话说清凭什么>",
-    "SAY: <要送给它的话，二十字以内；没有就写 —>",
+    "SAY: <要发给工作进程的话，二十字以内；没有就写 —>",
   ].join("\n");
 }
 
@@ -127,11 +127,11 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
   const m = input.msg;
   const facts: string[] = [
     `这一单原本要做什么：${String(input.action || "(未记录)").replace(/\s+/g, " ").slice(0, 700)}`,
-    `它申报的类型：${m.kind}（自报严重度 ${m.severity}，是否需要监工：${m.needs}）`,
-    `它说的话：${String(m.text || "").replace(/\s+/g, " ").slice(0, 900)}`,
+    `工作进程申报的类型：${m.kind}（自报严重度 ${m.severity}，是否需要监工：${m.needs}）`,
+    `工作进程的表述：${String(m.text || "").replace(/\s+/g, " ").slice(0, 900)}`,
   ];
   const evidence = String(m.evidence ?? "").trim() || String(input.evidence ?? "").trim();
-  if (evidence) facts.push(`它给的证据：${evidence.replace(/\s+/g, " ").slice(0, 1400)}`);
+  if (evidence) facts.push(`工作进程提供的证据：${evidence.replace(/\s+/g, " ").slice(0, 1400)}`);
   if (input.workspace && input.workspace.length) {
     facts.push("", "【工作区版本控制变动 · 系统采集】", ...input.workspace);
   }
@@ -150,7 +150,7 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
       "",
       "【这一单送达过的要求，逐条核对：未给结论的按未完成处理】",
       ...ledger.map((x) => `  - ${x}`),
-      "判定口径：出现“未给结论”，或结论写 not_mine 但内容明显属于本单 -> 判 reject 打回并点明是哪一条；",
+      "判定口径：出现“未给结论”，或结论写 not_mine 但内容明显属于本单 -> 判 reject 退回并指明具体条目；",
       "结论写 done 但证据里找不到对应改动 -> 同样 reject。只有每条都有可信结论时才 accept。",
     );
   }
@@ -161,7 +161,7 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
   for (const r of input.recent.slice(-3)) facts.push(`最近一次失败：${r}`);
   /* 两种“不合格”处置不同：能继续做的打回继续做，做不到的转用户决策。 */
   facts.push(
-    "不合格分两种：报告不足但工作可继续（缺证据、只做表面、与新要求不符）-> reject，打回后同一单继续执行；",
+    "不合格分两种：报告不足但工作可继续（缺证据、仅完成表面工作、与新要求不符）-> reject，退回后同一单继续执行；",
     "任务本身无法继续（缺权限或凭据、需求自相矛盾、外部依赖不可用、代价不可逆）-> escalate，该单转为等用户决策。",
   );
   /* 验收标准随判定下发，口径与 closeOut.ts 共用，使执行侧与审查侧一致。 */
@@ -186,11 +186,11 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
       },
       {
         name: "accept",
-        desc: "只用于它报完成：代码证据足以结束（行为对得上要求、相关单元测试结果一致）；根据情况看是否需要追加全量测试",
+        desc: "只用于工作进程报完成：代码证据足以结束（行为与要求相符、相关单元测试结果一致）；根据情况看是否需要追加全量测试",
       },
       {
         name: "reject",
-        desc: "只用于它报完成：报告还不足但事情能继续做（没代码证据、只做了表面、行为与最新要求不符）。打回后同一单重新执行；全量测试，界面截图视情况而打回（例如：耗时长、测试难度大等可放宽）",
+        desc: "只用于工作进程报完成：报告还不足但事情能继续做（无代码证据、仅完成表面工作、行为与最新要求不符）。退回后同一单重新执行；全量测试、界面截图按情况退回（例如：耗时长、测试难度大等可放宽）",
       },
     ],
     session: "capitalist-brain-triage",
@@ -208,7 +208,7 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
     };
   }
   const first = r.actions[0];
-  if (!first) return { decision: "continue", why: "模型没给出动作", fallback: true, error: "模型返回了内容但没有第一个动作" };
+  if (!first) return { decision: "continue", why: "模型未给出动作", fallback: true, error: "模型返回了内容但没有第一个动作" };
   const decision = first.name as TriageDecision;
   const say = decision === "nudge" || decision === "reject" ? String(first.arg ?? "").trim() : "";
   return {

@@ -94,7 +94,7 @@ function stageHaystack(stage: Stage, shards: { id: string; action: string }[]): 
 export function planInstruct(input: InstructInput): InstructPlan {
   const text = String(input.text ?? "").trim();
   if (!text) {
-    return { kind: "clarify", reason: "内容为空", detail: "请写明要执行的操作，例如“把 UI 相关的任务都停掉”", candidates: [] };
+    return { kind: "clarify", reason: "内容为空", detail: "请写明要执行的操作，例如“把 UI 相关的任务都停止”", candidates: [] };
   }
 
   const byStage = new Map<string, { id: string; action: string }[]>();
@@ -124,7 +124,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
       kind: "concurrency",
       arg: conc[1] as string,
       reason: "识别到“并行度 + 数字”",
-      detail: `并行度调为 ${conc[1]}（下一次派单的槽位数以此计算）`,
+      detail: `并行度调整为 ${conc[1]}（作为后续派单的槽位数）`,
     };
   }
 
@@ -145,7 +145,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
       kind: "ask",
       arg: text,
       reason: "识别到提问",
-      detail: "这是提问：只回答，不暂停派单、不改下一步、不动门槛",
+      detail: "这是提问：只回答，不暂停派单、不修改下一步、不修改门槛",
     };
   }
 
@@ -157,7 +157,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "resume",
       reason: "识别到“继续/恢复”",
-      detail: "恢复派单：下一轮起重新开单",
+      detail: "恢复派单：继续派发新单",
     };
   }
 
@@ -174,7 +174,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
         `原话已登记：${text}。派单前对话层要把它整理成结构完整、无歧义的提示词，` +
         "理解不透先向用户澄清，不许原样转发；排序、依赖等调度说明由对话层自己执行，不写入单子。" +
         "组单时在任务说明末尾追加语言一致性要求：以用户当前使用的语言写作，语言跟随用户实际语言，不固定为某一种。" +
-        "该设置只影响整阶段补派的派单，有分片的阶段不受影响。要停止某类任务用“停掉…”",
+        "该设置只影响整阶段补派的派单，有分片的阶段不受影响。要停止某类任务，输入“停止…”",
     };
   }
 
@@ -204,7 +204,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
       reason: `“${why}”命中了当前阶段 ${cur.stage.id} ${cur.stage.name}`,
       detail:
         `跳过 ${cur.stage.id} ${cur.stage.name}` +
-        (shards.length ? `（该阶段有 ${shards.length} 个分片，按整阶段处理——本通道只支持阶段粒度）` : "") +
+        (shards.length ? `（该阶段有 ${shards.length} 个分片，按整阶段处理，本通道只支持阶段粒度）` : "") +
         "；跳过将记为待补项，终审时仍会清算",
     };
   }
@@ -215,7 +215,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "clarify",
       reason: "命中的不是当前阶段",
-      detail: `当前阶段为 ${input.currentStage}。该输入更接近指定 ${names}——它们不在当前阶段，未做变更。停止当前阶段请指明阶段名，或使用“全部停掉”`,
+      detail: `当前阶段为 ${input.currentStage}。该输入更接近指定 ${names}，它们不在当前阶段，未做变更。停止当前阶段请指明阶段名，或使用“全部停止”`,
       candidates: candidates(),
     };
   }
@@ -226,7 +226,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
     reason: "没有识别出具体对象",
     detail:
       `当前阶段为 ${input.currentStage}。无法识别“${text}”指向的阶段。` +
-      "可改用阶段 id，或使用“全部停掉”",
+      "可改用阶段 id，或使用“全部停止”",
     candidates: cur ? [{ id: cur.stage.id, name: cur.stage.name, hits: [] }] : [],
   };
 }

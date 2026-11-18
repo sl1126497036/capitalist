@@ -675,7 +675,7 @@ export function cmdClose(p: Parsed): number {
     writeJson({ ok: true, ...r });
     return 0;
   }
-  const where = `${r.stage}${r.shard ? `/${r.shard}` : t(" (whole stage)", " 整阶段")}`;
+  const where = r.shard ? `${r.shard}` : t("(whole stage)", "整阶段");
   write(
     t(`Closed ${r.dispatch} (${where}), ${r.from} -> closed.\n`, `已结束 ${r.dispatch}（${where}），原状态 ${r.from} -> closed。\n`) +
       (r.worker
@@ -706,7 +706,7 @@ export function cmdPromote(p: Parsed): number {
     writeJson({ ...r });
     return 0;
   }
-  const where = `${r.stage}${r.shard ? `/${r.shard}` : t(" (whole stage)", " 整阶段")}`;
+  const where = r.shard ? `${r.shard}` : t("(whole stage)", "整阶段");
   const live = listWorkers(root).filter((w) => w.status === "running" || w.status === "starting").length;
   const cap = Math.max(1, Number(loadSupervisor(root)?.max_workers ?? 1) || 1);
   write(

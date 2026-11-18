@@ -333,7 +333,7 @@ function squashBlocker(text: unknown, max: number): string {
 
 /**
  * 把台账上的一张单压成卡点素材。
- * 取不到原因时返回空对象，由 {@link buildSkipBlocker} 写成“上一轮没留下失败原因”，让工作进程先复现再动手。
+ * 取不到原因时返回空对象，由 {@link buildSkipBlocker} 写成“上一轮未记录失败原因”，让工作进程先复现再开始修改。
  */
 export function blockerInfoOf(d: Partial<Dispatch> | undefined | null): BlockerInfo {
   if (!d) return {};
@@ -372,7 +372,7 @@ export function blockerLines(info?: BlockerInfo | null): string[] {
     .map((x) => String(x ?? "").trim())
     .filter(Boolean);
   if (parts.length === 0) {
-    return ["上一轮未记录失败原因。先复现一次，确认卡点位置再动手；不重复上一轮的做法；已改过的文件不重做。"];
+    return ["上一轮未记录失败原因。先复现一次，确认卡点位置再开始修改；不重复上一轮的做法；已改过的文件不重做。"];
   }
   const lead = "上一轮卡在：";
   const how = "不重复上一轮的路径：卡点仍在时改用其它可行路径，已解除时从上次进度继续；已改过的文件不重做。";
@@ -429,7 +429,7 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
     "  1. 读目标文件当前内容与最近改动痕迹（mtime、git 记录），同时了解相关模块现在怎么做的、",
     "     接口怎么调的、界面现在什么样；不把派单正文当独立任务执行，先了解上下文。",
     "  2. 派单要求的事情若已经实现，不要重做：在报告里指出实现位置（文件 + 行号）与差异；",
-    "     只做了一半的只补缺，不推倒重来。",
+    "     只做了一半的只补缺，不整体重做。",
     "  3. 本单要求若与已验收的做法相反（要恢复一个已被撤掉的东西），先读 `.capitalist/tasks.jsonl` 里",
     "     同一线程已结束任务的 `note`（裁决结论写着当时定的口径），按本单最新要求做，",
     "     并在报告里写明推翻了哪一条，不留两套实现。",
@@ -439,7 +439,7 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
     ...(at
       ? [`     比较方法：\`stat -c %Y <文件>\` 与 \`date -d "${at.iso}" +%s\`，前者更大即被改过。`]
       : []),
-    "  5. 现状与派单描述冲突、或读了也对不上：先用 capitalist ask / capitalist notify question 申报，不猜测处理。",
+    "  5. 现状与派单描述冲突、或读后无法对应：先用 capitalist ask / capitalist notify question 申报，不猜测处理。",
   ];
 }
 
@@ -448,14 +448,14 @@ function buildBoundaryBlock(id: string): string[] {
   return [
     "【三、边界】",
     `  1. 只认这一单：需要复查要求时读 .capitalist/brief/${id}.md；不读 .capitalist/tasks.jsonl、`,
-    "     .capitalist/inbox/*.jsonl、别的 .capitalist/workers/* 或别的 brief。那些是别人的单。",
+    "     .capitalist/inbox/*.jsonl、别的 .capitalist/workers/* 或别的 brief。这些属于其他派单。",
     "     别人的日志、别人的报告都不算证据；不把“上一轮同口径的单已经实现过”当作本单产出，",
     "     本单未做即未完成。",
     "  2. 台账里 done / closed 的派单是历史，不是待办：读台账、日志排查时，不要按历史派单的描述",
     "     “恢复”或“实现”任何东西。界面现状以代码为准，不以截图、旧日志、旧派单正文为准；",
     "     历史描述与本单冲突时以本单为准，并在报告里写明冲突点。",
     "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
-    "     那三项属于监工，工作进程代做会使执行与验收不分。",
+    "     那三项属于监工，工作进程代为执行会使执行与验收职责不分。",
     `  4. 卡在外部条件（验证码、账号、授权）：capitalist block <类型> "<卡在哪>" 后停手。`,
   ];
 }
@@ -466,9 +466,9 @@ function buildBoundaryBlock(id: string): string[] {
 function buildHelpBlock(dispatchId: string): string[] {
   return [
     "【六、卡住了怎么申报】申报后不停手，继续执行：",
-    `  capitalist notify stuck "<卡在哪、已经试过什么>"        同一件事连续失败两次、找不到入口、报错看不懂`,
+    `  capitalist notify stuck "<卡在哪、已经试过什么>"        同一件事连续失败两次、找不到入口、报错无法理解`,
     `  capitalist notify question "<问题>" --needs decision   要求自相矛盾、不知道优先级、不知道该不该动`,
-    `  capitalist notify risk "<为什么觉得越界>"               可能越界：删数据、改发布配置、动别人负责的文件`,
+    `  capitalist notify risk "<为什么觉得越界>"               可能越界：删数据、改发布配置、修改他人负责的文件`,
     `  capitalist notify quality "<哪部分没做实>"              能交但质量不足，先如实申报`,
     `  capitalist notify progress "<走到哪了>"                 只是让监工知道进度，不需要回复`,
     "  监工会据此决定：继续、给出简要纠正、重开或转人工。",
@@ -488,7 +488,7 @@ export function buildApplyBlock(): string[] {
     "【五、改完要生效】只改文件、不重启承载进程，等于没有交付：",
     "  1. 改动涉及前端界面：构建后重启面板服务（只重启面板，不动监工），重启后确认页面加载的是新构建产物。",
     "  2. 改动涉及监工主进程逻辑（调度、派单、提示词等）：先确认没有运行中的任务，再按现有安全流程重启监工使其生效。",
-    "     工作进程不直接杀监工进程：走外部拉起，或先 capitalist reload 落盘再由外部重起；重启后用新的进程号与启动时间核对。",
+    "     工作进程不直接终止监工进程：走外部拉起，或先 capitalist reload 落盘再由外部重起；重启后用新的进程号与启动时间核对。",
     "  3. 收尾报告写“已重启生效：<面板 / 监工>”及重启对象；未重启的不报 done。",
   ];
 }
@@ -522,7 +522,7 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
   const accept = buildAcceptBlock(d);
   /* 与首次派单同一套七块结构（见 buildPrompt 的说明），块内编号各自从 1 起。 */
   return [
-    "继续上一次被中断的执行，不要从头开始。",
+    "继续上一次被中断的执行，不要从零开始。",
     "本提示词自包含：会话上下文丢失或压缩后，仍可凭以下正文与约束继续执行。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
@@ -531,8 +531,8 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
     `派单 ${d.id}（阶段 ${d.stage}${d.shard ? `，分片 ${d.shard}` : ""}${title ? `，标题 ${title}` : ""}）：这一单的要求原文如下，原样重发，不重写。`,
-    baseAction || "(这一单没有留下正文，按下面的验收清单与卡点判断要做什么；判断不了就 capitalist ask)",
-    "接着做剩下没完成的部分；已改过的文件不重做，动手前先核对当前状态。",
+    baseAction || "(这一单没有留下正文，按下面的验收清单与卡点判断要做什么；无法判断时使用 capitalist ask)",
+    "继续完成剩余部分；已改过的文件不重做，开始前先核对当前状态。",
     ...(tail
       ? [
           "",
@@ -588,7 +588,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     ``,
     `【二、这一单只做一件事】`,
     readonly
-      ? "查明卡点：卡在哪一步、为什么卡、证据是什么。给出结论与修复建议。不改任何代码。"
+      ? "查明卡点：停滞在哪一步、原因是什么、证据是什么。给出结论与修复建议。不改任何代码。"
       : "查明卡点并修复：先定位根因，再改代码，再验证。",
     ``,
     /* 修复单也要先核对现状：卡点描述可能已过时，根因或许已被其它改动一并修复。 */
@@ -608,7 +608,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     `  2. 不重启监工：那是监工自己的动作，重启会终止正在执行这条修复的进程。`,
     readonly
       ? "  3. 只读：代码、配置、台账均不改。"
-      : "  3. 可以改代码，但只改与这个卡点直接相关的地方；不顺带重构，不做其它单的任务。",
+      : "  3. 可以改代码，但只改与这个卡点直接相关的地方；不连带重构，不做其它单的任务。",
     ``,
     /* 修复单同样按业务单的结束口径验收：不要求执行全部测试或提供截图，证据为改动点及与卡点直接相关的复现/测试。 */
     ...buildCloseOutRules(`【${CN[n + 1]}、怎么算做完】`),

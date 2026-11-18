@@ -39,13 +39,13 @@ function laneEvents(root) {
 }
 
 
-test("运行中写回的占用超过 0.6：下一次派单换新代且不续接", () => {
+test("运行中写回的占用超过 0.5：下一次派单换新代且不续接", () => {
   const root = emptyRoot();
   const d = aDispatch();
   const first = lane.pickLane(root, d);
   assert.strictEqual(first.resume, false, "首次没有可续接的会话");
 
-  // 进程还活着时刷新出来的读数（limit = 300k × 0.6 = 180k）。
+  // 进程还活着时刷新出来的读数（limit = 300k × 0.5 = 150k）。
   lane.recordLaneUsage(root, first.id, {
     context_used: 200_000,
     context_window: 300_000,
@@ -66,16 +66,16 @@ test("运行中写回的占用超过 0.6：下一次派单换新代且不续接"
   assert.strictEqual(ev.from_gen, 0);
   assert.strictEqual(ev.to_gen, 1);
   assert.strictEqual(ev.ctx_used, 200_000, "事件里要带上一代的最终占用");
-  assert.strictEqual(ev.limit, 180_000, "事件里要带判定用的阈值");
+  assert.strictEqual(ev.limit, 150_000, "事件里要带判定用的阈值");
   assert.strictEqual(ev.why, "ctx_full");
 });
 
-test("刚好 0.6 就算满（阈值是 >=，不是 >）", () => {
+test("刚好 0.5 就算满（阈值是 >=，不是 >）", () => {
   const root = emptyRoot();
   const d = aDispatch();
   const first = lane.pickLane(root, d);
   lane.recordLaneUsage(root, first.id, {
-    context_used: 180_000,
+    context_used: 150_000,
     context_window: 300_000,
   });
   assert.strictEqual(lane.laneTooFull(lane.readLane(root, BASE)), true);
@@ -84,12 +84,12 @@ test("刚好 0.6 就算满（阈值是 >=，不是 >）", () => {
   assert.strictEqual(next.id, `${BASE}-g1`);
 });
 
-test("读数低于 0.6 仍然续接，闸门没有把正常会话也换掉", () => {
+test("读数低于 0.5 仍然续接，闸门没有把正常会话也换掉", () => {
   const root = emptyRoot();
   const d = aDispatch();
   const first = lane.pickLane(root, d);
   lane.recordLaneUsage(root, first.id, {
-    context_used: 179_999,
+    context_used: 149_999,
     context_window: 300_000,
   });
   const next = lane.pickLane(root, d);
@@ -167,7 +167,7 @@ test("运行中按日志增量刷新占用：不用等进程退出，闸门就�
   const st = lane.readLane(root, BASE);
   assert.strictEqual(st.current, first.id);
   assert.strictEqual(st.ctx_used, 700_000, "运行中的读数必须落到会话上");
-  assert.strictEqual(lane.laneTooFull(st), true, "700k 必须超过本代阈值（1M 窗口的六成）");
+  assert.strictEqual(lane.laneTooFull(st), true, "700k 必须超过本代阈值（1M 窗口的五成）");
 
   const next = lane.pickLane(root, d, (sessionId) => sessionId === first.id);
   assert.strictEqual(next.resume, false, "进程还活着但已满：不许再接新单");
@@ -176,9 +176,46 @@ test("运行中按日志增量刷新占用：不用等进程退出，闸门就�
   const [ev] = laneEvents(root);
   assert.ok(ev, "换代要留事件");
   assert.strictEqual(ev.ctx_used, 700_000);
-  assert.strictEqual(ev.limit, 600_000);
+  assert.strictEqual(ev.limit, 500_000);
 });
 
+
+test("会话闲置超过 1 小时：即使占用未满也换代，不续接陈旧上下文", () => {
+  const root = emptyRoot();
+  const d = aDispatch();
+  const first = lane.pickLane(root, d);
+  assert.strictEqual(first.resume, false);
+
+  lane.recordLaneUsage(root, first.id, {
+    context_used: 10_000,
+    context_window: 300_000,
+  });
+
+  const st = lane.readLane(root, BASE);
+  st.at = new Date(Date.now() - 7200_000).toISOString();
+  writeFileSync(join(root, ".capitalist", "sessions", `${BASE}.json`), JSON.stringify(st, null, 1));
+
+  const next = lane.pickLane(root, d);
+  assert.strictEqual(next.resume, false, "闲置过久不许续接");
+  assert.strictEqual(next.id, `${BASE}-g1`, "闲置过久必须换新代");
+
+  const [ev] = laneEvents(root);
+  assert.ok(ev, "换代要留事件");
+  assert.strictEqual(ev.why, "ctx_stale", "换代原因记为闲置过久");
+});
+
+test("会话在 1 小时窗内且占用未满：正常续接", () => {
+  const root = emptyRoot();
+  const d = aDispatch();
+  const first = lane.pickLane(root, d);
+  lane.recordLaneUsage(root, first.id, {
+    context_used: 10_000,
+    context_window: 300_000,
+  });
+  const next = lane.pickLane(root, d);
+  assert.strictEqual(next.resume, true);
+  assert.strictEqual(next.id, BASE);
+});
 
 test("占用一直未知：不会无限续接，到上限就换代", () => {
   const root = emptyRoot();

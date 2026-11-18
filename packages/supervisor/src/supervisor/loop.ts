@@ -944,7 +944,7 @@ async function judgeRetry(
       x.claimed_at && x.done_at
         ? Math.round((Date.parse(String(x.done_at)) - Date.parse(String(x.claimed_at))) / 1000)
         : null;
-    facts.push(`第 ${i + 1} 次：${note}${dur !== null ? `（这个进程活了 ${dur} 秒）` : ""}`);
+    facts.push(`第 ${i + 1} 次：${note}${dur !== null ? `（该进程运行了 ${dur} 秒）` : ""}`);
   });
   const wid = String(d.worker ?? "");
   if (wid) {
@@ -954,10 +954,10 @@ async function judgeRetry(
       const clean = withoutThinking(raw.split(/\r?\n/).filter((l) => l.trim()));
       const tail = tailWithinChars(clean.lines, 1800);
       facts.push(
-        `它死之前日志的最后几行${clean.dropped ? `（另有 ${clean.dropped} 行思考过程，已略去）` : ""}：\n${tail}`,
+        `进程退出前日志的最后几行${clean.dropped ? `（另有 ${clean.dropped} 行思考过程，已略去）` : ""}：\n${tail}`,
       );
     } catch {
-      facts.push("它死之前没有留下可读的日志（进程被强杀或启动即失败）");
+      facts.push("进程退出前未留下可读日志（进程被强杀或启动即失败）");
     }
   }
   /* 历史卡点记忆作为“卡点是否消除”的核对输入。 */
@@ -4453,7 +4453,7 @@ function supersedeStaleDispatches(
       if (w && w.mode !== "visible" && (w.status === "running" || w.status === "starting")) {
         killJudgedWorker(root, w, false, out);
         saveWorker(root, { ...w, status: "done" });
-        out(`[监工] worker ${w.id} 的工作已随阶段推进作废，结束它并释放槽位`);
+        out(`[监工] worker ${w.id} 的工作已随阶段推进作废，结束该进程并释放槽位`);
       }
     }
 
@@ -4600,7 +4600,7 @@ function rescueOrphanDirectives(root: string, out: (s: string) => void): void {
       });
       out(
         `[监工] ${last.id} 已${last.status === "closed" ? "被用户结束" : "完成"}，` +
-          `${want.count} 条追加未投递；要它继续请明确重开这一单`,
+          `${want.count} 条追加未投递；如需继续执行，请明确重开该单`,
       );
       continue;
     }

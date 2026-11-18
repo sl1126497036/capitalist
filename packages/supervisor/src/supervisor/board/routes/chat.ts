@@ -134,13 +134,12 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ? [
             "",
             "【你现在对话的对象】",
-            taskShard || taskStage
-              ? `任务：${taskStage}/${taskShard || "(整阶段)"}${taskTitle ? ` · ${taskTitle}` : ""}`
+            taskShard || taskStage || taskTitle
+              ? `任务：${taskTitle || "(未命名)"}`
               : "任务：(未能定位，按全局状态回答)",
             me
               ? `当前状态：${me.status} ｜ 已运行 ${Math.round((me.duration_sec ?? 0) / 60)} 分钟`
               : "该单的执行进程已退出 ｜ 任务仍在，可以重开",
-            `该单标题：${taskTitle || "(未记录)"}`,
             `最近输出：${String(me?.last || "").slice(0, 300) || "(还没有输出)"}`,
             ...(() => {
               if (!me?.worker) return [];
@@ -323,9 +322,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           "该线程对应的任务已结束，用户在此会话发来消息时直接回答。",
           "",
           "【该单情况】",
-          `任务：${taskStage}/${taskShard || "(整阶段)"}${taskTitle ? ` · ${taskTitle}` : ""}`,
+          `任务：${taskTitle || "(未命名)"}`,
           `状态：${me ? me.status : "已结束"}${me?.settled ? "（已结束）" : ""}`,
-          `该单标题：${taskTitle || "(未记录)"}`,
           `最近输出：${String(me?.last ?? "").slice(0, 300) || "(还没有输出)"}`,
           ...(readPause(ctx.opts.root) !== null
             ? ["", "【监工当前处于“暂停派单”】任何派单 / 插队 / 立即执行指令都不会执行。"]
@@ -411,7 +409,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       const idleQueue = running.length === 0 && queued === 0 && failed === 0;
 
       const contextLines = [
-        `阶段：${state?.stage ?? "?"}${capitalist.stage_name ? ` ${capitalist.stage_name}` : ""}`,
+        ...(capitalist.stage_name ? [`阶段：${capitalist.stage_name}`] : []),
         ...mine,
         ...taskNoLines(threads),
         ...workerRuntimeLines(ctx.opts.root),
@@ -435,7 +433,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ...(idleQueue ? ["队列状态：空（待命，没有派单在执行，也没有排队项）"] : []),
         `下一步：${state?.next_action ? String(state.next_action).slice(0, 300) : "(空)"}`,
         `线程总数：${threads.length} ｜ 已完成 ${threads.filter((t) => t.status === "done" || t.status === "exited").length}`,
-        ...(brief
+        ...(brief && via !== "capitalist"
           ? ["", "【重载后继承的上下文（压缩过，已完成且证据齐全的不要重做）】", brief]
           : []),
         ...(() => {
@@ -550,15 +548,24 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
 
       /** 优先用工作进程记录上的 ai_session；老记录缺该字段才回落基名。 */
       const liveSession = String((me as unknown as { ai_session?: string } | null)?.ai_session ?? "").trim();
-      const sessionId = me
-        ? liveSession ||
-          workerSessionId(String(me.stage ?? ""), String(me.shard ?? ""), String(me.dispatch ?? ""))
-        : /*
-           * 监工会话（capitalist-chat 系）：每一轮进来先过单轮注入上限。会话记录超限时
-           * 换代到 `capitalist-chat-w<ws>-c<gen>`，不让历史与历史轮次的工具输出无限累积重发
-           * （reload.ts 的 supervisorChatTurnSessionId；换代时写入 context_compacted 事件）。
-           */
-          supervisorChatTurnSessionId(ctx.opts.root);
+      /*
+       * 监工介入（via === "capitalist"）不得复用工作进程的 ai_session：
+       * 复用会把工作进程的完整上下文（含“你是独立的工作进程”等系统提示）带进监工对话，
+       * 形成监工与工作进程两套角色杂糅。监工介入一律走监工自己的会话，
+       * 工作进程的执行内容只通过上面的 mine 块摘要（最近输出 / workerDigest）以纯文本进入 prompt。
+       */
+      const sessionId =
+        via === "capitalist"
+          ? supervisorChatTurnSessionId(ctx.opts.root)
+          : me
+            ? liveSession ||
+              workerSessionId(String(me.stage ?? ""), String(me.shard ?? ""), String(me.dispatch ?? ""))
+            : /*
+               * 监工会话（capitalist-chat 系）：每一轮进来先过单轮注入上限。会话记录超限时
+               * 换代到 `capitalist-chat-w<ws>-c<gen>`，不让历史与历史轮次的工具输出无限累积重发
+               * （reload.ts 的 supervisorChatTurnSessionId；换代时写入 context_compacted 事件）。
+               */
+              supervisorChatTurnSessionId(ctx.opts.root);
       const leaveChat = enterSupervisorAction("chat");
       /*
        * 模型输出首个 token 前不写入任何字节，界面显示为无回复。

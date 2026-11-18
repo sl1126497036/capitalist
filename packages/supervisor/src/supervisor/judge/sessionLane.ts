@@ -38,11 +38,13 @@ export interface LaneState {
 }
 
 /** 上下文的更换会话阈值：占窗口的比例。 */
-const CTX_RATIO = 0.6;
-/** 拿不到窗口时的回落上限（常见窗口 300k，取六成）。 */
-const CTX_FALLBACK_LIMIT = 180_000;
+const CTX_RATIO = 0.5;
+/** 拿不到窗口时的回落上限（常见窗口 300k，取一半）。 */
+const CTX_FALLBACK_LIMIT = 150_000;
 /** 占用未知时同一代最多续接几次，再多就换代。 */
 const CTX_UNKNOWN_MAX_RESUME = 2;
+/** 会话可复用的最长时间窗：距上次更新超过它即换代，避免久置会话续接时重发大段历史。 */
+const CTX_MAX_AGE_MS = 3600_000;
 /** `.capitalist/sessions` 目录。 */
 export function sessionsDir(root: string): string {
   return join(supervisorDir(root), "sessions");
@@ -147,6 +149,13 @@ export function laneUnknownSpent(st: LaneState | null): boolean {
   return (st.resumes ?? 0) >= CTX_UNKNOWN_MAX_RESUME;
 }
 
+/** 会话是否已闲置过久：距上次更新超过时间窗即换代，避免续接时把大段陈旧历史重发进上下文。 */
+export function laneStale(st: LaneState | null, nowMs = Date.now()): boolean {
+  if (!st || !st.at) return false;
+  const at = Date.parse(st.at);
+  return Number.isFinite(at) && nowMs - at > CTX_MAX_AGE_MS;
+}
+
 /** `busy` 由调用方提供；本模块不读工作进程台账，`worker.ts` 与看板各自判定会话占用。 */
 export function pickLane(
   root: string,
@@ -179,12 +188,13 @@ export function pickLane(
     return { id: base, resume: false };
   }
 
-  /* 占用未满、未知续接次数未达上限、无进程占用三道闸门全通过才续接，否则换代；与 action 指纹无关。sig 更新为最新指纹供回查。 */
+  /* 占用未满、未知续接次数未达上限、未闲置过久、无进程占用四道闸门全通过才续接，否则换代；与 action 指纹无关。sig 更新为最新指纹供回查。 */
   /* 占用判定读取会话文件的实时读数：`loop.ts` 的 `refreshLaneUsage` 每轮按日志增量刷新，不等进程退出。 */
   const tooFull = laneTooFull(st);
   const unknownSpent = laneUnknownSpent(st);
+  const stale = laneStale(st);
   const occupied = busy(st.current);
-  if (!tooFull && !unknownSpent && !occupied) {
+  if (!tooFull && !unknownSpent && !stale && !occupied) {
     writeLane(root, {
       ...st,
       sig,
@@ -196,7 +206,7 @@ export function pickLane(
   }
   const gen = st.gen + 1;
   const current = `${base}-g${gen}`;
-  const why = tooFull ? "ctx_full" : unknownSpent ? "ctx_unknown" : "occupied";
+  const why = tooFull ? "ctx_full" : unknownSpent ? "ctx_unknown" : stale ? "ctx_stale" : "occupied";
   recordEvent(root, "lane_rotated", {
     base,
     from_gen: st.gen,

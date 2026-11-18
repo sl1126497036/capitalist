@@ -37,7 +37,7 @@ test("卡点段只写卡点与打法，长度不超过上限", () => {
 
 test("拿不到失败原因时明说，并让 worker 先复现", () => {
   const text = worker.buildSkipBlocker({});
-  assert.match(text, /没留下失败原因/);
+  assert.match(text, /未记录失败原因/);
   assert.match(text, /复现/);
 });
 
