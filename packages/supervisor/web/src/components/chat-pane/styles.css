@@ -2748,13 +2748,12 @@
 .pickup,
 .pickx {
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-pill);
-  background: var(--raise);
-  color: var(--t1);
+  border: 0;
+  background: none;
+  color: var(--t7);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2771,14 +2770,10 @@
 
 .pickup:hover,
 .pickx:hover {
-  background: var(--raise-3);
-  border-color: var(--select-line);
   color: var(--t1);
 }
 
 .pickup:disabled {
-  background: var(--raise);
-  border-color: var(--line-2);
   color: var(--t4);
   cursor: default;
 }
@@ -3121,7 +3116,7 @@
 /*
  * 气泡上的技能标签。
  *
- * 发送后输入区即清空，带走的技能只能从气泡上读。字色取 `currentColor`，
+ * 发送后输入区即清空，带走的技能只能在气泡上查看。字色取 `currentColor`，
  * 不用主题灰阶：气泡底色随角色变化（本人消息为深蓝灰），固定灰阶在深色底上对比不足。
  * 描边跟随同色，整体略微压暗，层级靠字号与透明度区分，不靠字色。
  */

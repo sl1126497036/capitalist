@@ -36,7 +36,7 @@ export function cmdGate(p: Parsed): number {
   const text = inline || (reqFile ? readFileSync(reqFile, "utf8") : "");
   if (!text) die("用法：capitalist gate --text <命令> 或 --req <请求文件>");
   const root = findRoot(flagString(p, "root"));
-  const spec = flagString(p, "contract") ?? "generic";
+  const spec = flagString(p, "contract") ?? "minimal";
   const contract = root ? loadOrDie(root).contract : loadContract(spec, skillDirs());
   if (!contract) die(`找不到任务列表：${spec}`);
 
@@ -127,7 +127,7 @@ function splitPaths(raw: string): string[] {
 /**
  * 提交越界或删除申请的理由。
  *
- * 理由与路径写进申请台账，由监工裁决。本命令不产生放行凭证：批准由监工或用户给出，
+ * 理由与路径写进申请台账，由监工裁决。本命令不产生批准记录：批准由监工或用户给出，
  * 且只对一次动作有效。
  */
 export function cmdJustify(p: Parsed): number {

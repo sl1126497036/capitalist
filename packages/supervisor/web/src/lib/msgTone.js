@@ -97,7 +97,7 @@ export function toneOf(m) {
 
   if (FAIL_EVENTS.has(evt)) return { tone: "bad", note: "" };
 
-  /* 指令被拒（ok=false）为确定失败。 */
+  /* 指令未执行（ok=false）为确定失败。 */
   if (evt === "supervisor_cmd" && m.ok === false) return { tone: "bad", note: "" };
 
   /* 门槛评估未达标（ok=false）归琥珀，标签写“未达标”。 */

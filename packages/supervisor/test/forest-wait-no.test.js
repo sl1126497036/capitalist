@@ -1,8 +1,8 @@
 /**
- * 任务树上「等待前置单」的显示。
+ * 任务树上“等待前置单”的显示。
  *
  * 守的是编号：节点等的是台账里的某张单，界面上要写任务编号（等待 #05），
- * 不能把 `D-…` 这种内部标识冠上 `#` 当成任务号显示——它会让人以为那是另一张单。
+ * 不能把 `D-…` 这种内部标识加上 `#` 当成任务号显示：它会让人以为那是另一张单。
  */
 
 const test = require("node:test");
@@ -42,7 +42,7 @@ function scene() {
   return root;
 }
 
-test("等待前置单时带回编号，供界面显示「等待 #编号」", () => {
+test("等待前置单时带回编号，供界面显示“等待 #编号”", () => {
   const root = scene();
   const nos = dispatchNoTable(root);
   const view = buildForestView(root, (id) => nos.get(id) ?? "");
@@ -67,13 +67,13 @@ test("不在等待态的节点不带编号", () => {
   assert.equal(pre.stuckOnNo, "", "运行中的单没有等待对象，不该带编号");
 });
 
-test("编号表缺失时留空，不拿 id 冒充编号", () => {
+test("编号表缺失时留空，不用 id 代替编号", () => {
   const root = scene();
   /* 不传 noOf：等同编号表不可用。 */
   const view = buildForestView(root);
   const nodes = view.trees.flatMap((t) => t.nodes);
   const next = nodes.find((n) => n.id === "D-next1");
   assert.ok(next);
-  assert.equal(next.stuckOnNo, "", "查不到编号就留空，界面自己决定退路");
+  assert.equal(next.stuckOnNo, "", "查不到编号就留空，由界面决定如何显示");
   assert.equal(next.stuckOn, "D-pre1", "阻塞来源照旧保留");
 });

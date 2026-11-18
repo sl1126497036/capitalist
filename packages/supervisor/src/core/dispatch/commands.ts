@@ -306,7 +306,7 @@ export function appendDirective(
     atts?: string[];
     /** 这条插话对应的用户消息标识（看板发送时生成）。 */
     msgId?: string;
-    /** 目标派生链：无分片单靠它认领，防止别的一条链把话领走。 */
+    /** 目标派生链：无分片单靠它认领，避免消息串进其他派生链。 */
     lineage?: string;
     /** 目标单：这条话是说给哪一单的（派单 id 或 worker id）。 */
     target?: string;
@@ -376,9 +376,9 @@ export function listDirectives(root: string): Directive[] {
 export interface DirectiveScope {
   shard: string;
   stage?: string;
-  /** 这一单的派单 id。 */
+  /** 该单的派单 id。 */
   dispatchId?: string;
-  /** 这一单的派生链（重派链首单 id）。 */
+  /** 该单的派生链（重派链首单 id）。 */
   lineage?: string;
   /** 问话的 worker id（hook 送达时才有）。 */
   workerId?: string;

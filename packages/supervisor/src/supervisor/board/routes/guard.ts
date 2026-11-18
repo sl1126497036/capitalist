@@ -47,7 +47,7 @@ export function handleGuard(ctx: BoardCtx): void {
   sendJson(ctx, {
     /* 已补理由、等监工处理。没有理由的申请不展示：用户看不到判断依据。 */
     pending: rows.filter((r) => r.status === "open" && r.reason.trim() !== "").map(view),
-    /* 监工拿不准，等用户裁决。 */
+    /* 监工无法判定，等用户裁决。 */
     escalated: rows.filter((r) => r.status === "escalated").map(view),
   });
 }

@@ -43,7 +43,7 @@ export interface GuardRequest {
   /** 工作进程补充的理由；未补充时为空串。 */
   reason: string;
   status: GuardStatus;
-  /** 批准是否已被使用。一次批准只放行一次。 */
+  /** 批准是否已被使用。一次批准只使用一次。 */
   used: boolean;
   /** 裁决说明。 */
   why: string;

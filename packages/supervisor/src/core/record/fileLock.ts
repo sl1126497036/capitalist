@@ -292,7 +292,7 @@ export function acquire(root: string, path: string, mode: LockMode, holder: stri
 /**
  * 申请并在超时内轮询等待。
  *
- * 这是“其他 worker 要写需要等”的实现入口：hook 侧调它，等到就放行，等不到就拒绝。
+ * 这是“其他 worker 要写需要等”的实现入口：hook 侧调它，等到锁就继续，等不到就拒绝。
  * 轮询间隔从 120ms 起、每次 +80ms 退避，最多等到 `waitMs`。
  */
 export function acquireWithWait(

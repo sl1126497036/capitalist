@@ -592,7 +592,7 @@
                       v-if="v.assoc && v.m.no"
                       class="assocchip jump"
                       type="button"
-                      :aria-label="t('切到这一单的工作进程')"
+                      :aria-label="t('切到该单的工作进程')"
                       @click.stop="emit('locate', String(v.m.no))"
                     >{{ t("同一派单") }} {{ v.assoc }}</button>
                     <span
@@ -851,8 +851,15 @@
             @click.stop
           >
             <div class="pickhd">
-              <button class="pickup" type="button" :disabled="!pickCanUp" @click.stop="pickGoUp">
-                <UpOutlined aria-hidden="true"/>
+              <button
+                class="pickup"
+                type="button"
+                :disabled="!pickCanUp"
+                :aria-label="t('返回上一级')"
+                :title="t('返回上一级')"
+                @click.stop="pickGoUp"
+              >
+                <LeftOutlined aria-hidden="true"/>
               </button>
               <input
                 class="pickpath"

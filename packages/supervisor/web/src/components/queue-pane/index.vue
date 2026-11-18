@@ -615,18 +615,22 @@ function capNum(n) {
 }
 const supervisorUnreadShown = computed(() => Math.max(0, Number(props.supervisorUnread) || 0));
 
-/* 监工行模型优先取 supervisor_model；为空时用接口 model（最近一次派单的模型）作为宿主默认的观测值。 */
+/*
+ * 监工行只认监工模型：显式选定值优先，其次解析出的实际档名。
+ * 不回落最近一次派单的模型：那是 Worker 模型，与监工模型是两回事，混用会把两处显示带反。
+ */
 const supervisorModel = computed(() => {
   const s = supervisorView.value || {};
-  const raw = String(s.supervisor_model || "").trim() || String(s.model || "").trim();
+  const raw =
+    String(s.supervisor_model || "").trim() || String(s.supervisor_model_effective || "").trim();
   return raw ? modelOf(raw) : null;
 });
 const supervisorModelTip = computed(() => {
   const s = supervisorView.value || {};
   const explicit = String(s.supervisor_model || "").trim();
-  if (explicit) return tr("监工对话模型：{m}", { m: explicit });
-  const raw = String(s.model || "").trim();
-  return raw ? tr("默认模型 {m}", { m: raw }) : tr("宿主默认");
+  if (explicit) return tr("监工模型：{m}", { m: explicit });
+  const effective = String(s.supervisor_model_effective || "").trim();
+  return effective ? tr("监工模型：{m}（宿主默认）", { m: effective }) : tr("宿主默认");
 });
 
 

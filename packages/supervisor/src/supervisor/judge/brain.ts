@@ -6,6 +6,7 @@
 import { askModel } from "../channel/llm";
 import { brainSessionOf, recentVerdicts } from "./brainLane";
 import { loadSupervisor } from "../../core/record/supervisor";
+import { supervisorModelOf } from "./supervisorModel";
 
 /** 一个可执行动作。`name` 由调用方在 `actions` 里声明，模型只能选声明过的。 */
 export interface BrainAction {
@@ -141,7 +142,7 @@ export async function decide(opts: DecideOptions): Promise<BrainResult> {
     timeoutMs: opts.timeoutMs ?? 120_000,
     effort: opts.effort ?? "high",
     /* 使用监工记录中的模型（--capitalist-model），判定与看板对话保持同一口径。 */
-    model: loadSupervisor(opts.root)?.supervisor_model || undefined,
+    model: supervisorModelOf(opts.root),
   });
   if (!r.ok) {
     /* 调用失败时 `r.text` 为失败原因。 */

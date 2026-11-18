@@ -217,7 +217,7 @@ const HELP_GROUPS: HelpGroup[] = [
         brief: [
           "创建任务根并常驻：派单、验收、回收重派。队列无待办时转入待命。",
           "在终端前台运行，随终端存活；关闭终端后监工下线。",
-          "宿主会话内不提供启动入口，启动时输出终端命令后退出。",
+          "WorkBuddy 会话运行在沙箱里，不能在会话内启动；其他宿主可直接启动。",
           "启动后不执行上次未完成的派单：这些单逐张标为暂停，队列原样保留；",
           "新派入的单不受暂停影响，可立即执行。唤醒暂停单用 capitalist wake --user，",
           "或在看板按“已暂停”筛选后逐单唤醒。",
@@ -261,6 +261,10 @@ const HELP_GROUPS: HelpGroup[] = [
           { f: "--board-quiet-ms N", d: ["看板合并窗口，缺省 8000ms（CAPITALIST_BOARD_RELOAD_QUIET_MS）"] },
           { f: "--board-min-gap-ms N", d: ["看板最小间隔，缺省 60000ms（CAPITALIST_BOARD_RELOAD_MIN_GAP_MS）"] },
           { f: "--force", d: ["接管并清除熔断"] },
+          {
+            f: "--verbose",
+            d: ["打印启动参数、守护进程、任务列表热加载等运行细节（环境变量 CAPITALIST_VERBOSE=1）；", "缺省只输出看板地址、运行状态与错误"],
+          },
         ],
       },
       { cmd: "supervise-stop", brief: ["请求监工退出（下一 tick 生效）"] },

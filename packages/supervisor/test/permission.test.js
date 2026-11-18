@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const { decide, normalizeMode, modeNames, severity, resolveMode } = require("../dist/core/guard/permission");
 
-test("未知档位名 fail-closed 到 deny，不改用 default", () => {
+test("未知档位名按 deny 处理，不改用 default", () => {
   assert.equal(decide("plan_mode_typo", "allow", "write"), "deny");
   assert.equal(decide("", "allow", "write"), "deny");
   assert.equal(decide(null, "allow", "read"), "deny");

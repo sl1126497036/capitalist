@@ -16,7 +16,11 @@ import { writeJson } from "../../core/record/json";
 import { t } from "../lang";
 import { write } from "../output";
 
-export async function runAuthDiag(root: string): Promise<void> {
+/**
+ * @param verbose 打印“未下发令牌”这类正常结论。缺省只在读取出错时输出；启动横幅只留
+ * 看板地址与运行状态，正常路径不该占一行。
+ */
+export async function runAuthDiag(root: string, verbose = false): Promise<void> {
   const tok = await import("../../supervisor/channel/officialToken");
   const diagFile = join(supervisorDir(root), "auth-diag.json");
   const saveDiag = (value: unknown): void => {
@@ -28,6 +32,10 @@ export async function runAuthDiag(root: string): Promise<void> {
   };
 
   if (!tok.tokenInjectionEnabled()) {
+    if (!verbose) {
+      saveDiag({ injection: "off" });
+      return;
+    }
     write(
       t(
         "[supervisor] no host token injected; workers and the chat channel use the host CLI login.\n",

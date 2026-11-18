@@ -15,6 +15,7 @@ import { tokenTotals, usageTotalsOf, type UsageTotals, ThreadCostRow, costRowsWi
 import { readPendingMq } from "../../core/dispatch/mq";
 import { balanceView, BalanceView } from "../usage/balance";
 import { readSupervisorModelUsed } from "./assets";
+import { supervisorModelEffective } from "../judge/supervisorModel";
 import { readNextModel } from "../loop";
 import { readPause } from "../../core/record/pause";
 import { TaskSummary as TaskPoolSummary } from "../../core/record/tasks";
@@ -288,7 +289,10 @@ export interface SupervisorStatusView {
   context: SupervisorContextView;
   model: string;
   model_version: string;
+  /** 用户选定的监工模型；空串表示跟随宿主默认。 */
   supervisor_model: string;
+  /** 监工实际调用的模型：`supervisor_model` 为空时是平台默认档的具体档名。 */
+  supervisor_model_effective: string;
   next_model: string;
   effort: string;
   paused: boolean;
@@ -383,6 +387,7 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
     model: lastModel || readSupervisorModelUsed(root),
     model_version: lastVersion,
     supervisor_model: String(capitalist?.supervisor_model ?? "").trim(),
+    supervisor_model_effective: supervisorModelEffective(root),
     next_model: readNextModel(root),
     effort: String(capitalist?.effort ?? "").trim(),
     paused: readPause(root) !== null,

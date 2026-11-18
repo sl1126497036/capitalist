@@ -117,7 +117,7 @@ export interface BoardEvent {
 }
 
 export type ThreadRole = "supervisor" | "worker" | "user";
-export type ThreadKind = "dispatch" | "verdict" | "output" | "tool" | "say" | "thinking" | "engine";
+export type ThreadKind = "dispatch" | "verdict" | "output" | "tool" | "say" | "thinking" | "engine" | "notice";
 
 export interface ThreadMessage {
   /** 消息 id 必须与时间戳解耦，取派单 id、工作进程输出块序号、事件内容指纹等来源标识。 */
@@ -518,6 +518,9 @@ export function buildSnapshot(root: string): BoardSnapshot {
       workers,
       dispatches,
       blockers: Array.isArray(state?.blockers) ? state?.blockers.length : 0,
+      blockerReasons: Array.isArray(state?.blockers)
+        ? state?.blockers.map((b) => String((b as { reason?: unknown }).reason ?? ""))
+        : [],
       hasActive: Boolean(active),
       lastLogTail,
     }),
@@ -602,6 +605,8 @@ export interface DiagnoseInput {
   workers: BoardWorker[];
   dispatches: BoardDispatch[];
   blockers: number;
+  /** 阻塞原因，与终端状态行同源；只用于把“卡在哪”写清楚。 */
+  blockerReasons?: string[];
   hasActive: boolean;
   lastLogTail: string;
 }
@@ -677,11 +682,21 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
   }
 
   if (i.blockers > 0) {
+    /* 与终端状态行同口径：同类阻塞合并计数，说清有几条、卡在哪。 */
+    const counts = new Map<string, number>();
+    for (const x of i.blockerReasons ?? []) {
+      const key = String(x ?? "").trim() || "未写原因";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const items = [...counts.entries()]
+      .slice(0, 2)
+      .map(([reason, n]) => `${reason} ${n} 条`)
+      .join("、");
     return {
       level: "warn",
-      title: `状态里有 ${i.blockers} 条阻塞`,
-      detail: "执行侧登记了阻塞，监工据此暂停派单或放行收工。",
-      fix: "capitalist status 看清原因后 capitalist unblock",
+      title: `${i.blockers} 条阻塞未解除，监工暂不派新单`,
+      detail: items || "执行侧登记了阻塞，没有写原因。",
+      fix: "capitalist unblock --all 解除全部，或按类型逐条解除",
     };
   }
 

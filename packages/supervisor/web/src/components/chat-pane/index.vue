@@ -229,6 +229,8 @@ function cls(m) {
     if (m.kind === "thinking") return "think";
     /* 引擎诊断单独分档，渲染为系统消息样式的折叠块。 */
     if (m.kind === "engine") return "engine";
+    /* 状态提示（如插话已送达）不是推理内容：按系统消息渲染，不做折叠卡。 */
+    if (m.kind === "notice") return "sys";
     /* 进程非零退出由底部状态条表达，其历史正文不按失败着色。 */
     return "worker";
   }
@@ -434,7 +436,7 @@ const isSupervisorSessionEvent = (m) => {
   if (!e) return true;
   if (HEARTBEAT_EVENTS.has(e)) return false;
   if (!CAPITALIST_SESSION_EVENTS.has(e)) return false;
-  /* 指令回执只保留“被拒”；“已执行”已由指令气泡上的状态标表达。 */
+  /* 指令回执只保留“失败”；“已执行”已由指令气泡上的状态标表达。 */
   return e !== "supervisor_cmd" || m?.ok === false;
 };
 
@@ -925,10 +927,10 @@ function stat(v) {
   const s = String(v.m.status || "");
   if (s === "pending") return tr("等待下一轮调度");
   if (s === "executed") return v.m.no ? tr("已执行 #{no}", { no: v.m.no }) : tr("已执行");
-  /* 被拒尾标按 reason 优先、回落 detail，两者皆空只显示“被拒”；字段由 supervisor_cmd 事件与 SC- 指令卡下发。 */
+  /* 失败尾标按 reason 优先、回落 detail，两者皆空只显示“失败”；字段由 supervisor_cmd 事件与 SC- 指令卡下发。 */
   if (s === "rejected") {
     const tail = rejectTail(v.m.reason, v.m.detail);
-    return tail ? `${tr("被拒")} · ${tail}` : tr("被拒");
+    return tail ? `${tr("失败")} · ${tail}` : tr("失败");
   }
   return "";
 }
@@ -1686,11 +1688,6 @@ watch(
     seen.value = new Set();
     newIds.value = new Set();
     restoreOrBottom();
-    if (attachments.value.length || uploadingCount.value > 0) {
-      draftGen += 1;
-      attachments.value = [];
-      uploadFails.value = [];
-    }
   },
 );
 

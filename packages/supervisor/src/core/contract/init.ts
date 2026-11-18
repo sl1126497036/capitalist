@@ -107,7 +107,7 @@ export function enterStage(state: TaskState, stage: Stage): void {
  */
 export function createTaskRoot(opts: CreateRootOptions): CreateRootResult {
   const fallback = !opts.contractSpec;
-  const spec = opts.contractSpec ?? "generic";
+  const spec = opts.contractSpec ?? "minimal";
   const contract = loadContract(spec, opts.contractDirs ?? []);
   if (!contract) throw new ContractNotFoundError(spec, contractNames(opts.contractDirs ?? []));
 

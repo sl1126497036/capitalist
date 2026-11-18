@@ -1,8 +1,8 @@
 /**
  * 监工对话的抢占语义。
  *
- * 用户追加新内容时，正在提交的回执或报告不应继续占着通道：新消息要立刻被处理。
- * 但中断的是过程，不是要求——排队中的消息一条都不能丢。
+ * 用户追加新内容时，正在提交的回执或报告不应继续占用通道：新消息要立刻被处理。
+ * 但中断的是过程，不是要求：排队中的消息一条都不能丢。
  */
 
 const assert = require("node:assert/strict");
@@ -35,32 +35,32 @@ test("新消息打断正在提交的那一轮", async () => {
     return await obey(signal);
   });
   await sleep(20);
-  assert.equal(firstSignal.aborted, false, "刚开跑的一轮不该自己被打断");
+  assert.equal(firstSignal.aborted, false, "刚开始执行的一轮不该自己被打断");
 
   const second = serializeSupervisorChat(async () => "second");
-  assert.equal(firstSignal.aborted, true, "新消息进来时，正在跑的那一轮必须被中止");
+  assert.equal(firstSignal.aborted, true, "新消息进来时，正在执行的那一轮必须被中止");
   assert.equal(await first, "aborted", "被中止的一轮按中断收尾，不按正常完成");
   assert.equal(await second, "second");
 });
 
-test("排队中的消息不会被后来者吞掉", async () => {
+test("排队中的消息不会因为后来的消息而丢失", async () => {
   const seen = [];
   const first = serializeSupervisorChat(async (signal) => {
     seen.push("A");
     return await obey(signal);
   });
   await sleep(10);
-  /* 第二条在 A 还在跑时入队：它只排队，不该被中断。 */
+  /* 第二条在 A 仍在执行时入队：它只排队，不该被中断。 */
   const second = serializeSupervisorChat(async (signal) => {
     seen.push("B");
-    assert.equal(signal.aborted, false, "排队中的消息不该在开跑前就被中止");
+    assert.equal(signal.aborted, false, "排队中的消息不该在开始执行前就被中止");
     await obey(signal, 20);
     return "B";
   });
-  /* 第三条入队时，正在跑的仍是 A；B 只是排队，必须保留。 */
+  /* 第三条入队时，正在执行的仍是 A；B 只是排队，必须保留。 */
   const third = serializeSupervisorChat(async (signal) => {
     seen.push("C");
-    assert.equal(signal.aborted, false, "排队中的消息不该在开跑前就被中止");
+    assert.equal(signal.aborted, false, "排队中的消息不该在开始执行前就被中止");
     await obey(signal, 20);
     return "C";
   });
@@ -69,7 +69,7 @@ test("排队中的消息不会被后来者吞掉", async () => {
   assert.deepEqual(seen, ["A", "B", "C"], "三条消息都要轮到，顺序按发送序");
 });
 
-test("单条消息不被打断，正常跑完", async () => {
+test("单条消息不被打断，正常执行完成", async () => {
   const out = await serializeSupervisorChat(async (signal) => {
     assert.equal(signal.aborted, false);
     return await obey(signal, 30);
@@ -83,7 +83,7 @@ test("抢占之后通道仍可用，不进入失败态", async () => {
   const second = serializeSupervisorChat(async () => "after");
   assert.equal(await first, "aborted");
   assert.equal(await second, "after");
-  /* 再来一轮：链没有被中止留下的残状态卡住。 */
+  /* 再来一轮：链没有被中止留下的残余状态卡住。 */
   assert.equal(await serializeSupervisorChat(async () => "again"), "again");
 });
 

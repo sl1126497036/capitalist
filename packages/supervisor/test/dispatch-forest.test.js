@@ -350,7 +350,7 @@ test("场景：派单失败——父节点失败期间子节点继续等，重�
   assert.deepStrictEqual(queueAfterRestart(root), ["B", "X"], "同一件事的重派完成后，B 解锁");
 });
 
-test("场景：被拒之后——父节点被人工结束（closed）视为已终结，子节点照常启动且不再回来", () => {
+test("场景：被拒之后父节点被人工结束（closed）视为已终结，子节点照常启动且不再回来", () => {
   const root = sandbox();
   put(root, "A", { status: "closed", done_at: new Date().toISOString() });
   put(root, "B", { parent: "A", parent_reason: "要 A 的产物（A 后来被关掉）" });

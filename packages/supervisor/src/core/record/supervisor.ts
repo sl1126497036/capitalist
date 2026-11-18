@@ -101,7 +101,7 @@ export interface SupervisorRecord {
   note?: string;
 }
 
-/** 派单状态。`claimed` 表示已被某个 worker 领走且尚未结束。 */
+/** 派单状态。`claimed` 表示已被某个 worker 认领且尚未结束。 */
 /** 派单状态。 */
 export type DispatchStatus = "open" | "claimed" | "reported" | "review" | "done" | "failed" | "closed";
 
@@ -205,7 +205,7 @@ export interface Dispatch {
   /** 到这个决定为止，这条链已经重试过几次。 */
   retry_count?: number;
   cascade_from?: string;
-  /** 级联判定失败的时刻（ISO）。与 `done_at` 分开：`done_at` 是这一单自己的生命周期终点。 */
+  /** 级联判定失败的时刻（ISO）。与 `done_at` 分开：`done_at` 是该单自身的生命周期终点。 */
   cascade_at?: string;
   cascade_resets?: number;
   role?: "work" | "diagnose" | "fix";
@@ -1732,7 +1732,7 @@ export function sweepReviews(root: string): Dispatch[] {
   }
   if (changed) {
     writeJsonl(dispatchPath(root), rows);
-    // 自动结束也是结束：任务池必须跟着走，否则“已验收”永远差这一批。
+    // 自动结束也是结束：任务池必须跟着走，否则“已验收”永远缺结果。
     for (const d of out) syncTaskForDispatch(root, d);
   }
   return out;

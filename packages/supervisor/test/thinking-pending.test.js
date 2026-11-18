@@ -4,7 +4,7 @@
  * 守的是一个具体的观感缺陷：插话发出、工作进程还没产出新一轮思考时，会话流里最后一张
  * 思考卡仍是插话前的内容。刷新后前后对不上，用户会以为插话没发出去。
  *
- * 判据是「块序号 = 已越过几次插话」：最后一段（越过全部插话的那块）为空，就说明插话后
+ * 判据是“块序号 = 已越过几次插话”：最后一段（越过全部插话的那块）为空，就说明插话后
  * 还没有新思考，此时补一条占位块。反过来，新思考一到，占位必须自动让位，不能变成常驻
  * 的假消息。
  */
@@ -92,21 +92,35 @@ const pending = (messages) => messages.filter((m) => String(m.id).endsWith("#thi
 const thinks = (messages) => messages.filter((m) => m.kind === "thinking");
 
 test("插话刚发出、还没有新思考：补一条占位，且排在所有思考之后", () => {
-  /* 插话时间晚于日志 mtime —— 正是「刚按下发送、日志还没更新」的那一刻。 */
+  /* 插话时间晚于日志 mtime，正是“刚按下发送、日志还没更新”的那一刻。 */
   const s = scenario({ thinking: ["先看结构", "再改代码"], sayOffsets: [75] });
   const p = pending(s.messages);
   assert.equal(p.length, 1, "应补一条占位");
-  assert.equal(p[0].kind, "thinking", "占位要走思考过程这一档");
+  assert.equal(p[0].kind, "notice", "占位是提示，不是推理内容：不能套思考折叠壳，点开才有东西");
   assert.ok(String(p[0].text).includes("插话已送达"), `文案要说明插话已送达：${p[0].text}`);
   assert.ok(String(p[0].text).includes("重新思考"), `运行中要说在重新思考：${p[0].text}`);
 
   const all = thinks(s.messages);
-  assert.equal(all.length, 2, "两段真思考 + 一条占位");
-  assert.ok(String(all[all.length - 1].id).endsWith("#think-pending"), "占位必须排在最后一张思考卡");
+  assert.equal(all.length, 1, "插话前的两段真思考合成一块；占位不再冒充思考");
+  assert.ok(
+    String(all[0].text).includes("先看结构") && String(all[0].text).includes("再改代码"),
+    "真思考内容不能丢",
+  );
+  assert.ok(
+    Date.parse(String(p[0].at)) > Date.parse(String(all[all.length - 1].at)),
+    "占位要排在已有思考之后",
+  );
+});
+
+test("工作进程本来就没有思考输出：插话后也不补占位", () => {
+  /* 宿主不吐推理时，补出来的“思考过程”点开是空的，比没有这条更糟。 */
+  const s = scenario({ thinking: [], sayOffsets: [30] });
+  assert.equal(pending(s.messages).length, 0, "没有真实思考就不该出现思考卡");
+  assert.equal(thinks(s.messages).length, 0);
 });
 
 test("插话落在两段思考之间：最后一段已有新思考，不出占位", () => {
-  /* 两段思考插值在 t0+20、t0+40；插话在 t0+10，两段都算「插话之后」，并成同一块。 */
+  /* 两段思考插值在 t0+20、t0+40；插话在 t0+10，两段都算“插话之后”，并成同一块。 */
   const s = scenario({ thinking: ["先看结构", "再改代码"], sayOffsets: [10] });
   assert.equal(pending(s.messages).length, 0, "已有插话后的思考，占位不该出现");
   const all = thinks(s.messages);
@@ -118,8 +132,8 @@ test("插话晚于全部思考：补占位，但真思考内容一条不少", ()
   const s = scenario({ thinking: ["先看结构", "再改代码"], sayOffsets: [50] });
   assert.equal(pending(s.messages).length, 1, "插话后没有新思考，应补占位");
   const bodies = thinks(s.messages).map((m) => String(m.text));
-  assert.ok(bodies.some((b) => b.includes("先看结构")), "原有思考不能被占位顶掉");
-  assert.ok(bodies.some((b) => b.includes("再改代码")), "原有思考不能被占位顶掉");
+  assert.ok(bodies.some((b) => b.includes("先看结构")), "原有思考不能被占位替代");
+  assert.ok(bodies.some((b) => b.includes("再改代码")), "原有思考不能被占位替代");
 });
 
 test("没有插话时不补占位", () => {
@@ -138,13 +152,13 @@ test("进程已结束：文案改成下一轮生效，不说还在思考", () =>
 
 test("多次插话：只补一条，不按次数堆叠", () => {
   const s = scenario({ thinking: ["先看结构"], sayOffsets: [30, 50, 75] });
-  assert.equal(pending(s.messages).length, 1, "占位只表达「最新一次插话后还没动」，不该堆三条");
+  assert.equal(pending(s.messages).length, 1, "占位只表达“最新一次插话后还没动”，不该堆三条");
 });
 
 test("增量请求也要带回思考块：时间是插值，不能按游标过滤", () => {
   /*
    * 思考块的 `at` 是按段序号插值出来的，可能早于游标。按 `> since` 过滤会让界面上永远
-   * 看不到它（只剩工具行），只有整页刷新才出现——这正是「这一段没有思考过程」的来源。
+   * 看不到它（只剩工具行），只有整页刷新才出现：这正是“这一段没有思考过程”的来源。
    */
   const s = scenario({ thinking: ["先看结构", "再改代码"], sayOffsets: [75] });
   const since = s.page.next_since;

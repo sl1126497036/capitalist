@@ -1,6 +1,7 @@
 /**
- * 会话：按阶段与分片（无分片时按分类标签）派生会话基名，决定工作进程续接哪条 AI 会话。
+ * 会话：按派单派生会话基名，决定工作进程续接哪条 AI 会话。
  *
+ * 一条派单一条会话：不同派单互不共享上下文，同一单的重开、追加与重派续接原会话。
  * 上下文占用超过窗口比例时换代；同一会话同时只允许一个进程续接；action 指纹只作记录，不参与换代判定。
  */
 
@@ -51,15 +52,40 @@ function basePath(root: string, base: string): string {
   return join(sessionsDir(root), `${base}.json`);
 }
 
-/** 会话基名取分片，无分片时取首个分类标签；无标签时为 `misc`。本函数供看板复用。 */
-export function laneBaseId(stage: string, shard: string, tags: readonly string[] = []): string {
-  const pick = String(shard ?? "").trim() || String(tags[0] ?? "").trim() || "misc";
-  return `capitalist-${stage}-${pick}`
+/** 会话基名的字符集归一化：只留小写字母、数字与连字符。 */
+function slug(text: string): string {
+  return String(text ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 52);
+    .replace(/^-|-$/g, "");
+}
+
+/** 会话基名最大长度；宿主对会话 id 长度有上限，超出的部分无效。 */
+const BASE_MAX = 52;
+
+/**
+ * 会话基名：一条派单一条会话。
+ *
+ * 主键取派单 id，因此不同派单必定落在不同会话，同 stage、同分片、同分类标签的多张单也不会并成一条；
+ * 同一张单的重开、追加与重派沿用同一 id，续接的仍是它自己的上下文，不会丢已做过的部分。
+ *
+ * 派单 id 缺失时（历史记录、看板只有阶段与分片）退回阶段与分片派生，仅用于兼容旧档。
+ */
+export function laneBaseId(
+  stage: string,
+  shard: string,
+  tags: readonly string[] = [],
+  dispatchId = "",
+): string {
+  const fromDispatch = String(dispatchId ?? "").trim().replace(/^d-/i, "");
+  const pick =
+    slug(fromDispatch) || String(shard ?? "").trim() || String(tags[0] ?? "").trim() || "misc";
+  const tail = (slug(pick) || "misc").slice(0, 24);
+  /* 先留出派单标识的位置再截阶段名：从尾部截断会把隔离键切掉，退化成共用会话。 */
+  const budget = Math.max(2, BASE_MAX - "capitalist-".length - 1 - tail.length);
+  const head = slug(stage).slice(0, budget) || "s";
+  return `capitalist-${head}-${tail}`;
 }
 
 /** 读会话记录；没有或损坏时返回 null（按首次处理）。 */
@@ -130,7 +156,12 @@ export function pickLane(
   const tags = Array.isArray((dispatch as { tags?: string[] }).tags)
     ? ((dispatch as { tags?: string[] }).tags as string[])
     : [];
-  const base = laneBaseId(String(dispatch.stage ?? ""), String(dispatch.shard ?? ""), tags);
+  const base = laneBaseId(
+    String(dispatch.stage ?? ""),
+    String(dispatch.shard ?? ""),
+    tags,
+    String(dispatch.id ?? ""),
+  );
   const sig = fingerprintOf(String(dispatch.action ?? ""));
   const st = readLane(root, base);
 

@@ -228,14 +228,15 @@ function refPattern(ref) {
 test("收工闸：送到了但没有结论，不许结束，并直接给出可复制的命令行", () => {
   const root = sandbox();
   seed(root, "D-cli");
-  const rec = put(root, "这条要回报");
-  claim(root, "D-cli");
+  put(root, "这条要回报");
+  /* 行号在领取时写入：取领取结果里的那条，才是 worker 会看到的编号。 */
+  const [rec] = claim(root, "D-cli");
 
   const denied = runCli(["report", "D-cli", "--status", "done", "--note", "做完了", "--root", root]);
   assert.equal(denied.code, 1, `没结论必须挡住：${denied.out}`);
   assert.match(denied.out, /未给出结论/);
   assert.match(denied.out, /--outcome/, "要给出可直接复制的命令行，否则挡一次就要来回猜格式");
-  assert.match(denied.out, refPattern(cmds.directiveRef(rec)), "要点明是哪一条");
+  assert.match(denied.out, refPattern(cmds.directiveShortRef(rec)), "要点明是哪一条");
 });
 
 test("收工闸：给了结论就放行", () => {

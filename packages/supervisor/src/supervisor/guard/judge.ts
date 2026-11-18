@@ -25,6 +25,7 @@ import type { TaskState } from "../../core/types";
 import { askModel } from "../channel/llm";
 import { parseActions } from "../judge/brain";
 import { brainSessionOf } from "../judge/brainLane";
+import { supervisorModelOf } from "../judge/supervisorModel";
 
 /** 每轮最多裁决几条：模型调用是分钟级，积压时按先后顺序逐轮消化。 */
 const MAX_PER_TICK = 2;
@@ -150,7 +151,7 @@ async function judgeOne(
     sessionId: lane.id,
     cwd: root,
     effort: "high",
-    model: loadSupervisor(root)?.supervisor_model || undefined,
+    model: supervisorModelOf(root),
   });
 
   const parsed = r.ok ? parseActions(r.text ?? "", ACTIONS) : null;

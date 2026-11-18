@@ -30,12 +30,14 @@ import { taskNoLines, workerRuntimeLines, workerDigest, settledLines } from "../
 import { writeQuotedDirect, runCli, resolveQuoteText, quoteDispatchLabel, sayArgsOf } from "../cmdQuote";
 import { serializeSupervisorChat, supervisorPolicy, workerSessionId } from "../commands";
 import { chatAuthHint } from "../models";
+import { reopenDirective, resolveThreadAction } from "../threadAction";
 import { targetFromText } from "../render";
 import { dispatchTitle } from "../snapshot";
 import { dispatchModel, readDispatchesBoard } from "../sources";
 import { buildThreads } from "../threads";
 import { buildSupervisorStatus } from "../views";
 import { findSkill, listSkills } from "../../skills";
+import { supervisorModelOf } from "../../judge/supervisorModel";
 
 /**
  * 会携带技能的动作：这些动作最终把正文下发成派单，技能名随正文一起下发。
@@ -137,14 +139,14 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
               : "任务：(未能定位，按全局状态回答)",
             me
               ? `当前状态：${me.status} ｜ 已运行 ${Math.round((me.duration_sec ?? 0) / 60)} 分钟`
-              : "这一单的执行进程已退出 ｜ 这条任务还在，可以重开",
-            `它这一单的标题：${taskTitle || "(未记录)"}`,
-            `它最近输出的一句话：${String(me?.last || "").slice(0, 300) || "(还没输出)"}`,
+              : "该单的执行进程已退出 ｜ 任务仍在，可以重开",
+            `该单标题：${taskTitle || "(未记录)"}`,
+            `最近输出：${String(me?.last || "").slice(0, 300) || "(还没有输出)"}`,
             ...(() => {
               if (!me?.worker) return [];
               const rec = loadWorker(ctx.opts.root, String(me.worker));
               const dg = rec ? workerDigest(rec) : "";
-              return dg ? [`它已经做到哪：${dg}`] : [];
+              return dg ? [`执行进度：${dg}`] : [];
             })(),
             ...(readPause(ctx.opts.root) !== null
               ? [
@@ -157,20 +159,21 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             ...(via === "capitalist"
               ? [
                   "",
-                  "【用户按了“监工介入”】提问发生在这个进程的会话里，携带上面的任务编号直接回答，",
-                  "这句话不登记回该派单，也不转给该进程；由监工直接回复。",
-                  "用户所指即当前这一单。回答只围绕它：什么状态、在做什么、还差什么。",
-                  "不对比其他派单，不解释其他运行中的派单，避免被理解为在描述当前派单。",
-                  "确实需要提到别的单时，先说明“那是另一单，与所问无关”。",
+                  "【用户按了“监工介入”】提问发生在该进程的会话里，携带上面的任务编号直接回答；",
+                  "本次提问不登记回该派单，也不转给该进程，由监工直接回复。",
+                  `用户所指即当前派单（#${talkNo}）。回答只围绕该单：状态、正在执行的内容、未完成的部分。`,
+                  "不提及其他派单，避免被当作在描述当前派单。",
+                  "确需提及别的派单时，先说明其与所问无关。",
                   talkNo
-                    ? `用户说“插队 / 排到前面”：DO: queue #${talkNo}——仅插入队首，运行中的派单不受影响。`
+                    ? `用户说“插队 / 排到前面”：DO: queue #${talkNo}：仅插入队首，运行中的派单不受影响。`
                     : "用户说“插队 / 排到前面”：先按【任务编号表】找号，再写 DO: queue #NN。",
                   talkNo
-                    ? `用户说“立即执行 / 马上跑 / 别等”：DO: promote #${talkNo}——抢占槽位，运行中的派单退回队首，本单结束后继续执行。`
-                    : "用户说“立即执行 / 马上跑”：DO: promote #NN——这才抢占槽位。",
-                  "要新建一单并立刻抢占槽位（不等排队）：DO: dispatch --now <内容>（--now 表示立即执行，会挂起运行中的派单）。",
-                  "要重做这一单：还在排队就 queue 或 promote；已经终结就 DO: dispatch 并按原任务重写一遍。",
-                  "不要为让某一单启动而新建一单改动机制：那是另一件事，除非用户明确要求。",
+                    ? `用户说“立即执行 / 马上跑 / 别等”：DO: promote #${talkNo}：抢占槽位，运行中的派单退回队首，本单结束后继续执行。`
+                    : "用户说“立即执行 / 马上跑”：DO: promote #NN：抢占槽位。",
+                  "要新建派单并立刻抢占槽位（不等排队）：DO: dispatch --now <内容>（--now 表示立即执行，会挂起运行中的派单）。",
+                  "要继续执行该单：排队中用 queue 或 promote；已结束用 DO: redo #<本单编号>，沿用原单与原会话，不新建单。",
+                  "要补充或更正要求：DO: amend #<本单编号> <内容>；只有用户明确说“另开一单 / 新任务”才 dispatch。",
+                  "不要为启动某一单而新建派单去改动机制；用户明确要求时除外。",
                   "不要用 retry：retry 的参数是分片 id，不是任务号，adhoc 单传进去会被拒。",
                 ]
               : []),
@@ -181,8 +184,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         /*
          * 技能随补充内容一起注入。
          *
-         * 下发经 `say`，正文会并入该单的动作，工作进程在下一个动作间隙收到；正文里
-         * 出现技能名，它才会按名加载对应 SKILL.md。消息流记的是原文，技能另记一份，
+         * 经 `say` 下发，正文并入该单动作，工作进程在下一个动作间隙收到；正文含技能名时，
+         * 工作进程按名加载对应 SKILL.md。消息流记录原文，技能另记一份，
          * 气泡据此展示，技能行不写入正文。
          */
         const sayText = skills.length ? `${text}${skillLine}` : text;
@@ -197,9 +200,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           String(me?.dispatch ?? threadDispatch?.id ?? "") || targetFromText(ctx.opts.root, text);
         const targetLineage = String(me?.lineage ?? threadDispatch?.lineage ?? "");
         /**
-         * 这一单的派单记录。
-         * 线程按派生链键组织时 `threadDispatch` 取不到，只能按线程上的派单 id 再查一次，
-         * 否则“排队中的单”会被当成“已结束的单”，用户的补充要求会答完就没了。
+         * 该线程的派单记录。
+         * 线程按派生链键组织时 `threadDispatch` 取不到，需按线程上的派单 id 再查一次，
+         * 否则“排队中的单”会被当作“已结束的单”，用户的补充要求会丢失。
          */
         const disp = ((): Dispatch | null => {
           if (threadDispatch) return threadDispatch;
@@ -212,7 +215,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           } catch {
           }
         };
-        /* 逐字回放要按事件流下发；不带这几个头，浏览器会攒到结束才渲染。 */
+        /* 逐字回放要按事件流下发；缺少这些头时，浏览器会缓冲到响应结束才渲染。 */
         ctx.res.writeHead(200, {
           "content-type": "text/event-stream; charset=utf-8",
           "cache-control": "no-cache, no-transform",
@@ -220,8 +223,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           "x-accel-buffering": "no",
         });
         /**
-         * 收尾：落一条回复事件并结束这一轮。
-         * 正文为空表示这一轮只是登记指令，没有对话内容。
+         * 收尾：写入一条回复事件并结束本轮。
+         * 正文为空表示本轮只登记了指令，没有对话内容。
          */
         const finish = (args: { reply: string; applied: string; dispatch?: string; error?: string }): void => {
           settleChat(ctx.opts.root, {
@@ -302,8 +305,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           finish({
             reply: "",
             applied: onDuty
-              ? "已登记到当前派单 · 执行中的进程会在下一个动作间隙收到这条内容"
-              : "已登记到这一单 · 启动后会带上这条内容",
+              ? "已登记到当前派单，执行中的进程会在下一个动作间隙收到"
+              : "已登记到当前派单，启动后一并下发",
             dispatch: targetDispatch,
           });
           return;
@@ -314,27 +317,28 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           (ranWorker as unknown as { ai_session?: string } | null)?.ai_session ?? "",
         ).trim();
         const sessionId =
-          liveSession || workerSessionId(String(me?.stage ?? taskStage), String(me?.shard ?? taskShard));
+          liveSession ||
+          workerSessionId(String(me?.stage ?? taskStage), String(me?.shard ?? taskShard), talkDispatch);
         const prompt = [
-          "这条线程对应一个已经结束的任务，用户在此会话发来消息，直接回答。",
+          "该线程对应的任务已结束，用户在此会话发来消息时直接回答。",
           "",
-          "【这一单的情况】",
+          "【该单情况】",
           `任务：${taskStage}/${taskShard || "(整阶段)"}${taskTitle ? ` · ${taskTitle}` : ""}`,
           `状态：${me ? me.status : "已结束"}${me?.settled ? "（已结束）" : ""}`,
-          `它这一单的标题：${taskTitle || "(未记录)"}`,
-          `它最近输出的一句话：${String(me?.last ?? "").slice(0, 300) || "(还没输出)"}`,
+          `该单标题：${taskTitle || "(未记录)"}`,
+          `最近输出：${String(me?.last ?? "").slice(0, 300) || "(还没有输出)"}`,
           ...(readPause(ctx.opts.root) !== null
             ? ["", "【监工当前处于“暂停派单”】任何派单 / 插队 / 立即执行指令都不会执行。"]
             : []),
           "",
           "【怎么回答】",
-          "- 用中文，简短直接，一到三句；不要客套，不要复述用户的话",
-          "- 思考过程也用中文写：界面会把推理过程原样展开给用户看",
+          "- 使用用户语言，简短直接，一到三句；不要客套，不要复述用户的话",
+          "- 思考过程也用用户语言写：界面会把推理过程原样展开给用户看",
           "- 只依据本会话已有的上下文和下面这条消息回答；不知道就回答不知道，不编造",
           "- 会话归属：本会话续接派单执行进程，与 WorkBuddy 窗口的对话互不共享上下文。",
           "  被问是否与 WorkBuddy 窗口共用会话时，答不是，并说明这是执行进程的会话；运行环境中的 WorkBuddy 变量继承自启动方，不代表同一会话。",
           "  用户没问就不主动提。",
-          "- 这一单已经结束：只回答问题，不要改文件、不要改派单；需要继续动手时，说明需要在队列里重开这一单",
+          "- 该单已结束：只回答问题，不改文件、不改派单；需要重派时按当前单的上下文用量判断，上下文充足则直接复用，否则新开一单",
           "- 排版用 Markdown：加粗写 **文字**，列表行首写 - 或 1.，代码用反引号包起来；标题写成 ## 文字（井号后留空格），任务编号写作 #12",
           "- 不要提内部文件名和路径（以 .capitalist/ 开头的那种），也不要提任务列表、分片、收工条件、闸门判据、阻塞编号这类内部词",
           "",
@@ -350,9 +354,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         const leaveChat = enterSupervisorAction("chat");
         /* 续接会话期间没有正文增量，每 3 秒推一次状态帧供界面显示。 */
         const startedAt = Date.now();
-        sse({ kind: "status", text: "正在续接这一单的会话" });
+        sse({ kind: "status", text: "正在续接会话" });
         const beat = setInterval(() => {
-          sse({ kind: "status", text: `正在续接这一单的会话` });
+          sse({ kind: "status", text: `正在续接会话` });
         }, 3_000);
         const chatHost = chatHostOf(ctx.opts.root);
         const r = await askModelStream({
@@ -361,7 +365,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           cwd: ctx.opts.root,
           ...(chatHost ? { host: chatHost } : {}),
           effort: loadSupervisor(ctx.opts.root)?.effort ?? "high",
-          model: dispatchModel(disp ?? undefined) || undefined,
+          model: supervisorModelOf(ctx.opts.root),
           ...(ctx.opts.token ? { token: ctx.opts.token } : {}),
           signal,
           onDelta: (d) => sse(d),
@@ -377,8 +381,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           const quota = isQuotaText(r.text);
           if (quota) markQuotaExhausted(ctx.opts.root, r.text);
           /*
-           * 通道拒绝要落成一条回复：只写 applied 时它仅进状态行，
-           * 这一轮结束后状态行随即被完成文案覆盖，用户看到的就是“发了没回”。
+           * 通道拒绝要写入一条回复：只写 applied 时内容仅进状态行，
+           * 本轮结束后状态行随即被完成文案覆盖，用户看到的是“发了没回”。
            */
           const hurt = quota ? r.text : `对话通道不可用：${r.text}${chatAuthHint(ctx.opts.root)}`;
           finish({ reply: hurt, applied: "", error: hurt });
@@ -483,8 +487,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ...skillLines,
         "",
         "【怎么回答】",
-        "- 用中文，简短直接，一到三句，不要客套、不要重复用户的话",
-        "- 思考过程也用中文写：界面会把推理过程原样展开给用户看，用英文写用户看不懂",
+        "- 使用用户语言，简短直接，一到三句，不要客套、不要重复用户的话",
+        "- 思考过程也用用户语言写：界面会把推理过程原样展开给用户看",
         "- 陈述语气：写明对象与结果。不用第二人称“你”，不用“已记这一单，没打断它”这类口语化说法，",
         "  不拟人、不承诺、不陈述自身工作。",
         "- 只依据上面的状态回答；状态里没有的信息就回答“不知道”，不编造",
@@ -492,9 +496,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         "  被问是否与 WorkBuddy 窗口共用会话时，答不是，并说明这是监工的对话；运行环境中的 WorkBuddy 变量继承自启动方，不代表同一会话。",
         "  用户没问就不主动提。",
         "- 心跳流水（supervisor_tick）不作为状态来源；用户问“为什么没动 / 卡在哪 / 是不是坏了”时，",
-        "  读台账和日志查明，属对话层职责——直接查比派单更快且更准。",
-        "- 但“对谁做”必须落到具体对象：以用户所指的那个东西为准（哪个、哪一处），不按类别推断。",
-        "  写派单前先确认是**哪一个**、能把它的位置指出来；指不出唯一对象时 capitalist ask，不猜测",
+        "  读台账和日志查明，属对话层职责：直接查比派单更快且更准。",
+        "- 但“对谁做”必须明确到具体对象：以用户所指为准（哪个、哪一处），不按类别推断。",
+        "  写派单前先确认具体对象并给出位置；指不出唯一对象时 capitalist ask，不猜测",
         "- 用户输入按指令执行；不纠正用户表述，不解释识别规则",
         ...(idleQueue
           ? [
@@ -525,7 +529,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
               resolveQuoteText(ctx.opts.root, thread, quote, quoteFallback) || "（原文未取回，仅编号）",
               ...(() => {
                 const hit = quoteDispatchLabel(ctx.opts.root, quote);
-                return hit ? [`这条消息已派成 ${hit}——引用它用于修正那一单。`] : [];
+                return hit ? [`该消息已派成 ${hit}：引用用于修正该单。`] : [];
               })(),
             ]
           : []),
@@ -547,11 +551,12 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       /** 优先用工作进程记录上的 ai_session；老记录缺该字段才回落基名。 */
       const liveSession = String((me as unknown as { ai_session?: string } | null)?.ai_session ?? "").trim();
       const sessionId = me
-        ? liveSession || workerSessionId(String(me.stage ?? ""), String(me.shard ?? ""))
+        ? liveSession ||
+          workerSessionId(String(me.stage ?? ""), String(me.shard ?? ""), String(me.dispatch ?? ""))
         : /*
            * 监工会话（capitalist-chat 系）：每一轮进来先过单轮注入上限。会话记录超限时
            * 换代到 `capitalist-chat-w<ws>-c<gen>`，不让历史与历史轮次的工具输出无限累积重发
-           * （reload.ts 的 supervisorChatTurnSessionId；换代会落 context_compacted 事件）。
+           * （reload.ts 的 supervisorChatTurnSessionId；换代时写入 context_compacted 事件）。
            */
           supervisorChatTurnSessionId(ctx.opts.root);
       const leaveChat = enterSupervisorAction("chat");
@@ -568,7 +573,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         cwd: ctx.opts.root,
         ...(chatHost ? { host: chatHost } : {}),
         effort: loadSupervisor(ctx.opts.root)?.effort ?? "high",
-        model: loadSupervisor(ctx.opts.root)?.supervisor_model || undefined,
+        model: supervisorModelOf(ctx.opts.root),
         ...(ctx.opts.token ? { token: ctx.opts.token } : {}),
         signal,
         onDelta: (d) => sse(d),
@@ -576,7 +581,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         clearInterval(beat);
         leaveChat();
       });
-      /* 新消息抢占了这一轮：按“未执行”收尾，要求仍留在待处理清单里。 */
+      /* 新消息抢占了本轮：按“未执行”收尾，要求仍留在待处理清单里。 */
       if (r.aborted) {
         replyPreempted(ctx, { msgId: userMsg.id, text, thread, from: "supervisor", sse });
         return;
@@ -602,7 +607,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           thread,
           error: hurt,
         });
-        /* 状态帧之外再落一条回复：失败原因要留在消息流里，不能只靠会被完成文案覆盖的状态行。 */
+        /* 状态帧之外再写入一条回复：失败原因要留在消息流里，不能只靠会被完成文案覆盖的状态行。 */
         recordEvent(ctx.opts.root, "supervisor_reply", {
           ask: text,
           reply: hurt,
@@ -636,6 +641,11 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         const okTexts: string[] = [];
         const okIds: string[] = [];
         const failNotes: string[] = [];
+        /* 用户在线程里提的要求归属该线程对应的派单，已结束的先重开（见 threadAction.ts）。 */
+        const talkTarget = String(talkDispatch ?? "").trim();
+        const threadDisp = talkTarget
+          ? readDispatchesBoard(ctx.opts.root).find((x) => String(x.id) === talkTarget)
+          : undefined;
         for (const act of parsed.acts) {
           /* 没有动作即纯对话，不当作失败上报。 */
           if (!act.action || act.action === "none") continue;
@@ -652,16 +662,37 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           }
           const arg = bindAttachments(act.arg, chosen).text;
           /*
-           * 推翻说明随单进入正文：工作进程与验收需要知道本次是刻意推翻旧口径，
-           * 否则会按“两套并存”处理。回执仍用原文，不把该行带进气泡。
+           * 推翻说明随派单正文下发，工作进程与验收据此知道本次是刻意推翻旧口径，
+           * 否则会按“两套并存”处理。回执仍用原文，不把该说明写进气泡。
            */
           const withSkill = SKILL_ACTIONS.has(String(act.action)) ? `${arg}${skillLine}` : arg;
-          const directiveArg = act.revoke ? `${withSkill}\n\n本次作废：${act.revoke}` : withSkill;
+          const revised = resolveThreadAction({
+            text,
+            talkTarget,
+            talkNo,
+            action: String(act.action),
+            arg: act.revoke ? `${withSkill}\n\n本次作废：${act.revoke}` : withSkill,
+            status: String(threadDisp?.status ?? ""),
+          });
+          const actionName = revised.action;
+          const directiveArg = revised.arg;
+          if (revised.reopenFirst) {
+            const r = appendSupervisorDirective(
+              ctx.opts.root,
+              reopenDirective({ talkNo, talkTarget, msgId: userMsg.id }),
+            );
+            if (r.ok) okIds.push(String(r.rec?.id ?? ""));
+            else {
+              const head = String(r.error || "重开失败").split("白名单")[0] ?? "";
+              failNotes.push(`redo：${head.replace(/[：:，,]\s*$/, "")}`);
+              continue;
+            }
+          }
           /** skip 把整个阶段记成待补项跳过，不代为确认。 */
           const w = appendSupervisorDirective(ctx.opts.root, {
-            action: act.action,
+            action: actionName,
             arg: directiveArg,
-            confirm: act.action !== "skip",
+            confirm: actionName !== "skip",
             msg_id: userMsg.id,
             atts: chosen,
             target:
@@ -675,20 +706,20 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             /* 白名单清单属于内部信息，不进入用户可见文案。 */
             const head = String(w.error || "动作未执行").split("白名单")[0] ?? "";
             const why = head.replace(/[：:，,]\s*$/, "");
-            failNotes.push(`${String(act.action)}：${why}`);
+            failNotes.push(`${actionName}：${why}`);
             continue;
           }
           const why = w.rec.result?.ok === false ? w.rec.result.reason : "";
           if (why) {
-            failNotes.push(`${act.action}：${why}`);
+            failNotes.push(`${actionName}：${why}`);
             continue;
           }
           acted = true;
           okIds.push(String(w.rec?.id ?? ""));
           okTexts.push(arg);
           if (!settleAction) {
-            settleAction = act.action;
-            settleVerdict = chatVerdictOf(act.action, arg);
+            settleAction = actionName;
+            settleVerdict = chatVerdictOf(actionName, arg);
           }
         }
         if (okIds.length) {
@@ -696,13 +727,13 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           settleDispatch = okIds[0]!;
           dispatchText = okTexts.join("\n");
           applied = multi
-            ? `已落成 ${okIds.length} 张单`
+            ? `已执行 ${okIds.length} 项动作`
             : settleAction === "dispatch"
               ? "已加入队列"
               : `已执行 ${settleAction}${okTexts[0] ? `：${okTexts[0].slice(0, 60)}` : ""}`;
         }
         if (failNotes.length) {
-          /* 失败原因只进“被拒”行，不并入回复正文。 */
+          /* 失败原因只写入“被拒”行，不并入回复正文。 */
           settleError = `未执行：${failNotes.join("；")}`;
         }
         if (okIds.length > 1) multiDirectiveIds = okIds;

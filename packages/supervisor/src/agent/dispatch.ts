@@ -12,7 +12,7 @@ import type { HookDecision, HookFacet, UnifiedEvent } from "./contract";
 import { autoAdopt, loadWatchRules } from "../core/platform/autowatch";
 import { buildBrief, type BriefLang } from "../core/message/brief";
 import { runCheck } from "../core/contract/checks";
-import { claimDirectives, directiveRef, laneKeyOf } from "../core/dispatch/commands";
+import { claimDirectives, directiveShortRef, laneKeyOf } from "../core/dispatch/commands";
 import { type Contract, evaluate, isLastStage, loadContract } from "../core/contract/contract";
 import { readJsonl } from "../core/record/json";
 import {
@@ -63,7 +63,11 @@ const INJECT_HEAD: Record<BriefLang, string> = {
   en: "【capitalist active】(state injected below — do not repeat it to the user)",
 };
 
-const THINK_ZH = "思考过程用中文写：界面会把推理原样展开给用户看，用英文写无法阅读。";
+/** 推理过程用哪门语言写：跟用户说话的语言走，界面会把推理原样展开。 */
+const THINK_LANG: Record<BriefLang, string> = {
+  zh: "思考过程用用户语言写：界面会把推理原样展开给用户看。",
+  en: "Write your reasoning in the user's language: the board shows it verbatim.",
+};
 
 const INJECT_RULES: Record<BriefLang, string> = {
   zh:
@@ -235,11 +239,11 @@ function deliverPendingDirectives(
   return hook.deny(
     [
       `【用户追加 · 派单 ${dispatchId}】执行期间收到用户追加的内容，本次工具调用暂停一次以完成送达。`,
-      `编号：${directiveRef(rec)}`,
+      `编号：${directiveShortRef(rec)}`,
       "先判断这条是不是对“这一单”的要求，然后按结论处理：",
       "  是 -> 按下面的内容调整做法（与原要求冲突时以追加内容为准），然后继续原任务；",
       "  不是 -> 不要改这一单的做法，但收尾时必须把这个编号报成 not_mine 并说明该归哪一单。",
-      `回报方式：capitalist report … --outcome "${directiveRef(rec)}=done"` +
+      `回报方式：capitalist report … --outcome "${directiveShortRef(rec)}=done"` +
         "（也可 not_mine / blocked，多条用分号隔开）。没给结论的这一单过不了收工闸。",
       "被暂停的调用仍需执行时重新发起。",
       "",
@@ -609,7 +613,11 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
     // 工作进程的存活由监工按心跳判定，不续写心跳时长任务会被当作死进程回收。
     touchWorker(ctx.root, wid, { status: "running", stage: ctx.state.stage });
     return hook.inject(
-      `【capitalist · worker ${wid}】（监工已派单；只做这一单，结束时 capitalist report）\n${brief}\n\n${THINK_ZH}`,
+      `${
+        lang === "zh"
+          ? `【capitalist · worker ${wid}】（监工已派单；只做这一单，结束时 capitalist report）`
+          : `【capitalist · worker ${wid}】(dispatched; do only this task, run \`capitalist report\` when done)`
+      }\n${brief}\n\n${THINK_LANG[lang]}`,
       event.point,
       event.sessionId,
     );

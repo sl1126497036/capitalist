@@ -159,7 +159,7 @@ test("原地打转：日志持续增长也会判卡点，并在本轮写入指�
     workerId: "W-stuck",
     via: "hook",
   });
-  assert.equal(taken.length, 1, "指导应当能被这一单取走");
+  assert.equal(taken.length, 1, "指导应当能被本单取走");
 
   await loop.handleStuckWorker(root, capitalist.loadWorker(root, "W-stuck"), {
     heartbeatSec: 900,

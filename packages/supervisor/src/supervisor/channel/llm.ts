@@ -333,11 +333,14 @@ export function isQuotaText(text: string): boolean {
 }
 
 /**
- * 额度耗尽特征：要求“额度 / 积分 / 余额”等词与状态后缀同时出现，或命中 429、quota、payment required 等协议标记；
- * 不单独匹配名词，避免正常回复被误判为上游拒绝。
+ * 额度耗尽特征。
+ *
+ * 要求词与状态后缀同时出现，或 429/402 带上协议上下文：日志是整段 JSON，裸数字 429
+ * 会命中 token 计数与耗时，把正常退出误判成额度耗尽，之后重试判定按“额度问题”挂起，
+ * 该单就再也派不出去。中文同理，只认“额度已耗尽”这类短语。
  */
 const QUOTA_HINT =
-  /(quota|insufficient[_\s-]?(funds|balance|credit)|credits?[_\s-]?(exhausted|exceeded)|balance[_\s-]?(low|insufficient|exhausted)|payment[_\s-]required|\b402\b|\b429\b|(额度|积分|余额|配额)[^\n。，,；;]{0,8}(用尽|用完|不足|耗尽|超出|不够)|欠费)/i;
+  /(quota|insufficient[_\s-]?(funds|balance|credit)|credits?[_\s-]?(exhausted|exceeded)|balance[_\s-]?(low|insufficient|exhausted)|payment[_\s-]required|(额度|积分|余额|配额)[^\n。，,；;]{0,8}(用尽|用完|不足|耗尽|超出|不够)|欠费|(?:http|status|code|error|response)[^\n]{0,24}\b(?:402|429)\b|\b(?:402|429)\b[^\n]{0,24}(?:too many requests|rate[_\s-]?limit|quota|余额|额度))/i;
 
 /** 认证失效特征，与额度特征分开匹配，两者处置不同。 */
 const AUTH_HINT = /(\b401\b|\b403\b|unauthorized|invalid[_\s-]?api[_\s-]?key|authentication|认证失败|凭证(?:失效|过期|无效)|未登录)/i;
@@ -671,7 +674,7 @@ export async function askModelStream(
     /* 上游拒绝（额度 / 限流）说明；非空表示正文为错误说明。 */
     let quotaHit = "";
     let stopTimers = (): void => {};
-    /** 摘掉中止监听；本轮已结束时必须摘掉，否则上层复用的信号会留着一条死引用。 */
+    /** 移除中止监听；本轮已结束时必须移除，否则上层复用的信号会留下一条失效引用。 */
     let detachAbort = (): void => {};
     const done = (r: AskModelResult): void => {
       if (settled) return;
@@ -699,7 +702,7 @@ export async function askModelStream(
      * 抢占：上层收到新的用户消息时中止本轮。
      *
      * 先发 SIGTERM 让宿主自己收尾；2 秒后仍未退出则 SIGKILL，避免一个已经没人等的
-     * 模型进程继续占用端口与额度。返回 `aborted` 而不返回错误，调用方据此把这一轮
+     * 模型进程继续占用端口与额度。返回 `aborted` 而不返回错误，调用方据此把本轮
      * 收成“被新消息打断”，不按通道故障上报。
      */
     const onAbort = (): void => {

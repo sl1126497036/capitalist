@@ -89,7 +89,7 @@ test("执行中的单：hook 在下一次工具调用前送达追加内容，不
   });
 
   const row = cmds.listDirectives(root)[0];
-  assert.equal(row.consumed, true, "送达即领走：同一句话不能反复送达");
+  assert.equal(row.consumed, true, "送达即认领：同一句话不能反复送达");
   assert.equal(row.consumed_by, "D-append1", "留痕：进了哪一单");
   assert.ok(row.consumed_at, "留痕：什么时候送达的");
   assert.equal(row.consumed_via, "hook", "留痕：是执行中送达的，不是启动带入的");
@@ -108,7 +108,7 @@ test("送达之后不再重复：第二次工具调用放行，插话保持已�
   assert.equal(cmds.listDirectives(root)[0].consumed, true);
 });
 
-test("别单的消息不串：派生链对不上的插话不会被这一单领走", () => {
+test("别单的消息不串：派生链对不上的插话不会被这一单认领", () => {
   const root = sandbox();
   seedDispatch(root, { lineage: "D-other" });
   cmds.appendDirective(root, { text: "这是给另一条链的话", lineage: "D-mine" });
@@ -264,7 +264,8 @@ test("追加目标单属已推进阶段：不翻回，追加标记为未投递",
   assert.deepEqual(loop.drainSettledDirectives(root), [], "已标记的追加不进入复活流程");
 });
 
-test("手动结束的单在同一阶段仍由追加唤起", () => {
+test("手动结束的单不会被追加重新拉开", () => {
+  /* 用户结束就是结束：补投递只救失败的单，不能把关闭的单悄悄拉回队列。 */
   const root = sandbox();
   seedDispatch(root, { status: "closed", done_at: new Date().toISOString() });
   cmds.appendDirective(root, {
@@ -274,9 +275,9 @@ test("手动结束的单在同一阶段仍由追加唤起", () => {
     lineage: "D-append1",
   });
 
-  assert.deepEqual(loop.drainSettledDirectives(root), ["D-append1"]);
+  assert.deepEqual(loop.drainSettledDirectives(root), []);
   const row = capitalist.readDispatches(root).find((d) => d.id === "D-append1");
-  assert.equal(row.status, "open", "同阶段的结束单要能被追加重新拉开");
+  assert.equal(row.status, "closed", "关闭的单必须保持关闭");
 });
 
 test("同一次追加只画一张卡片：directive_amended 与插话记录同文时不重复下发", () => {

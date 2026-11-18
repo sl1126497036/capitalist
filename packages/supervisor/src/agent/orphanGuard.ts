@@ -125,7 +125,7 @@ export function guardSupervisor(): void {
       JSON.stringify({ misses, supervisor_pid: supervisorPid, at: new Date().toISOString() }),
     );
   } catch {
-    /* 计数写入失败：仍然放行，下一次大概率能写成功；不在读不到计数文件时误停会话 */
+    /* 计数写入失败：仍然继续，下一次大概率能写成功；不在读不到计数文件时误停会话 */
   }
 
   if (misses < MISS_LIMIT) return;

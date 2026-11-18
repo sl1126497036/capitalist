@@ -1163,7 +1163,7 @@ async function onInterject({ text, alsoBlock, quote }) {
       });
       if (!b.ok) setNotice({ text: `${$t("登记阻塞失败")} ${b.data.error || $t("未知原因")}`, bad: true });
     }
-    /* 中断的最后一步同样走统一路径：先刷新再弹回执，卡片要先变成已停止。 */
+    /* 中断的最后一步同样经统一路径：先刷新再弹回执，卡片要先变成已停止。 */
     await applyAction({
       action: "stop-worker",
       body: { id: t.worker || t.id, shard: t.shard || "" },
@@ -1185,7 +1185,7 @@ function onHandback() {
   return applyAction({
     action: "release",
     body: { id: t.id, shard: t.shard || "" },
-    text: (d, ok) => (ok ? $t("已交还监工，下一轮调度起恢复自动裁定") : `${$t("交还失败")} ${d.error || $t("未知原因")}`),
+    text: (d, ok) => (ok ? $t("已交还监工：下一轮调度恢复自动裁定") : `${$t("交还失败")} ${d.error || $t("未知原因")}`),
   });
 }
 
@@ -1213,7 +1213,7 @@ const cardBusy = ref("");
  * @param key    铺蒙版的卡片键；空串表示不铺蒙版
  * @param action 接口动作名
  * @param body   除 action 外的请求字段
- * @param toast  true 走页顶浮层，false 走页面级回执条
+ * @param toast  true 经页顶浮层，false 经页面级回执条
  * @param text   (data, ok) => 回执文案；返回空串则不弹
  * @param after  列表刷新之后、弹回执之前执行的界面收尾（如切回监工流）
  */
@@ -1246,7 +1246,8 @@ function onCloseTask({ id, shard, title }) {
   return applyAction({
     key: id,
     action: "close",
-    body: { shard: shard || "" },
+    /* key 只用于卡片忙态，请求体必须自己带 id：后端按 body.id 找线程。 */
+    body: { id, shard: shard || "" },
     /* 结束任务与清除的回执经页面级浮层显示，不进会话流，避免被监工当作用户消息读入。 */
     toast: true,
     text: (d, ok) =>
@@ -1266,7 +1267,8 @@ function onPromoteTask({ id, shard, title }) {
   return applyAction({
     key: id,
     action: "promote",
-    body: { shard: shard || "" },
+    /* key 只用于卡片忙态，请求体必须自己带 id：后端按 body.id 找线程。 */
+    body: { id, shard: shard || "" },
     text: (d, ok) =>
       ok
         ? d.effective || d.detail || `${$t("已置顶")} ${title || d.dispatch || id}`
@@ -1280,7 +1282,8 @@ function onWakeTask({ id, shard, title }) {
   return applyAction({
     key: id,
     action: "wake",
-    body: { shard: shard || "" },
+    /* key 只用于卡片忙态，请求体必须自己带 id：后端按 body.id 找线程。 */
+    body: { id, shard: shard || "" },
     text: (d, ok) =>
       ok
         ? d.effective || d.detail || `${$t("已唤醒")} ${title || d.dispatch || id}`
@@ -1464,7 +1467,7 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
         :aria-hidden="queueCollapsed ? 'true' : 'false'"
       >
         <!-- 监工 tab 与任务队列同属左栏，顶栏不渲染；数量多时整行横向滚动，不换行。
-             只有一个监工时，这一行只重复顶部已有的名字，因此不渲染；存在多个监工时才显示切换入口。 -->
+             只有一个监工时不渲染：该行只重复顶部已有的名字。存在多个监工时才显示切换入口。 -->
         <SupervisorStrip
           v-if="tasks.length > 1"
           class="q-supervisor-strip"
@@ -1641,7 +1644,7 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
 }
 .leftwrap.collapsed {
   width: 0;
-  /* 收起后只剩 2px 边框，会在左缘留一道竖线；边框一并收掉。 */
+  /* 收起后只剩 2px 边框，会在左缘留一道竖线；边框一并移除。 */
   border-width: 0;
 }
 .leftwrap.dragging {

@@ -77,9 +77,15 @@ const supervisorCur = rawModel;
 /** 宿主自己配置的默认模型（`/api/models` 的 default_model，取自宿主的 settings.json）。 */
 const hostModelsDefault = ref("");
 
-/** 宿主默认模型：优先取宿主配置的 model，清单未加载时取监工接口的观测值。 */
+/**
+ * 监工实际跑的默认档：先取接口解析出的生效档（调用时真正传给宿主的那个），
+ * 再退回宿主自己配置的默认值。顺序不能反：平台会显式传默认档，宿主配置未必等于实际调用。
+ * 也不回落最近一次派单的模型：那是 Worker 模型，会把顶栏显示带偏。
+ */
 const hostDefault = computed(
-  () => hostModelsDefault.value || String(props.capitalist?.model || "").trim(),
+  () =>
+    String(props.capitalist?.supervisor_model_effective || "").trim() ||
+    hostModelsDefault.value,
 );
 
 /** 按原 id 展示；路由别名换算成实际模型，解析不出来就原样显示。 */

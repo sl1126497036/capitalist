@@ -182,7 +182,7 @@ export function deleteGate(base: GuardBase, cmd: string): HookDecision {
     markGuardUsed(base.root, approved.id);
     recordReview(base.root, {
       rule: "LOCAL-DELETE",
-      label: "删除放行",
+      label: "删除批准",
       why: approved.why || "监工已批准",
       evidence: targets.join(" "),
       decision: "ALLOW",

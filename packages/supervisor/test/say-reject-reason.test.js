@@ -11,7 +11,7 @@ const loadRejectTail = async () => {
   return mod.rejectTail;
 };
 
-test("rejectTail：reason 优先，空了取 detail，都空返回空串", async () => {
+test("rejectTail：reason 优先，为空时取 detail，均为空返回空串", async () => {
   const rejectTail = await loadRejectTail();
   assert.equal(rejectTail("模型额度不足", "完整说明"), "模型额度不足");
   assert.equal(rejectTail("", "完整说明"), "完整说明", "reason 为空取 detail");

@@ -196,7 +196,7 @@ export function ctxWindowSupported(
  * 3. 两边都没有 -> null：没有可依据的上限，界面只显示已用，不编一个。
  *
  * 看板读数、会话更换判定、监工上下文的超限判定都调这个函数。各算一套的后果是
- * “界面显示还有一半，实际判定已经超过上限”，而这种事不会报错。
+ * “界面显示还有一半，实际判定已经超过上限”，且这类偏差不会报错。
  */
 export function resolveContextWindow(model: string, reported?: number | string | null): number | null {
   const host = Number(reported);

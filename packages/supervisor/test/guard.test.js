@@ -76,9 +76,9 @@ test("任务根以内放行，根外要理由", () => {
   assert.equal(outside.decision, "justify");
 });
 
-test("根外删除转申请，不直接拒绝也不直接放行", () => {
+test("根外删除转申请，不直接拒绝也不直接批准", () => {
   const outside = localCheck(minimal, ROOT, ["/tmp/other"], "delete");
-  /* 根外删除由监工裁决：本层只标出需要申请，放行判据在 core/guard/requests。 */
+  /* 根外删除由监工裁决：本层只标出需要申请，批准判据在 core/guard/requests。 */
   assert.equal(outside.decision, "justify");
 });
 

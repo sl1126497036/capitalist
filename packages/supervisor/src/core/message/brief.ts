@@ -95,7 +95,7 @@ export function buildBrief(input: BriefInput): string {
    * 默认的 `generic` 是调度层的容器键，不对应工序。
    * 未指定契约时不显示阶段与推进提示，只输出目标、任务池与在途进度。
    */
-  const custom = Boolean(state.contract && state.contract !== "generic");
+  const custom = Boolean(state.contract && state.contract !== "generic" && state.contract !== "minimal");
   const stage = custom ? contract.stages.find((s) => s.id === state.stage) : undefined;
   lines.push(
     custom

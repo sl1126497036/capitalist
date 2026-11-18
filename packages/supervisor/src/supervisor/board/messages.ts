@@ -277,7 +277,7 @@ export function threadMessages(
      * 稳定排在思考之前，不依赖同一时刻的插入顺序。
      *
      * 插话归属：`target` 指向本单或本进程，或在这条进程会话里发出；认不出的不参与切块，
-     * 免得其他线程的插话干扰切块。
+     * 避免其他线程的插话干扰切块。
      *
      * 只卡 `t0` 下限，不卡 `t1` 上限：插话刚发出时日志还没更新，`t1` 仍是旧 mtime，
      * 卡上限会把这条插话排除在外，后面就判不出“插话后还没有新思考”。对切块无副作用：
@@ -328,13 +328,15 @@ export function threadMessages(
        * 补一条占位块，给插话留下可见落点；新思考一到，这个位置自然被真内容占掉，占位消失。
        *
        * 判据用“块序号 = 已越过几次插话”这一既有语义，不做时间比较：思考段本身没有真实
-       * 时间戳，`at` 是在 `t0..t1` 之间按序号插值出来的，拿它和 `at_ts` 比会误判。
-       * 占位只在已有思考块时补：宿主不输出推理时不该凭空造一张“思考过程”。
+       * 时间戳，`at` 是在 `t0..t1` 之间按序号插值出来的，用它和 `at_ts` 比较会误判。
+       * 只在已经有过真实思考时补：宿主不输出推理的情况下凭空造一条“思考过程”，
+       * 点开是空的，比没有这条更糟。占位本身按提示消息渲染，不套思考折叠壳。
        */
       const pendingIdx = thinkSayTimes.length;
       const lastSay = pendingIdx > 0 ? thinkSayTimes[pendingIdx - 1]! : 0;
       const tail = blocks[pendingIdx];
-      if (lastSay > 0 && (!tail || tail.body.length === 0)) {
+      const hasRealThink = blocks.some((b) => b.body.length > 0);
+      if (hasRealThink && lastSay > 0 && (!tail || tail.body.length === 0)) {
         const live = ["running", "starting", "claimed"].includes(String(worker.status ?? ""));
         /* 排在所有已有思考块之后：插值时间可能晚于插话时刻，取两者较大值再让一步。 */
         const lastAt = blocks.reduce((mx, b) => (b.body.length > 0 ? Math.max(mx, b.at) : mx), t0);
@@ -344,7 +346,7 @@ export function threadMessages(
           id: `${worker.id}#think-pending`,
           at: new Date(at * 1000).toISOString(),
           role: "worker",
-          kind: "thinking",
+          kind: "notice",
           text,
           tool: "",
           cmd: "",
@@ -540,8 +542,8 @@ export function threadMessages(
   const sinceTs = opts.since !== undefined && Number.isFinite(opts.since) && opts.since > 0 ? opts.since : 0;
   /*
    * 思考块的 `at` 是按段序号在 `t0..t1` 之间插值出来的，不是真实时刻。新块生成后它的时间
-   * 常常早于游标，用 `> since` 过滤会让它永远进不了增量结果——界面上表现为「这一段一直
-   * 没有思考过程，只有工具行」，刷新页面才会出现。思考块数量受插话次数约束（通常 1–3 块），
+   * 常常早于游标，用 `> since` 过滤会让它永远进不了增量结果：界面上表现为“这一段一直
+   * 没有思考过程，只有工具行”，刷新页面才会出现。思考块数量受插话次数约束（通常 1–3 块），
    * 每轮全量带上代价可控；前端按消息 id 合并，重复下发不会多出气泡。
    */
   const fresh =
@@ -551,7 +553,7 @@ export function threadMessages(
   // 游标只前进不后退，没有新增时停在调用方传入的 since。
   let next_since = sinceTs;
   for (const m of messages) {
-    /* 思考块的时间是插值，不能拿它推进游标：会把游标推到真实进度之前，后面的消息反而漏掉。 */
+    /* 思考块的时间是插值，不能用它推进游标：会把游标推到真实进度之前，后面的消息反而漏掉。 */
     if (m.kind === "thinking") continue;
     const ts = atTs(m.at);
     if (ts > next_since) next_since = ts;

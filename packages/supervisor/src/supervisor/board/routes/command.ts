@@ -85,7 +85,7 @@ ctx.req.on("end", () => {
         root: targetRoot,
         killed: killedPid,
         effective: killedPid
-          ? `已立即关停（结束进程 ${killedPid}）；进度已保存，重新执行 capitalist supervise 后按恢复计划继续`
+          ? `已关停（结束进程 ${killedPid}）；进度已保存，重新执行 capitalist supervise 后按恢复计划继续`
           : "停止请求已写入，监工在下一 tick 退出",
       }),
     );
@@ -129,8 +129,8 @@ ctx.req.on("end", () => {
         killed: killed.length,
         skipped: skipped.length,
         effective: stopped.length
-          ? `已立即关停 ${stopped.length} 个监工${killed.length ? `（结束 ${killed.length} 个进程）` : ""}；进度已保存，重新执行 capitalist supervise 后按恢复计划继续`
-          : "没有可关停的监工：这些任务根上都没有运行中的监工记录",
+          ? `已关停 ${stopped.length} 个监工${killed.length ? `（结束 ${killed.length} 个进程）` : ""}；进度已保存，重新执行 capitalist supervise 后按恢复计划继续`
+          : "没有可关停的监工：这些任务根上没有运行中的监工记录",
       }),
     );
     return;
@@ -151,7 +151,7 @@ ctx.req.on("end", () => {
     const last = restartAt.get(targetRoot) ?? 0;
     if (Date.now() - last < RESTART_COOLDOWN_MS) {
       ctx.res.writeHead(400, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-      ctx.res.end(JSON.stringify({ ok: false, error: "刚发起过重启，等新进程起来再看（15 秒内不重复拉起）" }));
+      ctx.res.end(JSON.stringify({ ok: false, error: "刚刚已经发起过重启，等新进程启动（15 秒内不重复发起）" }));
       return;
     }
     restartAt.set(targetRoot, Date.now());
@@ -196,13 +196,13 @@ ctx.req.on("end", () => {
       ctx.res.end(
         JSON.stringify({
           ok: false,
-          error: `重启失败：拉起器没有启动（${e instanceof Error ? e.message : String(e)}）。旧监工仍在运行，没有停。`,
+          error: `重启失败：（${e instanceof Error ? e.message : String(e)}）。旧监工仍在运行。`,
         }),
       );
       return;
     }
 
-    requestSupervisorStop(targetRoot, "看板：用户重启（新进程由拉起器接管）");
+    requestSupervisorStop(targetRoot, "看板：用户重启（新进程由启动器接管）");
     recordEvent(targetRoot, "supervisor_restart_requested", { by: "user", via: "board", target, contract });
 
     ctx.res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -211,7 +211,7 @@ ctx.req.on("end", () => {
         ok: true,
         action: "restart",
         root: targetRoot,
-        effective: "已请求关闭，3 秒后由看板进程拉起新的监工（新 pid）；期间在途工作进程按正常收尾",
+        effective: "已请求关闭；期间在途工作进程按正常收尾",
       }),
     );
     return;
@@ -236,8 +236,8 @@ ctx.req.on("end", () => {
         action: "next-model",
         model,
         effective: model
-          ? `之后的派单都使用 ${model}（常驻，直到再次更换或清除）`
-          : "已清除派单模型，之后的派单回到契约/默认模型",
+          ? `后续派单将使用 ${model}`
+          : "已清除派单模型，后续派单回到契约/默认模型",
       }),
     );
     return;
@@ -260,7 +260,7 @@ ctx.req.on("end", () => {
         action: "capitalist-model",
         model,
         effective: model
-          ? `监工对话层改用 ${model}，下一轮调用即生效（不用重启）`
+          ? `监工对话层改用 ${model}，下一轮调用生效`
           : "监工对话层回到宿主默认模型",
       }),
     );
@@ -322,7 +322,7 @@ const restartAt = new Map<string, number>();
  * 命令执行完再清一次读缓存。
  *
  * 请求进来时（index.ts 的写请求钩子）已经清过一次，但命令本身可能持续数百毫秒，
- * 期间看板轮询会把命令前的台账重新灌进缓存。最要紧的是 `cachedView`：
+ * 期间看板轮询会把命令前的台账重新写入缓存。最要紧的是 `cachedView`：
  * `/api/threads` 的视图缓存 TTL 是 4000ms，不清它，前端命令后的第一次刷新
  * 仍会拿到旧列表，看起来就是“蒙版撤了、列表过几秒才变”。
  */
@@ -401,13 +401,13 @@ ctx.req.on("end", () => {
   }
   const cur = readDispatches(ctx.opts.root).find((d) => String(d.id) === id);
   if (!cur) {
-    sendJson(ctx, { error: `没有这张单：${id}` }, 404);
+    sendJson(ctx, { error: `没有这个任务单：${id}` }, 404);
     return;
   }
   const note = String(cur.review_note ?? cur.note ?? "") || "用户确认结束";
   const done = finishDispatch(ctx.opts.root, id, "done", note);
   if (!done) {
-    sendJson(ctx, { error: `这张单已经结束：${id}` }, 409);
+    sendJson(ctx, { error: `任务单已经结束：${id}` }, 409);
     return;
   }
   recordEvent(ctx.opts.root, "dispatch_confirmed", {

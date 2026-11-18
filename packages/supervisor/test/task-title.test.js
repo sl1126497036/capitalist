@@ -67,7 +67,7 @@ test("前端只有一份分片映射表，且取自服务端", () => {
   assert.ok(imported, "web/src/lib/taskTitle.js 未从服务端导入 SHARD_TITLES");
   assert.match(imported[1], /usage\/taskTitle(\.ts)?$/, `导入来源不是服务端的分片映射模块：${imported[1]}`);
 
-  /* 路径写错不会在 node 侧报错，只会让前端打包时才发现；这里直接落到文件系统上验。 */
+  /* 路径写错不会在 node 侧报错，只会让前端打包时才发现；这里直接在文件系统上验证。 */
   const abs = resolve(dirname(WEB_TABLE), imported[1]);
   assert.ok(existsSync(abs), `导入路径不存在：${abs}`);
 

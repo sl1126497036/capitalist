@@ -138,7 +138,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       /* 分类标签是调度用的会话键，只在调度侧使用，不上界面。 */
       const arg = splitDirectiveTag(String(e.arg ?? "")).body;
       const tail = ok ? String(e.detail ?? "") : String(e.reason ?? "");
-      return `指令 ${action}${arg ? ` ${arg}` : ""}：${ok ? "已执行" : "被拒"}${tail ? `（${tail}）` : ""}`;
+      return `指令 ${action}${arg ? ` ${arg}` : ""}：${ok ? "已执行" : "失败"}${tail ? `，${tail}` : ""}`;
     }
     case "supervisor_answer":
       return `回答“${String(e.question ?? "")}”：${String(e.answer ?? "")}`;

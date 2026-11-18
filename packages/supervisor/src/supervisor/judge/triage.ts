@@ -159,6 +159,11 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
     `门槛还缺：${input.gateMissing.length ? input.gateMissing.join("；") : "（无）"}`,
   );
   for (const r of input.recent.slice(-3)) facts.push(`最近一次失败：${r}`);
+  /* 两种“不合格”处置不同：能继续做的打回继续做，做不到的转用户决策。 */
+  facts.push(
+    "不合格分两种：报告不足但工作可继续（缺证据、只做表面、与新要求不符）-> reject，打回后同一单继续执行；",
+    "任务本身无法继续（缺权限或凭据、需求自相矛盾、外部依赖不可用、代价不可逆）-> escalate，该单转为等用户决策。",
+  );
   /* 验收标准随判定下发，口径与 closeOut.ts 共用，使执行侧与审查侧一致。 */
   facts.push("", ...acceptanceFacts());
   const gate = input.gateMissing;
@@ -175,14 +180,17 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
         desc: "这一单的做法走不通要重开（要求本身做不到时选 escalate）",
       },
       { name: "pause_shard", desc: "继续执行代价更大（正在改错地方、在扩大破坏面），先停这一片" },
-      { name: "escalate", desc: "需人工裁决：红线风险、权限、需求自相矛盾、代价不可逆" },
+      {
+        name: "escalate",
+        desc: "需人工裁决，任务无法继续：缺权限或凭据、需求自相矛盾、外部依赖不可用、代价不可逆。该单转为等用户决策，不再重派",
+      },
       {
         name: "accept",
-        desc: "只用于它报完成：代码证据足以结束（行为对得上要求、相关单元测试结果一致）；不要求全量测试、不要求截图",
+        desc: "只用于它报完成：代码证据足以结束（行为对得上要求、相关单元测试结果一致）；根据情况看是否需要追加全量测试",
       },
       {
         name: "reject",
-        desc: "只用于它报完成：报告不足以结束（没有代码证据、只做了表面、行为与最新要求不符）；不得因没跑全量测试、没附截图而打回",
+        desc: "只用于它报完成：报告还不足但事情能继续做（没代码证据、只做了表面、行为与最新要求不符）。打回后同一单重新执行；全量测试，界面截图视情况而打回（例如：耗时长、测试难度大等可放宽）",
       },
     ],
     session: "capitalist-brain-triage",

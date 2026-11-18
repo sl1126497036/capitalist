@@ -84,10 +84,10 @@ export function evtText(m) {
   return String(m?.text || "");
 }
 
-/** 指令回执尾标：已执行 / 被拒；落到派单时附任务编号。 */
+/** 指令回执尾标：已执行 / 失败；落到派单时附任务编号。 */
 export function evtReceipt(m) {
   if (m?.event !== "supervisor_cmd") return "";
-  const base = m.ok ? t("已执行") : t("被拒");
+  const base = m.ok ? t("已执行") : t("失败");
   /* `no` 由服务端按任务编号表下发；缺失时只显示结论。 */
   const no = String(m?.no || "");
   return no ? `${base} #${no}` : base;
@@ -103,7 +103,7 @@ export function isSupervisorSpeech(m, supervisorView) {
 
 /**
  * 用户指令 / 追加卡片的生效状态词。`no` 由服务端下发，仅已落到派单的状态带号。
- * 被拒时 reason 优先、为空回落 detail，与 rejectTail 及 stat() 同口径。
+ * 失败时 reason 优先、为空回落 detail，与 rejectTail 及 stat() 同口径。
  */
 export function sayStatus(s, no, reason, detail) {
   const v = String(s || "");
@@ -112,7 +112,7 @@ export function sayStatus(s, no, reason, detail) {
   if (v === "executed") return withNo(t("已执行"));
   if (v === "rejected") {
     const tail = rejectTail(reason, detail);
-    return tail ? `${t("被拒")} · ${tail}` : t("被拒");
+    return tail ? `${t("失败")} · ${tail}` : t("失败");
   }
   if (v === "pending") return t("等待下一轮调度");
   if (v === "已并入派单") {

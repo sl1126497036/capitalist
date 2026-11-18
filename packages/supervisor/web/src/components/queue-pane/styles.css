@@ -591,7 +591,13 @@
   font-variant-numeric: tabular-nums;
   color: var(--t7);
   white-space: nowrap;
+  /*
+   * 横向要裁（内容超宽时压到右下角状态词），纵向不能裁：行高为 1、字号 10px 时字形比行盒高，
+   * g / y 的下降部会被削平，看起来像首字母缺一块。clip + 2px 余量同时满足两件事。
+   */
   overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: 2px;
   padding-right: 52px;
 }
 

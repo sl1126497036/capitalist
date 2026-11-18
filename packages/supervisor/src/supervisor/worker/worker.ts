@@ -448,13 +448,13 @@ function buildBoundaryBlock(id: string): string[] {
   return [
     "【三、边界】",
     `  1. 只认这一单：需要复查要求时读 .capitalist/brief/${id}.md；不读 .capitalist/tasks.jsonl、`,
-    "     .capitalist/inbox/*.jsonl、别的 .capitalist/workers/* 或别的 brief —— 那些是别人的单。",
+    "     .capitalist/inbox/*.jsonl、别的 .capitalist/workers/* 或别的 brief。那些是别人的单。",
     "     别人的日志、别人的报告都不算证据；不把“上一轮同口径的单已经实现过”当作本单产出，",
     "     本单未做即未完成。",
     "  2. 台账里 done / closed 的派单是历史，不是待办：读台账、日志排查时，不要按历史派单的描述",
     "     “恢复”或“实现”任何东西。界面现状以代码为准，不以截图、旧日志、旧派单正文为准；",
     "     历史描述与本单冲突时以本单为准，并在报告里写明冲突点。",
-    "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件——",
+    "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
     "     那三项属于监工，工作进程代做会使执行与验收不分。",
     `  4. 卡在外部条件（验证码、账号、授权）：capitalist block <类型> "<卡在哪>" 后停手。`,
   ];
@@ -1003,7 +1003,7 @@ function watchSilentStart(
     const lines = [
       `[silent] 拉起后${Math.round(delayMs / 1000)}秒日志仍无正文，工作进程没有进入会话`,
       /* `child.pid` 缺失时 pid 为 0，判活按“已退出”处理：没有取到 pid 就说明没有启动。 */
-      `[silent] 进程${pid}${pidAlive(pid) ? "仍存活" : "已退出"}，日志增量0字节`,
+      `[silent] 进程${pid}${pidAlive(pid) ? "仍存活" : "已退出"}，日志增量 0 字节`,
       `[silent] 参数${args.length}项、共${argvChars}字符，${multiline ? "含换行" : "不含换行"}`,
       `[silent] 令牌变量${hasToken ? "已注入" : "未注入"}`,
       "",

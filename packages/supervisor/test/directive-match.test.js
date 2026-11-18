@@ -42,7 +42,7 @@ test("target 指向同链的中途单：重派出来的新单照样领得到", (
     dispatchId: "D-new",
     lineage: "D-chain",
   });
-  assert.equal(taken.length, 1, "同链的中途单上的话必须能被这一单领走");
+  assert.equal(taken.length, 1, "同链的中途单上的话必须能被本单取走");
   assert.equal(taken[0].text, "改跳过卡点的提示词");
 });
 
@@ -59,13 +59,13 @@ test("target 指向别的链：一张都领不走（串台是这条通道要根�
     dispatchId: "D-new",
     lineage: "D-chain",
   });
-  assert.equal(taken.length, 0, "别的链的话不许被这一单领走");
+  assert.equal(taken.length, 0, "别的链的话不许被本单取走");
 });
 
 test("target 就是本单：直接命中，不必走链", () => {
   const root = sandbox();
   seed(root, { id: "D-chain", lineage: "D-chain" });
-  cmds.appendDirective(root, { text: "就这一单的补充", target: "D-chain", stage: "S0" });
+  cmds.appendDirective(root, { text: "本单的补充内容", target: "D-chain", stage: "S0" });
 
   const taken = cmds.claimDirectives(root, {
     shard: "",
@@ -170,13 +170,13 @@ function rowOf(root, id) {
   return capitalist.readDispatches(root).find((d) => String(d.id) === id);
 }
 
-test("悬空追加回收：链上已无活单时把最新那张翻回 open，并清掉终止痕迹", () => {
+test("悬空追加回收：失败的单挂着追加时翻回 open，并清掉终止痕迹", () => {
   const root = sandbox();
   seed(root, { id: "D-chain", lineage: "D-chain" });
   seed(root, {
     id: "D-last",
     lineage: "D-chain",
-    status: "done",
+    status: "failed",
     retry_verdict: "give_up",
     retry_why: "上一轮判过不再重试",
     done_at: new Date().toISOString(),
@@ -186,7 +186,7 @@ test("悬空追加回收：链上已无活单时把最新那张翻回 open，并
   loop.__testing.rescueOrphanDirectives(root, noop);
 
   const after = rowOf(root, "D-last");
-  assert.equal(after.status, "open", "挂着追加的已终结束必须被翻回 open");
+  assert.equal(after.status, "open", "挂着追加的失败单必须被重新置为 open");
   assert.equal(after.retry_verdict, undefined, "give_up 留着会挡住重派");
   assert.equal(after.done_at, undefined, "done_at 留着会被当成已结束");
   assert.match(String(after.note), /没人读/, "note 要写清为什么又活了");
@@ -205,8 +205,8 @@ test("悬空追加回收：链上还有活单时不动它（那一单自己会�
 
 test("悬空追加回收：每拍只救一条链，不一次拉起一堆进程", () => {
   const root = sandbox();
-  seed(root, { id: "D-a", lineage: "D-a" });
-  seed(root, { id: "D-b", lineage: "D-b" });
+  seed(root, { id: "D-a", lineage: "D-a", status: "failed" });
+  seed(root, { id: "D-b", lineage: "D-b", status: "failed" });
   cmds.appendDirective(root, { text: "链 A 的追加", target: "D-a", stage: "S0" });
   cmds.appendDirective(root, { text: "链 B 的追加", target: "D-b", stage: "S0" });
 
@@ -214,6 +214,27 @@ test("悬空追加回收：每拍只救一条链，不一次拉起一堆进程",
 
   const reopened = ["D-a", "D-b"].filter((id) => rowOf(root, id).status === "open");
   assert.equal(reopened.length, 1, "一拍只救一条链，余下的下一拍再说");
+});
+
+test("悬空追加回收：用户手动结束的单不被自动拉起", () => {
+  /* 关闭是用户的明确意图，监工不能因为“还有话没读”把它悄悄reopen。 */
+  const root = sandbox();
+  seed(root, { id: "D-closed", lineage: "D-closed", status: "closed" });
+  cmds.appendDirective(root, { text: "关闭之后补的话", target: "D-closed", stage: "S0" });
+
+  loop.__testing.rescueOrphanDirectives(root, noop);
+
+  assert.equal(rowOf(root, "D-closed").status, "closed", "用户关掉的单必须保持关闭");
+});
+
+test("悬空追加回收：正常完成的单也不被自动拉起", () => {
+  const root = sandbox();
+  seed(root, { id: "D-done", lineage: "D-done", status: "done" });
+  cmds.appendDirective(root, { text: "完成之后补的话", target: "D-done", stage: "S0" });
+
+  loop.__testing.rescueOrphanDirectives(root, noop);
+
+  assert.equal(rowOf(root, "D-done").status, "done", "已完成不等于失败，不该由监工自动返工");
 });
 
 test("悬空追加回收：超过追诉期的老追加不再翻旧账", () => {

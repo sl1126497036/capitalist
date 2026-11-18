@@ -677,7 +677,7 @@ const EN = {
   "已中断": "Interrupted",
   "下一轮调度重派": "redispatched on the next scheduling round",
   "中断失败": "Interrupt failed",
-  "已交还监工，下一轮调度起恢复自动裁定": "Handed back; automatic adjudication resumes next round",
+  "已交还监工：下一轮调度恢复自动裁定": "Handed back; automatic adjudication resumes next round",
   "交还失败": "Handback failed",
   "已结束": "Closed",
   "监工不再为它重新派单": "the supervisor will not dispatch for it again",

@@ -73,7 +73,7 @@ const SCHEMA_HINT = `只输出一个 JSON 对象，不要任何解释、不要�
   "stages": [
     {
       "id": "S0",
-      "name": "阶段名（中文，4-8 字）",
+      "name": "阶段名（用用户语言，4-8 字）",
       "goal": "阶段目标，简要说明",
       "next": "交给执行者的下一步动作，要具体到做什么、产出什么文件",
       "done": { "type": "file_exists", "path": "相对产出路径" }
@@ -106,6 +106,8 @@ export async function generateContract(opts: {
   host?: string;
   out?: string;
   effort?: string;
+  /** 监工模型（`--capitalist-model`）：拆任务也是监工的活，与后续判定、对话用同一个模型。 */
+  model?: string;
 }): Promise<GenContractResult> {
   const dir = join(supervisorDir(opts.root), "contracts");
   const path = opts.out ?? join(dir, `generated-${new Date().toISOString().replace(/[:.]/g, "-")}.contract.json`);
@@ -128,6 +130,7 @@ export async function generateContract(opts: {
     cwd: opts.root,
     ...(opts.host ? { host: opts.host } : {}),
     ...(opts.effort ? { effort: opts.effort } : {}),
+    ...(String(opts.model ?? "").trim() ? { model: String(opts.model).trim() } : {}),
   });
   if (!r.ok) return { ok: false, path, why: `模型通道不可用：${r.text}`, stages: [] };
 
@@ -183,9 +186,6 @@ export async function generateContract(opts: {
 /** 逐条列出阶段名，供核对契约与目标是否一致。 */
 export function describeGenerated(r: GenContractResult): string {
   if (!r.ok) return `[契约] 未能生成，改用内置清单：${r.why}`;
-  return (
-    `[契约] 按目标生成了 ${r.stages.length} 个阶段：` +
-    r.stages.map((s) => `${s.id} ${s.name}`).join(" / ") +
-    `\n[契约] 文件：${r.path}`
-  );
+  /* 文件路径不进终端：用户要看的是分成了哪几个阶段，路径属于内部位置。 */
+  return `[契约] 按目标生成了 ${r.stages.length} 个阶段：${r.stages.map((s) => `${s.id} ${s.name}`).join(" / ")}`;
 }

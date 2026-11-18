@@ -175,6 +175,8 @@ test("超限判定用同一个生效上限：900k / 1M = 90% 触发", () => {
 test("会话判定按 1M 的 60% 判断，不再在 180k 就换代", () => {
   const root = emptyRoot();
   const dispatch = { id: "D-1", stage: "U1", shard: "x", action: "做点事" };
+  /* 会话按派单派生：基名带派单 id。 */
+  const laneBase = "capitalist-u1-1";
   const first = lane.pickLane(root, dispatch);
   assert.equal(first.resume, false);
 
@@ -183,7 +185,7 @@ test("会话判定按 1M 的 60% 判断，不再在 180k 就换代", () => {
     context_window: 300_000,
     context_model: MODEL,
   });
-  const st = lane.readLane(root, "capitalist-u1-x");
+  const st = lane.readLane(root, laneBase);
   assert.equal(lane.laneContextWindow(st), 1_000_000);
   assert.equal(lane.laneTooFull(st), false, "250k < 1M × 60% = 600k");
 
@@ -195,8 +197,8 @@ test("会话判定按 1M 的 60% 判断，不再在 180k 就换代", () => {
     context_window: 300_000,
     context_model: MODEL,
   });
-  assert.equal(lane.laneTooFull(lane.readLane(root, "capitalist-u1-x")), true, "700k ≥ 600k");
+  assert.equal(lane.laneTooFull(lane.readLane(root, laneBase)), true, "700k ≥ 600k");
   const next = lane.pickLane(root, dispatch);
   assert.equal(next.resume, false, "满了就换代");
-  assert.equal(next.id, "capitalist-u1-x-g1");
+  assert.equal(next.id, `${laneBase}-g1`);
 });

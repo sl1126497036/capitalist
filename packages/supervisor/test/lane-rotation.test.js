@@ -17,8 +17,11 @@ function emptyRoot() {
   return root;
 }
 
+/* 会话按派单隔离：基名带派单 id，故所有断言以此为准。 */
+const BASE = "capitalist-u1-mwkqez4me4j";
+
 function aDispatch() {
-  return { id: "D-1", stage: "U1", shard: "x", action: "把这件事做完" };
+  return { id: "D-mwkqez4me4j", stage: "U1", shard: "x", action: "把这件事做完" };
 }
 
 function laneEvents(root) {
@@ -47,19 +50,19 @@ test("运行中写回的占用超过 0.6：下一次派单换新代且不续接"
     context_used: 200_000,
     context_window: 300_000,
   });
-  assert.strictEqual(lane.laneTooFull(lane.readLane(root, "capitalist-u1-x")), true);
+  assert.strictEqual(lane.laneTooFull(lane.readLane(root, BASE)), true);
 
   const next = lane.pickLane(root, d);
   assert.strictEqual(next.resume, false, "已满的会话不许再接新单");
-  assert.strictEqual(next.id, "capitalist-u1-x-g1", "必须换一代，而不是续接旧会话");
+  assert.strictEqual(next.id, `${BASE}-g1`, "必须换一代，而不是续接旧会话");
 
-  const st = lane.readLane(root, "capitalist-u1-x");
+  const st = lane.readLane(root, BASE);
   assert.strictEqual(st.gen, 1);
   assert.strictEqual(st.ctx_used, null, "新一代的占用读数从零开始");
 
   const [ev] = laneEvents(root);
   assert.ok(ev, "换代必须留下 lane_rotated 事件");
-  assert.strictEqual(ev.base, "capitalist-u1-x");
+  assert.strictEqual(ev.base, BASE);
   assert.strictEqual(ev.from_gen, 0);
   assert.strictEqual(ev.to_gen, 1);
   assert.strictEqual(ev.ctx_used, 200_000, "事件里要带上一代的最终占用");
@@ -75,10 +78,10 @@ test("刚好 0.6 就算满（阈值是 >=，不是 >）", () => {
     context_used: 180_000,
     context_window: 300_000,
   });
-  assert.strictEqual(lane.laneTooFull(lane.readLane(root, "capitalist-u1-x")), true);
+  assert.strictEqual(lane.laneTooFull(lane.readLane(root, BASE)), true);
   const next = lane.pickLane(root, d);
   assert.strictEqual(next.resume, false);
-  assert.strictEqual(next.id, "capitalist-u1-x-g1");
+  assert.strictEqual(next.id, `${BASE}-g1`);
 });
 
 test("读数低于 0.6 仍然续接，闸门没有把正常会话也换掉", () => {
@@ -91,7 +94,7 @@ test("读数低于 0.6 仍然续接，闸门没有把正常会话也换掉", () 
   });
   const next = lane.pickLane(root, d);
   assert.strictEqual(next.resume, true);
-  assert.strictEqual(next.id, "capitalist-u1-x");
+  assert.strictEqual(next.id, BASE);
 });
 
 test("进程还活着（busy）且已满：同样换代，不往同一条会话上排新单", () => {
@@ -104,7 +107,7 @@ test("进程还活着（busy）且已满：同样换代，不往同一条会话�
   });
   const next = lane.pickLane(root, d, (id) => id === first.id);
   assert.strictEqual(next.resume, false);
-  assert.strictEqual(next.id, "capitalist-u1-x-g1");
+  assert.strictEqual(next.id, `${BASE}-g1`);
 });
 
 test("换代后老代晚到的读数不会把新代闸门带偏", () => {
@@ -114,7 +117,7 @@ test("换代后老代晚到的读数不会把新代闸门带偏", () => {
   lane.recordLaneUsage(root, first.id, { context_used: 200_000, context_window: 300_000 });
   const next = lane.pickLane(root, d);
   lane.recordLaneUsage(root, first.id, { context_used: 290_000, context_window: 300_000 });
-  const st = lane.readLane(root, "capitalist-u1-x");
+  const st = lane.readLane(root, BASE);
   assert.strictEqual(st.current, next.id);
   assert.strictEqual(st.ctx_used, null, "老代的终值不能算到新代头上");
 });
@@ -153,7 +156,7 @@ test("运行中按日志增量刷新占用：不用等进程退出，闸门就�
     `${JSON.stringify({
       type: "assistant",
       __timestamp: "2026-11-04T10:00:00Z",
-      _meta: { "vendor.ai/contextUsed": 400_000 },
+      _meta: { "vendor.ai/contextUsed": 700_000 },
       message: { id: "m1", model: "deepseek-v4.1-flash", usage: { input_tokens: 10 } },
     })}\n`,
   );
@@ -161,19 +164,19 @@ test("运行中按日志增量刷新占用：不用等进程退出，闸门就�
   // 进程没有退出，只有日志增长，这就是“运行中”的现场。
   loop.refreshLaneUsage(root, []);
 
-  const st = lane.readLane(root, "capitalist-u1-x");
+  const st = lane.readLane(root, BASE);
   assert.strictEqual(st.current, first.id);
-  assert.strictEqual(st.ctx_used, 400_000, "运行中的读数必须落到会话上");
-  assert.strictEqual(lane.laneTooFull(st), true, "400k ≥ 600k × 60% = 360k");
+  assert.strictEqual(st.ctx_used, 700_000, "运行中的读数必须落到会话上");
+  assert.strictEqual(lane.laneTooFull(st), true, "700k 必须超过本代阈值（1M 窗口的六成）");
 
   const next = lane.pickLane(root, d, (sessionId) => sessionId === first.id);
   assert.strictEqual(next.resume, false, "进程还活着但已满：不许再接新单");
-  assert.strictEqual(next.id, "capitalist-u1-x-g1", "下一次派单必须换新代");
+  assert.strictEqual(next.id, `${BASE}-g1`, "下一次派单必须换新代");
 
   const [ev] = laneEvents(root);
   assert.ok(ev, "换代要留事件");
-  assert.strictEqual(ev.ctx_used, 400_000);
-  assert.strictEqual(ev.limit, 360_000);
+  assert.strictEqual(ev.ctx_used, 700_000);
+  assert.strictEqual(ev.limit, 600_000);
 });
 
 
@@ -197,8 +200,8 @@ test("占用一直未知：不会无限续接，到上限就换代", () => {
 
   assert.ok(rotated, "ctx_used=null 不能成为永远续接的理由");
   assert.ok(resumes <= 3, `同一代最多续接 3 次，实际 ${resumes}`);
-  assert.strictEqual(rotated.id, "capitalist-u1-x-g1");
-  assert.strictEqual(lane.readLane(root, "capitalist-u1-x").gen, 1);
+  assert.strictEqual(rotated.id, `${BASE}-g1`);
+  assert.strictEqual(lane.readLane(root, BASE).gen, 1);
 
   const [ev] = laneEvents(root);
   assert.ok(ev);
@@ -221,10 +224,40 @@ test("未知占用的续接上限按代重置：新一代重新计数", () => {
       continue;
     }
     gen += 1;
-    assert.strictEqual(got.id, `capitalist-u1-x-g${gen}`);
+    assert.strictEqual(got.id, `${BASE}-g${gen}`);
     sinceRotate = 0;
   }
   assert.ok(maxRun <= 3, `每代续接次数必须有界，实际最长 ${maxRun}`);
   assert.ok(gen >= 6, `30 次派单里必须换过很多代，实际 ${gen}`);
-  assert.strictEqual(lane.readLane(root, "capitalist-u1-x").gen, gen);
+  assert.strictEqual(lane.readLane(root, BASE).gen, gen);
+});
+
+
+test("同阶段、同标签、无分片的两张单：会话必须互相独立", () => {
+  const root = emptyRoot();
+  /* 这正是线上出问题的形态：同一阶段下多张单，分片为空，分类标签相同。 */
+  const a = { id: "D-mwkqez4me4j", stage: "T", shard: "", tags: ["supervisor-copy"], action: "第一件事" };
+  const b = { id: "D-mwkqvjqpf2a", stage: "T", shard: "", tags: ["supervisor-copy"], action: "第二件事" };
+
+  const sa = lane.pickLane(root, a);
+  const sb = lane.pickLane(root, b);
+  assert.notStrictEqual(sa.id, sb.id, "不同派单不能落到同一条会话");
+  assert.strictEqual(sa.id, "capitalist-t-mwkqez4me4j");
+  assert.strictEqual(sb.id, "capitalist-t-mwkqvjqpf2a");
+  assert.strictEqual(sb.resume, false, "另一张单的会话不能被续接");
+});
+
+test("同一张单重开续接自己的会话，不因隔离而丢上下文", () => {
+  const root = emptyRoot();
+  const d = aDispatch();
+  const first = lane.pickLane(root, d);
+  const again = lane.pickLane(root, d);
+  assert.strictEqual(again.id, first.id, "同一单重开必须续接原会话");
+  assert.strictEqual(again.resume, true);
+});
+
+test("派单 id 缺失时才退回阶段与分片派生（兼容旧档）", () => {
+  const root = emptyRoot();
+  const got = lane.pickLane(root, { stage: "U1", shard: "x", action: "无 id 的历史单" });
+  assert.strictEqual(got.id, "capitalist-u1-x");
 });

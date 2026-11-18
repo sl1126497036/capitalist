@@ -269,7 +269,7 @@ export function tokenTotals(figs: readonly UsageFigures[]): {
 /**
  * 视图层用量合计。
  *
- * 字段名与外发形状（监工状态、指标、全局概览三处接口共用）。三处视图原先各写一遍
+ * 字段名与外发格式（监工状态、指标、全局概览三处接口共用）。三处视图原先各写一遍
  * interface 与 9 行字段映射，改一处必然漂移，故收敛到本模块。
  */
 export interface UsageTotals {

@@ -110,10 +110,10 @@ export function threadIdByNo(root: string, no: number | string): string {
  * 任务号 -> 该线程上的单：先按号取线程键，派生线程按 `lineage` 尾号匹配，分片线程按分片名匹配；不按队列顺序近似。
  *
  * 默认只认在途状态，用于“该编号当前执行到哪一步”。重开（redo）要的恰恰是已经结束的那张单，
- * 该场合把 `includeDone` 打开，否则会被 live 过滤掉，表现为“没有 #01 这一单”。
+ * 该场合把 `includeDone` 打开，否则会被 live 过滤掉，表现为“没有编号 #01”。
  *
  * @param rows 传入已读的台账可省一次 IO；不传时自行读取。
- * @param opts.includeDone 为真时把 `done` 也视为可取目标（仍取最近一条）。
+ * @param opts.includeDone 为真时把已结束的单（`done` / `closed` / `failed`）也视为可取目标（仍取最近一条）。
  * @returns 命中的那张单；号不存在、或已终结且未开启 includeDone 时为 undefined。
  */
 export function dispatchOfThreadNo(
@@ -130,7 +130,11 @@ export function dispatchOfThreadNo(
   const linTail = tail.startsWith("x") ? tail.slice(1) : "";
   const live = (s: string): boolean => {
     if (["open", "claimed", "reported", "review"].includes(s)) return true;
-    return opts.includeDone === true && s === "done";
+    /*
+     * 重开要的是已经结束的单，而“结束”有三种终态：done、closed（用户结束）、failed。
+     * 只认 done 会让用户点“重开”时拿到“没有编号 #NN”——那张单明明就在看板上。
+     */
+    return opts.includeDone === true && ["done", "closed", "failed"].includes(s);
   };
   return [...rows].reverse().find((x) => {
     if (!live(String(x.status ?? ""))) return false;

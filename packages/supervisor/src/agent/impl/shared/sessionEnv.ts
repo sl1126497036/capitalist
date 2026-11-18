@@ -20,3 +20,22 @@ export const SESSION_ENV_NAMES: readonly string[] = [
 export function inHostSession(): boolean {
   return SESSION_ENV_NAMES.some((name) => Boolean(process.env[name]));
 }
+
+/**
+ * WorkBuddy 的会话运行在沙箱内：常驻进程随该命令结束，无法支撑监工。
+ *
+ * 判定同时要求“由宿主会话派生”与“宿主是 WorkBuddy”：桌面进程拉起的终端也会继承
+ * `WORKBUDDY_*`，只看产品变量会把普通终端误判成会话。
+ */
+export function inSandboxedHostSession(): boolean {
+  return inHostSession() && isWorkbuddyHost();
+}
+
+/** 当前宿主是否为 WorkBuddy。变量名取其产品标识，不依赖版本。 */
+export function isWorkbuddyHost(): boolean {
+  return Boolean(
+    process.env.WORKBUDDY_PRODUCT_NAME ||
+      process.env.WORKBUDDY_IS_PACKAGED ||
+      process.env.WORKBUDDY_APP_NAME,
+  );
+}
