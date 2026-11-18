@@ -6,7 +6,7 @@
 /**
  * @param {object} capitalist `/api/supervisor` 的返回
  * @returns {{k: string, v: string|number, tone?: string, dot?: boolean, tip?: string, na?: boolean}[]}
- *   状态 / 并行 / 运行 / 排队 / 待裁决 / 欠账，以及有心跳说明时多一条“异常”。
+ *   状态 / 并行 / 运行 / 排队 / 待裁决 / 待补项，以及有心跳说明时多一条“异常”。
  */
 export function supervisorStatusRows(capitalist) {
   const s = capitalist || {};
@@ -18,7 +18,7 @@ export function supervisorStatusRows(capitalist) {
     { k: "运行", v: s.running ?? "—" },
     { k: "排队", v: s.queued ?? "—" },
     Number(s.pending_asks) > 0 ? { k: "待裁决", v: s.pending_asks, tone: "warn" } : { k: "待裁决", v: 0 },
-    Number(s.debt_count) > 0 ? { k: "欠账", v: s.debt_count, tone: "warn" } : { k: "欠账", v: 0 },
+    Number(s.debt_count) > 0 ? { k: "待补项", v: s.debt_count, tone: "warn" } : { k: "待补项", v: 0 },
     ...(String(s.heartbeat_note || "").trim()
       ? [{ k: "异常", v: String(s.heartbeat_note), tone: "warn", tip: String(s.heartbeat_note) }]
       : []),

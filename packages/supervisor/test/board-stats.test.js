@@ -147,7 +147,7 @@ test("未知状态归异常，不藏进已完成", () => {
   assertShape(counts);
 });
 
-test("exited 按派单是否结项拆成 done / ended", () => {
+test("exited 按派单是否结束拆成 done / ended", () => {
   const counts = board.taskCountsOf(
     [
       { id: "S0/settled", status: "exited" },

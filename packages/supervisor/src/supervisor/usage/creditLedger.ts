@@ -192,7 +192,7 @@ export function noteCreditUsed(root: string, used: number | null, unit: string, 
     return;
   }
   /*
-   * 活跃判据取“窗口内有过动作”，不看进程状态：监工停止或判死延迟时，
+   * 活跃判据取“窗口内有过动作”，不看进程状态：监工停止或判定失败延迟时，
    * 记录会长期停在 running，只按状态判断会把此后的账号增量持续记给这个进程。
    */
   const active = workers.filter((w) => lastActivityMs(w) >= windowFrom);

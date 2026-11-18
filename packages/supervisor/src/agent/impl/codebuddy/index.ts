@@ -22,11 +22,11 @@ const LOGIN_HINT =
 /**
  * 实时输出开关。
  *
- * 默认的 `--output-format text` 只在会话结束吐一段总结：跑 70 分钟的 worker，日志里只有宿主
- * 的运维行，看板因此“看不到它在做什么”，人也没法判断它是真在推进还是卡住了。
- * `stream-json` 把每个 assistant 消息、每次工具调用按行实时打出来，看板才有过程可看。
+ * 默认的 `--output-format text` 只在会话结束输出一段总结：执行 70 分钟的工作进程，日志里只有宿主
+ * 的运维行，看板因此“看不到它在做什么”，用户也无法判断它是真在推进还是卡住了。
+ * `stream-json` 把每个 assistant 消息、每次工具调用按行实时输出，看板才有过程可看。
  *
- * 设 `CAPITALIST_WORKER_STREAM=0` 可关闭流式输出；解析侧无法识别格式时回到纯文本。
+ * 设 `CAPITALIST_WORKER_STREAM=0` 可关闭流式输出；解析侧无法识别格式时改用纯文本。
  */
 /**
  * 会话续载参数。
@@ -79,7 +79,7 @@ export const impl: HostImpl = {
   userLevelHook: true,
   knownModels: ["fast-model", "deepseek-v4.1-flash", "glm-5.3-flash"],
   cliBins: ["codebuddy", "codebuddy.cmd"],
-  /* 平台模型策略：默认档与禁用名单，阻止宿主自行回落（见 shared/modelPolicy.ts）。 */
+  /* 平台模型策略：默认档与禁用名单，阻止宿主自行改用其它档位（见 shared/modelPolicy.ts）。 */
   modelPolicy: TENCENT_MODEL_POLICY,
 
   hook: new ClaudeStyleHook({ guessPriority: 30 }),
@@ -98,7 +98,7 @@ export const impl: HostImpl = {
   worker: {
     key: "codebuddy",
     detectPriority: 30,
-    // 只剔宿主 HTTP 服务的端口变量；整个前缀剔除会连 CLI 的启动配置一起削掉。
+    // 只剔除宿主 HTTP 服务的端口变量；整个前缀剔除会连 CLI 的启动配置一起移除。
     //
     // 另剔 `ACC_PRODUCT_CONFIG*` 与 `CODEBUDDY_HOST`：宿主把产品配置注入成“桌面端身份”，
     // CLI 按该身份认证，与自身登录态不一致，非交互调用返回 `Authentication required`。
@@ -110,7 +110,7 @@ export const impl: HostImpl = {
     envDropNames: ["CODEBUDDY_HOST", ...TENCENT_SESSION_ENV_DROP_NAMES],
     binNames: (platform) => winBinNames(platform, "codebuddy"),
     // prompt 走 argv，不走 stdin：`-p` 的 stdin 要承载首次进入目录的信任确认，两者共用
-    // 一条管道时 prompt 会被当作确认读掉，进程随后读到 EOF 空转。
+    // 一条管道时 prompt 会被当作确认读入，进程随后读到 EOF 空等。
     // `--port 0` 让 CLI 自选端口。默认端口固定（51073），与桌面端宿主同机运行时得到
     // EADDRINUSE，而 CLI 在这种失败下仍以退出码 0 结束。
     argv: ({ prompt, model, session, effort }) => [

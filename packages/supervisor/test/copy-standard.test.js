@@ -12,7 +12,7 @@ const { __testing } = require(join(PKG, "dist/supervisor/loop.js"));
 const { withCopyStandard } = __testing;
 const memory = require(join(PKG, "dist/supervisor/context/memory.js"));
 
-/* 措辞样本：真实使用时由人在看板/记忆里写入一条，内容可改，代码不内置。 */
+/* 措辞样本：真实使用时由用户在看板或记忆里写入一条，内容可改，代码不内置。 */
 const NOTE =
   "【文案规范】本单涉及用户可见文案时用陈述语气：写明对象与结果，不用第二人称、口语化说法与拟人表达。";
 

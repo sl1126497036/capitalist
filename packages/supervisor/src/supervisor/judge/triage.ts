@@ -86,8 +86,8 @@ function buildPrompt(input: TriageInput): string {
     "            选 escalate，重开无法解决该问题）",
     "pause_shard 继续做下去代价更大（正在改错地方、正在扩大破坏面），先停这一片",
     "escalate    需人工裁决：红线风险、权限、需求自相矛盾、代价不可逆",
-    "accept      只用于类型 done：报告与证据足以结单",
-    "reject      只用于类型 done：报告不足以结单（没证据、只做了表面、与原要求不符）",
+    "accept      只用于类型 done：报告与证据足以结束",
+    "reject      只用于类型 done：报告不足以结束（没证据、只做了表面、与原要求不符）",
     "",
     "【判断要求】",
     "- 以证据为准，不只看申报内容。申报“已全部完成”但证据无产出的，判 reject。",
@@ -122,7 +122,7 @@ export function parseVerdict(raw: string): TriageVerdict | null {
   };
 }
 
-/** 判一条申报；与判死重试共用 `brain.decide`，仅动作集不同。 */
+/** 判一条申报；与判定失败重试共用 `brain.decide`，仅动作集不同。 */
 export async function triage(input: TriageInput): Promise<TriageVerdict> {
   const m = input.msg;
   const facts: string[] = [
@@ -178,11 +178,11 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
       { name: "escalate", desc: "需人工裁决：红线风险、权限、需求自相矛盾、代价不可逆" },
       {
         name: "accept",
-        desc: "只用于它报完成：代码证据足以结单（行为对得上要求、相关单元测试结果一致）；不要求全量测试、不要求截图",
+        desc: "只用于它报完成：代码证据足以结束（行为对得上要求、相关单元测试结果一致）；不要求全量测试、不要求截图",
       },
       {
         name: "reject",
-        desc: "只用于它报完成：报告不足以结单（没有代码证据、只做了表面、行为与最新要求不符）；不得因没跑全量测试、没附截图而打回",
+        desc: "只用于它报完成：报告不足以结束（没有代码证据、只做了表面、行为与最新要求不符）；不得因没跑全量测试、没附截图而打回",
       },
     ],
     session: "capitalist-brain-triage",

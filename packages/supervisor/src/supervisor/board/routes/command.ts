@@ -52,10 +52,10 @@ ctx.req.on("end", () => {
   if (typeof parsed.action === "string") input.action = parsed.action;
   if (typeof parsed.arg === "string") input.arg = parsed.arg;
   if (parsed.confirm === true) input.confirm = true;
-  // 该接口的指令来源记为 user；监工落的指令走 /api/capitalist-chat 的 DO 行并带 via:"capitalist"。
+  // 该接口的指令来源记为 user；监工写入的指令经 /api/capitalist-chat 的 DO 行并带 via:"capitalist"。
   input.via = "user";
 
-  /** 只接受已知任务根，其余回落本看板自己的根；关停写停止哨兵，不进指令队列。 */
+  /** 只接受已知任务根，其余改用本看板自己的根；关停写停止哨兵，不进指令队列。 */
   const targetRoot =
     typeof parsed.root === "string" && parsed.root.trim()
       ? listTaskRoots(ctx.opts.root).includes(resolve(parsed.root.trim()))
@@ -289,7 +289,7 @@ ctx.req.on("end", () => {
 });
 }
 
-/** 看板重启限流：同一任务根在冷却期内只重启一次，避免连续点击打爆进程。 */
+/** 看板重启限流：同一任务根在冷却期内只重启一次，避免连续点击反复拉起进程。 */
 const RESTART_LAUNCHER = `
 const { spawn } = require("node:child_process");
 const args = JSON.parse(process.env.CAPITALIST_RELAUNCH_ARGS || "[]");
@@ -313,7 +313,7 @@ function tick() {
 setTimeout(tick, 400);
 `;
 
-/** 看板重启限流：同一任务根在冷却期内只重启一次，避免连续点击打爆进程。 */
+/** 看板重启限流：同一任务根在冷却期内只重启一次，避免连续点击反复拉起进程。 */
 const RESTART_COOLDOWN_MS = 15_000;
 const restartAt = new Map<string, number>();
 
@@ -374,7 +374,7 @@ export function handleConfirmDispatch(ctx: BoardCtx): void {
 const loopback = isLoopback(ctx);
 if (!loopback) {
   ctx.res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-  ctx.res.end(JSON.stringify({ error: "结单接口只接受本机回环地址" }));
+  ctx.res.end(JSON.stringify({ error: "结束任务接口只接受本机回环地址" }));
   return;
 }
 if (ctx.req.method !== "POST") {
@@ -404,10 +404,10 @@ ctx.req.on("end", () => {
     sendJson(ctx, { error: `没有这张单：${id}` }, 404);
     return;
   }
-  const note = String(cur.review_note ?? cur.note ?? "") || "用户确认结单";
+  const note = String(cur.review_note ?? cur.note ?? "") || "用户确认结束";
   const done = finishDispatch(ctx.opts.root, id, "done", note);
   if (!done) {
-    sendJson(ctx, { error: `这张单已经结过了：${id}` }, 409);
+    sendJson(ctx, { error: `这张单已经结束：${id}` }, 409);
     return;
   }
   recordEvent(ctx.opts.root, "dispatch_confirmed", {

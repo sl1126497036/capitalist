@@ -142,7 +142,7 @@ test("不是这一单送出的插话，改不了它的结论", () => {
   claim(root, "D-f");
 
   const bad = cmds.markDirectiveOutcome(root, cmds.directiveRef(rec), "done", { by: "D-g" });
-  assert.equal(bad.ok, false, "别的单不能替它结项");
+  assert.equal(bad.ok, false, "别的单不能替它结束");
   assert.match(bad.reason, /送达给/);
 });
 
@@ -207,7 +207,7 @@ test("openDirectivesOf 只列本单送出、且还没有结论的", () => {
   /* 结掉一条之后它就不该再出现。 */
   cmds.markDirectiveOutcome(root, cmds.directiveRef(a), "done", { by: "D-j" });
   const after = cmds.openDirectivesOf(root, "D-j").map(cmds.directiveRef);
-  assert.ok(!after.includes(cmds.directiveRef(a)), "已结项的不再挡收工");
+  assert.ok(!after.includes(cmds.directiveRef(a)), "已结束的不再挡收工");
   assert.ok(cmds.directiveRef(c).length > 0 && cmds.directiveRef(b).length > 0);
 });
 
@@ -225,7 +225,7 @@ function refPattern(ref) {
   return new RegExp(String(ref).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 }
 
-test("收工闸：送到了但没有结论，不许结单，并直接给出可复制的命令行", () => {
+test("收工闸：送到了但没有结论，不许结束，并直接给出可复制的命令行", () => {
   const root = sandbox();
   seed(root, "D-cli");
   const rec = put(root, "这条要回报");

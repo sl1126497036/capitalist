@@ -3,6 +3,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { appendJsonl, readJsonl, writeJsonl } from "../record/json";
 import { supervisorDir } from "../record/paths";
 
 /** 裁决台账的文件名。只认这一个，别的一律不是台账。 */
@@ -30,7 +31,7 @@ export interface InboxRecord extends Record<string, unknown> {
 export interface IgnoredInboxRow {
   /** 在文件里的行号，从 1 起。 */
   line: number;
-  /** 人或日志可读的原因。 */
+  /** 供人与日志阅读的原因。 */
   reason: string;
   /** 原始行截断到 200 字符，仅用于定位，避免整份台账写入事件。 */
   raw: string;
@@ -144,6 +145,78 @@ export function readInbox(root: string): InboxRead {
  */
 export function openInboxAsks(root: string): InboxRecord[] {
   return readInbox(root).rows.filter((q) => q.type === "ask" && q.status === "open");
+}
+
+/**
+ * 登记一条待裁决问题到 `qa.jsonl`。
+ *
+ * `shard` 必须写：缺省会被调度层当成全阶段级问题，连带暂停其它分片；只有全阶段问题
+ * 才留空。
+ *
+ * @returns 问题 id，供裁决方记录与本条问题的对应关系。
+ */
+export function appendAsk(
+  root: string,
+  question: string,
+  detail = "",
+  stage = "",
+  shard = "",
+): string {
+  const id = `Q${Math.floor(Date.now() / 1000) % 100000}-${Math.random().toString(36).slice(2, 6)}`;
+  appendJsonl(join(inboxDir(root), INBOX_LEDGER), {
+    type: "ask",
+    status: "open",
+    /* id 加随机后缀，使同一秒内连续登记不重复。 */
+    id,
+    at: new Date().toISOString(),
+    at_ts: Date.now() / 1000,
+    text: question,
+    context: detail,
+    stage,
+    ...(shard ? { shard } : {}),
+  });
+  return id;
+}
+
+/**
+ * 回填一条问题并关闭它。
+ *
+ * 定位方式三种：id 精确匹配、正文全文匹配、正文片段匹配。后两种是给“没有 id 的历史
+ * 记录”留的出口：关不掉时 open ask 会让监工一直暂停派单。
+ *
+ * @returns 是否命中，以及命中问题的正文。没命中时调用方按“找不到问题”处理。
+ */
+export function answerAsk(root: string, id: string, guidance: string): { ok: boolean; text: string } {
+  const file = join(inboxDir(root), INBOX_LEDGER);
+  const rows = readJsonl<Record<string, unknown>>(file);
+  let hit = false;
+  let hitText = "";
+  for (const r of rows) {
+    if (r.type !== "ask") continue;
+    const text = String(r.text ?? r.question ?? "");
+    const matched = r.id === id || (text !== "" && (text === id || text.includes(id)));
+    if (!matched) continue;
+    r.status = "answered";
+    r.answered_at = new Date().toISOString();
+    hit = true;
+    hitText = text;
+  }
+  if (!hit) return { ok: false, text: "" };
+
+  /* 同一问题只保留最新一条指导。 */
+  for (const r of rows) {
+    if (r.type === "answer" && r.qid === id) r.status = "superseded";
+  }
+  rows.push({
+    at: new Date().toISOString(),
+    at_ts: Date.now() / 1000,
+    type: "answer",
+    qid: id,
+    status: "new",
+    text: guidance,
+  });
+  writeJsonl(file, rows);
+  return { ok: true, text: hitText };
 }
 
 /**

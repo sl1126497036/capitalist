@@ -46,7 +46,7 @@ export interface BoardSnapshot {
     ticks: number;
     heartbeat_age_sec: number;
     worker_host: string;
-    /** 宿主的显示名；未注册宿主为空串，前端回落显示 worker_host。 */
+    /** 宿主的显示名；未注册宿主为空串，前端改用 worker_host 显示。 */
     worker_host_label: string;
     max_workers: number;
     note: string;
@@ -271,7 +271,7 @@ export function readTailText(file: string): string {
 /**
  * 台账里可能夹着原始输出的字段。
  *
- * 判定与重试理由由模型或子进程产出，容易把 stderr、PID、退出码、JSON 片段整段抄进来。
+ * 判定与重试理由由模型或子进程产出，容易把 stderr、PID、退出码、JSON 片段整段复制进来。
  * 界面只留能判断下一步的那一句：取首行、去掉明显的技术片段、超出上限截断。
  */
 export function brief(value: unknown, max = 120): string {
@@ -300,7 +300,7 @@ export function describeEvent(e: Record<string, unknown>): string {
     case "dispatch_failed":
       return `回报失败 ${d}：${brief(e.note) || "（无说明）"}`;
     case "dispatch_closed":
-      return `手动结项 ${d}（原状态 ${zh.status(e.from) || "未知状态"}${e.worker ? "，执行中" : "，排队中"}${e.killed ? "，已中断" : ""}）：${String(e.reason ?? "")}`;
+      return `手动结束 ${d}（原状态 ${zh.status(e.from) || "未知状态"}${e.worker ? "，执行中" : "，排队中"}${e.killed ? "，已中断" : ""}）：${String(e.reason ?? "")}`;
     case "dispatch_wake":
       return `消息唤醒 ${d}（原状态 ${zh.status(e.from) || "未知状态"}）：会话新消息将该派单重新置为待执行，沿用原上下文续跑`;
     case "dispatch_retry": {
@@ -309,7 +309,7 @@ export function describeEvent(e: Record<string, unknown>): string {
       return `重派任务 ${d}（第 ${attempt} 次${failed > 0 ? `，累计失败 ${failed} 次` : ""}）`;
     }
     case "dispatch_orphan":
-      return `派单 ${d} 判死重派（进程状态：${zh.status(e.worker_status) || "未知状态"}）`;
+      return `派单 ${d} 判定失败，重新派发（进程状态：${zh.status(e.worker_status) || "未知状态"}）`;
     case "worker_start": {
       const host = String(e.host ?? "");
       return `开始执行 ${d}${host ? `（${host}）` : ""}`;
@@ -317,13 +317,13 @@ export function describeEvent(e: Record<string, unknown>): string {
     case "worker_gone":
       return `执行进程${d ? `（${d}）` : ""} ${e.stale ? "心跳超时" : "已退出"}，回收`;
     case "worker_stopped":
-      return `执行进程被用户中断${e.killed ? "（已发送终止信号）" : ""}${d ? `，${d} 按失败结单` : ""}`;
+      return `执行进程被用户中断${e.killed ? "（已发送终止信号）" : ""}${d ? `，${d} 按失败结束` : ""}`;
     case "worker_launch_failed":
       return `进程启动失败：${brief(e.error)}`;
     case "dispatch_superseded":
       return `派单 ${d} 作废：不属于当前编排`;
     case "dispatch_reaped":
-      return `回收执行进程：${d} 已按失败结单，等待重派（退出码 ${String(e.exit_code ?? "?")}）`;
+      return `回收执行进程：${d} 已按失败结束，等待重派（退出码 ${String(e.exit_code ?? "?")}）`;
     case "worker_reaped":
       return `执行进程已回收${d ? `（${d}）` : ""}`;
     case "worker_killed":
@@ -339,7 +339,7 @@ export function describeEvent(e: Record<string, unknown>): string {
     case "direct_deliver":
       /*
        * 未开监工介入时的普通对话，投递结果由消息旁的“已送达”标签表达，这里不再单列一条
-       * 记录：同一条消息出现两处回执，会让人以为监工插了手。
+       * 记录：同一条消息出现两处回执，会让人以为监工参与过这条对话。
        */
       return "";
     case "supervisor_advance": {
@@ -532,7 +532,7 @@ export function buildSnapshot(root: string): BoardSnapshot {
           /*
            * 宿主 id 用于逻辑判断，标签用于顶栏显示。
            * worker_host 记的是 `worker.key`，与 impl id 不一定同名（如 claude-code / claude），
-           * 故先按 id 查，再按 worker key 查；都查不到时留空，前端回落显示 id。
+           * 故先按 id 查，再按 worker key 查；都查不到时留空，前端改用 id 显示。
            */
           worker_host_label: String(
             (

@@ -226,7 +226,7 @@ test("恢复计划：已验证跳过，未验证必派复验，且不重复派",
   const second = applyResumePlan(root, "S1", () => {});
   assert.equal(second, 0, "已有在途复验单时不得重复派");
 
-  // 复验单结单后：条目转为已验证，不再派
+  // 复验单结束后：条目转为已验证，不再派
   const rows2 = readDispatches(root).map((d) => (d.source === "reverify" ? { ...d, status: "done", done_at: new Date().toISOString() } : d));
   writeFileSync(join(root, ".capitalist", "inbox", "dispatch.jsonl"), rows2.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
   const third = applyResumePlan(root, "S1", () => {});
@@ -236,7 +236,7 @@ test("恢复计划：已验证跳过，未验证必派复验，且不重复派",
   assert.equal(after.state["S1/shard-c"].state, "verified");
 });
 
-test("复验结单后，新一次重载把它记为已验证（不重复复验）", () => {
+test("复验结束后，新一次重载把它记为已验证（不重复复验）", () => {
   const { root, contract } = makeRoot();
   const snap1 = buildReloadSnapshot(root, contract, 1);
   const plan = buildResumePlan(snap1);
@@ -252,7 +252,7 @@ test("复验结单后，新一次重载把它记为已验证（不重复复验�
 
   const snap2 = buildReloadSnapshot(root, contract, 2);
   const byKey = Object.fromEntries(snap2.items.map((i) => [i.key, i]));
-  assert.equal(byKey["S1/shard-a"].state, "done_verified", "复验单结单 -> 已验证");
+  assert.equal(byKey["S1/shard-a"].state, "done_verified", "复验单结束 -> 已验证");
   assert.equal(byKey["S1/shard-c"].state, "done_verified");
   const plan2 = buildResumePlan(snap2);
   assert.equal(plan2.reverify.length, 0, "已验证的不得再进复验清单");

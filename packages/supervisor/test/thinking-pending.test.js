@@ -33,7 +33,7 @@ const think = (text) =>
  * 造一个任务根：派单 + 工作进程 + 日志 + 指定时间的插话。
  *
  * `t1` 取日志 mtime，`t0` 定为 `t1 - 60`，于是思考段按序号插值到
- * `t0 + 60/3`、`t0 + 120/3`…… 插话时间用相对 `t0` 的秒数表达，便于精确落点。
+ * `t0 + 60/3`、`t0 + 120/3`…… 插话时间用相对 `t0` 的秒数表达，便于精确定位。
  */
 function scenario({ thinking = [], sayOffsets = [], status = "running" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-think-"));

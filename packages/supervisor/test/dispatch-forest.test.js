@@ -35,7 +35,7 @@ function put(root, id, extra = {}) {
   return capitalist.readDispatches(root).find((x) => x.id === id);
 }
 
-/** 直接改台账行（模拟收尸判死、手改结构等外部事实，不改行序）。 */
+/** 直接改台账行（模拟收尸判定失败、手改结构等外部事实，不改行序）。 */
 function patch(root, id, fields) {
   const rows = capitalist.readDispatches(root).map((x) => (x.id === id ? { ...x, ...fields } : x));
   writeJsonl(capitalist.dispatchPath(root), rows);
@@ -343,14 +343,14 @@ test("场景：派单失败——父节点失败期间子节点继续等，重�
   capitalist.finishDispatch(root, "A", "failed", "进程崩了");
   assert.deepStrictEqual(queueAfterRestart(root), ["X"], "A 失败，B 继续等，X 不受牵连");
 
-  /* 重派单继承原单正文（requeueAdhoc / resetSubtree 的真实行为），血缘才认得出“同一件事”。 */
+  /* 重派单继承原单正文（requeueAdhoc / resetSubtree 的真实行为），派生链才认得出“同一件事”。 */
   put(root, "A2", { lineage: "A", action: "做 A", urgent: true });
   assert.deepStrictEqual(queueAfterRestart(root), ["A2", "X"], "重派单先进队列，B 仍等");
   capitalist.finishDispatch(root, "A2", "done", "重派完成");
   assert.deepStrictEqual(queueAfterRestart(root), ["B", "X"], "同一件事的重派完成后，B 解锁");
 });
 
-test("场景：被拒之后——父节点被人工结项（closed）视为已终结，子节点照常启动且不再回来", () => {
+test("场景：被拒之后——父节点被人工结束（closed）视为已终结，子节点照常启动且不再回来", () => {
   const root = sandbox();
   put(root, "A", { status: "closed", done_at: new Date().toISOString() });
   put(root, "B", { parent: "A", parent_reason: "要 A 的产物（A 后来被关掉）" });

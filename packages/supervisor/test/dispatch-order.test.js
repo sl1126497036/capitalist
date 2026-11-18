@@ -36,7 +36,7 @@ function put(root, id, extra = {}) {
   return capitalist.readDispatches(root).find((x) => x.id === id);
 }
 
-/** 直接改台账行状态（模拟收尸判死等外部事实，不改行序）。 */
+/** 直接改台账行状态（模拟收尸判定失败等外部事实，不改行序）。 */
 function setStatus(root, id, status) {
   const rows = capitalist.readDispatches(root).map((x) => (x.id === id ? { ...x, status } : x));
   writeJsonl(capitalist.dispatchPath(root), rows);
@@ -64,7 +64,7 @@ test("依赖门：前置单没完成，挂了编号的单不启动；完成后�
   assert.deepStrictEqual(queueAfterRestart(root), ["B"], "A 完成后 B 才进队列");
 });
 
-test("血缘解析：前置单失败重派后，重派单完成同样算满足（B 不因 A 换编号而永久卡死）", () => {
+test("派生链解析：前置单失败重派后，重派单完成同样算满足（B 不因 A 换编号而永久卡死）", () => {
   const root = sandbox();
   put(root, "A");
   put(root, "B", { after: ["A"] });
@@ -76,14 +76,14 @@ test("血缘解析：前置单失败重派后，重派单完成同样算满足�
   assert.deepStrictEqual(queueAfterRestart(root), ["B"], "同一件事的重派完成后，B 解锁");
 });
 
-test("前置是契约分片单：分片重派另起新血缘，重派完成后同样算满足（U1 实测缺口回归）", () => {
+test("前置是契约分片单：分片重派另起新派生链，重派完成后同样算满足（U1 实测缺口回归）", () => {
   const root = sandbox();
   /* 分片单（有 shard 字段）：planDispatch / shardRetry / 模型回退的重派都另写 lineage。 */
   put(root, "S1", { shard: "s1", lineage: "S1" });
   put(root, "B", { shard: "", after: ["S1"] });
   capitalist.finishDispatch(root, "S1", "failed", "进程崩了");
   assert.deepStrictEqual(queueAfterRestart(root), [], "分片失败，B 继续等");
-  /* 重派单：同 stage+shard，但血缘是新的（分片重派不整链继承血缘）。 */
+  /* 重派单：同 stage+shard，但派生链是新的（分片重派不整链继承派生链）。 */
   put(root, "S2", { shard: "s1", lineage: "S2" });
   assert.deepStrictEqual(queueAfterRestart(root), ["S2"], "重派单先进队列，B 仍等");
   capitalist.finishDispatch(root, "S2", "done", "重派完成");
@@ -205,7 +205,7 @@ test("AFTER 行解析：编号进解析结果，不进气泡正文；AFTER: none
 test("dispatch 指令把依赖写进台账 after 字段（编号 -> 派单 id 落数据）", async () => {
   const root = sandbox();
   const a = put(root, "A");
-  /* 编号表：A 的线程键（阶段 / x+血缘尾 6 位）拿 1 号。 */
+  /* 编号表：A 的线程键（阶段 / x+派生链尾 6 位）拿 1 号。 */
   assignThreadNos(root, [`S0/x${String(a.lineage ?? a.id).slice(-6).toLowerCase()}`]);
   const w = appendSupervisorDirective(root, {
     action: "dispatch",

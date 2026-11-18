@@ -150,7 +150,7 @@ test("原地打转：日志持续增长也会判卡点，并在本轮写入指�
   assert.equal(after.stuck.channel, "hook");
   assert.equal(listDirectives(root).length, 1);
 
-  /* 模拟 hook 在下一个工具调用前领走指导。 */
+  /* 模拟 hook 在下一个工具调用前取走指导。 */
   const taken = require("../dist/core/dispatch/commands").claimDirectives(root, {
     dispatchId: "D-stuck1",
     shard: "",
@@ -159,7 +159,7 @@ test("原地打转：日志持续增长也会判卡点，并在本轮写入指�
     workerId: "W-stuck",
     via: "hook",
   });
-  assert.equal(taken.length, 1, "指导应当能被这一单领走");
+  assert.equal(taken.length, 1, "指导应当能被这一单取走");
 
   await loop.handleStuckWorker(root, capitalist.loadWorker(root, "W-stuck"), {
     heartbeatSec: 900,

@@ -195,8 +195,8 @@ export function ctxWindowSupported(
  * 2. 宿主报了别的值 -> 用它（比表大不压低，比表小也当作该模型的真实配额）；
  * 3. 两边都没有 -> null：没有可依据的上限，界面只显示已用，不编一个。
  *
- * 看板读数、会话车道的换道闸门、监工上下文的超限判定都调这个函数。各算一套的后果是
- * “界面说还有一半、闸门却已经换了道”，而这种事不会报错。
+ * 看板读数、会话更换判定、监工上下文的超限判定都调这个函数。各算一套的后果是
+ * “界面显示还有一半，实际判定已经超过上限”，而这种事不会报错。
  */
 export function resolveContextWindow(model: string, reported?: number | string | null): number | null {
   const host = Number(reported);

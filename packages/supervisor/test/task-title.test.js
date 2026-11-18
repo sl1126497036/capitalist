@@ -8,7 +8,7 @@
  *    真到了老派单（没有 title 字段）就只剩映射表一条路。
  * 2. 映射表只许有一份。前端 `web/src/lib/taskTitle.js` 直接从服务端
  *    `src/supervisor/usage/taskTitle.ts` 导入（与 `lib/fmt.js` 引 `context/terms.ts` 同一条路径），
- *    一旦有人在 web 侧重新抄一张表，键就会在下次改表时漂移，前端在某个分片上退回“未命名任务”。
+ *    一旦有人在 web 侧重新复制一份映射表，键就会在下次改表时漂移，前端在某个分片上退回“未命名任务”。
  */
 
 const test = require("node:test");
@@ -57,7 +57,7 @@ test("前端只有一份分片映射表，且取自服务端", () => {
   const src = readFileSync(WEB_TABLE, "utf8");
   /*
    * 原先这里比对两张表是否同键同名。前端改为直接引用服务端模块后，第二份表已不存在，
-   * 比对失去对象；判据随之升级为“不许再有第二份”——只要有人在 web 侧重新抄一张表，
+   * 比对失去对象；判据随之升级为“不许再有第二份”：只要有人在 web 侧重新复制一份映射表，
    * 哪怕内容当时是对的，也会在下次改表时静默漂移，这条断言会立刻拦下。
    */
   const copied = /export\s+const\s+SHARD_TITLES\s*=\s*Object\.freeze\(\{/.test(src);

@@ -86,7 +86,7 @@ export function yieldOrder(rows: readonly Dispatch[], immediateId: string): Disp
  *
  * 三件事一次落盘，避免中途被打断留下半截状态：
  *   - `claimed` 的退回 `open`。先改台账再结束进程，退出回调据此判定该单已不在途，
- *     不按失败结单；
+ *     不按失败结束；
  *   - 写 `yielded_at` / `yielded_by`，界面据此标“已让位”，与失败、取消区分开；
  *   - 写 `yield_rank`（按传入顺序），恢复时据此还原先后。
  *

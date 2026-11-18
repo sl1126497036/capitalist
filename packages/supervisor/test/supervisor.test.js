@@ -79,7 +79,7 @@ test("每个 worker 一条记录，心跳互不影响", () => {
     });
   }
 
-  // 只给 W-a 续命，W-b 应被单独判死
+  // 只给 W-a 续命，W-b 应被单独判定失败
   capitalist.touchWorker(root, "W-a");
   const b = capitalist.loadWorker(root, "W-b");
   assert.ok(b);
@@ -90,7 +90,7 @@ test("每个 worker 一条记录，心跳互不影响", () => {
   assert.equal(capitalist.listWorkers(root).length, 2, "两条记录都在，不互相覆盖");
 });
 
-test("worker 进程已退出时判死，并回收它手上的单", () => {
+test("worker 进程已退出时判定失败，并回收它手上的单", () => {
   const root = sandbox();
   openDispatch(root);
   capitalist.claimDispatch(root, "D-test1", "W-dead");
@@ -139,8 +139,8 @@ test("tick 收割所有 claimed 僵尸，不只最后一张", () => {
   loop.__testing.reap(root, 900, () => {});
 
   const byId = Object.fromEntries(capitalist.readDispatches(root).map((d) => [d.id, d.status]));
-  assert.equal(byId["D-a"], "failed", "进程已死的 claimed 必须结单");
-  assert.equal(byId["D-c"], "failed", "worker 记录丢失的 claimed 必须结单");
+  assert.equal(byId["D-a"], "failed", "进程已死的 claimed 必须结束");
+  assert.equal(byId["D-c"], "failed", "worker 记录丢失的 claimed 必须结束");
   assert.equal(byId["D-b"], "claimed", "活着的 worker 手上的单不能被误杀");
   assert.equal(capitalist.loadWorker(root, "W-dead").status, "exited");
 });
@@ -542,7 +542,7 @@ test("立即执行：一个 tick 内腾槽拉起，运行中的单挂起并标�
       log: join(base, ".capitalist", "workers", "W-run.log"),
     });
 
-    /* 车道记录：先按正常派单算一次，记下它将来该续接的会话 id。 */
+    /* 会话记录：先按正常派单算一次，记下它将来该续接的会话 id。 */
     const sessBefore = resolveSession(base, capitalist.readDispatches(base).find((d) => d.id === "D-run"));
 
     const contract = { name: "minimal", data: {}, stages: [{ id: "S0", name: "澄清" }] };

@@ -29,7 +29,7 @@ function put(root, id, extra = {}) {
   });
 }
 
-/** 直接改台账行：模拟收尸判死、手改结构等外部事实。 */
+/** 直接改台账行：模拟收尸判定失败、手改结构等外部事实。 */
 function patch(root, id, fields) {
   const rows = capitalist.readDispatches(root).map((x) => (x.id === id ? { ...x, ...fields } : x));
   writeJsonl(capitalist.dispatchPath(root), rows);

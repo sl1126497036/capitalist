@@ -172,7 +172,7 @@ test("超限判定用同一个生效上限：900k / 1M = 90% 触发", () => {
 });
 
 
-test("车道闸门按 1M 的 60% 判断，不再在 180k 就换代", () => {
+test("会话判定按 1M 的 60% 判断，不再在 180k 就换代", () => {
   const root = emptyRoot();
   const dispatch = { id: "D-1", stage: "U1", shard: "x", action: "做点事" };
   const first = lane.pickLane(root, dispatch);
@@ -187,7 +187,7 @@ test("车道闸门按 1M 的 60% 判断，不再在 180k 就换代", () => {
   assert.equal(lane.laneContextWindow(st), 1_000_000);
   assert.equal(lane.laneTooFull(st), false, "250k < 1M × 60% = 600k");
 
-  // 同一份要求、同一车道：没满就续接。
+  // 同一份要求、同一会话：没满就续接。
   assert.equal(lane.pickLane(root, dispatch).resume, true);
 
   lane.recordLaneUsage(root, first.id, {

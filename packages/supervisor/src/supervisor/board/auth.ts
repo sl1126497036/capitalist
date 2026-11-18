@@ -64,7 +64,7 @@ export function needKeyPage(): string {
     "p{margin:8px 0;color:#8fa1bd}code{font-family:ui-monospace,Menlo,Consolas,monospace;",
     "background:#1a2338;padding:2px 6px;border-radius:4px;color:#9ecbff}</style></head><body>",
     '<div class="box"><h1>需要访问 key</h1>',
-    "<p>安全模式下需要提供访问 key，每次启动生成新的 key，并输出到启动日志。</p>",
+    "<p>安全模式下需要访问 key，每次启动生成，见启动日志。</p>",
     "<p>带 key 打开一次后，浏览器以会话 cookie 保存，关闭浏览器后失效：</p>",
     "<p><code>http://&lt;主机&gt;:&lt;端口&gt;/?key=&lt;访问 key&gt;</code></p>",
     "<p>访问 key 也可从启动监工终端输出的 <code>board_url</code> 或 <code>capitalist status</code> 读取。</p>",
@@ -117,7 +117,7 @@ export function guardBoardAccess(req: IncomingMessage, res: ServerResponse, url:
   const qs = url.indexOf("?") >= 0 ? new URLSearchParams(url.slice(url.indexOf("?") + 1)) : null;
   const given = String(qs?.get("key") ?? "").trim();
   if (given && keyEquals(given, boardKey)) {
-    /** 种下 cookie 后从地址栏清除 key。 */
+    /** 写入 cookie 后从地址栏清除 key。 */
     const u = new URL(url, "http://placeholder");
     u.searchParams.delete("key");
     const loc = `${u.pathname}${u.search}` || "/";

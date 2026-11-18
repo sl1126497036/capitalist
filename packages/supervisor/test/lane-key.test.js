@@ -1,4 +1,4 @@
-/** 线程键不能把“没有血缘”的派单折成 `阶段/main`。 */
+/** 线程键不能把“没有派生链”的派单折成 `阶段/main`。 */
 
 const test = require("node:test");
 const assert = require("node:assert");
@@ -23,7 +23,7 @@ test("lineage 有值时用 lineage，不用 id", () => {
   assert.strictEqual(key, "u1/xpoqqm2");
 });
 
-test("有分片时优先按分片，不看血缘", () => {
+test("有分片时优先按分片，不看派生链", () => {
   const key = laneKeyOf({ stage: "U1", shard: "parity-audit-b", lineage: "D-mw244poqqm2", id: "D-x" });
   assert.strictEqual(key, "u1/parity-audit-b");
 });

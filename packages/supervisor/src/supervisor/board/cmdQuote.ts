@@ -153,7 +153,7 @@ export function runCli(args: string[]): { code: number; stdout: string; stderr: 
   };
 }
 
-/** 暂停落 .capitalist/pause.json，形状与 capitalist pause 一致，读方统一走 core/record/pause 的 readPause。 */
+/** 暂停状态写入 .capitalist/pause.json，格式与 capitalist pause 一致，读取统一经 core/record/pause 的 readPause。 */
 export function setPause(root: string, reason: string): void {
   const rec = { at: new Date().toISOString(), reason: reason || "看板暂停调度", by: "board" };
   writeJson(pausePath(root), rec);

@@ -22,7 +22,7 @@ export type LockMode = "read" | "write";
 /** 单条锁。`depth` 用于重入，`beat` 用于判活。 */
 export interface LockEntry {
   mode: LockMode;
-  /** 持有者：workerId（`CAPITALIST_WORKER_ID`）；人手工加的锁是 `user`。 */
+  /** 持有者：workerId（`CAPITALIST_WORKER_ID`）；用户手工加的锁是 `user`。 */
   holder: string;
   pid: number;
   /** 原始路径（保留大小写，便于在界面上原样展示）。 */
@@ -68,7 +68,7 @@ export interface AcquireOpts {
    *
    * hook 是宿主 fork 出来的短命进程，写完就退了。如果记它的 pid，判活永远为假，
    * 回收逻辑会以为持有者死了，面板上也会显示成一个不存在的进程。调用方拿不到时
-   * 才回落到 `process.pid`。
+   * 才改用 `process.pid`。
    */
   pid?: number;
 }
@@ -292,7 +292,7 @@ export function acquire(root: string, path: string, mode: LockMode, holder: stri
 /**
  * 申请并在超时内轮询等待。
  *
- * 这是“别的 worker 要写需要等”的真正落点：hook 侧调它，等到就给过，等不到就拒。
+ * 这是“其他 worker 要写需要等”的实现入口：hook 侧调它，等到就放行，等不到就拒绝。
  * 轮询间隔从 120ms 起、每次 +80ms 退避，最多等到 `waitMs`。
  */
 export function acquireWithWait(
@@ -385,7 +385,7 @@ export function forceRelease(root: string, path: string): boolean {
   });
 }
 
-/** 释放某个持有者的全部锁（worker 结单 / 判死时用）。 */
+/** 释放某个持有者的全部锁（worker 结束 / 判定失败时用）。 */
 export function releaseAll(root: string, holder: string): number {
   return withTableLock(root, () => {
     const table = readTable(root);
@@ -406,7 +406,7 @@ export function releaseAll(root: string, holder: string): number {
 /**
  * 回收：持有者进程已死、或心跳超过 ttl。
  *
- * 两个条件都满足才回收。仅超时一项不判死：visible 模式的工作进程不写心跳
+ * 两个条件都满足才回收。仅超时一项不判定失败：visible 模式的工作进程不写心跳
  * （见 `WorkerRecord.mode`），单凭超时会回收仍在执行的进程。
  */
 export function reap(root: string): { reclaimed: { path: string; holder: string; why: string }[] } {

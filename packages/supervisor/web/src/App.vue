@@ -60,6 +60,12 @@ const boardState = ref(null);
 /** /api/overview：顶栏跨监工读数条的数据源。 */
 const overview = ref(null);
 const threads = ref([]);
+/*
+ * 等用户裁决的权限申请：监工无法判定的越界与删除，按先后顺序。
+ *
+ * 只取 escalated 一组。pending 是监工还在判断的，给用户看会让人以为自己要替监工做事。
+ */
+const guardQueue = ref([]);
 /** /api/threads 的 counts：左栏筛选与任务分组的数据源。 */
 const threadCounts = ref({});
 const threadTotal = ref(0);
@@ -282,7 +288,11 @@ const typing = computed(() => {
 });
 
 /* 输入区始终可输入；没有有效工作进程目标时消息转交监工。 */
-const readonly = computed(() => false);
+/*
+ * 有待裁决的申请时输入框不可用：工作进程停在这次操作上等结论，此时发消息既不会被领取，
+ * 也会让人误以为已经换了话题。裁决完成即恢复。
+ */
+const readonly = computed(() => guardQueue.value.length > 0);
 
 
 function q(params) {
@@ -401,7 +411,7 @@ async function loadStructure(thenMessages = false) {
     loadMessages();
   }
   if (!root.value) {
-    /* 结构确认无任务根时收掉载入指示，显示“尚未选择任务根”。 */
+    /* 结构确认无任务根时移除载入指示，显示“尚未选择任务根”。 */
     msgPending.value = false;
   }
   metrics.value = metRes || {};
@@ -580,7 +590,7 @@ async function loadMessages() {
   if (!t) {
     /* 选中进程未出现在返回窗口时保留右栏内容，不清空。 */
     if (!threads.value.length) messages.value = [];
-    /* 选不中进程时按已有结果收掉载入指示，不停在载入中。 */
+    /* 选不中进程时按已有结果移除载入指示，不停在载入中。 */
     msgPending.value = false;
     return;
   }
@@ -624,11 +634,47 @@ function loadOlder() {
   loadMessages();
 }
 
+/** 取等用户裁决的权限申请。失败保留上一次结果，不把面板清空。 */
+async function loadGuard() {
+  const res = await safe("./api/guard", { escalated: [] });
+  guardQueue.value = Array.isArray(res?.escalated) ? res.escalated : [];
+}
+
+/**
+ * 用户裁决一次申请。
+ *
+ * 顺序与卡片动作一致：发请求、刷新列表、再给回执。裁决会写进申请台账并通知工作进程，
+ * 先刷新再回执才能让面板与台账同一步到位。
+ */
+async function onGuardDecision(body) {
+  try {
+    const r = await fetch("./api/guard/decision", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-capitalist-client": "board" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      notice.value = { text: d?.error || $t("裁决未生效"), bad: true };
+      return;
+    }
+    await loadGuard();
+    notice.value = { text: body.verdict === "allow" ? $t("已允许这一次") : $t("已拒绝"), bad: false };
+  } catch (e) {
+    notice.value = {
+      text: $t("请求失败 {m}", { m: e instanceof Error ? e.message : String(e) }),
+      bad: true,
+    };
+  }
+}
+
 async function load() {
   const my = epoch;
   try {
     await loadStructure(true);
     await firstMessages;
+    /* 权限裁决与消息列表并行取，失败不影响主视图。 */
+    void loadGuard();
     pruneEchoes();
     if (errKind.value === "request") {
       err.value = "";
@@ -1143,7 +1189,7 @@ function onHandback() {
   });
 }
 
-/* 结项由后端把派单置为 closed（运行中先结单再 SIGTERM，排队直接撤下）；请求期间单号写入 cardStopBusy 供 QueuePane 铺蒙版，同一时刻只允许一张卡处于请求中。 */
+/* 结束任务由后端把派单置为 closed（运行中的先结束再发送 SIGTERM，排队中的直接撤下）；请求期间单号写入 cardStopBusy 供 QueuePane 铺蒙版，同一时刻只允许一张卡处于请求中。 */
 /* 操作蒙版至少停留 320ms，避免请求过快时蒙版一闪而过。 */
 const BUSY_MIN_MS = 320;
 function holdBusy(startedAt) {
@@ -1153,7 +1199,7 @@ function holdBusy(startedAt) {
 
 /*
  * 所有卡片动作共用一个忙碌键：取消、清除、置顶、唤醒都会改队列，
- * 服务端回执与列表刷新不是同一拍。请求期间铺蒙版，用户才知道动作已被接受。
+ * 服务端回执与列表刷新不是同时发生。请求期间铺蒙版，用户由此得知动作已被接受。
  */
 const cardBusy = ref("");
 
@@ -1201,12 +1247,12 @@ function onCloseTask({ id, shard, title }) {
     key: id,
     action: "close",
     body: { shard: shard || "" },
-    /* 结项与清除的回执走页面级浮层，不进会话流，避免被监工当作用户消息读入。 */
+    /* 结束任务与清除的回执经页面级浮层显示，不进会话流，避免被监工当作用户消息读入。 */
     toast: true,
     text: (d, ok) =>
       ok
-        ? d.effective || `${$t("已结项")} ${d.dispatch || id} ${$t("监工不再为它补单")}`
-        : `${$t("结项失败")} ${d.error || d.reason || $t("未知原因")}`,
+        ? d.effective || `${$t("已结束")} ${d.dispatch || id} ${$t("监工不再为它重新派单")}`
+        : `${$t("结束失败")} ${d.error || d.reason || $t("未知原因")}`,
     after: () => {
       /* 关闭当前选中线程时回到监工流。 */
       if (sel.value && (sel.value === id || curThread.value?.dispatch === id)) pickSupervisor();
@@ -1264,7 +1310,7 @@ function showToast(text, bad = false) {
 }
 onUnmounted(() => clearTimeout(toastTimer));
 
-/* 清除单卡由后端先结项（异常单）再打标记，不删记录；结果只走 showToast。
+/* 清除单卡由后端先结束该单（异常单）再写入标记，不删除记录；结果只经 showToast 显示。
    忙碌键复用上面那个统一的 cardBusy。 */
 function onClearCard({ key }) {
   if (!key) return null;
@@ -1500,6 +1546,8 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
         :counts="threadCounts"
         :queue-collapsed="queueCollapsed"
         :paused="pausedView"
+        :guard-queue="guardQueue"
+        @guard-decision="onGuardDecision"
         @toggle-queue="toggleQueue"
         @send="onSend"
         @interject="onInterject"

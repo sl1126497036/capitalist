@@ -65,7 +65,7 @@ test("不再有重复的核对现状：只有一块，且合并了两边独有�
   assert.ok(text.includes("相关模块现在怎么做的"), "grounding 独有的理解现状要保留");
 });
 
-test("“带超时”只写一遍：结单口径里说完，不再在动作清单里重复", () => {
+test("“带超时”只写一遍：结束口径里说完，不再在动作清单里重复", () => {
   const text = buildPrompt(ARGS);
   const hits = text.split("\n").filter((l) => l.includes("带超时与无输出判定"));
   assert.equal(hits.length, 1, `实际出现 ${hits.length} 处：\n${hits.join("\n")}`);

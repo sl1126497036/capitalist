@@ -148,7 +148,7 @@ function makeOrderRoot() {
   ];
   writeFileSync(join(capitalist, "inbox", "dispatch.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
 
-  // shard-b 已结单且台账四项证据齐全 -> done_verified，不占恢复次序、不进复验清单
+  // shard-b 已结束且台账四项证据齐全 -> done_verified，不占恢复次序、不进复验清单
   writeFileSync(
     join(capitalist, "ledger.jsonl"),
     JSON.stringify({

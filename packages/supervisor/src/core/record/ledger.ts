@@ -65,9 +65,35 @@ export function recordEvent(root: string, event: string, extra: Record<string, u
   });
 }
 
+/**
+ * 记一条工具动作事件。
+ *
+ * 工作进程身份从环境读取：hook 由工作进程内的宿主派生，继承了 `CAPITALIST_WORKER_ID`
+ * 与 `CAPITALIST_DISPATCH_ID`。用户自己的会话里这两项为空，记录里不出现。宿主给出的描述
+ * 文字一并写入记录，截断到 200 字。
+ */
+export function recordToolEvent(
+  root: string,
+  fields: { point: string; tool: string; session: string; desc?: string | undefined },
+  extra: Record<string, unknown> = {},
+  kind = "tool",
+): void {
+  const worker = process.env.CAPITALIST_WORKER_ID ?? "";
+  const dispatch = process.env.CAPITALIST_DISPATCH_ID ?? "";
+  const desc = String(fields.desc ?? "").trim();
+  recordEvent(root, kind, {
+    point: fields.point,
+    tool: fields.tool,
+    session: fields.session,
+    ...(worker ? { worker } : {}),
+    ...(dispatch ? { dispatch } : {}),
+    ...(desc ? { desc: desc.slice(0, 200) } : {}),
+    ...extra,
+  });
+}
+
 /** 节流状态：进程内，不落盘。监工重启后重新计一次，代价只是多一条记录。 */
 const throttleState = new Map<string, { at: number; n: number }>();
-
 /** 进程内节流记录：同一 `event|key` 在窗口内只落一条，重复的次数攒在 `repeat` 里。 */
 export function recordEventThrottled(
   root: string,

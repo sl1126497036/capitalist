@@ -1,5 +1,5 @@
 /**
- * 按目标、工作空间内容与已加载技能动态生成契约。
+ * 按目标、项目内容与已加载技能动态生成契约。
  * 产物与 `contracts/*.contract.json` 同构，调度层无需改动；生成失败时回落内置契约。
  */
 
@@ -19,7 +19,7 @@ export interface GenContractResult {
   stages: { id: string; name: string }[];
 }
 
-/** 工作空间摘要：供模型判断项目类型，不含全量文件树。 */
+/** 项目摘要：供模型判断项目类型，不含全量文件树。 */
 function workspaceDigest(root: string): string {
   const lines: string[] = [`目录：${root}`];
   try {
@@ -113,9 +113,9 @@ export async function generateContract(opts: {
   const prompt = [
     "你在为一个任务型监工生成任务清单（契约）。监工会按这份清单派单给工作进程。",
     "",
-    `目标内容：${opts.target || "（未提供，按工作空间内容判断）"}`,
+    `目标内容：${opts.target || "（未提供，按项目内容判断）"}`,
     "",
-    "工作空间摘要：",
+    "项目摘要：",
     workspaceDigest(opts.root),
     "",
     `已加载技能：${skills.length ? skills.join("、") : "（无）"}`,

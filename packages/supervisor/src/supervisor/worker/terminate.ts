@@ -1,5 +1,5 @@
 /**
- * 结束进程的共用实现：判死、监工退场、启动时回收孤儿进程三处路径共用。
+ * 结束进程的共用实现：判定失败、监工退场、启动时回收孤儿进程三处路径共用。
  *
  * 先 SIGTERM，窗口内未退出再 SIGKILL，并确认进程已不在。
  */
@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 
 import { pidAlive, sleepSync } from "../../core/record/process";
 
-/** 主线程内的阻塞等待；判死与回收走同步路径，不使用 await。 */
+/** 主线程内的阻塞等待；判定失败与回收走同步路径，不使用 await。 */
 export { sleepSync };
 
 /** 轮询等待进程退出；到期仍活着返回 false。 */

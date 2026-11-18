@@ -129,7 +129,7 @@ export function parseActions(
 /** 调用方负责采齐事实；本函数只发起模型调用并解析输出。 */
 export async function decide(opts: DecideOptions): Promise<BrainResult> {
   const allowed = opts.actions.map((a) => a.name);
-  /* `opts.session` 为车道基名，实际 id 可带代数；超阈值时换代并落事件，下一轮从空上下文开始。见 brainLane.ts。 */
+  /* `opts.session` 为会话基名，实际 id 可带代数；超阈值时换代并落事件，下一轮从空上下文开始。见 brainLane.ts。 */
   const lane = brainSessionOf(opts.root, opts.session);
   /* 换代后的首轮附上一代结论摘要；其余轮次不带入。 */
   const carry = lane.fresh && lane.gen > 0 ? recentVerdicts(opts.root, 6) : [];

@@ -64,8 +64,8 @@ test("登记动作的免检识别：同包的绝对路径入口", () => {
   assert.equal(isJustifyInvocation(`node "${own}" justify /tmp/x r`), true);
 });
 
-test("登记输出：不谎报已经入队", () => {
-  /* 登记只写理由文件；入队发生在越界命令真的放行那一刻，两件事不能混成一句。 */
+test("没有匹配申请时明确报错，不谎报已提交", () => {
+  /* 理由只能补到已被拦下的申请上。凭空提交等于给了一个不存在的批准预期。 */
   const root = mkdtempSync(join(tmpdir(), "capitalist-justify-"));
   mkdirSync(join(root, ".capitalist"), { recursive: true });
   const r = spawnSync(
@@ -74,7 +74,7 @@ test("登记输出：不谎报已经入队", () => {
     { encoding: "utf8" },
   );
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`;
-  assert.equal(r.status, 0, `登记应当成功：${out}`);
-  assert.ok(out.includes("放行时记入待复核队列"), `要说明入队时机：${out}`);
-  assert.ok(!out.includes("已排入"), `不能写成已经入队：${out}`);
+  assert.notEqual(r.status, 0, `没有申请时不应报成功：${out}`);
+  assert.ok(out.includes("没有匹配的待裁决申请"), `要说明缺什么：${out}`);
+  assert.ok(!out.includes("已提交申请"), `不能写成已经提交：${out}`);
 });

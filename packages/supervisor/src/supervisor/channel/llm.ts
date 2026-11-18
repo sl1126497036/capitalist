@@ -37,7 +37,7 @@ function injectOfficialToken(env: NodeJS.ProcessEnv, host: WorkerHost, explicit?
 /**
  * 对话通道用哪个 CLI。
  *
- * 候选顺序：声明的宿主（`supervise --agent` 落盘值或 `--agent` 覆盖）-> 同族宿主 -> 常量兜底。
+ * 候选顺序：声明的宿主（`supervise --agent` 落盘值或 `--agent` 覆盖）-> 同族宿主 -> 常量默认值。
  * 逐个验证本机存在可执行文件：桌面端没有非交互入口时，由同族 CLI 承担工作进程。
  * 显式声明找不到可执行文件时原样返回，由调用方报错，不跨族借用别家的登录态。
  *
@@ -58,7 +58,7 @@ export function resolveChatHost(explicit?: WorkerHost): WorkerHost {
   for (const key of chain) {
     if (findBin(key)) return key;
   }
-  /* 同族没有可用入口时回到常量兜底：由 askModel 按“找不到可执行文件”报错，不使用桌面端入口。 */
+  /* 同族没有可用入口时回到常量默认值：由 askModel 按“找不到可执行文件”报错，不使用桌面端入口。 */
   return chain[0] ?? (DEFAULT_SUPERVISOR_CHAT_HOST as WorkerHost);
 }
 
@@ -216,7 +216,7 @@ export interface AskModelOptions {
    */
   token?: string | undefined;
   /**
-   * 中止信号：上层收到新的用户消息时用它掐断正在提交的回执或报告，
+   * 中止信号：上层收到新的用户消息时用它终止正在提交的回执或报告，
    * 让用户要求优先得到处理。中止后子进程被结束，本轮按 `aborted` 返回。
    */
   signal?: AbortSignal;
@@ -245,7 +245,7 @@ export interface AskModelResult {
   /** 这条读数对应的模型名（modelUsage 的键）；宿主没报时缺省。 */
   context_model?: string;
   /**
-   * 本轮被调用方的中止信号掐断。
+   * 本轮被调用方的中止信号终止。
    *
    * 与“通道故障”分开：中止是预期内的结果，调用方据此收尾（提示用户本轮被打断），
    * 不按错误上报，也不重试。
@@ -355,7 +355,7 @@ export const AUTH_REQUIRED_TEXT = "登录状态无效";
  * 输出是否命中登录失效特征。
  *
  * 与额度分开处置：额度耗尽存在恢复可能，登录态不可用在同一环境下重试结果相同，调用方
- * 直接判死，不进入重试裁决。
+ * 直接判定失败，不进入重试裁决。
  */
 export function looksLikeAuth(text: string): boolean {
   return AUTH_HINT.test(String(text ?? ""));

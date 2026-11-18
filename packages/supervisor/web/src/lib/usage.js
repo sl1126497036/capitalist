@@ -105,14 +105,14 @@ export function billParts(n, unit) {
 export function spendOf(usage) {
   const u = usage || {};
   /*
-   * 积分来自账号级台账，与日志是否可读无关：日志被清理或路径失效时仍要显示已摊算的积分，
+   * 积分来自账号级台账，与日志是否可读无关：日志被清理或路径失效时仍要显示已分摊的积分，
    * 因此先于 `reported` 判断。
    */
   if (Number.isFinite(Number(u.credit)) && u.credit !== null) {
     return {
       text: `${Math.round(Number(u.credit)).toLocaleString("en-US")} ${t("积分")}`,
       tip: t(
-        "计费接口增量摊算（输入 {a} + 输出 {b} token）；面板未开启期间不摊算",
+        "计费接口增量分摊（输入 {a} + 输出 {b} token）；面板未开启期间不分摊",
         { a: fmtTokens(u.input_tokens) || t("未上报"), b: fmtTokens(u.output_tokens) || t("未上报") },
       ),
     };
@@ -123,7 +123,7 @@ export function spendOf(usage) {
   }
   if (Number.isFinite(Number(u.total_tokens))) {
     /*
-     * `credit_metered` 下的积分读数由计费接口增量摊算；接口返回 0 时 `credit` 为 null，
+     * `credit_metered` 下的积分读数由计费接口增量分摊；接口返回 0 时 `credit` 为 null，
      * 此时不回落 token（token 为会话累计），按“未上报”处理。
      */
     if (u.credit_metered) {

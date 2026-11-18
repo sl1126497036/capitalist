@@ -163,7 +163,7 @@ test("运行中按日志增量刷新占用：不用等进程退出，闸门就�
 
   const st = lane.readLane(root, "capitalist-u1-x");
   assert.strictEqual(st.current, first.id);
-  assert.strictEqual(st.ctx_used, 400_000, "运行中的读数必须落到车道上");
+  assert.strictEqual(st.ctx_used, 400_000, "运行中的读数必须落到会话上");
   assert.strictEqual(lane.laneTooFull(st), true, "400k ≥ 600k × 60% = 360k");
 
   const next = lane.pickLane(root, d, (sessionId) => sessionId === first.id);

@@ -781,8 +781,8 @@ function classifyItem(
   }
 
   /*
-   * 复验单的结局优先于业务单状态：在途判未验证，已结单判已验证，失败则由 applyResumePlan 重派。
-   * 判定须放在 `review` 之前，否则每次重载都会把已结单的一片重新判成未验证、重复派复验。
+   * 复验单的结局优先于业务单状态：在途判未验证，已结束判已验证，失败则由 applyResumePlan 重派。
+   * 判定须放在 `review` 之前，否则每次重载都会把已结束的一片重新判成未验证、重复派复验。
    * 复验单不参与业务完成度判定，从 rows 里单独挑，不从 business 里找。
    */
   const reverifies = rows.filter((d) => d.source === "reverify");
@@ -795,7 +795,7 @@ function classifyItem(
     return {
       ...base,
       state: "done_verified",
-      why: `复验单 ${doneReverify.id} 已结单`,
+      why: `复验单 ${doneReverify.id} 已结束`,
       verified_by: String(doneReverify.id),
       verified_at: String(doneReverify.done_at ?? doneReverify.at ?? ""),
     };
@@ -815,7 +815,7 @@ function classifyItem(
         verified_at: String(hit.at ?? ""),
       };
     }
-    return { ...base, state: "done_unverified", why: `已结单（${last.id}），但证据台账里没有对应的 confirmed 记录` };
+    return { ...base, state: "done_unverified", why: `已结束（${last.id}），但证据台账里没有对应的 confirmed 记录` };
   }
   // open / 其它：没有在途以外的状态落在这里
   return { ...base, state: "in_progress", why: `状态 ${last.status}` };
@@ -1747,7 +1747,7 @@ const SEVERE_EVENT_TAIL_BYTES = 512_000;
  * 从 JSONL 台账尾部读出可解析的记录行。
  *
  * 只读尾部一段：`events.jsonl` 随任务增长到几十 MB，取最近几条不需要全量解析。
- * 半行写入（进程在写一半时被杀）按坏行跳过，不让一条脏数据废掉整段上下文。
+ * 半行写入（进程在写一半时被终止）按坏行跳过，不让一条损坏数据影响整段上下文。
  *
  * @param maxBytes 尾部窗口上限，实际读取量不超过文件大小。
  */
@@ -1808,7 +1808,7 @@ export function severeSupervisorEventLines(root: string, max = 8): string[] {
 }
 
 /**
- * 把用户最近几条指令原文摆进监工上下文。
+ * 把用户最近几条指令原文写入监工上下文。
  * 只取 `supervisor_chat_ask` 且 from=user 的指令，压成一行、截断，最多 {@link max} 条；附件行不进本段，路径由截图段单独给出。
  */
 export function recentUserLines(root: string, max = 6): string[] {

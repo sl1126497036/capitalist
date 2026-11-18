@@ -25,7 +25,7 @@ import { ensureSkillManual } from "../install/install";
 /** 手册目录名，与安装器安装时的目录名一致。 */
 const SKILL_NAME = "capitalist";
 
-function main(): void {
+async function main(): Promise<void> {
   const installed = all().filter((impl) =>
     existsSync(join(homedir(), impl.configDir, "skills", SKILL_NAME, "SKILL.md")),
   );
@@ -58,4 +58,6 @@ function main(): void {
   }
 }
 
-main();
+main().catch(() => {
+  /* 包已装好，收尾失败不应让 npm install 报错 */
+});

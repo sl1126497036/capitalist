@@ -87,7 +87,7 @@ function durText(node) {
         }}
       </p>
       <p v-else-if="item.node.state === 'closed' && item.node.reason" class="fv-nreason">
-        {{ t("结项原因：{why}", { why: item.node.reason }) }}
+        {{ t("结束原因：{why}", { why: item.node.reason }) }}
       </p>
     </div>
 

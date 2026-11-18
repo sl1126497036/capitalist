@@ -1,6 +1,6 @@
 ---
 name: capitalist
-version: 0.1.4
+version: 0.1.5
 agent_created: true
 description: capitalist（监工进程）。监工是独立进程（capitalist supervise），工作进程由它拉起，各自独立；本会话只启动监工、读取状态、回报结论，不执行业务代码。适用于多阶段、跨会话、易偏离、有硬性红线、需持续核验进度的任务。触发词：capitalist、监督、盯着做、自动推进、别中断、开新进程、换进程、上下文太长、上下文压缩、会话一长就糊涂、多进程协调、一个进程执行一个监督、不想每一步都给指令、谁来把关、按流程走、照着流程走、监督这个任务、让它自己跑、装 capitalist、开监督、给我盯一下。
 ---
@@ -29,22 +29,24 @@ description: capitalist（监工进程）。监工是独立进程（capitalist s
 
 ## 2. 启动监工
 
-启动命令必须在系统node环境中执行，沙箱node存在权限问题
-```bash
-# WorkBuddy 必须加 --detach，否则 codebuddy -p 无凭证权限会导致无法使用
-capitalist supervise "<目标>" --agent workbuddy --detach
+特别注意：在WorkBuddy中使用时，本会话不启动监工。宿主会话内取得的凭证授权只覆盖单条命令，命令结束即失效，无法支撑常驻进程。
+需要启动时，把命令交给用户在终端执行。
+其他宿主可正常执行启动，监工和Worker进程自动走非交互终端运行：
 
-# CodeBuddy / ClaudeCode
+```bash
 capitalist supervise "<目标>" --agent <宿主>
 ```
 
-`--agent` 取值见第 1 节表格，填当前所在环境对应的值。
+`--agent` 取值见第 1 节表格
 
-WorkBuddy 必须加 `--detach`：宿主把长命令转入后台执行，命令随即返回；读取登录态发生在这条命令执行期间，授权询问才能显示在界面上。未加 `--detach` 时读取在后台进程中进行，询问无处显示，按拒绝处理，对话通道与派单随之不可用。
+本会话用 `capitalist status` 确认状态：
 
-Windows 上 `--detach` 由启动器转交，启动器由 `capitalist install` 创建。启动失败时执行 `capitalist serve --status`，未运行则重跑 `capitalist install`。
+| 输出 | 处理 |
+|---|---|
+| `监工：在线（pid …，心跳 Ns 前更新）` | 已在运行 |
+| 无监工记录 | 未启动或启动报错，请用户查看终端输出 |
 
-监工在后台常驻，不占用当前会话。启动后执行 `capitalist status`，输出应为“监工：在线（pid …，心跳 Ns 前更新）”；仅输出“已启动”表示心跳尚未确认。
+监工运行期间，本会话仍可操作同一任务根：`capitalist status`、`capitalist workers`、`capitalist tasks`、`capitalist inbox` 查询状态，`capitalist ask` 提问，`capitalist answer` 回填裁决。这些命令只读写 `.capitalist` 下的文件，监工下一轮读取。
 
 - 启动后有两种状态，均等待用户动作：
   - 存在未完成事项：上次退出时未完成的派单（`open` / `claimed` / `reported` / `review`）逐张标记暂停，不执行。暂停是派单级标记：宿主侧新派入的单不受影响，可立即执行；被暂停的单继续占住所属分片，不补派、不重派。该步骤不能跳过。
@@ -55,7 +57,7 @@ Windows 上 `--detach` 由启动器转交，启动器由 `capitalist install` �
 - `capitalist resume` 解除的是全局暂停（`capitalist pause` 写入的 `.capitalist/pause.json`），不解除逐单暂停。
 - `capitalist start` 只创建任务根，不写入派单，不拉起工作进程，不替代 `capitalist supervise`。
 - 用户未明确要求时严禁派单，保持监工待命，缺省使用 minimal 契约。
-- 启动后即提醒用户已启动，并汇报面板地址和状态，除非用户明确要求，不再做其他工作。
+- 确认在线后，汇报面板地址与当前状态；除非用户明确要求，不再做其他工作。
 
 ### 宿主说明
 
@@ -66,8 +68,8 @@ Windows 上 `--detach` 由启动器转交，启动器由 `capitalist install` �
 
 - WorkBuddy 中的注意事项
   - 无终端可用时处于“受限模式”，需先解除。
-  - 必须用系统安装的 Node 运行，宿主内置的 Node 无法启动监工。
-  - 启动时必须加 --detach，且 macOS 下用户需同意凭证访问授权（授权会由 WorkBuddy 自动检测发起，无需介入），否则将出现“对话通道不可用”
+  - 监工不在WorkBuddy的命令通道内启动，由用户在终端执行 `capitalist supervise --agent workbuddy`。
+
 - ClaudeCode
   - 宿主为 ClaudeCode 时，监工通过 `claude -p` 调度。
 
@@ -95,7 +97,7 @@ Windows 上 `--detach` 由启动器转交，启动器由 `capitalist install` �
 
 | 输入                   | 动作                                      |
 | ------------------- | -------------------------------------- |
-| “给这个项目开监督” / “盯着这个项目” | 执行 `capitalist supervise`（WorkBuddy 加 `--detach`），回报 pid 与契约名 |
+| “给这个项目开监督” / “盯着这个项目” | 给出终端启动命令，由用户执行；启动后用 `capitalist status` 确认，回报 pid 与契约名 |
 | “现在到哪了”/“当前状态”       | `capitalist workers` + `capitalist status`，输出摘要，不贴原文 |
 | “验证码 123456”/“授权了”  | 转交该值，再执行 `capitalist unblock --type <类型>`    |
 | “这个先别动”/“只读”        | `capitalist mode plan`                        |
@@ -108,7 +110,7 @@ Windows 上 `--detach` 由启动器转交，启动器由 `capitalist install` �
 
 | 角色   | 进程                                  | 职责               | 启动方       |
 | ---- | ------------------------------------ | ----------------- | --------- |
-| 监工进程 | `capitalist supervise`，常驻                   | 建根、选定契约、派单、验收、回收重派 | 本会话（WorkBuddy 加 `--detach`，其余宿主由常驻任务持有） |
+| 监工进程 | `capitalist supervise`，前台常驻                   | 建根、选定契约、派单、验收、回收重派 | 用户终端 |
 | 工作进程 | 独立宿主进程（`claude -p` / `codebuddy -p`） | 执行当前派单           | 监工        |
 | hook | 宿主在工作进程内调用的判定层                       | 拦截红线、注入状态          | 安装时写入     |
 
@@ -130,10 +132,14 @@ Windows 上 `--detach` 由启动器转交，启动器由 `capitalist install` �
 
 ## 4. 职责边界
 
+启动监工(非WorkBuddy)：
+```bash
+capitalist supervise "<目标>" --contract <契约名> --agent <宿主>   # 前台常驻，关闭终端后下线
+```
+
 本会话可执行的命令：
 
 ```bash
-capitalist supervise "<目标>" --contract <契约名> --agent <宿主> [--detach]   # 启动监工；WorkBuddy 必须加 --detach
 capitalist supervise-stop                                    # 停止监工
 capitalist workers                                           # 工作进程列表与状态
 capitalist status                                            # 阶段与门槛
@@ -202,7 +208,7 @@ capitalist tree rebuild --apply  # 写入重建结果
 
 | 目的         | 命令                                                               |
 | ---------- | ---------------------------------------------------------------- |
-| 启动监工      | `capitalist supervise "<目标>" --contract <契约名> --agent <宿主> [--workers N] [--detach]`（WorkBuddy 必须加 `--detach`） |
+| 启动监工      | `capitalist supervise "<目标>" --contract <契约名> --agent <宿主> [--workers N]`|
 | 停止监工      | `capitalist supervise-stop`                                             |
 | 唤醒暂停单     | 由用户在监工面板“已暂停”下逐单唤醒（本会话不执行 `capitalist wake`）              |
 | 工作进程       | `capitalist workers [--json]`                                           |
@@ -282,10 +288,11 @@ capitalist tree rebuild --apply  # 写入重建结果
 | `capitalist supervise` 报找不到工作进程宿主                          | 本机未安装 claude / codebuddy 的 CLI。告知用户安装其中一个，或更换机器运行监工                                |
 | 监工已启动但无工作进程                                           | 读取 `.capitalist/workers/*.log`，确认宿主 CLI 可执行且工作空间可读写                                                                              |
 | 工作进程启动后立即退出（`capitalist workers` 显示 exited）                     | 读取 `↳ 原因` 行：上游返回 429（账号配额或频率限制）时更换账号                                                                                    |
-| `--detach` 启动后监工消失（Windows）                          | 自检窗口为 30 秒，宿主约在第 37 秒回收整棵进程树（Job），自检仍报“心跳已确认”。改用常驻任务持有 |
-| WorkBuddy 启动后对话与派单报“对话通道不可用”                    | 启动未加 `--detach`：登录态读取发生在后台进程中，授权询问无法显示，读取按拒绝处理。加 `--detach` 重启 |
-| 常驻任务里起的监工被终止，工作进程会一起退出                        | Windows Job 连带终止 `guard`，`.capitalist/guard.log` 无记录。监工终止后所有工作进程退出，重启后重派 |
-| 窗口停在“是否信任此目录”                                       | 交互式启动会提示信任确认。改用默认后台模式，`-p` 不提示信任；交互式启动按 1 完成确认                                                                               |
+| 报“监工不在宿主会话内启动”                                  | 属正常拦截。把终端启动命令交给用户执行                                                                                 |
+| 终端启动后 `capitalist status` 无监工记录                     | 启动命令已退出。查看用户终端窗口里的报错输出                                                                           |
+| WorkBuddy 启动后对话与派单报“对话通道不可用”                    | 宿主 CLI 登录态不可用。执行 `capitalist auth-check` 确认；不可用时在终端运行 `codebuddy` 并输入 `/login` |
+| 监工进程被系统终止，工作进程一起退出                        | Windows Job 连带终止 `guard`，`.capitalist/guard.log` 无记录。重启监工后重派 |
+| 窗口停在“是否信任此目录”                                       | 交互式启动会提示信任确认，按 1 完成确认；需要无提示时用 `-p` |
 | 报 `EADDRINUSE 127.0.0.1:xxxxx`                      | 宿主环境变量被派生进程继承（`SERVER__PORT`）。当前版本继承整份环境并剔除宿主会话变量；出现该错误表明版本过旧 |
 | 工作进程一直不结束                                           | `capitalist workers` 读取心跳；超时后监工判死重派，也可执行 `capitalist supervise-stop` 后读取日志                                                                |
 | 监工反复派同一单                                            | 门槛未达标而工作进程上报完成：检查 `capitalist status` 的未达项，按需调整契约的 `done`                                                                          |

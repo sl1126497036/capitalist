@@ -151,11 +151,11 @@ test("老记录只在 thread 里写了线程键：按线程认领", () => {
 });
 
 
-test("线程键规则与看板一致：有分片用分片，无分片用血缘尾号", () => {
+test("线程键规则与看板一致：有分片用分片，无分片用派生链尾号", () => {
   assert.equal(cmds.laneKeyOf({ stage: "U1", shard: "ui", lineage: "D-abc" }), "u1/ui");
   assert.equal(cmds.laneKeyOf({ stage: "U1", shard: "", lineage: "D-mw01lmdixjs" }), "u1/xmdixjs");
   assert.equal(cmds.laneKeyOf({ stage: "U1", id: "D-abcdef123456" }), "u1/x123456");
-  /* 血缘优先于 id：同一链上不同单必须落到同一个键，否则一次重派就换一条线程。 */
+  /* 派生链优先于 id：同一链上不同单必须落到同一个键，否则一次重派就换一条线程。 */
   assert.equal(cmds.laneKeyOf({ stage: "U1", lineage: "D-zzzzzz999999", id: "D-other" }), "u1/x999999");
   assert.equal(cmds.laneKeyOf({ stage: "U1", shard: null, lineage: "" }), "u1/main");
 });
@@ -186,7 +186,7 @@ test("悬空追加回收：链上已无活单时把最新那张翻回 open，并
   loop.__testing.rescueOrphanDirectives(root, noop);
 
   const after = rowOf(root, "D-last");
-  assert.equal(after.status, "open", "挂着追加的已终结单必须被翻回 open");
+  assert.equal(after.status, "open", "挂着追加的已终结束必须被翻回 open");
   assert.equal(after.retry_verdict, undefined, "give_up 留着会挡住重派");
   assert.equal(after.done_at, undefined, "done_at 留着会被当成已结束");
   assert.match(String(after.note), /没人读/, "note 要写清为什么又活了");

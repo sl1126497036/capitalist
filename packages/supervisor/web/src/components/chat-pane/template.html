@@ -588,8 +588,15 @@
                   <div v-if="v.c === 'supervisorsay'" class="rhdr">
                     <span class="rtitle">{{ v.m.kind === "say" ? t("监工：") : v.m.kind === "dispatch" ? t("监工派单：") : t("监工裁决：") }}</span>
                     <span v-if="v.m.kind === 'say'" class="rsig">{{ t("对话层") }}</span>
+                    <button
+                      v-if="v.assoc && v.m.no"
+                      class="assocchip jump"
+                      type="button"
+                      :aria-label="t('切到这一单的工作进程')"
+                      @click.stop="emit('locate', String(v.m.no))"
+                    >{{ t("同一派单") }} {{ v.assoc }}</button>
                     <span
-                      v-if="v.assoc"
+                      v-else-if="v.assoc"
                       class="assocchip"
                     >{{ t("同一派单") }} {{ v.assoc }}</span>
                   </div>
@@ -709,6 +716,41 @@
         </div>
       </div>
     </section>
+
+    <!-- 权限裁决：贴在输入框上方。等待裁决时输入框不可用，决策是唯一可做的动作。 -->
+    <div
+      v-if="!isSupervisor && guardQueue.length"
+      class="guardbar"
+      role="region"
+      :aria-label="t('权限等待裁决')"
+    >
+      <div class="ghead">
+        <span class="gtitle">{{ t("权限等待裁决") }}</span>
+        <span class="gcount">{{ guardQueue.length }}</span>
+      </div>
+      <div :key="guardQueue[0].id" class="gitem">
+        <div class="gmeta">
+          <span class="gkind" :class="guardQueue[0].kind === 'delete' ? 'del' : 'out'">
+            {{ guardQueue[0].kind === "delete" ? t("删除") : t("允许范围外") }}
+          </span>
+          <span class="gpaths">{{ guardQueue[0].paths.join("、") }}</span>
+        </div>
+        <div v-if="guardQueue[0].reason" class="gtext">{{ guardQueue[0].reason }}</div>
+        <div v-if="guardQueue[0].why" class="gwhy">{{ guardQueue[0].why }}</div>
+        <div class="gacts">
+          <button
+            class="gbtn ok"
+            type="button"
+            @click="emit('guardDecision', { id: guardQueue[0].id, verdict: 'allow' })"
+          >{{ t("允许这一次") }}</button>
+          <button
+            class="gbtn no"
+            type="button"
+            @click="emit('guardDecision', { id: guardQueue[0].id, verdict: 'deny' })"
+          >{{ t("拒绝") }}</button>
+        </div>
+      </div>
+    </div>
 
     <div
       class="composer"

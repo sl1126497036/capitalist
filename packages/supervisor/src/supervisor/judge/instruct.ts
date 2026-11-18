@@ -205,7 +205,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
       detail:
         `跳过 ${cur.stage.id} ${cur.stage.name}` +
         (shards.length ? `（该阶段有 ${shards.length} 个分片，按整阶段处理——本通道只支持阶段粒度）` : "") +
-        "；跳过将记为欠账，终审时仍会清算",
+        "；跳过将记为待补项，终审时仍会清算",
     };
   }
 

@@ -95,10 +95,10 @@ test("节流按 key 分开：不同单据各自记一条", () => {
 });
 
 
-test("判定脑车道：首轮 fresh，之后同一条会话，轮次累加", () => {
+test("判定脑会话：首轮 fresh，之后同一条会话，轮次累加", () => {
   const root = tmpRoot("brainlane");
   /*
-   * 车道名带随机后缀：占用估算按会话 id 去宿主的 projects 目录找记录，
+   * 会话名带随机后缀：占用估算按会话 id 去宿主的 projects 目录找记录，
    * 用固定名会读到这台机器上真实跑过的同一条会话（几 MB），测试就变成看环境脸色。
    */
   const base = `capitalist-brain-t-${Date.now().toString(36)}`;
@@ -116,7 +116,7 @@ test("判定脑车道：首轮 fresh，之后同一条会话，轮次累加", ()
   assert.equal(lane.turns, 2, "每调用一次记一轮，占用无法估算时用它决定是否更换会话");
 });
 
-test("判定脑车道：不同车道互不影响", () => {
+test("判定脑会话：不同会话互不影响", () => {
   const root = tmpRoot("brainlane2");
   const tag = Date.now().toString(36);
   brainSessionOf(root, `capitalist-brain-triage-${tag}`);

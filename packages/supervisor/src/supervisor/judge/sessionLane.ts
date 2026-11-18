@@ -1,7 +1,7 @@
 /**
- * 会话车道：按阶段与分片（无分片时按分类标签）派生车道基名，决定工作进程续接哪条 AI 会话。
+ * 会话：按阶段与分片（无分片时按分类标签）派生会话基名，决定工作进程续接哪条 AI 会话。
  *
- * 上下文占用超过窗口比例时换代；同一车道同时只允许一个进程续接；action 指纹只作记录，不参与换代判定。
+ * 上下文占用超过窗口比例时换代；同一会话同时只允许一个进程续接；action 指纹只作记录，不参与换代判定。
  */
 
 import { createHash } from "node:crypto";
@@ -14,9 +14,9 @@ import { resolveContextWindow } from "../../core/guard/limits";
 import type { Dispatch, WorkerRecord } from "../../core/record/supervisor";
 import type { WorkerSession } from "../../agent/contract";
 
-/** 车道记录：一车道一代，换代只改 `current`。 */
+/** 会话记录：一条会话一代，更换只改 `current`。 */
 export interface LaneState {
-  /** 车道基名，例如 `capitalist-u6-main`、`capitalist-u6-ui`。 */
+  /** 会话基名，例如 `capitalist-u6-main`、`capitalist-u6-ui`。 */
   base: string;
   /** 当前使用的会话 id，例如 `capitalist-u6-main-g3`。 */
   current: string;
@@ -36,7 +36,7 @@ export interface LaneState {
   at: string;
 }
 
-/** 上下文的换道阈值：占窗口的比例。 */
+/** 上下文的更换会话阈值：占窗口的比例。 */
 const CTX_RATIO = 0.6;
 /** 拿不到窗口时的回落上限（常见窗口 300k，取六成）。 */
 const CTX_FALLBACK_LIMIT = 180_000;
@@ -51,7 +51,7 @@ function basePath(root: string, base: string): string {
   return join(sessionsDir(root), `${base}.json`);
 }
 
-/** 车道基名取分片，无分片时取首个分类标签；无标签时为 `misc`。本函数供看板复用。 */
+/** 会话基名取分片，无分片时取首个分类标签；无标签时为 `misc`。本函数供看板复用。 */
 export function laneBaseId(stage: string, shard: string, tags: readonly string[] = []): string {
   const pick = String(shard ?? "").trim() || String(tags[0] ?? "").trim() || "misc";
   return `capitalist-${stage}-${pick}`
@@ -62,7 +62,7 @@ export function laneBaseId(stage: string, shard: string, tags: readonly string[]
     .slice(0, 52);
 }
 
-/** 读车道记录；没有或损坏时返回 null（按首次处理）。 */
+/** 读会话记录；没有或损坏时返回 null（按首次处理）。 */
 export function readLane(root: string, base: string): LaneState | null {
   try {
     const st = JSON.parse(readFileSync(basePath(root, base), "utf8")) as LaneState;
@@ -95,14 +95,14 @@ function fingerprintOf(action: string): string {
   return createHash("sha1").update(base.trim()).digest("hex").slice(0, 12);
 }
 
-/** 与看板、监工超限判定共用 {@link resolveContextWindow}；车道文件中的占位窗口按 `ctx_model` 校正。 */
+/** 与看板、监工超限判定共用 {@link resolveContextWindow}；会话文件中的占位窗口按 `ctx_model` 校正。 */
 export function laneContextWindow(st: LaneState | null): number {
   if (!st) return 0;
   const w = resolveContextWindow(String(st.ctx_model ?? ""), st.ctx_window);
   return w !== null && w > 0 ? w : 0;
 }
 
-/** 这一代车道的换道阈值（token）：窗口的六成，拿不到窗口时取回落值。 */
+/** 这一代会话的更换会话阈值（token）：窗口的六成，拿不到窗口时取默认值。 */
 export function laneLimit(st: LaneState | null): number {
   if (!st) return CTX_FALLBACK_LIMIT;
   const win = laneContextWindow(st);
@@ -121,7 +121,7 @@ export function laneUnknownSpent(st: LaneState | null): boolean {
   return (st.resumes ?? 0) >= CTX_UNKNOWN_MAX_RESUME;
 }
 
-/** `busy` 由调用方提供；本模块不读工作进程台账，`worker.ts` 与看板各自判定车道占用。 */
+/** `busy` 由调用方提供；本模块不读工作进程台账，`worker.ts` 与看板各自判定会话占用。 */
 export function pickLane(
   root: string,
   dispatch: Dispatch,
@@ -149,7 +149,7 @@ export function pickLane(
   }
 
   /* 占用未满、未知续接次数未达上限、无进程占用三道闸门全通过才续接，否则换代；与 action 指纹无关。sig 更新为最新指纹供回查。 */
-  /* 占用判定读取车道文件的实时读数：`loop.ts` 的 `refreshLaneUsage` 每轮按日志增量刷新，不等进程退出。 */
+  /* 占用判定读取会话文件的实时读数：`loop.ts` 的 `refreshLaneUsage` 每轮按日志增量刷新，不等进程退出。 */
   const tooFull = laneTooFull(st);
   const unknownSpent = laneUnknownSpent(st);
   const occupied = busy(st.current);
@@ -190,7 +190,7 @@ export function pickLane(
 }
 
 /**
- * 把工作进程的上下文占用写回其车道：运行中由 `loop.ts` 的 `refreshLaneUsage` 每轮刷新，退出时由 exit 回调与 `reap` 补写终值。
+ * 把工作进程的上下文占用写回其会话：运行中由 `loop.ts` 的 `refreshLaneUsage` 每轮刷新，退出时由 exit 回调与 `reap` 补写终值。
  *
  * 只写当前代，老代读数晚到时不覆盖新代。
  */
@@ -214,7 +214,7 @@ export function recordLaneUsage(
   });
 }
 
-/** 车道文件是否存在（调试/看板用）。 */
+/** 会话文件是否存在（调试/看板用）。 */
 export function laneExists(root: string, base: string): boolean {
   return existsSync(basePath(root, base));
 }

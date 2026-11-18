@@ -94,7 +94,7 @@ export interface Directive {
   /** 发起这条话的进程（`W-…`）。 */
   thread?: string;
   /**
-   * 发起这条话的线程（`阶段/分片`，无分片是 `阶段/x血缘尾号`，见 {@link laneKeyOf}）。
+   * 发起这条话的线程（`阶段/分片`，无分片是 `阶段/x派生链尾号`，见 {@link laneKeyOf}）。
    *
    * 线程比分派单长寿：同一线程重派出来的新进程、新单都还认这条话。用户在某条线程里
    * 追加的内容天然属于那条线程，不因为中途换过一次进程就失效。
@@ -102,7 +102,7 @@ export interface Directive {
   lane?: string;
   /** 目标分片。空 = 下一次任意派单 */
   shard?: string | null;
-  /** 目标血缘（派单链的首单 id）。 */
+  /** 目标派生链（派单链的首单 id）。 */
   lineage?: string;
   /** 目标：这句话是说给哪一单的（派单 id `D-…` 或 worker id `W-…`）。 */
   target?: string;
@@ -261,7 +261,7 @@ export function isWorkerRef(v: string): boolean {
 }
 
 /**
- * 派单 -> 它所属线程的键（`阶段/分片`；无分片时 `阶段/x血缘尾号`）。
+ * 派单 -> 它所属线程的键（`阶段/分片`；无分片时 `阶段/x派生链尾号`）。
  *
  * 线程键是任务的身份，比分单和进程都长寿：同一任务重派出来的几张单、拉起的几个
  * 进程共用同一个键，编号表（thread-no.json）也按它发行号。所以“用户在哪条线程里说
@@ -306,7 +306,7 @@ export function appendDirective(
     atts?: string[];
     /** 这条插话对应的用户消息标识（看板发送时生成）。 */
     msgId?: string;
-    /** 目标血缘：无分片单靠它认领，防止别的一条链把话领走。 */
+    /** 目标派生链：无分片单靠它认领，防止别的一条链把话领走。 */
     lineage?: string;
     /** 目标单：这条话是说给哪一单的（派单 id 或 worker id）。 */
     target?: string;
@@ -335,7 +335,7 @@ export function appendDirective(
   if (input.target) rec.target = input.target;
   if (input.via === "capitalist" || input.via === "user") rec.via = input.via;
   /*
-   * 时间戳精度到毫秒：同一毫秒内连发两条时，`directiveRef` 会指向同一行，结项落到相邻记录上。
+   * 时间戳精度到毫秒：同一毫秒内连发两条时，`directiveRef` 会指向同一行，结束落到相邻记录上。
    * 与前一条相同或更早（时钟回拨）则顺延 1ms，保证引用唯一，落盘格式不变。
    */
   const file = directPath(root);
@@ -378,7 +378,7 @@ export interface DirectiveScope {
   stage?: string;
   /** 这一单的派单 id。 */
   dispatchId?: string;
-  /** 这一单的血缘（重派链首单 id）。 */
+  /** 这一单的派生链（重派链首单 id）。 */
   lineage?: string;
   /** 问话的 worker id（hook 送达时才有）。 */
   workerId?: string;
@@ -408,7 +408,7 @@ export function directiveMatches(r: Directive, scope: DirectiveScope): boolean {
     /** 链归并：target 指向的是同一条链上的另一张单，也算这一单的。 */
     const chain = scope.lineageOf?.(target) ?? "";
     if (chain && chain === String(scope.lineage ?? "")) return true;
-    /** 目标那一单没了（失败重派生成新 id、新血缘）时，同分片的下一次补派仍然归这一片。 */
+    /** 目标那一单没了（失败重派生成新 id、新派生链）时，同分片的下一次补派仍然归这一片。 */
     return Boolean(r.shard) && r.shard === String(scope.shard ?? "");
   }
 
@@ -831,7 +831,7 @@ export function stopWorker(root: string, id: string, opts: StopWorkerOptions = {
       process.kill(rec.pid, "SIGTERM");
       killed = true;
     } catch {
-      /* 进程刚好退出：仍按失败结单，效果一致 */
+      /* 进程刚好退出：仍按失败结束，效果一致 */
     }
   }
   if (requeue && killed) reapTreeLater(rec.pid);
@@ -876,12 +876,12 @@ export interface CloseTaskResult {
   killed: boolean;
   from: string;
   note: string;
-  /** 结项后是否把这一片一起冻住了（不再自动重派） */
+  /** 结束后是否把这一片一起冻住了（不再自动重派） */
   held: boolean;
 }
 
 /**
- * 找一张“还开着”的单：结项只对没结论的单有意义。
+ * 找一张“还开着”的单：结束只对没结论的单有意义。
  *
  * 目标可能是三种写法，按顺序试：
  *   1. 派单 id（`D-…`）；
@@ -914,7 +914,7 @@ function openDispatchOf(
   return null;
 }
 
-/** 手动结项：把一张单关掉，并且不再重派。 */
+/** 手动结束：把一张单关掉，并且不再重派。 */
 export function closeTask(
   root: string,
   target: string,
@@ -925,7 +925,7 @@ export function closeTask(
   const { d, worker } = hit;
   const reason = (opts.reason ?? "").trim();
 
-  const closed = closeDispatch(root, d.id, reason || "用户手动结项", opts.by ?? "user");
+  const closed = closeDispatch(root, d.id, reason || "用户手动结束", opts.by ?? "user");
   if (!closed) return null;
 
   let killed = false;
@@ -938,14 +938,14 @@ export function closeTask(
         process.kill(pid, "SIGTERM");
         killed = true;
       } catch {
-        /* 进程刚好退出：结单已经落了，结果一致 */
+        /* 进程刚好退出：结束已经落了，结果一致 */
       }
     }
     saveWorker(root, { ...worker, status: "exited", exit_code: worker.exit_code ?? (killed ? 0 : undefined) });
   }
 
   /*
-   * 结项后冻住这一片。
+   * 结束后冻住这一片。
    *
    * 只把这一张单改成 closed 不够：阶段门槛仍未达标，监工下一轮调度 会重新建一张单派出去，
    * 用户看到的就是“说了停，它还在派”。接管态是现成的抑制开关，loop 的 held() 会跳过
@@ -960,7 +960,7 @@ export function closeTask(
         (x.shard ?? "") === d.shard && (x.status === "open" || x.status === "claimed" || x.status === "review"),
     );
     if (!live) {
-      takeoverShard(root, { shard: d.shard, reason: reason || "用户手动结项", by: opts.by ?? "user" });
+      takeoverShard(root, { shard: d.shard, reason: reason || "用户手动结束", by: opts.by ?? "user" });
       held = true;
     }
   }
@@ -972,7 +972,7 @@ export function closeTask(
     worker: worker?.id ?? "",
     from: d.status,
     killed,
-    reason: reason || "用户手动结项",
+    reason: reason || "用户手动结束",
     by: opts.by ?? "user",
   });
 
@@ -1022,7 +1022,7 @@ export function promoteTask(
       d.status === "claimed"
         ? "该派单已在执行（进程已领单），无需置顶"
         : d.status === "review"
-          ? "该派单正在等待结项确认，不在排队中"
+          ? "该派单正在等待结束确认，不在排队中"
           : `该派单已处于终态 ${d.status}，重跑请使用 capitalist retry 或发送消息唤醒`;
     return { ok: false, reason: why };
   }

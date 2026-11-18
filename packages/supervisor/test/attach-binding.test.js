@@ -115,7 +115,7 @@ test("派单不继承上一条消息的附件；同一条重派链仍然接手",
     assert.ok(!String(byId.B.action).includes("[附件]"), "新消息不许继承上一条的图");
     assert.ok(!String(byId.C.action).includes("[附件]"), "阶段派单同样不许继承");
 
-    /* 重派：同一血缘、上一张没结单，用户交的图必须跟过去（另一条既有要求）。 */
+    /* 重派：同一派生链、上一张没结束，用户交的图必须跟过去（另一条既有要求）。 */
     appendDispatch(root, { id: "A2", ...base, shard: "", source: "requeue", attempt: 2, lineage: "A", action: "重派同一件事" });
     const a2 = readDispatches(root).find((d) => d.id === "A2");
     assert.ok(String(a2.action).includes(`[附件] ${IMG}`), "重派要接手这张图");

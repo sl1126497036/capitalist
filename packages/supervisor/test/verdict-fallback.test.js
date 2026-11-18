@@ -29,7 +29,7 @@ function seed(base, status) {
   return d;
 }
 
-test("报完成 + 判定不可用：结单，并注明未经复核与具体原因", () => {
+test("报完成 + 判定不可用：结束，并注明未经复核与具体原因", () => {
   const { base, clean } = sandbox();
   try {
     seed(base, "reported");
@@ -41,7 +41,7 @@ test("报完成 + 判定不可用：结单，并注明未经复核与具体原�
       out: () => {},
     });
     const row = readDispatches(base).find((d) => d.id === "D-fb0001");
-    assert.strictEqual(row.status, "done", "必须结单，不能悬空在 reported");
+    assert.strictEqual(row.status, "done", "必须结束，不能悬空在 reported");
     assert.match(String(row.note ?? ""), /未经 AI 复核/, "note 要说明没人审过");
     assert.match(String(row.note ?? ""), /拿不到模型凭证/, "note 要带出 fallback 的真因");
     assert.match(String(row.note ?? ""), /加了 X/, "原报告内容要保留，不能被 note 覆盖掉");
@@ -50,7 +50,7 @@ test("报完成 + 判定不可用：结单，并注明未经复核与具体原�
   }
 });
 
-test("报完成 + 判定不可用但没给原因：也要结单，理由用通用说法", () => {
+test("报完成 + 判定不可用但没给原因：也要结束，理由用通用说法", () => {
   const { base, clean } = sandbox();
   try {
     seed(base, "reported");
@@ -81,7 +81,7 @@ test("非 done 类申报 + 判定不可用：不动状态，只记录", () => {
       out: () => {},
     });
     const row = readDispatches(base).find((d) => d.id === "D-fb0001");
-    assert.strictEqual(row.status, "reported", "卡点类申报判定不了时不许代它结单");
+    assert.strictEqual(row.status, "reported", "卡点类申报判定不了时不许代它结束");
   } finally {
     clean();
   }

@@ -308,7 +308,7 @@ export function planRebuild(root: string): RebuildPlan {
  *
  * 一次写完整个文件：中途失败不会留下“关了一半”的台账。
  * 只改 `status` / `parent` / `parent_reason` / `retry_verdict` / `note` 这几个字段，
- * 正文、编号、时间、血缘一律不动，重建的是结构，不是历史。
+ * 正文、编号、时间、派生链一律不动，重建的是结构，不是历史。
  */
 export function applyRebuild(root: string, plan: RebuildPlan, by = "rebuild"): { closed: number; reopened: number } {
   const rows = readDispatches(root).slice();

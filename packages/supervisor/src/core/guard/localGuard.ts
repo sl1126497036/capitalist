@@ -86,6 +86,10 @@ export interface LocalCheckResult {
 /**
  * 本机边界判定。行为与归档的 Python 实现 `local_check()` 逐条对齐。
  *
+ * 敏感文件名（`.env`、`id_rsa` 一类）分两种处理：在任务根内的属于项目自身凭据，
+ * 允许提交申请由监工判断，判断只针对路径与用途，不含内容；在任务根外的一律拒绝，
+ * 不接受理由。敏感路径（`~/.ssh` 等）无论在哪都拒绝。
+ *
  * @param contract 提供 `local_guard` 配置；无该配置时直接放行。
  * @param root 任务根。为 null 时不存在“根内”这一免判区域，所有路径都按越界处理。
  * @param paths 待判定的路径列表。为空时直接放行。
@@ -107,6 +111,9 @@ export function localCheck(
   const sensNames = (cfg.sensitive_names ?? []).map((x) => String(x).toLowerCase());
   const taskRoot = root ? normLocal(root) : "";
 
+  /* 根内命中的敏感文件名：不拒绝，转为需要申请。 */
+  const soft: LocalHit[] = [];
+
   for (const p of paths) {
     const np = normLocal(p, root);
     for (const sp of sensPaths) {
@@ -118,35 +125,36 @@ export function localCheck(
       }
     }
     const base = np.split("/").pop() ?? "";
+    const inRoot = taskRoot !== "" && isInside(np, taskRoot);
     for (const sn of sensNames) {
-      if (sn.startsWith("*.")) {
-        if (base.endsWith(sn.slice(1))) {
-          return {
-            decision: "deny",
-            hits: [{ kind: "sensitive", path: p, why: `敏感文件类型 ${sn}` }],
-          };
-        }
-      } else if (base === sn) {
-        return {
-          decision: "deny",
-          hits: [{ kind: "sensitive", path: p, why: `敏感文件名 ${sn}` }],
-        };
+      const named = sn.startsWith("*.") ? base.endsWith(sn.slice(1)) : base === sn;
+      if (!named) continue;
+      if (inRoot) {
+        soft.push({ kind: "sensitive", path: p, why: `项目内凭据 ${sn}，需要说明用途` });
+        break;
       }
+      return {
+        decision: "deny",
+        hits: [
+          {
+            kind: "sensitive",
+            path: p,
+            why: sn.startsWith("*.") ? `敏感文件类型 ${sn}` : `敏感文件名 ${sn}`,
+          },
+        ],
+      };
     }
   }
 
-  if (action === "delete" && cfg.never_delete_outside_task_root !== false) {
-    for (const p of paths) {
-      const np = normLocal(p, root);
-      if (!isInside(np, taskRoot)) {
-        return {
-          decision: "deny",
-          hits: [{ kind: "delete", path: p, why: "不许删除任务根以外的本机内容" }],
-        };
-      }
-    }
-  }
+  /*
+   * 删除不再按“根内 / 根外”区分处理：根外的删除也改为提交申请，由监工判断影响。
+   * 目标不明确的删除（通配符、未给目标）仍由 localDeleteCheck 直接拒。
+   */
 
+  /*
+   * 越界一律转申请，不再查理由文件。理由由监工裁决，不由写入理由的一方决定；
+   * 判据是申请台账里的批准记录，见 core/guard/requests.ts。
+   */
   const outside: string[] = [];
   for (const p of paths) {
     const np = normLocal(p, root);
@@ -154,25 +162,22 @@ export function localCheck(
     if (allowRoots.some((r) => isInside(np, r))) continue;
     outside.push(p);
   }
-  if (outside.length === 0) return { decision: "allow", hits: [] };
-
-  const hits: LocalHit[] = [];
-  for (const p of outside) {
-    if (hasJustification(root ?? "", p)) {
-      hits.push({
-        kind: "outside_justified",
-        path: p,
-        why: "越界放行（已登记理由），待事后复查",
-      });
-    } else {
-      const scope = (cfg.allow_roots ?? []).join(" / ") || "（未设）";
-      return {
-        decision: "justify",
-        hits: [{ kind: "outside", path: p, why: `超出允许范围（${scope}）与任务根` }],
-      };
-    }
+  if (outside.length === 0) {
+    return soft.length > 0 ? { decision: "justify", hits: soft } : { decision: "allow", hits: [] };
   }
-  return { decision: "allow_outside", hits };
+
+  const scope = (cfg.allow_roots ?? []).join(" / ") || "（未设）";
+  return {
+    decision: "justify",
+    hits: [
+      ...outside.map((p) => ({
+        kind: "outside" as const,
+        path: p,
+        why: `超出允许范围（${scope}）与任务根`,
+      })),
+      ...soft,
+    ],
+  };
 }
 
 /**

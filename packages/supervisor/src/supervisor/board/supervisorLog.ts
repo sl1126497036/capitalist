@@ -43,12 +43,12 @@ const CAPITALIST_LOG_EVENTS = new Set([
 const HEARTBEAT_EVENTS = new Set([
   "supervisor_tick",
   "tick_window",
-  "dispatch_orphan", // 判死重派
+  "dispatch_orphan", // 判定失败，重新派发
   "dispatch_retry", // 重派
-  "dispatch_forced_finished", // 超时强制结单
+  "dispatch_forced_finished", // 超时强制结束
   "dispatch_reaped",
   "redispatch_capped", // 重派达到上限
-  "worker_gone", // 心跳超时判死 / 进程退出回收
+  "worker_gone", // 心跳超时判定退出 / 进程退出回收
   "worker_killed",
   "worker_looping_killed",
   "worker_heartbeat_rescued", // 心跳恢复
@@ -171,7 +171,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       return supervisorReplyView(e);
     }
     case "stage_skipped":
-      return `跳过阶段 ${String(e.from ?? "")} -> ${String(e.to ?? "")}（记欠账，不算达标）`;
+      return `跳过阶段 ${String(e.from ?? "")} -> ${String(e.to ?? "")}（记录待补项，不算达标）`;
     case "contract_reload":
       return `任务列表热加载：阶段 ${String(e.next_stages ?? "")}，分片 ${String(e.next_shards ?? "?")}`;
     case "contract_change":
@@ -189,7 +189,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
     case "retry_held":
       return `${shardTitle(e.shard) || "该任务"}卡点未消除，暂不重派：${String(e.why ?? "").slice(0, 120)}`;
     case "debt_settled":
-      return `终审清算欠账 ${String(e.count ?? 0)} 条`;
+      return `补做待补项 ${String(e.count ?? 0)} 条`;
     case "tree_rebuilt":
       return String(e.note ?? "已重建派单树");
     case "gate_eval_placeholder":
@@ -242,7 +242,7 @@ export function buildSupervisorLog(
 
   const rows = readJsonlFromTail(eventsFile(root), 2_000_000);
   const msgs: ThreadMessage[] = [];
-  /** 单阶段契约没有收工时刻，supervisor_done 整类不上屏，台账照旧保留。 */
+  /** 单阶段契约没有结束时刻，supervisor_done 整类不上屏，台账照旧保留。 */
   const ledgerOnly = ledgerOnlyRoot(root);
   /** 回执正文里的内部派单 id 按编号表换成界面号。 */
   const nos = dispatchNoTable(root);
@@ -292,7 +292,7 @@ export function buildSupervisorLog(
     const name = String(e.event ?? e.kind ?? "");
     if (!fresh(e.at)) continue;
     if (name === "supervisor_tick") continue;
-    /** 心跳链路事件（判死、重派、回收、停滞）一律不上屏，只留台账。 */
+    /** 心跳链路事件（判定失败、重派、回收、停滞）一律不上屏，只留台账。 */
     if (HEARTBEAT_EVENTS.has(name)) continue;
     if (ledgerOnly && name === "supervisor_done") continue;
     if (!CAPITALIST_LOG_EVENTS.has(name)) continue;

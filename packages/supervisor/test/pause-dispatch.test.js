@@ -36,7 +36,7 @@ function put(root, id, extra = {}) {
 
 const rowOf = (root, id) => capitalist.readDispatches(root).find((d) => d.id === id);
 
-test("启动只暂停未完成的派单，已结项的不动", () => {
+test("启动只暂停未完成的派单，已结束的不动", () => {
   const root = sandbox();
   put(root, "D-open");
   put(root, "D-claimed", { status: "claimed", worker: "W-1" });
@@ -50,7 +50,7 @@ test("启动只暂停未完成的派单，已结项的不动", () => {
   assert.strictEqual(open.paused_by, "startup");
   assert.strictEqual(open.status, "open", "暂停不改状态：它仍是一张待办的派单");
 
-  assert.strictEqual(rowOf(root, "D-done").paused_at, undefined, "已结项的单不该被暂停");
+  assert.strictEqual(rowOf(root, "D-done").paused_at, undefined, "已结束的单不该被暂停");
 });
 
 test("暂停标记幂等：重复启动不刷新暂停时刻", () => {
@@ -99,7 +99,7 @@ test("唤醒清除标记；失败单退回排队并清掉终止字段", () => {
   assert.ok(capitalist.firstOpenDispatch(root), "唤醒后可被领取");
 });
 
-test("已结项的单不唤醒：完成或关闭是终态", () => {
+test("已结束的单不唤醒：完成或关闭是终态", () => {
   const root = sandbox();
   put(root, "D-done", { status: "done", done_at: new Date().toISOString() });
   capitalist.holdDispatch(root, "D-done", "startup", "测试");

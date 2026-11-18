@@ -30,7 +30,7 @@ export const MQ_DECISION_LABEL: Record<string, string> = {
   reject: "报告打回",
 };
 
-/* 只缓存全量页：不同 limit 只是同一份数据裁掉尾巴，没必要各算一遍。 */
+/* 只缓存全量页：不同 limit 只是同一份数据去掉末尾，没必要各算一遍。 */
 
 export function oneLine(m: ThreadMessage): string {
   const s = m.text.replace(/\s+/g, " ").trim();
@@ -46,7 +46,7 @@ export function toolSummary(e: Record<string, unknown>): { text: string; cmd: st
     : /^(Edit|MultiEdit|NotebookEdit)$/.test(tool) ? "改文件"
     : /^(Grep|Search)$/.test(tool) ? "搜索"
     : /^(Glob)$/.test(tool) ? "找文件"
-    : isShellTool(tool) ? "跑命令"
+    : isShellTool(tool) ? "执行命令"
     : tool || "工具调用";
   const desc = String(e.desc ?? "").trim().replace(/\s+/g, " ");
   if (desc !== "") return { text: desc.slice(0, 80), cmd };

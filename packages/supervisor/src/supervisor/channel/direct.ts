@@ -32,7 +32,7 @@ export const CAPITALIST_ACTIONS = [
   "promote",
   /* 插到排队队首，不抢占槽位；与 promote 的立即执行不同。 */
   "queue",
-  /* 作废一张单：结单、结束进程且不再重派（`DO: cancel #65`）。 */
+  /* 作废一张单：结束该单、结束进程且不再重派（`DO: cancel #65`）。 */
   "cancel",
   "skip",
   "ask",
@@ -41,17 +41,17 @@ export const CAPITALIST_ACTIONS = [
 
 export type SupervisorAction = (typeof CAPITALIST_ACTIONS)[number];
 
-/** 一次指令执行的结果，落进记录的 `result` 字段供界面回显。 */
+/** 一次指令执行的结果，写入记录的 `result` 字段供界面回显。 */
 export interface SupervisorResult {
   ok: boolean;
   /** 被拒原因；成功时为空串 */
   reason: string;
   /** 成功时的界面回显文本（例如“已重派 supervisor-entry”） */
   detail: string;
-  /** 插队标记，仅 `dispatch` 建插队单时置真；随 result 落盘供界面回显。 */
+  /** 插队标记，仅 `dispatch` 建插队单时置真；随 result 写入记录供界面回显。 */
   urgent?: boolean;
   /**
-   * 目标派单 id：`dispatch` 并入既有单或 `amend` 追加时指向实际落到的单，界面据此显示任务编号。
+   * 目标派单 id：`dispatch` 并入既有单或 `amend` 追加时指向实际对应的单，界面据此显示任务编号。
    * 被拒或新建单时不存在。
    */
   dispatch?: string;
@@ -91,7 +91,7 @@ export interface SupervisorDirective {
    * 新派单优先用 `PARENT:`，`AFTER:` 仍兼容。
    */
   after?: string[];
-  /** 目标线程（`capitalist say --thread` 落的记录）：回显归位到该工作进程会话，不进入监工流。 */
+  /** 目标线程（`capitalist say --thread` 写入的记录）：回显归位到该工作进程会话，不进入监工流。 */
   thread?: string;
   /**
    * 指令作用的目标派单 id，仅 `amend` 使用：追加内容必须落在具体一单。

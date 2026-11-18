@@ -192,7 +192,7 @@ export function handleThreadMessage(ctx: BoardCtx): void {
       })
       .map((e) => {
       const isAsk = String(e.event ?? e.kind) === "supervisor_chat_ask";
-      /** 角色以写入时的 from 字段为准，旧记录缺该字段才按事件名回落。 */
+      /** 角色以写入时的 from 字段为准，旧记录缺该字段时才按事件名判定。 */
       const from = String((e as { from?: unknown }).from ?? "");
       const role: ThreadRole =
         from === "user" || from === "supervisor" || from === "worker"

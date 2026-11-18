@@ -198,7 +198,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         const targetLineage = String(me?.lineage ?? threadDispatch?.lineage ?? "");
         /**
          * 这一单的派单记录。
-         * 线程按血缘键组织时 `threadDispatch` 取不到，只能按线程上的派单 id 再查一次，
+         * 线程按派生链键组织时 `threadDispatch` 取不到，只能按线程上的派单 id 再查一次，
          * 否则“排队中的单”会被当成“已结束的单”，用户的补充要求会答完就没了。
          */
         const disp = ((): Dispatch | null => {
@@ -320,7 +320,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           "",
           "【这一单的情况】",
           `任务：${taskStage}/${taskShard || "(整阶段)"}${taskTitle ? ` · ${taskTitle}` : ""}`,
-          `状态：${me ? me.status : "已结束"}${me?.settled ? "（已结项）" : ""}`,
+          `状态：${me ? me.status : "已结束"}${me?.settled ? "（已结束）" : ""}`,
           `它这一单的标题：${taskTitle || "(未记录)"}`,
           `它最近输出的一句话：${String(me?.last ?? "").slice(0, 300) || "(还没输出)"}`,
           ...(readPause(ctx.opts.root) !== null
@@ -657,7 +657,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
            */
           const withSkill = SKILL_ACTIONS.has(String(act.action)) ? `${arg}${skillLine}` : arg;
           const directiveArg = act.revoke ? `${withSkill}\n\n本次作废：${act.revoke}` : withSkill;
-          /** skip 把整个阶段记成欠账跳过，不代为确认。 */
+          /** skip 把整个阶段记成待补项跳过，不代为确认。 */
           const w = appendSupervisorDirective(ctx.opts.root, {
             action: act.action,
             arg: directiveArg,

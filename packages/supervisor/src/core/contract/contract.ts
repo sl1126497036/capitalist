@@ -233,9 +233,9 @@ function locateContract(spec: string, searchDirs: readonly string[]): string | n
 /**
  * 按名字或路径加载契约。
  *
- * @param spec 契约名、文件路径，或 `minimal`（通用回落契约）
+ * @param spec 契约名、文件路径，或 `minimal`（通用默认契约）
  * @param searchDirs 额外的搜索目录（宿主 skills/ 等），由顶层传入
- * @returns 找不到或读不出（文件不存在、JSON 损坏）返回 null，由调用方决定是报错还是回落
+ * @returns 找不到或读不出（文件不存在、JSON 损坏）返回 null，由调用方决定是报错还是改用默认
  */
 export function loadContract(spec: string, searchDirs: readonly string[] = []): Contract | null {
   const file = locateContract(spec, searchDirs);
@@ -365,7 +365,7 @@ export function readContractFile(spec: string, searchDirs: readonly string[] = [
  * 每轮调度 调用：重读契约，按 mtime 与内容哈希判变化。
  *
  * 解析失败且 `prev` 存在时，沿用上一份契约并回报 `error`，不中断调度；
- * 首读就失败（无 `prev`）则抛错，由调用方决定退出还是回落。
+ * 首读就失败（无 `prev`）则抛错，由调用方决定退出还是改用默认。
  *
  * @param prev 上一份契约的定位信息与哈希，用于比对。
  * @param fallbackFile 按名定位失败时改读的文件（`capitalist adopt` 记下的绝对路径）。
@@ -610,8 +610,8 @@ export function rollbackContract(root: string, file: string): ContractData | nul
  * 分片级模型优先级链：分片 model -> 契约 default_model -> 命令行 --worker-model -> 宿主默认。
  *
  * 返回“去重后的非空候选 + 末尾一个 undefined（宿主默认）”。{@link resolveShardModel} 取首项，
- * {@link resolveShardModelFallback} 取次项（即上一档失败时的回落）。前导 undefined 会被跳过，
- * 否则分片没写 model 时会错误地回落到 undefined 而非 default_model。
+ * {@link resolveShardModelFallback} 取次项（即上一档失败时的默认值）。前导 undefined 会被跳过，
+ * 否则分片没写 model 时会错误地取 undefined 而非 default_model。
  *
  * @param cliModel 命令行指定的模型。为 undefined 时该档不参与。
  */
@@ -630,7 +630,7 @@ export function shardModelChain(
     if (m === undefined) continue;
     if (chain[chain.length - 1] !== m) chain.push(m);
   }
-  chain.push(undefined); // 末尾 undefined = 宿主默认，作为最终回落
+  chain.push(undefined); // 末尾 undefined = 宿主默认，作为最终默认值
   return chain;
 }
 
@@ -682,7 +682,7 @@ export function stageIds(contract: Contract): string[] {
 }
 
 /**
- * 下一阶段 id。与归档的 Python 实现 `next_stage()` 逐条对齐：未知 id 回落到首阶段，
+ * 下一阶段 id。与归档的 Python 实现 `next_stage()` 逐条对齐：未知 id 改用首阶段，
  * 已在末阶段时返回自身（调用方应先查 {@link isLastStage}）。
  *
  * @returns 下一阶段 id；契约没有阶段时返回 null。
@@ -692,7 +692,7 @@ export function nextStageId(contract: Contract, id: string): string | null {
   if (ids.length === 0) return null;
   const i = ids.indexOf(id);
   /*
-   * 当前阶段不在契约里时返回 null，不回落第一阶段：回落会让状态机“推进”到原阶段，
+   * 当前阶段不在契约里时返回 null，不返回第一阶段：返回会让状态机“推进”到原阶段，
    * 事件记为 X -> X，看板显示一次并不存在的推进，实际是状态与契约对不上。
    */
   if (i < 0) return null;

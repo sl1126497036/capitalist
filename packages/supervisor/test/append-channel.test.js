@@ -108,14 +108,14 @@ test("送达之后不再重复：第二次工具调用放行，插话保持已�
   assert.equal(cmds.listDirectives(root)[0].consumed, true);
 });
 
-test("别单的消息不串：血缘对不上的插话不会被这一单领走", () => {
+test("别单的消息不串：派生链对不上的插话不会被这一单领走", () => {
   const root = sandbox();
   seedDispatch(root, { lineage: "D-other" });
   cmds.appendDirective(root, { text: "这是给另一条链的话", lineage: "D-mine" });
 
   withWorkerEnv(root, () => {
     const r = dispatch(hook, workerEvent(root));
-    assert.ok(!r.stdout || !r.stdout.includes("另一条链"), "带血缘的插话只归那条链");
+    assert.ok(!r.stdout || !r.stdout.includes("另一条链"), "带派生链的插话只归那条链");
   });
   assert.equal(cmds.listDirectives(root)[0].consumed, false);
 });
@@ -217,7 +217,7 @@ test("滞留追加补投递：目标单已终结时翻回 open，下一拍带着
   const root = sandbox();
   seedDispatch(root, { status: "failed", done_at: new Date().toISOString() });
   cmds.appendDirective(root, {
-    text: "结单之后才补的这句也要执行",
+    text: "结束之后才补的这句也要执行",
     shard: "a",
     target: "D-append1",
     lineage: "D-append1",
@@ -264,11 +264,11 @@ test("追加目标单属已推进阶段：不翻回，追加标记为未投递",
   assert.deepEqual(loop.drainSettledDirectives(root), [], "已标记的追加不进入复活流程");
 });
 
-test("手动结项的单在同一阶段仍由追加唤起", () => {
+test("手动结束的单在同一阶段仍由追加唤起", () => {
   const root = sandbox();
   seedDispatch(root, { status: "closed", done_at: new Date().toISOString() });
   cmds.appendDirective(root, {
-    text: "结项之后再补一句",
+    text: "结束之后再补一句",
     shard: "a",
     target: "D-append1",
     lineage: "D-append1",
@@ -276,7 +276,7 @@ test("手动结项的单在同一阶段仍由追加唤起", () => {
 
   assert.deepEqual(loop.drainSettledDirectives(root), ["D-append1"]);
   const row = capitalist.readDispatches(root).find((d) => d.id === "D-append1");
-  assert.equal(row.status, "open", "同阶段的结项单要能被追加重新拉开");
+  assert.equal(row.status, "open", "同阶段的结束单要能被追加重新拉开");
 });
 
 test("同一次追加只画一张卡片：directive_amended 与插话记录同文时不重复下发", () => {

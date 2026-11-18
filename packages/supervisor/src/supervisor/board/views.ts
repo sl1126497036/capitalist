@@ -317,7 +317,7 @@ function heartbeatSummary(root: string, hours: number): string {
   }
   const parts: string[] = [];
   if (timeout > 0) parts.push(`心跳超时 ${timeout}`);
-  if (killed > 0) parts.push(`判死 ${killed}`);
+  if (killed > 0) parts.push(`判定失败 ${killed}`);
   if (redispatch > 0) parts.push(`重派 ${redispatch}`);
   return parts.length ? `${parts.join(" · ")}（近 ${hours} 小时）` : "";
 }

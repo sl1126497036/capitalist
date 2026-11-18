@@ -12,6 +12,10 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+import { inHostSession } from "../agent/impl/shared/sessionEnv";
+import { runAuthDiag } from "./cmd/authDiag";
+import { t } from "./lang";
+
 import { buildBrief } from "../core/message/brief";
 import { runCheck } from "../core/contract/checks";
 import { appendDirective, activeTakeover, listDirectives, releaseShard, takeoverShard } from "../core/dispatch/commands";
@@ -61,7 +65,7 @@ import { COMMAND_HELP, HELP, VERSION } from "./help";
 import { cmdBoard, cmdFeed } from "./cmd/boardCmd";
 import { cmdAuthCheck } from "./cmd/authCheck";
 import { cmdGate, cmdJustify, cmdLocalCheck } from "./cmd/precheck";
-import { cmdClose, cmdNext, cmdPromote, cmdReport, cmdStopWorker, cmdSuperviseStop, cmdWake, cmdWorkers, detachSupervisor } from "./cmd/proc";
+import { cmdClose, cmdNext, cmdPromote, cmdReport, cmdStopWorker, cmdSuperviseStop, cmdWake, cmdWorkers } from "./cmd/proc";
 import { cmdLock } from "./cmd/lockCmd";
 import { cmdReload } from "./cmd/reloadCmd";
 import { cmdTree } from "./cmd/tree";
@@ -554,7 +558,7 @@ function cmdSay(p: Parsed): number {
    * 认这条话。落错字段的后果是那句话永久领不到（见 core/commands 的 Directive.thread）。
    */
   const lane = flagString(p, "lane") || undefined;
-  /* 血缘：无分片单靠它认领这条话，见 core/dispatch/commands.ts 的 directiveMatches。 */
+  /* 派生链：无分片单靠它认领这条话，见 core/dispatch/commands.ts 的 directiveMatches。 */
   const lineage = flagString(p, "lineage") || undefined;
   /* 目标派单由看板按工作进程解析后传入，也接受分片名。 */
   const target = flagString(p, "target") || undefined;
@@ -932,26 +936,23 @@ async function main(): Promise<number> {
       if (r.cached) write(`（结论来自缓存 ${r.status.checkedAt}，加 --force 重新联网）\n`);
       return 0;
     }
-    case "serve": {
-      const { cmdServe } = await import("./cmd/serveCmd");
-      return await cmdServe(p);
-    }
     case "install": {
       const { runInstall } = await import("../install/install");
       const { resolveAgents } = await import("../install/prompt");
       const root = flagString(p, "root") ?? process.cwd();
       const dryRun = flagBool(p, "dry-run");
+      const interactive = !dryRun && !flagBool(p, "yes") && process.stdin.isTTY === true;
       const chosen = await resolveAgents({
         action: "install",
         explicit: agentList(p),
         all: flagBool(p, "all"),
         /* dry-run 只报计划、不改配置 */
-        interactive: !dryRun && !flagBool(p, "yes") && process.stdin.isTTY === true,
+        interactive,
         root,
       });
       /* 未选择宿主时不做任何写入：退出码非零，脚本与自动化据此判定“未安装”。 */
       if (chosen === null) return 1;
-      return runInstall({
+      return await runInstall({
         hosts: chosen,
         dryRun,
         verbose: flagBool(p, "verbose"),
@@ -979,59 +980,27 @@ async function main(): Promise<number> {
     }
     case "supervise": {
       /*
-       * 唯一一次读取宿主登录态，且只在令牌下发开启时执行。
-       *
-       * 下发缺省关闭：工作进程与对话通道使用宿主 CLI 自身的登录态，插件不读取任何凭据，
-       * 也不触发访问询问。置 `CAPITALIST_TOKEN_INJECT=1` 恢复下发。
-       *
-       * 开启下发时：读取由本进程发起，不接收外部传入的令牌；令牌只写进本进程环境，由
-       * 监工、对话通道与工作进程共用。令牌不进 argv、不写文件、不写日志、不写 supervisor.json。
+       * 宿主会话内不提供启动入口：会话内取得的凭证授权只覆盖单条命令，命令结束即失效，
+       * 无法支撑常驻进程。
        */
-      {
-        const tok = await import("../supervisor/channel/officialToken");
-        if (!tok.tokenInjectionEnabled()) {
-          write("[监工] 未下发宿主令牌：工作进程与对话通道使用宿主自身的登录态。\n");
-          try {
-            const diagRoot = flagString(p, "root") ?? process.cwd();
-            writeJson(join(supervisorDir(diagRoot), "auth-diag.json"), { injection: "off" });
-          } catch {
-            /* 诊断写失败不影响启动 */
-          }
-        } else if (!tok.tokenInjectorPresent()) {
-          write("[监工] 未下发宿主令牌：注入组件不存在。\n");
-          try {
-            const diagRoot = flagString(p, "root") ?? process.cwd();
-            writeJson(join(supervisorDir(diagRoot), "auth-diag.json"), tok.hostTokenDiag());
-          } catch {
-            /* 诊断写失败不影响启动 */
-          }
-        } else {
-          const source = tok.warmHostToken();
-          /*
-           * 诊断落盘：只写判定与错误码，供重启后回看读取落在哪一层；不含令牌。
-           * 读取失败的提示只出现在 stdout，进程转到后台后无从复查。
-           */
-          try {
-            const diagRoot = flagString(p, "root") ?? process.cwd();
-            writeJson(join(supervisorDir(diagRoot), "auth-diag.json"), tok.hostTokenDiag());
-          } catch {
-            /* 诊断写失败不影响启动 */
-          }
-          if (source !== "none") {
-            write("[监工] 已取得宿主令牌：对话与派单直接使用，不会再询问。\n");
-          } else {
-            const failure = tok.officialTokenFailure();
-            const code = String(tok.hostTokenDiag()["errorCode"] ?? "");
-            write(
-              failure === "missing"
-                ? "[监工] 未取得宿主令牌：宿主登录态不可见。若宿主已登录，说明沙箱使存在性判定误报为不存在，见 .capitalist/auth-diag.json。\n"
-                : failure === "encrypted"
-                  ? "[监工] 未取得宿主令牌：宿主登录态为加密格式，无法取出访问令牌。\n"
-                  : `[监工] 未取得宿主令牌：授权请求被拒或未响应${code ? `（${code}）` : ""}，重启监工并在弹窗中选择“本次会话内始终允许”。\n`,
-            );
-          }
-        }
+      if (inHostSession()) {
+        write(
+          t(
+            [
+              "The supervisor does not start inside a host session.",
+              'Run it in a terminal: capitalist supervise "<target>" --agent <host>',
+              "The command stays in the foreground; closing the terminal stops the supervisor.",
+            ].join("\n") + "\n",
+            [
+              "监工不在宿主会话内启动。",
+              '在终端执行：capitalist supervise "<目标>" --agent <宿主>',
+              "命令在前台常驻，关闭终端后监工下线。",
+            ].join("\n") + "\n",
+          ),
+        );
+        return 1;
       }
+      await runAuthDiag(flagString(p, "root") ?? process.cwd());
       const supervisorRoot = flagString(p, "root") ?? process.cwd();
       /*
        * 已有监工在运行时返回其 pid、心跳与看板地址，不返回启动失败提示。
@@ -1063,11 +1032,21 @@ async function main(): Promise<number> {
           /* `claude` 等别名先归一为 impl id 再查询。 */
           const impl = reg.byId(reg.normalize(declHost) ?? declHost);
           if (!impl) {
-            write(`⚠ 未知宿主：${declHost}。可用取值：${reg.all().map((x) => x.id).join(" / ")}\n`);
+            write(
+              t(
+                `unknown host: ${declHost}. Available: ${reg.all().map((x) => x.id).join(" / ")}\n`,
+                `未知宿主：${declHost}。可用取值：${reg.all().map((x) => x.id).join(" / ")}\n`,
+              ),
+            );
             return 1;
           }
           reg.setHostOverride(impl.id);
-          write(`[监工] 宿主按显式声明取：${impl.id}\n`);
+          write(
+            t(
+              `[supervisor] host set by --agent: ${impl.id}\n`,
+              `[监工] 宿主按显式声明取：${impl.id}\n`,
+            ),
+          );
         }
       }
       /*
@@ -1077,9 +1056,14 @@ async function main(): Promise<number> {
       const detectedWorker = detectWorkerHost();
       if (p.flags["worker-host"] !== undefined) {
         write(
-          `[监工] --worker-host 已移除：工作进程按宿主自动判定${
-            detectedWorker ? `，本次为 ${detectedWorker}` : "，当前未找到可用入口"
-          }。\n`,
+          t(
+            `[supervisor] --worker-host removed: the worker host is detected automatically${
+              detectedWorker ? `; this run uses ${detectedWorker}` : "; no usable entry found"
+            }.\n`,
+            `[监工] --worker-host 已移除：工作进程按宿主自动判定${
+              detectedWorker ? `，本次为 ${detectedWorker}` : "，当前未找到可用入口"
+            }。\n`,
+          ),
         );
       }
       const healHosts = [detectedWorker].filter(
@@ -1096,17 +1080,32 @@ async function main(): Promise<number> {
         process.platform !== "win32";
       const skipHooks = !wantHooks || flagBool(p, "no-hooks");
       if (skipHooks) {
-        write("[监工] 未安装 hook：心跳按“pid + 日志增长”判定，红线预检使用工作进程档位\n");
+        write(
+          t(
+            "[supervisor] hooks not installed: heartbeat uses pid and log growth; redline precheck uses the worker tier\n",
+            "[监工] 未安装 hook：心跳按“pid + 日志增长”判定，红线预检使用工作进程档位\n",
+          ),
+        );
       }
       if (healHosts.length > 0 && !skipHooks) {
         // 写项目级 settings.local.json：用户级那份由宿主自己维护，hooks 键保不住。
         const healed = ensureHooks(healHosts, supervisorRoot);
         if (healed.installed.length > 0) {
-          write(`[监工] 已补装 hook：${healed.installed.join("、")}\n`);
+          write(
+            t(
+              `[supervisor] hooks installed: ${healed.installed.join(", ")}\n`,
+              `[监工] 已补装 hook：${healed.installed.join("、")}\n`,
+            ),
+          );
         }
-        for (const f of healed.failed) write(`[监工] hook 补装失败（${f.id}）：${f.message}\n`);
+        for (const f of healed.failed)
+          write(
+            t(
+              `[supervisor] hook install failed (${f.id}): ${f.message}\n`,
+              `[监工] hook 补装失败（${f.id}）：${f.message}\n`,
+            ),
+          );
       }
-      if (flagBool(p, "detach")) return await detachSupervisor(supervisorRoot);
       /*
        * “启动默认不派单”放在主循环里判定：队列里还有待办时，把上次未完成的派单逐张标记暂停；
        * 没有待办就直接待命在线（不派单、不轮询、不退出），等用户派单。
@@ -1262,9 +1261,20 @@ function runningSupervisorNotice(root: string): string | null {
   const age = Math.max(0, Math.round(Date.now() / 1000 - rec.heartbeat_ts));
   const url = String(rec.board_url ?? "").trim();
   return [
-    `[监工] 已经在运行：pid ${rec.pid}，第 ${rec.ticks} 轮，心跳 ${age} 秒前。`,
-    url ? `[监工] 看板：${url}` : "[监工] 看板未开启（启动时指定了 --no-board）。",
-    "[监工] 重新开启方式：先执行 capitalist supervise-stop，或使用 --force 接管。",
+    t(
+      `[supervisor] already running: pid ${rec.pid}, tick ${rec.ticks}, heartbeat ${age}s ago.`,
+      `[监工] 已经在运行：pid ${rec.pid}，第 ${rec.ticks} 轮，心跳 ${age} 秒前。`,
+    ),
+    url
+      ? t(`[supervisor] board: ${url}`, `[监工] 看板：${url}`)
+      : t(
+          "[supervisor] board disabled (--no-board).",
+          "[监工] 看板未开启（启动时指定了 --no-board）。",
+        ),
+    t(
+      "[supervisor] to restart: run capitalist supervise-stop, or take over with --force.",
+      "[监工] 重新开启方式：先执行 capitalist supervise-stop，或使用 --force 接管。",
+    ),
   ].join("\n");
 }
 

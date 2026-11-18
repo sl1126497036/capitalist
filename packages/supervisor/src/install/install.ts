@@ -20,7 +20,6 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { writeJson } from "../core/record/json";
-import { BRIDGE_PLATFORM, bridgeLogPath, startBridgeNow } from "../core/platform/bridge";
 import type { HostImpl, InstallContext, InstallEntry } from "../agent/contract";
 import { all, byId, normalize } from "../agent/registry";
 import { watchConfigPath } from "../agent/locations";
@@ -406,7 +405,7 @@ function hookSettingsFile(impl: HostImpl, root?: string): string | null {
   /*
    * 用户级落点：项目里不建配置目录。
    *
-   * WorkBuddy 一旦在项目里看到 `.codebuddy` 就转入受限模式，bash 不可用，插件等于没装。
+   * 桌面端实现在项目里看到同族 CLI 的配置目录就转入受限模式，bash 不可用，插件等同未安装。
    * 这类宿主的 hook 只能写用户级，代价是本机所有该宿主会话都会触发，取舍见 impl 注释。
    */
   if (impl.userLevelHook === true) return join(homedir(), impl.configDir, impl.settingsFile);
@@ -451,7 +450,7 @@ function withHost(impl: HostImpl, text: string): string {
  *
  * @returns 退出码。全部成功时返回 0。
  */
-export function runInstall(opts: InstallOptions): number {
+export async function runInstall(opts: InstallOptions): Promise<number> {
   const { impls, unknown } = resolveHosts(opts.hosts);
   if (unknown.length > 0) {
     process.stderr.write(
@@ -547,26 +546,6 @@ export function runInstall(opts: InstallOptions): number {
       label: "监工手册",
       reasons: [`原因：${err instanceof Error ? err.message : String(err)}`],
     });
-  }
-
-  /*
-   * Windows：拉起沙箱外启动器。
-   *
-   * 宿主的命令通道会在命令结束时回收整棵进程树（Job 对象），detached 只脱离控制台。
-   * 这里在用户终端里拉起启动器，启动器不在那条命令的 Job 里，`--detach` 转交后才常驻。
-   * 不写自启、不写注册表：启动器在本机重启后失效，重跑 install 或 `capitalist serve` 即可。
-   */
-  if (!dryRun && BRIDGE_PLATFORM) {
-    try {
-      const pid = startBridgeNow(process.argv[1] ?? "");
-      details.push(
-        pid > 0
-          ? `启动器：pid ${pid}，日志见 ${bridgeLogPath()}`
-          : `启动器：未启动，日志见 ${bridgeLogPath()}`,
-      );
-    } catch (err) {
-      notes.push(`启动器：未启动，${String((err as Error).message ?? err)}`);
-    }
   }
 
   if (done.length > 0) {

@@ -30,7 +30,7 @@ export interface UsageFigures {
   cost_usd: number | null;
   /** 该次运行的计费方式，前端据此决定显示 金额 / tokens / 积分 */
   billing_unit: BillingUnit;
-  /** 积分消耗（积分台账按时间窗摊算；无摊算记录时为 null，界面回落按 token 显示） */
+  /** 积分消耗（积分台账按时间窗分摊；无分摊记录时为 null，界面改用 token 显示） */
   credit: number | null;
   /** 积分单位；无来源时为空串 */
   credit_unit: string;
@@ -54,7 +54,7 @@ export interface UsageFigures {
   model_version: string;
   /** 开始时刻（工作进程记录的 `started_at`） */
   started_at: string;
-  /** 结束时刻（result 时间戳 > 最后一条带时间戳的行 > 派单结单时刻） */
+  /** 结束时刻（result 时间戳 > 最后一条带时间戳的行 > 派单结束时刻） */
   ended_at: string;
   /** 读数来源：官方汇总 / 日志逐条求和 / 没有 */
   source: "result" | "stream" | "mixed" | "none";
@@ -536,7 +536,7 @@ function atSec(s: string): number {
   return Number.isFinite(t) ? t / 1000 : 0;
 }
 
-/** 一个工作进程的用量读数；给 root 时一并带出积分摊算。 */
+/** 一个工作进程的用量读数；给 root 时一并带出积分分摊。 */
 export function workerUsage(w: WorkerRecord, dispatches: readonly Dispatch[] = [], root = ""): UsageFigures {
   const scan = w.log ? scanLog(w.log) : null;
   const d = w.dispatch ? dispatches.find((x) => x.id === w.dispatch) : undefined;
@@ -549,7 +549,7 @@ export function workerUsage(w: WorkerRecord, dispatches: readonly Dispatch[] = [
   const model =
     rawModel === FAST_MODEL_ALIAS && assist?.concreteModel ? assist.concreteModel : rawModel;
   const endedAt = res?.at || scan?.lastTs || doneAt || "";
-  /* 积分取账号级台账，与日志是否可读无关：日志被清理后已有摊算记录仍要显示。 */
+  /* 积分取账号级台账，与日志是否可读无关：日志被清理后已有分摊记录仍要显示。 */
   const credit = root ? creditOfWorker(root, w.id) : null;
   const creditUnitStr = root ? creditUnit(root) : "";
 
@@ -572,7 +572,7 @@ export function workerUsage(w: WorkerRecord, dispatches: readonly Dispatch[] = [
   const cacheRead = res ? res.cacheRead : (assist?.cacheRead ?? 0);
   const cacheWrite = res ? res.cacheWrite : (assist?.cacheWrite ?? 0);
   const costUsd = res?.costUsd ?? null;
-  /* 无摊算读数时 `credit` 为 null，维持 token 口径。 */
+  /* 无分摊读数时 `credit` 为 null，维持 token 口径。 */
   /* 上下文已用优先取 `_meta` 读数；`result` 的 usage 为整轮累计值，不作为占用。无读数时按会话文本估算并标 `context_estimate`。 */
   const hostCtx = res?.contextUsed ?? assist?.contextUsed ?? null;
   const estimated = hostCtx === null && assist ? estimateContextTokens(assist.ctxChars) : 0;
@@ -592,7 +592,7 @@ export function workerUsage(w: WorkerRecord, dispatches: readonly Dispatch[] = [
     cache_write_tokens: cacheWrite,
     total_tokens: input + output,
     cost_usd: costUsd,
-    // R8：金额为 0 / 缺失 -> 不走美元计价；有积分摊算读数 -> 按积分计费。
+    // R8：金额为 0 / 缺失 -> 不走美元计价；有积分分摊读数 -> 按积分计费。
     billing_unit: credit !== null ? "credit" : costUsd !== null && costUsd > 0 ? "usd" : "token",
     credit,
     credit_unit: credit !== null ? creditUnitStr || "积分" : "",

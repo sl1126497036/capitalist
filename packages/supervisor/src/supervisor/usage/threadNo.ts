@@ -17,7 +17,7 @@ const FILE = "thread-no.json";
 interface ThreadNoFile {
   /** 下一个待分配的号。缺省时按已有最大值 +1 推出。 */
   next?: number;
-  /** 线程 id -> 号。线程 id 是 `阶段/分片`（无分片为 `阶段/x血缘尾号`）。 */
+  /** 线程 id -> 号。线程 id 是 `阶段/分片`（无分片为 `阶段/x派生链尾号`）。 */
   ids?: Record<string, number>;
 }
 
@@ -45,7 +45,7 @@ function write(root: string, data: ThreadNoFile): void {
     writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, "utf8");
     renameSync(tmp, p);
   } catch {
-    /* Windows 上目标文件被其它进程占用时 `renameSync` 返回 EPERM，回落为直接覆盖写。 */
+    /* Windows 上目标文件被其它进程占用时 `renameSync` 返回 EPERM，改用直接覆盖写。 */
     try {
       writeFileSync(p, `${JSON.stringify(data, null, 2)}\n`, "utf8");
     } catch {

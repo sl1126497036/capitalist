@@ -5,13 +5,10 @@
  * （没起、没了、被接管）。
  */
 
-import { spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readJson } from "../../core/record/json";
 import { supervisorDir } from "../../core/record/paths";
-import { pidAlive, sleepSync } from "../../core/record/process";
-import { BRIDGE_PLATFORM, askBridge } from "../../core/platform/bridge";
 
 import { supervisorDisplayState, SUPERVISOR_STATE_LABEL } from "../../core/record/state";
 import { closeTask, promoteTask, stopWorker, listDirectives, directiveMatches, directiveRef, isDirectiveOpen, markDirectiveOutcome, dropDirectivesFor, DIRECTIVE_OUTCOMES, type DirectiveOutcome } from "../../core/dispatch/commands";
@@ -47,103 +44,15 @@ import type { Dispatch, WorkerRecord } from "../../core/record/supervisor";
 import { flagBool, flagString, type Parsed } from "../args";
 import { rootOrDie } from "./context";
 
-/** 报完成之后的待确认窗口。到点没人管就自动结单。 */
+/** 报完成之后的待确认窗口。到点没人管就自动结束。 */
 const REVIEW_WINDOW_MS = 3 * 60 * 1000;
 import { die, write, writeJson } from "../output";
 
-/** 后台起监工。 */
-export async function detachSupervisor(root: string): Promise<number> {
-  const entry = process.argv[1];
-  if (!entry) die("拿不到入口路径，无法后台启动；改为前台执行 capitalist supervise");
-  /*
-   * 令牌已由父进程在读取登录态时取得并留在进程环境，后台子进程直接继承；子进程不再读第二次，
-   * 宿主因此不会为同一次启动问两遍。
-   */
-  const args = process.argv.slice(2).filter((a) => a !== "--detach");
-
-  /*
-   * Windows 上先交给启动器：命令一返回，本进程所在的 Job 会回收整棵进程树，
-   * detached 只脱离控制台。启动器由用户终端拉起，不在这个 Job 里。
-   */
-  let pid = 0;
-  let viaServe = false;
-  if (BRIDGE_PLATFORM) {
-    const reply = await askBridge({ type: "spawn", cwd: process.cwd(), args: [entry, ...args] });
-    if (reply?.ok && reply.pid) {
-      pid = reply.pid;
-      viaServe = true;
-    }
-  }
-
-  if (!pid) {
-    /*
-     * 后台监工的输出去 `.capitalist/supervisor.log`。
-     *
-     * 原先用 `stdio: "ignore"`，进程退出后没有任何可查的东西——连报错文案里让用户
-     * “查看 supervisor.log”都无从看起，两次排查都只能靠猜。留言留档后，崩溃栈与
-     * 最后一条 tick 都能对上时间。
-     */
-    const logFd = openSync(join(supervisorDir(root), "supervisor.log"), "a");
-    const child = spawn(process.execPath, [entry, ...args], {
-      cwd: process.cwd(),
-      detached: true,
-      stdio: ["ignore", logFd, logFd],
-      // 后台起监工时不要弹控制台窗口：这是“脱离终端”的进程，弹窗只会打断用户。
-      windowsHide: true,
-    });
-    /* fd 已复制给子进程，父进程这份可以关掉。 */
-    closeSync(logFd);
-    child.unref();
-    pid = child.pid ?? 0;
-    if (!pid) die("未取得后台进程 pid，请在前台执行 capitalist supervise");
-  }
-
-  const verdict = waitDetachedAlive(root, pid, DETACH_PROBE_MS);
-  if (verdict === "died") {
-    if (viaServe) {
-      die(
-        [
-          `后台监工（pid ${pid}）启动后立刻退出。`,
-          "查看 .capitalist/supervisor.log 末尾几行：常见原因是宿主 CLI 登录态不可用（Authentication required）。",
-        ].join("\n"),
-      );
-    }
-    die(
-      [
-        `后台监工（pid ${pid}）启动后立刻退出，不要重试。`,
-        "执行 capitalist serve --status，未运行则重跑 capitalist install。",
-      ].join("\n"),
-    );
-  }
-  if (verdict === "alive") {
-    write(`监工已启动（pid ${pid}）。查看：capitalist workers\n`);
-  } else {
-    write(`监工已启动（pid ${pid}），心跳未确认。执行 capitalist status 复核。\n`);
-  }
-  return 0;
-}
-
-/** detach 后观察多久再下结论。 */
-const DETACH_PROBE_MS = 12_000;
-
 /**
- * 等后台监工写出第一份心跳。
+ * 后台启动监工。
  *
- * 只认 pid 对得上的记录：`.capitalist/supervisor.json` 里可能还躺着上一个监工的旧 pid，
- * 不比对就会把“上一个还活着”当成“新起的这个活着”。
+ * 已移除。监工在终端前台常驻，由用户执行命令启动；宿主会话内不提供启动入口。
  */
-function waitDetachedAlive(root: string, pid: number, budgetMs: number): "alive" | "died" | "unknown" {
-  const deadline = Date.now() + budgetMs;
-  let sawHeartbeat = false;
-  while (Date.now() < deadline) {
-    sleepSync(400);
-    if (!pidAlive(pid)) return "died";
-    const rec = loadSupervisor(root);
-    if (rec && rec.pid === pid && Date.now() - rec.heartbeat_ts * 1000 < 8000) sawHeartbeat = true;
-  }
-  if (!pidAlive(pid)) return "died";
-  return sawHeartbeat ? "alive" : "unknown";
-}
 
 /** 读取工作进程日志末尾的退出原因。 */
 function workerExitReason(root: string, w: WorkerRecord): string {
@@ -201,7 +110,7 @@ function patchDispatchRow(root: string, id: string, patch: Partial<Dispatch>): v
   writeJsonl(dispatchPath(root), rows);
 }
 
-/** 从派单台账取这张单的阶段/分片/血缘，收工闸靠它判断“哪些插话属于这一片”。 */function loadDispatchScope(root: string, id: string): { stage: string; shard: string; lineage: string } {
+/** 从派单台账取这张单的阶段/分片/派生链，收工闸靠它判断“哪些插话属于这一片”。 */function loadDispatchScope(root: string, id: string): { stage: string; shard: string; lineage: string } {
   const d = readDispatches(root).find((x) => String(x.id) === id);
   return {
     stage: String(d?.stage ?? ""),
@@ -259,7 +168,7 @@ async function awaitVerdict(
     /* 3 秒一次：监工调度周期为 5 秒，更密的轮询没有收益。 */
     await new Promise((r) => setTimeout(r, 3000));
     /*
-     * 就地打回：监工发现原进程还活着，就把原因写成一次性回执，不结单、不重派。
+     * 就地打回：监工发现原进程还活着，就把原因写成一次性回执，不结束、不重派。
      * 读走即删，同一份打回只该退一次，否则 worker 每报一次都被这条旧结论挡回来。
      */
     const reject = readJson<{ why?: string } | null>(rejectFile, null);
@@ -329,7 +238,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
   const selfWorkerId = process.env.CAPITALIST_WORKER_ID ?? "";
   if (selfWorkerId) releaseAll(root, selfWorkerId);
 
-  /** 报“完成”不直接结单，先挂成待确认。 */
+  /** 报“完成”不直接结束，先挂成待确认。 */
   if (status === "done") {
     const gap = restartEvidenceGap(root, id);
     if (gap) {
@@ -338,7 +247,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       write("工作进程不重启监工：这会终止正在调度它的进程。处理方式：\n");
       write("  1) 由外部拉起（scripts\\restart-supervisor.bat 或计划任务）；\n");
       write("  2) 或先 capitalist reload 把进度落盘，再由外部重起；\n");
-      write(`  3) 确认已重启后，用 capitalist close ${id} --note "<新 pid / 重启时间>" 手动结项。\n`);
+      write(`  3) 确认已重启后，用 capitalist close ${id} --note "<新 pid / 重启时间>" 手动结束任务。\n`);
       return 1;
     }
     const target = loadDispatchScope(root, id);
@@ -368,7 +277,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       return !Number.isFinite(at) || Date.now() - at < DIRECTIVE_STALE_MS;
     });
     if (pending.length > 0) {
-      write(`暂不能结单：还有 ${pending.length} 项要求未给出结论\n`);
+      write(`暂不能结束：还有 ${pending.length} 项要求未给出结论\n`);
       /*
        * 直接把命令行拼好。
        *
@@ -389,9 +298,9 @@ export async function cmdReport(p: Parsed): Promise<number> {
       return 1;
     }
 
-    /** 先判断监工是否在线：不在线时自行结单，不空等。 */
+    /** 先判断监工是否在线：不在线时自行结束，不空等。 */
     if (!isSupervisorAlive(root)) {
-      const why = "监工不在，无人裁决，按现状结单";
+      const why = "监工不在，无人裁决，按现状结束";
       const forced = finishDispatch(root, id, "done", note ? `${note}（${why}）` : why);
       if (!forced) {
         die(`派单不存在或已了结：${id}`);
@@ -407,7 +316,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
         note: why,
         by: "self",
       });
-      write(`监工未运行，无法裁决：${id} 已按现状结单。\n`);
+      write(`监工未运行，无法裁决：${id} 已按现状结束。\n`);
       if (note) write(`备注：${note}\n`);
       write("监工启动后 `capitalist tasks` 显示该项已验收；结论不符时执行 capitalist dispatch 重开派单。\n");
       return 0;
@@ -466,9 +375,9 @@ export async function cmdReport(p: Parsed): Promise<number> {
       /* 等监工裁决：要等它发出去（不等的话 CLI 退出会把请求带走）。 */
       await wakeSupervisor(root).catch(() => false);
     } catch {
-      /* 队列写不进去不影响结单流程：审查是增强，不是前置条件 */
+      /* 队列写不进去不影响结束流程：审查是增强，不是前置条件 */
     }
-    write(`已上报完成 ${id}，等监工裁决（它看完报告与证据再决定结不结单，不再有倒计时）\n`);
+    write(`已上报完成 ${id}，等监工裁决（它看完报告与证据再决定结不结束，不再有倒计时）\n`);
     if (note) write(`说明：${note}\n`);
     if (added) write(`已记录新增要求，监工按最新要求审这一单：${added.slice(0, 200)}\n`);
     write("这一单在监工裁决前仍然算在途：不要再派一张去做同一件事。\n");
@@ -668,8 +577,8 @@ export function cmdWorkers(p: Parsed): number {
 /**
  * 中断指定工作进程。
  *
- * 结束进程与把它的派单一并按失败结单，两件事都在 core/commands.stopWorker 里做。
- * 只标 worker 不结单会留下 claimed 僵尸：监工以为有人还在干，这张单不再重派，界面上的
+ * 结束进程与把它的派单一并按失败结束，两件事都在 core/commands.stopWorker 里做。
+ * 只标 worker 不结束会留下 claimed 僵尸：监工以为有人还在干，这张单不再重派，界面上的
  * 进行中状态一直转着。
  */
 export function cmdStopWorker(p: Parsed): number {
@@ -687,7 +596,7 @@ export function cmdStopWorker(p: Parsed): number {
       (r.dispatch
         ? requeue
           ? `派单 ${r.dispatch} 已退回待派，下一轮调度重新拉起。\n`
-          : `派单 ${r.dispatch} 已按失败结单（不留 claimed 僵尸）。\n`
+          : `派单 ${r.dispatch} 已按失败结束（不留 claimed 僵尸）。\n`
         : "该 worker 没有在途派单。\n") +
       (requeue
         ? "后果：下一轮调度重派这一单，会话按同一 lane 续接，历史不丢失。\n"
@@ -697,10 +606,10 @@ export function cmdStopWorker(p: Parsed): number {
 }
 
 /**
- * 手动结项：`capitalist close <派单id|worker-id|分片>`。
+ * 手动结束任务：`capitalist close <派单id|worker-id|分片>`。
  *
- * 与 `stop-worker` 的差别是调度后果：那个按失败结单、下一轮调度 会重派，这个关成终态
- * `closed`，调度层不再为它补单。排队中的单没有进程，所以三步里只有“结单”这一步。
+ * 与 `stop-worker` 的差别是调度后果：那个按失败结束、下一轮调度会重派，这个关成终态
+ * `closed`，调度层不再为它重新派单。排队中的单没有进程，所以三步里只有“结束”这一步。
  */
 export function cmdClose(p: Parsed): number {
   const target = p.positional[0];
@@ -710,7 +619,7 @@ export function cmdClose(p: Parsed): number {
   const r = closeTask(root, target, { reason, by: "user" });
   if (!r) {
     die(
-      `没有可结项的单：${target}（用看板任务队列或 capitalist workers 查看；` +
+      `没有可结束的单：${target}（用看板任务队列或 capitalist workers 查看；` +
         "已 done / failed / closed 的单不能再关）",
     );
   }
@@ -723,7 +632,7 @@ export function cmdClose(p: Parsed): number {
   const dropped = dropDirectivesFor(
     root,
     String(r.dispatch),
-    reason ? `用户结项：${reason}` : "用户手动结项，追加内容不再投递",
+    reason ? `用户结束任务：${reason}` : "用户手动结束任务，追加内容不再投递",
   );
 
   if (flagBool(p, "json")) {
@@ -732,7 +641,7 @@ export function cmdClose(p: Parsed): number {
   }
   const where = `${r.stage}${r.shard ? `/${r.shard}` : " 整阶段"}`;
   write(
-    `已结项 ${r.dispatch}（${where}），原状态 ${r.from} -> closed。\n` +
+    `已结束 ${r.dispatch}（${where}），原状态 ${r.from} -> closed。\n` +
       (r.worker
         ? `工作进程 ${r.worker}（pid ${r.pid}）${r.killed ? "已发送 SIGTERM" : "已处于终态或已不在"}。\n`
         : "这一单还在排队，没有运行中的进程，已从队列撤下。\n") +
@@ -741,7 +650,7 @@ export function cmdClose(p: Parsed): number {
       (dropped.length
         ? `${dropped.length} 条指向它的追加内容已标记不再投递（否则会把它翻回 open）。\n`
         : "") +
-      "后果：监工不再为它补单；要重开请用 capitalist update inbox/dispatch <id> status open。\n",
+      "后果：监工不再为它重新派单；要重开请用 capitalist update inbox/dispatch <id> status open。\n",
   );
   return 0;
 }

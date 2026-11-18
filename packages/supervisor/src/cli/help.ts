@@ -63,7 +63,7 @@ const HELP_GROUPS: HelpGroup[] = [
     items: [
       {
         cmd: "start <目标>",
-        brief: ["创建或续用任务根。省略契约时缺省 minimal"],
+        brief: ["创建或续用任务根。省略契约时缺省为 minimal"],
         opts: [
           { f: "--contract <名|路径>", d: ["契约名或路径"] },
           { f: "--root <目录>", d: ["任务根目录"] },
@@ -216,6 +216,8 @@ const HELP_GROUPS: HelpGroup[] = [
         cmd: "supervise <目标>",
         brief: [
           "创建任务根并常驻：派单、验收、回收重派。队列无待办时转入待命。",
+          "在终端前台运行，随终端存活；关闭终端后监工下线。",
+          "宿主会话内不提供启动入口，启动时输出终端命令后退出。",
           "启动后不执行上次未完成的派单：这些单逐张标为暂停，队列原样保留；",
           "新派入的单不受暂停影响，可立即执行。唤醒暂停单用 capitalist wake --user，",
           "或在看板按“已暂停”筛选后逐单唤醒。",
@@ -236,7 +238,7 @@ const HELP_GROUPS: HelpGroup[] = [
           { f: "--worker-model <模型>", d: ["工作进程使用的模型"] },
           {
             f: "--effort <档位>",
-            d: ["推理强度，缺省 high；只改思考深度，不改模型；", "非法值改用 high 并在启动时输出说明"],
+            d: ["推理强度，缺省 high；只改思考深度，不改模型；", "非法值按 high 处理，并在启动时输出说明"],
           },
           {
             f: "--capitalist-model <模型>",
@@ -259,15 +261,9 @@ const HELP_GROUPS: HelpGroup[] = [
           { f: "--board-quiet-ms N", d: ["看板合并窗口，缺省 8000ms（CAPITALIST_BOARD_RELOAD_QUIET_MS）"] },
           { f: "--board-min-gap-ms N", d: ["看板最小间隔，缺省 60000ms（CAPITALIST_BOARD_RELOAD_MIN_GAP_MS）"] },
           { f: "--force", d: ["接管并清除熔断"] },
-          { f: "--detach", d: ["后台运行"] },
         ],
       },
       { cmd: "supervise-stop", brief: ["请求监工退出（下一 tick 生效）"] },
-      {
-        cmd: "serve",
-        brief: ["Windows 专用启动器，由 capitalist install 拉起；", "--detach 依赖启动器，未运行时重跑 capitalist install"],
-        opts: [{ f: "--status", d: ["查看启动器是否在运行"] }],
-      },
       { cmd: "auth", brief: ["已移除；认证使用宿主自身登录态"] },
       {
         cmd: "auth-check",
@@ -321,15 +317,15 @@ const HELP_GROUPS: HelpGroup[] = [
         cmd: "report <派单id>",
         brief: ["工作进程上报，由工作进程内部调用"],
         opts: [
-          { f: "--status done|failed", d: ["结单状态"] },
-          { f: '--note "..."', d: ["结单说明"] },
+          { f: "--status done|failed", d: ["结束状态"] },
+          { f: '--note "..."', d: ["结束说明"] },
           {
             f: '--outcome "<编号>=<结论>;…"',
             d: [
               "为派单正文中的每条用户插话给出结论，编号取正文里的",
               "[方括号]；结论取 done / not_mine / blocked，not_mine 注明",
               "归属派单，blocked 注明阻塞原因，可在结论后用冒号补充说明。",
-              "未给出结论的条目阻止结单，并输出可复制的命令行。",
+              "未给出结论的条目阻止结束，并输出可复制的命令行。",
             ],
           },
         ],
@@ -363,12 +359,12 @@ const HELP_GROUPS: HelpGroup[] = [
       { cmd: "release [<分片>]", brief: ["交还被接管的分片，恢复监工自动重派与自动验收"] },
       {
         cmd: "stop-worker <id>",
-        brief: ["中断指定工作进程：结束其进程，并把它的派单按失败结单", "（下一 tick 重派，分片被接管或登记阻塞时除外）"],
+        brief: ["中断指定工作进程：结束其进程，并把它的派单按失败结束", "（下一 tick 重派，分片被接管或登记阻塞时除外）"],
       },
       {
         cmd: "close <派单id|worker-id|分片>",
-        brief: ["手动结项：运行中与排队中的派单均可关闭，状态置为终态 closed", "并写记录；监工不再为它补派单"],
-        opts: [{ f: '--reason "<原因>"', d: ["结项原因"] }],
+        brief: ["手动结束：运行中与排队中的派单均可关闭，状态置为终态 closed", "并写记录；监工不再为它补派单"],
+        opts: [{ f: '--reason "<原因>"', d: ["结束原因"] }],
       },
       {
         cmd: "promote <派单id|worker-id|分片>",
@@ -403,7 +399,7 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       {
         cmd: "feed",
-        brief: ["回报流水（工作进程上报、判死、阶段推进）最近 N 条"],
+        brief: ["回报流水（工作进程上报、判定失败、阶段推进）最近 N 条"],
         opts: [
           { f: "--limit N", d: ["条数"] },
           { f: "--json", d: ["输出 JSON"] },
@@ -532,7 +528,7 @@ export const HELP =
  * 条目说明生效时机：未开工的派单并入原派单，执行中的派单由 hook 送达；中断会触发重派。
  */
 export const COMMAND_HELP: Record<string, string> = {
-  say: `capitalist say "<文本>" [--target <派单id>] [--lineage <血缘>] [--shard <分片>] [--thread <线程>]
+  say: `capitalist say "<文本>" [--target <派单id>] [--lineage <派生链>] [--shard <分片>] [--thread <线程>]
 给派单追加一条消息。
   - 写入 .capitalist/direct.jsonl，字段 at / text / target / lineage / shard / thread / consumed
   - 未开工的派单：监工派单时读取未消费消息拼进 action，追加内容并入原派单，消费后标记 consumed
@@ -540,7 +536,7 @@ export const COMMAND_HELP: Record<string, string> = {
     送达后标记已用（consumed_via=hook），不重复注入
   - 记录 consumed_by / consumed_at / consumed_via，标明接收派单与送达方式，
     台账另有 direct_inject（登记）与 direct_deliver（送达）事件
-  - --target 将消息绑定到指定派单或其同血缘重派单；绑定到工作进程时不转发给其他派单
+  - --target 将消息绑定到指定派单或其同派生链重派单；绑定到工作进程时不转发给其他派单
   - 不带定位参数时对下一次任意派单生效；带 --shard 时只对目标分片的派单生效
   - --thread 用于界面回显归属，不改变生效范围`,
   direct: `capitalist direct "<文本>" [--shard <分片>] [--thread <线程>]
@@ -558,14 +554,14 @@ export const COMMAND_HELP: Record<string, string> = {
   - 生效时机：下一 tick 起监工恢复该分片的自动重派与自动验收`,
   "stop-worker": `capitalist stop-worker <worker-id>
 中断指定工作进程。
-  - 结束该进程（SIGTERM），并把它的派单按失败结单
+  - 结束该进程（SIGTERM），并把它的派单按失败结束
   - 下一 tick 重派该派单；分片被接管（capitalist takeover）或登记阻塞（capitalist block）时除外
   - worker-id 由 capitalist workers 输出`,
   close: `capitalist close <派单id|worker-id|分片> [--reason "原因"]
-手动结项：运行中与排队中的派单均可关闭。
+手动结束：运行中与排队中的派单均可关闭。
   - 派单状态置为终态 closed，写 done_at / closed_at / closed_by / note
-  - 存在运行中的进程时，先写 closed 结单再发送 SIGTERM；顺序颠倒会让进程退出回调
-    按失败结单，下一 tick 重派
+  - 存在运行中的进程时，先写 closed 结束再发送 SIGTERM；顺序颠倒会让进程退出回调
+    按失败结束，下一 tick 重派
   - 写 dispatch_closed 事件到 .capitalist/events.jsonl（含原状态、是否发送过 SIGTERM）
   - 监工不再为已关闭分片补单；关闭的分片计入完成数，不阻塞阶段推进
   - stop-worker 中断进程并触发重派；close 关闭派单且不再补单

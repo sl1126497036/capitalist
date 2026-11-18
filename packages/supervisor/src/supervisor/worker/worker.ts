@@ -346,7 +346,7 @@ export function blockerInfoOf(d: Partial<Dispatch> | undefined | null): BlockerI
 
 /**
  * 取同一条链上一张失败单的卡点素材；没有失败前身时返回 null。
- * 先按血缘查找，重派建单会写入新的 `lineage` 而接不上，故退回按分片匹配。
+ * 先按派生链查找，重派建单会写入新的 `lineage` 而接不上，故退回按分片匹配。
  */
 export function findPreviousBlocker(
   root: string,
@@ -408,11 +408,11 @@ export function buildAcceptBlock(d: Dispatch): string[] {
     "【本次验收 · 上一轮没过的地方优先，其余按原验收清单，不降低标准】",
     accept,
     "报告时逐条说明这一条现在怎么满足的；未做到的如实写，不写“已优化”这类无法核对的说法。",
-    "核对方式按下面的结单口径：以代码证据与相关单元测试为准。",
+    "核对方式按下面的结束口径：以代码证据与相关单元测试为准。",
   ];
 }
 
-/** 结单口径正文在 `closeOut.ts`，与监工判定层共用一份，避免执行侧与审查侧出现两套标准；三个提示词入口都从本导出取用。 */
+/** 结束口径正文在 `closeOut.ts`，与监工判定层共用一份，避免执行侧与审查侧出现两套标准；三个提示词入口都从本导出取用。 */
 export function buildCloseOutRules(heading?: string): string[] {
   return closeOutRules(heading);
 }
@@ -431,7 +431,7 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
     "  2. 派单要求的事情若已经实现，不要重做：在报告里指出实现位置（文件 + 行号）与差异；",
     "     只做了一半的只补缺，不推倒重来。",
     "  3. 本单要求若与已验收的做法相反（要恢复一个已被撤掉的东西），先读 `.capitalist/tasks.jsonl` 里",
-    "     同一线程已结单任务的 `note`（裁决结论写着当时定的口径），按本单最新要求做，",
+    "     同一线程已结束任务的 `note`（裁决结论写着当时定的口径），按本单最新要求做，",
     "     并在报告里写明推翻了哪一条，不留两套实现。",
     at
       ? `  4. 目标文件 mtime 晚于本单创建时刻 ${at.iso} 时，按最新内容做，不按旧快照覆盖。`
@@ -610,7 +610,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
       ? "  3. 只读：代码、配置、台账均不改。"
       : "  3. 可以改代码，但只改与这个卡点直接相关的地方；不顺带重构，不做其它单的任务。",
     ``,
-    /* 修复单同样按业务单的结单口径验收：不要求执行全部测试或提供截图，证据为改动点及与卡点直接相关的复现/测试。 */
+    /* 修复单同样按业务单的结束口径验收：不要求执行全部测试或提供截图，证据为改动点及与卡点直接相关的复现/测试。 */
     ...buildCloseOutRules(`【${CN[n + 1]}、怎么算做完】`),
     ``,
     `【${CN[n + 2]}、收尾】`,

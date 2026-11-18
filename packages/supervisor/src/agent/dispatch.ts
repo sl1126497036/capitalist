@@ -20,10 +20,13 @@ import {
   openViolations,
   recordEvent as writeEvent,
   recordReview,
+  recordToolEvent,
   recordViolation as writeViolation,
   touchSession,
 } from "../core/record/ledger";
-import { detectAction, extractLocalPaths, localCheck, localDeleteCheck, normLocal, tightenLocal } from "../core/guard/localGuard";
+import { detectAction, extractLocalPaths, localCheck, normLocal, tightenLocal } from "../core/guard/localGuard";
+/* 重复越界的升级提示与申请台账共用一份文案。 */
+import { escalation } from "../core/guard/requests";
 import {
   acquireWithWait,
   checkStale,
@@ -34,6 +37,7 @@ import {
 import { findRoot, supervisorDir } from "../core/record/paths";
 import { skillDirs, watchConfigPath } from "./locations";
 import { decide } from "../core/guard/permission";
+import { deleteGate, outsideGate, type GuardBase } from "./guardGate";
 import { loadState, resolveModeFor } from "../core/record/state";
 import { isSupervisorAlive, listWorkers, loadWorker, readDispatches, touchWorker } from "../core/record/supervisor";
 import type { ActionKind, GateResult, LocalDecision } from "../core/types";
@@ -109,145 +113,18 @@ function allowedBy(d: { code: number; stdout?: string | undefined }): boolean {
 }
 
 /**
- * 命令行入口名。`capitalist` 与 `cap` 是同一个 bin 的两个别名（见 package.json 的 `bin`）。
- */
-const CLI_ENTRY = new Set(["capitalist", "capitalist.js", "capitalist.cjs", "cap", "cap.js", "cap.cjs"]);
-
-/** 包管理器的临时执行前缀。`npx capitalist justify …` 与直接调用等价。 */
-const RUNNER_ENTRY = new Set(["npx", "pnpx", "bunx"]);
-
-/** `node` 一类解释器，其后第一个非开关参数是脚本路径。 */
-const NODE_ENTRY = /^node(js)?(\.exe)?$/i;
-
-/** 取路径最后一段，统一正斜杠并转小写。 */
-function baseName(p: string): string {
-  const s = p.replace(/\\/g, "/").replace(/\/+$/, "");
-  const i = s.lastIndexOf("/");
-  return (i < 0 ? s : s.slice(i + 1)).toLowerCase();
-}
-
-/** 引号内的分隔符不参与切分。 */
-function shellSegments(cmd: string): string[] {
-  const out: string[] = [];
-  let buf = "";
-  let quote = "";
-  for (let i = 0; i < cmd.length; i += 1) {
-    const ch = cmd[i] as string;
-    if (quote) {
-      if (ch === "\\" && quote === '"') {
-        buf += ch;
-        const nx = cmd[i + 1];
-        if (nx !== undefined) {
-          buf += nx;
-          i += 1;
-        }
-        continue;
-      }
-      if (ch === quote) quote = "";
-      buf += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      buf += ch;
-      continue;
-    }
-    if (ch === "\n" || ch === ";" || ch === "&" || ch === "|") {
-      out.push(buf);
-      buf = "";
-      const nx = cmd[i + 1];
-      if ((ch === "&" || ch === "|") && nx === ch) i += 1;
-      continue;
-    }
-    buf += ch;
-  }
-  out.push(buf);
-  return out.filter((s) => s.trim() !== "");
-}
-
-/** 引号感知的分词：引号内的空白不切分，引号本身不进入结果。 */
-function shellTokens(seg: string): string[] {
-  const out: string[] = [];
-  let buf = "";
-  let quote = "";
-  for (let i = 0; i < seg.length; i += 1) {
-    const ch = seg[i] as string;
-    if (quote) {
-      if (ch === "\\" && quote === '"') {
-        const nx = seg[i + 1];
-        if (nx !== undefined) {
-          buf += nx;
-          i += 1;
-        }
-        continue;
-      }
-      if (ch === quote) {
-        quote = "";
-        continue;
-      }
-      buf += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (buf !== "") out.push(buf);
-      buf = "";
-      continue;
-    }
-    buf += ch;
-  }
-  if (buf !== "") out.push(buf);
-  return out;
-}
-
-/**
- * 脚本路径是不是本项目的命令行入口。
+ * 命令行的切分与识别在 core/guard/cmdParse。
  *
- * 认三种写法：直接是 bin 别名、路径里带 `cli` 的 `main.js`、与本 hook 同包的
- * `dist/cli/main.js` 绝对路径。第三种的判据是真实路径比对，避免把任意项目的
- * `main.js` 当成登记入口。
+ * 这里只保留判定流程；解析规则属于纯文本处理，与红线、边界判定分开维护。
  */
-function isProjectCli(script: string): boolean {
-  const p = script.replace(/\\/g, "/");
-  const base = baseName(p);
-  if (CLI_ENTRY.has(base)) return true;
-  if (!/^main\.(js|cjs|mjs)$/.test(base)) return false;
-  if (/\/cli\//.test(p)) return true;
-  const actual = normLocal(p, process.cwd());
-  const own = normLocal(join(__dirname, "..", "cli", "main.js"));
-  return actual !== "" && actual === own;
-}
 
-/** 单段命令是否在调用 `justify`。 */
-function isJustifySegment(seg: string): boolean {
-  const t = shellTokens(seg);
-  let i = 0;
-  while (i < t.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t[i] as string)) i += 1;
-  while (i < t.length && RUNNER_ENTRY.has(baseName(t[i] as string))) i += 1;
+/** 引号内不切分的分词与分段在 cmdParse 中实现。 */
 
-  const head = t[i];
-  if (head === undefined) return false;
+/** 引号感知的分词已移到 cmdParse。 */
 
-  let argAt = i + 1;
-  if (NODE_ENTRY.test(baseName(head))) {
-    let j = i + 1;
-    while (j < t.length && (t[j] as string).startsWith("-")) {
-      /* `-e` / `-p` 后面跟的是代码而不是脚本文件，这类调用不是登记动作。 */
-      if (/^(--?e|--?p|--eval|--print)(=|$)/.test(t[j] as string)) return false;
-      j += 1;
-    }
-    const script = t[j];
-    if (script === undefined || !isProjectCli(script)) return false;
-    argAt = j + 1;
-  } else if (!CLI_ENTRY.has(baseName(head))) {
-    return false;
-  }
+/** 入口路径识别已移到 cmdParse。 */
 
-  return t[argAt] === "justify";
-}
+/** 单段识别已移到 cmdParse。 */
 
 /**
  * 看板对话会话的 id 前缀。换代会生成 `capitalist-chat-c<代次>`，前缀一致。
@@ -258,24 +135,13 @@ const CHAT_SESSION_RX = /^capitalist-chat\b/;
  * 对话层不许执行的动作：只保留改状态机的两个。
  *
  * 禁动作是治症状：真正的问题是“一张单都没有就把阶段往下走”，那由 `advanceStage` 的派单
- * 判据解决，与对话层能跑什么命令无关。禁得太多会挡住用户口述的需求（登记、派单、结项、
+ * 判据解决，与对话层能跑什么命令无关。禁得太多会挡住用户口述的需求（登记、派单、结束、
  * 唤醒都是对话层该执行的），所以名单只留 `advance` 与 `adopt`。
  */
 const CHAT_WRITE_RX = /(^|[\s;&|/])capitalist(\.js)?\s+(advance|adopt)\b/;
 
-/**
- * 命令里是否有一次 `justify` 调用。
- *
- * 该命令免判本机边界：否则会出现“要放行必须先放行”的死锁，登记通道自身反而无法使用。
- * 识别因此宁严不宽：错认会让任意命令借 `justify` 字样绕过边界检查。
- *
- * 逐段识别：`rm -rf x && capitalist justify x "理由"` 只有第二段是登记动作。
- *
- * @param cmd shell 命令原文。
- */
-export function isJustifyInvocation(cmd: string): boolean {
-  return shellSegments(cmd).some(isJustifySegment);
-}
+import { isJustifyInvocation } from "../core/guard/cmdParse";
+export { isJustifyInvocation };
 
 interface Ctx {
   root: string;
@@ -296,20 +162,17 @@ function loadCtx(event: UnifiedEvent): Ctx | null {
 
 /** 记一条动作事件。台账写失败不影响判定。 */
 function recordEvent(ctx: Ctx, event: UnifiedEvent, extra: Record<string, unknown>, kind = "tool"): void {
-  // 工作进程拉起时注入了 CAPITALIST_WORKER_ID / CAPITALIST_DISPATCH_ID，宿主 CLI 与它起的 hook 都会继承。
-  const worker = process.env.CAPITALIST_WORKER_ID ?? "";
-  const dispatch = process.env.CAPITALIST_DISPATCH_ID ?? "";
-  /** 宿主给命令类工具带的描述文字一并落盘。 */
-  const desc = String(event.toolInput?.description ?? event.toolInput?.intent ?? "").trim();
-  writeEvent(ctx.root, kind, {
-    point: event.point,
-    tool: event.tool,
-    session: event.sessionId,
-    ...(worker ? { worker } : {}),
-    ...(dispatch ? { dispatch } : {}),
-    ...(desc ? { desc: desc.slice(0, 200) } : {}),
-    ...extra,
-  });
+  recordToolEvent(
+    ctx.root,
+    {
+      point: event.point,
+      tool: event.tool,
+      session: event.sessionId,
+      desc: String(event.toolInput?.description ?? event.toolInput?.intent ?? ""),
+    },
+    extra,
+    kind,
+  );
 }
 
 /**
@@ -387,12 +250,14 @@ function deliverPendingDirectives(
   );
 }
 
+/* 申请入队与回执在 agent/guardGate。 */
+
 /** on_action：唯一能在执行前拦住的位置。红线与本机边界分别判定，两者都要过。 */
-function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
+function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = false): HookDecision {
   const selfWorker = process.env.CAPITALIST_WORKER_ID ?? "";
   if (selfWorker) releaseTransient(ctx.root, selfWorker);
 
-  const delivered = deliverPendingDirectives(hook, event, ctx);
+  const delivered = offline ? null : deliverPendingDirectives(hook, event, ctx);
   if (delivered) return delivered;
 
   const isFileTool = FILE_TOOLS.has(event.tool);
@@ -405,7 +270,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision 
     const act: ActionKind = ["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(event.tool)
       ? "write"
       : "read";
-    const base = judgeLocal(hook, event, ctx, [p], act);
+    const base = judgeLocal(hook, event, ctx, [p], act, offline);
     /* 已被边界或红线拦截的动作不再申请锁。 */
     if (!allowedBy(base)) return base;
     return guardFileLock(hook, event, ctx, [p], act) as HookDecision;
@@ -442,28 +307,11 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision 
     return gate.decision === "BLOCK" ? hook.deny(describeBlock(ctx.contract, gate, cmd), event.point, event.sessionId) : hook.passthrough();
   }
 
-  // 删除类红线只标识“这是一次删除”，判定归更具体的路径检查，因此路径检查先跑。
-  if (gate.hits.some((h) => h.defer === "local_delete")) {
-    const del = localDeleteCheck(ctx.contract, ctx.root, cmd);
-    if (del.decision === "deny") {
-      recordEvent(ctx, event, { cmd: cmd.slice(0, 400), decision: "BLOCK", reason: "local_delete" });
-      const v = recordViolation(ctx, event, {
-        rule: "LOCAL-DELETE",
-        label: "删除越界",
-        evidence: del.hits.map((h) => `${h.path} ${h.why}`).join("；"),
-        decision: "BLOCK",
-        kind: "local",
-      });
-      return hook.deny(
-        `【删除拦截】只能删任务根以内的东西：\n` +
-          del.hits.map((h) => `  ${h.path}\n    ${h.why}`).join("\n") +
-          "\n要动根外的内容，先问用户，不要自己决定。" +
-          escalation(v.nth),
-        event.point,
-        event.sessionId,
-      );
-    }
-  }
+  /*
+   * 删除一律先申请：任务根内的删除同样要上报。目标不明确（通配符、没给目标）直接拒，
+   * 说不清删哪就无法核对影响。
+   */
+  if (act === "delete") return deleteGate(guardBase(ctx, event, hook, offline), cmd);
 
   const local = localCheck(ctx.contract, ctx.root, extractLocalPaths(cmd, ctx.root), act);
   const localTightened = tightenLocal(ctx.mode, local.decision, act, decide);
@@ -485,8 +333,8 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision 
       kind: "local",
     });
     return hook.deny(
-      `【本机边界拦截】这条命令要碰的位置不允许：${why}\n` +
-        "敏感区一律不碰；任务根以外的本机内容一律不删。换一条不碰它的做法。" +
+      `【本机边界拦截】这条命令要访问的位置不允许：${why}\n` +
+        "敏感区一律拒绝访问。需要访问其他范围时，先提交申请由监工裁决。" +
         escalation(v.nth),
       event.point,
       event.sessionId,
@@ -510,14 +358,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision 
   }
 
   if (localTightened === "justify") {
-    const p = local.hits[0]?.path ?? "";
-    return hook.deny(
-      `【本机边界】这条命令超出允许范围：${local.hits.map((h) => h.path).join("、")}\n` +
-        `先登记理由：capitalist justify "${p}" "<为什么必须碰它>"\n` +
-        "登记后重试原命令即放行；放行时记入待复核队列（capitalist review 查看）。",
-      event.point,
-      event.sessionId,
-    );
+    return outsideGate(guardBase(ctx, event, hook, offline), local.hits.map((h) => h.path), act, event.tool);
   }
 
   if (gate.decision === "NEED_USER") {
@@ -536,17 +377,6 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision 
       event.point,
       event.sessionId,
     );
-  }
-
-  if (localTightened === "allow_outside") {
-    recordReview(ctx.root, {
-      rule: "LOCAL-OUTSIDE",
-      label: "越界放行（已登记理由）",
-      why: local.hits.map((h) => h.why).join("；"),
-      evidence: cmd,
-      decision: gate.decision,
-      session: event.sessionId,
-    });
   }
 
   const writeTargets = act === "write" ? shellWriteTargets(cmd, ctx.root) : [];
@@ -697,35 +527,30 @@ function guardFileLock(
   return hook.passthrough();
 }
 
-/** 同一问题反复出现时的追加提示。第 1 次不提示，第 3 次要求登记后再停。 */
-function escalation(nth: number): string {
-  if (nth <= 1) return "";
-  if (nth === 2) return "\n\n（同一问题第 2 次：换做法，不要重试同一条。）";
-  return '\n\n（同一问题第 3 次：停手，先 capitalist ask "<为什么反复这样干>" 登记，等监工裁决。）';
+/** 拦截编排需要的最小环境。 */
+function guardBase(ctx: Ctx, event: UnifiedEvent, hook: HookFacet, offline: boolean): GuardBase {
+  return {
+    hook,
+    event,
+    root: ctx.root,
+    contract: ctx.contract,
+    stage: ctx.state.stage,
+    offline,
+    violate: (a) => recordViolation(ctx, event, { ...a, kind: "local" }),
+  };
 }
 
-/** 文件类工具的路径判定：读与写按同一套边界，放行时记一条待复核项。 */
 function judgeLocal(
   hook: HookFacet,
   event: UnifiedEvent,
   ctx: Ctx,
   paths: string[],
   act: ActionKind,
+  offline: boolean,
 ): HookDecision {
   const local = localCheck(ctx.contract, ctx.root, paths, act);
   const decision: LocalDecision = tightenLocal(ctx.mode, local.decision, act, decide);
   if (decision === "allow") return hook.passthrough();
-
-  if (decision === "allow_outside") {
-    recordReview(ctx.root, {
-      rule: "LOCAL-OUTSIDE",
-      label: `越界放行（${event.tool}）`,
-      why: local.hits.map((h) => h.why).join("；"),
-      evidence: paths.join(" "),
-      session: event.sessionId,
-    });
-    return hook.passthrough();
-  }
 
   if (decision === "deny") {
     const why = local.hits.map((h) => `${h.path}（${h.why}）`).join("；");
@@ -747,14 +572,7 @@ function judgeLocal(
     );
   }
 
-  const p = local.hits[0]?.path ?? "";
-  return hook.deny(
-    `【本机边界】${event.tool} 要碰的位置超出允许范围：${local.hits.map((h) => h.path).join("、")}\n` +
-      `先说明理由：capitalist justify "${p}" "<为什么必须碰它>"\n` +
-      "登记后才能过；放行时记入待复核队列（capitalist review 查看）。",
-    event.point,
-    event.sessionId,
-  );
+  return outsideGate(guardBase(ctx, event, hook, offline), local.hits.map((h) => h.path), act, event.tool);
 }
 
 /** 组装拦截文案。档位收紧导致的拒绝与规则禁止分开标注。 */
@@ -902,7 +720,7 @@ export function dispatch(hook: HookFacet, event: UnifiedEvent): HookDecision {
   try {
     /*
      * 只接管监工拉起的进程：工作进程由 worker.ts 注入 CAPITALIST_WORKER_ID，
-     * 人自己开的会话没有这个变量。
+     * 用户自己开启的会话没有这个变量。
      *
      * 这道判断排在“监工是否在线”之前。监工可能正在运行，但用户在同一个仓库里用自己的会话
      * 执行命令时，不该被边界检查要求登记理由。理由是为工作进程保留记录的，人的操作没有
@@ -912,11 +730,14 @@ export function dispatch(hook: HookFacet, event: UnifiedEvent): HookDecision {
     if (!process.env.CAPITALIST_WORKER_ID) return hook.passthrough();
 
     /*
-     * 监工不在线时整个 hook 不接管：hook 是监工的判定层，没有监工就没有可执行的契约。
-     * 没有这道判断，监工停掉后仓库里残留的 hook 仍会拦命令、往上下文注入简报。
+     * 监工不在线时仍要判动作类事件：工作进程由监工拉起，已经脱离宿主沙箱，越界与删除
+     * 只能靠这一层拦。判定所需的契约与任务状态仍在任务根里，读得到。
+     *
+     * 其余事件不接管：没有监工就没有派单、没有待裁决，注入简报也无从执行。
      */
     const watchRoot = findRoot(event.cwd);
-    if (watchRoot && !isSupervisorAlive(watchRoot)) return hook.passthrough();
+    const offline = Boolean(watchRoot && !isSupervisorAlive(watchRoot));
+    if (offline && event.point !== "on_action") return hook.passthrough();
 
     let ctx = loadCtx(event);
 
@@ -944,7 +765,7 @@ export function dispatch(hook: HookFacet, event: UnifiedEvent): HookDecision {
 
     switch (event.point) {
       case "on_action":
-        return onAction(hook, event, ctx);
+        return onAction(hook, event, ctx, offline);
       case "on_idle":
       case "on_start":
         return onIdle(hook, event, ctx);

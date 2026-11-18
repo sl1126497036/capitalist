@@ -2096,6 +2096,17 @@
   opacity: 0.85;
 }
 
+/* 可点击的关联标签：跳到该单的工作进程会话。悬停加深边框，表示可跳。 */
+.assocchip.jump {
+  background: transparent;
+  cursor: pointer;
+}
+
+.assocchip.jump:hover {
+  border-style: solid;
+  opacity: 1;
+}
+
 .bub.k-supervisorsay.dcard :deep(.ant-bubble-content) {
   background: color-mix(in srgb, var(--talk-line) 16%, var(--talk-bg));
   border-color: color-mix(in srgb, var(--talk-line) 72%, transparent);
@@ -3711,5 +3722,109 @@
     animation: none;
     opacity: 0.85;
   }
+}
+
+/* 权限裁决条：在流内占位，位于输入框上方，不覆盖消息区。 */
+.guardbar {
+  margin: 0 var(--s16) var(--s8);
+  padding: var(--s10) var(--s12);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-card);
+  background: var(--warn-block);
+  color: var(--warn-body);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+}
+
+.ghead {
+  display: flex;
+  align-items: center;
+  gap: var(--s8);
+}
+
+.gtitle {
+  color: var(--warn-label);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gcount {
+  color: var(--warn-time);
+  font-size: 12px;
+}
+
+.gitem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+}
+
+.gmeta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s8);
+  min-width: 0;
+}
+
+.gkind {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--warn-chip-bg);
+  color: var(--warn-label);
+  font-size: 12px;
+}
+
+.gkind.del {
+  color: var(--bad);
+}
+
+.gpaths {
+  min-width: 0;
+  color: var(--t1);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gtext {
+  color: var(--t2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.gwhy {
+  color: var(--warn-time);
+  font-size: 12px;
+}
+
+.gacts {
+  display: flex;
+  gap: var(--s8);
+}
+
+.gbtn {
+  padding: 4px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--t1);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gbtn.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.gbtn.ok:hover {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.gbtn.no:hover {
+  background: var(--line-3);
 }
 

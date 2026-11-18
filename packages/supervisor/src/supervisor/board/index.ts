@@ -20,6 +20,7 @@ import { handleCapitalistChat } from "./routes/chat";
 import { handleCommand, handleCapitalistCommand, handleConfirmDispatch } from "./routes/command";
 import { handleFsList, handleAttachments, handleUpload, handleAttachment } from "./routes/files";
 import { handleSkills } from "./routes/skills";
+import { handleGuard, handleGuardDecision } from "./routes/guard";
 import { handleThreads, handleThreadMessage } from "./routes/threads";
 import { handleTasks, handleForest, handleMetrics, handleUsage, handleModels, handleOverview, handleState, handleMq, handleCtxWindow, handleAlerts, handleSupervisorSelf, handleCapitalistEvents, handleMemory, handleUnhandled, handleSupervisor } from "./routes/views";
 import { clearThreadsCaches } from "./threads";
@@ -355,6 +356,15 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
     /** 技能下拉的数据源；与工作进程注入提示词的扫描同源。 */
     if (url === "/api/skills" || url.startsWith("/api/skills?")) {
       handleSkills({ req, res, url, opts, cachedView });
+      return;
+    }
+    /** 权限裁决；decision 必须排在 /api/guard 之前，否则前缀匹配会漏掉提交请求。 */
+    if (url === "/api/guard/decision" || url.startsWith("/api/guard/decision?")) {
+      handleGuardDecision({ req, res, url, opts, cachedView });
+      return;
+    }
+    if (url === "/api/guard" || url.startsWith("/api/guard?")) {
+      handleGuard({ req, res, url, opts, cachedView });
       return;
     }
     if (url === "/api/overview" || url.startsWith("/api/overview?")) {

@@ -2,7 +2,7 @@
  * 宿主模型清单。
  *
  * 唯一可信来源是宿主 CLI 自身：`--help` 输出的 `--model` 可选值随宿主升级变化，
- * 静态常量会过期，因此派单轮换与看板下拉都按本清单取候选。常量仅在解析失败时兜底。
+ * 静态常量会过期，因此派单轮换与看板下拉都按本清单取候选。常量仅在解析失败时按默认值处理。
  */
 
 import { spawnSync } from "node:child_process";
@@ -84,7 +84,7 @@ export function resetHelpModelsCacheForTest(): void {
 /**
  * 读取宿主 CLI 声明的模型清单。
  *
- * @returns 模型 id 列表；CLI 不可执行或正文不含清单时返回空数组，由调用方决定兜底。
+ * @returns 模型 id 列表；CLI 不可执行或正文不含清单时返回空数组，由调用方作默认值。
  */
 export function helpModels(host: string): string[] {
   if (cache && cache.host === host && Date.now() - cache.at < TTL_MS) return cache.models;

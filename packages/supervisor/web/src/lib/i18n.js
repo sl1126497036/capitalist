@@ -234,7 +234,7 @@ const EN = {
     "These {n} queued dispatches are withdrawn and will not be handed out again.",
   "这些进程的日志将移至归档目录。": "The logs of these processes will be moved to the archive.",
   "从队列撤下，监工不再派发": "Withdrawn from the queue; no longer dispatched",
-  "结项并停止重派，运行中进程先结束":
+  "结束并停止重派，运行中进程先结束":
     "Settled, no longer redispatched; a running process ends first",
   "：{why}": ": {why}",
   "调度于 {t}": "Dispatched at {t}",
@@ -249,7 +249,7 @@ const EN = {
   " {n} 条未读": " {n} unread",
   "{n} 个子单": "Sub-tasks: {n}",
   "{n} 个已完成": "Done: {n}",
-  "{n} 个已结项": "Closed: {n}",
+  "{n} 个已结束": "Closed: {n}",
   "{n} 个节点": "Nodes: {n}",
   "{n} 个落在断链子树": "In blocked sub-trees: {n}",
   "{n} 失败": "Failed: {n}",
@@ -278,7 +278,7 @@ const EN = {
   "复制失败": "Copy failed",
   "失败": "Failed",
   "失败原因：{why}": "Failure reason: {why}",
-  "结项原因：{why}": "Closure reason: {why}",
+  "结束原因：{why}": "Closure reason: {why}",
   /* 重启蒙版副标题。 */
   "重启中…": "Restarting…",
   "重启期间界面暂停，完成后自动恢复调度。未恢复时，重新执行 capitalist supervise。":
@@ -320,7 +320,7 @@ const EN = {
   "待验收": "Awaiting review",
   /* 消息块头的小标签（msgTone.js 的 PENDING_NOTE）：结论未落定。 */
   "待确认": "Pending",
-  "记欠账": "Outstanding",
+  "记待补项": "Outstanding",
   "未达标": "Not met",
   "成环 无可达根节点": "Cycle no reachable root",
   "截图": "screenshot",
@@ -543,11 +543,11 @@ const EN = {
   /* 单位：token 保留原词，不译为中文。 */
   "token": "tokens",
   "积分": "credits",
-  "计费接口增量摊算（输入 {a} + 输出 {b} token）；面板未开启期间不摊算":
+  "计费接口增量分摊（输入 {a} + 输出 {b} token）；面板未开启期间不分摊":
     "Attributed from billing API deltas (input {a} + output {b} tokens); no attribution while the board is closed",
   "按积分计费，本线程未分摊到读数；输入 {a} + 输出 {b} token":
     "Credit-based host; no credits attributed to this thread; input {a} + output {b} tokens",
-  "积分按计费接口已用积分的增量摊算到这条线程；面板未开启期间的消耗没有摊算依据，读数可能偏小":
+  "积分按计费接口已用积分的增量分摊到这条线程；面板未开启期间的消耗没有分摊依据，读数可能偏小":
     "Credits are attributed to this thread from the increment of the billing API's used-credits; consumption while the panel was closed has no attribution basis, so the figure may be low",
   "这条线程没有用量读数": "this thread has no usage reading",
   "这条读数有用量但没有 token 字段": "this reading has usage but no token fields",
@@ -558,13 +558,13 @@ const EN = {
   "派发任务": "Dispatched",
   "任务完成": "Task done",
   "任务失败": "Task failed",
-  "手动结项": "Closed manually",
+  "手动结束": "Closed manually",
   "消息唤醒": "Woken by message",
-  "判死重派": "Dead, redispatched",
+  "判定失败重派": "Dead, redispatched",
   "重派任务": "Redispatch",
   "回收进程": "Process reaped",
   "任务作废": "Task superseded",
-  "超时结单": "Closed on timeout",
+  "超时结束": "Closed on timeout",
   "启动进程": "Process started",
   "中断进程": "Process interrupted",
   "进程退出": "Process exited",
@@ -583,7 +583,7 @@ const EN = {
   "看板启动": "Board started",
   "看板重启": "Board restarted",
   "重派达到上限": "Redispatch cap reached",
-  "欠账清算": "Debt settled",
+  "待补项补清": "Debt settled",
   "模型回退": "Model fallback",
   "指令回执": "Command receipt",
   "回答": "Answer",
@@ -679,14 +679,14 @@ const EN = {
   "中断失败": "Interrupt failed",
   "已交还监工，下一轮调度起恢复自动裁定": "Handed back; automatic adjudication resumes next round",
   "交还失败": "Handback failed",
-  "已结项": "Closed",
-  "监工不再为它补单": "the supervisor will not dispatch for it again",
-  "结项失败": "Close failed",
+  "已结束": "Closed",
+  "监工不再为它重新派单": "the supervisor will not dispatch for it again",
+  "结束失败": "Close failed",
   "已清空": "Cleared",
   "清空失败": "Clear failed",
   "清除任务卡": "Clear task card",
   "移出列表，记录保留": "Removed from the list; records are kept",
-  "结项并停止重派，记录保留": "Settled, no longer redispatched; records are kept",
+  "结束并停止重派，记录保留": "Settled, no longer redispatched; records are kept",
   "清除中…": "Clearing…",
   /* 整卡蒙版只有一行进行中文案，不带省略号。 */
   "清除中": "Clearing",

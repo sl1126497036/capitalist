@@ -65,7 +65,7 @@ test("同一次发送的双通路记录只出一条气泡", async () => {
   }
 });
 
-test("老指令不吞十分钟后同文的新指令", async () => {
+test("十分钟后同文的新指令不被当作老指令去重", async () => {
   const root = scratch();
   try {
     seedDirect(root, [

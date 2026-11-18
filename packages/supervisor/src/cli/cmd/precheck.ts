@@ -6,18 +6,18 @@
  */
 
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { evaluate, loadContract } from "../../core/contract/contract";
-import { appendJsonl } from "../../core/record/json";
 import {
   detectAction,
   extractLocalPaths,
   localCheck,
   localDeleteCheck,
+  normLocal,
   tightenLocal,
 } from "../../core/guard/localGuard";
-import { findRoot, supervisorDir } from "../../core/record/paths";
+import { appendReason, openGuardRequests } from "../../core/guard/requests";
+import { findRoot } from "../../core/record/paths";
 import { decide } from "../../core/guard/permission";
 import { resolveModeFor } from "../../core/record/state";
 import { skillDirs } from "../../agent/locations";
@@ -107,24 +107,71 @@ export function cmdLocalCheck(p: Parsed): number {
   return decided === "deny" || decided === "justify" ? 2 : 0;
 }
 
-/** 登记越界理由。 */
+/** 疑似凭据内容：私钥头、常见令牌前缀、长串无分隔的随机字符。 */
+const SECRET_RX =
+  /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|pk|ghp|gho|github_pat|xox[bap])[-_][A-Za-z0-9_-]{12,}|AKIA[0-9A-Z]{12,}|[A-Za-z0-9+/=]{32,})/;
+
+/** 理由里不该出现凭据内容：理由会进台账，也会被监工读取。 */
+function looksLikeSecret(text: string): boolean {
+  return SECRET_RX.test(text);
+}
+
+/** 逗号、顿号、换行分隔的多个路径。路径内部的空格不切分。 */
+function splitPaths(raw: string): string[] {
+  return raw
+    .split(/[,，、\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 提交越界或删除申请的理由。
+ *
+ * 理由与路径写进申请台账，由监工裁决。本命令不产生放行凭证：批准由监工或用户给出，
+ * 且只对一次动作有效。
+ */
 export function cmdJustify(p: Parsed): number {
-  const [path, reason] = p.positional;
-  if (!path || !reason) die('用法：capitalist justify "<路径>" "<为什么必须碰它>"');
+  const [pathArg, reason] = p.positional;
+  if (!pathArg || !reason) {
+    die('用法：capitalist justify "<路径>[,<路径>]" "<为什么必须做这次操作>" [--id <编号>]');
+  }
   const root = rootOrDie(p);
-  const ttl = Number(flagString(p, "ttl") ?? 300) || 300;
-  appendJsonl(join(supervisorDir(root), "justify.jsonl"), {
-    at: new Date().toISOString(),
-    at_ts: Date.now() / 1000,
-    path,
-    reason,
-    ttl,
-    session: process.env.CAPITALIST_SESSION_ID ?? "",
-  });
+
+  if (looksLikeSecret(reason) || looksLikeSecret(pathArg)) {
+    die(
+      "理由里疑似包含凭据内容，已拒绝提交。\n" +
+        "只写用途与影响，例如“读取构建配置以确认端口”。不要粘贴密钥、令牌或密码。",
+    );
+  }
+
+  const paths = splitPaths(pathArg);
+  const open = openGuardRequests(root);
+  const wanted = String(flagString(p, "id") ?? "").trim();
+  const hit = wanted
+    ? open.find((r) => r.id === wanted)
+    : open.find((r) => {
+        const have = new Set(r.paths.map((x) => normLocal(x)));
+        return paths.every((x) => have.has(normLocal(x)));
+      });
+
+  if (!hit) {
+    const list = open
+      .slice(-5)
+      .map((r) => `  ${r.id}  ${r.kind === "delete" ? "删除" : "越界"}  ${r.paths.join("、")}`)
+      .join("\n");
+    die(
+      "没有匹配的待裁决申请。\n" +
+        "先执行原动作，被拦截后按回执里的编号提交：capitalist justify \"<路径>\" \"<理由>\" --id <编号>\n" +
+        (list ? `当前待裁决：\n${list}` : "当前没有待裁决申请。"),
+    );
+  }
+
+  /* 合并提交：补充的路径并入同一条申请，监工一次看全。 */
+  const merged = [...new Set([...hit.paths, ...paths])];
+  appendReason(root, hit.id, reason, merged);
   write(
-    `已登记理由：${path}\n` +
-      `  有效期：${ttl} 秒，对登记路径及其子项生效。\n` +
-      "  重试原命令即放行；放行时记入待复核队列（capitalist review 查看）。\n",
+    `已提交申请 ${hit.id}：${merged.join("、")}\n` +
+      "等待监工裁决。批准后按原命令重试一次；未批准时不要反复重试。\n",
   );
   return 0;
 }

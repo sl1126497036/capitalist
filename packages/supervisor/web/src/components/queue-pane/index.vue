@@ -18,7 +18,7 @@ import EmptyState from "../empty-state";
 
 const props = defineProps({
   threads: { type: Array, default: () => [] },
-  /** 派单台账用于区分进程退出与派单结项：被打回重排的单同样处于 exited。 */
+  /** 派单台账用于区分进程退出与派单结束：被打回重排的单同样处于 exited。 */
   dispatches: { type: Array, default: () => [] },
   current: { type: String, default: "" },
   total: { type: Number, default: 0 },
@@ -44,7 +44,7 @@ const supervisorTitle = computed(() => {
 
 
 /* 暂停档不提供清空：暂停单的处置为唤醒或关闭，归档会使该派单离开待办队列，语义与“清空列表”不同。 */
-/* 已结项档同样不清空：这些单已终止，归档只影响回查。 */
+/* 已结束档同样不清空：这些单已终止，归档只影响回查。 */
 const canClear = computed(
   () =>
     filter.value !== "paused" &&
@@ -88,7 +88,7 @@ function bucket(x) {
   if (s === "done" || s === "finished") return "done";
   if (s === "exited") return settled(t) ? "done" : "queue";
   if (s === "canceled") return "canceled";
-  /* 作废与结项单单独成档，与后端 taskBucket 同口径。 */
+  /* 作废与结束单单独成档，与后端 taskBucket 同口径。 */
   if (s === "closed" || s === "superseded") return "closed";
   /* 未知状态按异常归类，与后端一致。 */
   return "bad";
@@ -98,7 +98,7 @@ function cell(t) {
   /* 后端把 closed 且 closed_by 为 user 的单标为 canceled；监工不调度，恢复需在对话中提出。 */
   if (s === "canceled") return { tone: "cancel", kind: "word", text: tr("已取消") };
   if (s === "superseded") return { tone: "cancel", kind: "word", text: tr("已作废") };
-  if (s === "closed") return { tone: "cancel", kind: "word", text: tr("已结项") };
+  if (s === "closed") return { tone: "cancel", kind: "word", text: tr("已结束") };
   /* 派单处于 reported 时不显示运行中或耗时；判据取后端下发的 doing，不按运行时长推断。 */
   if (String(t?.doing || "") === "report") {
     return { tone: "run", kind: "word", text: workerDoingText("report") };
@@ -257,7 +257,7 @@ const FILTERS = computed(() => {
     { key: "done", label: tr("已完成"), tone: "done" },
   ];
   if ((counts.value.canceled || 0) > 0) out.push({ key: "canceled", label: tr("已取消"), tone: "cancel" });
-  if ((counts.value.closed || 0) > 0) out.push({ key: "closed", label: tr("已结项"), tone: "cancel" });
+  if ((counts.value.closed || 0) > 0) out.push({ key: "closed", label: tr("已结束"), tone: "cancel" });
   return out;
 });
 
@@ -351,7 +351,7 @@ const staleCount = computed(() => props.threads.filter(searchMatch).filter(stale
 /** 按队列顺序统一取号，使任务行与消息引用读到同一个号。 */
 const numbering = computed(() => numberQueue(props.threads));
 
-/* 任务键与后端 taskKeyOf 同口径：有分片按阶段/分片，无分片按血缘；同一任务的重派共用一个键。 */
+/* 任务键与后端 taskKeyOf 同口径：有分片按阶段/分片，无分片按派生链；同一任务的重派共用一个键。 */
 function taskKeyOf(t) {
   const stage = String(t?.stage || "").trim();
   const shard = String(t?.shard || "").trim();
@@ -473,7 +473,7 @@ function closeWord(t) {
 function closeTip(t) {
   return canPromote(t)
     ? tr("从队列撤下，监工不再派发")
-    : tr("结项并停止重派，运行中进程先结束");
+    : tr("结束并停止重派，运行中进程先结束");
 }
 
 const promoting = ref("");
@@ -519,7 +519,7 @@ function closeConfirm(r) {
 }
 
 
-/* 清除只写标记让卡离开列表，历史台账保留；异常档先结项再打标记，运行中与排队不提供清除。 */
+/* 清除只写标记让卡离开列表，历史台账保留；异常档先结束再打标记，运行中与排队不提供清除。 */
 function canClearCard(t) {
   const b = bucket(t);
   return b === "done" || b === "canceled" || b === "bad";
@@ -529,7 +529,7 @@ const clearing = ref("");
 
 function clearTip(t) {
   return bucket(t) === "bad"
-    ? tr("结项并停止重派，记录保留")
+    ? tr("结束并停止重派，记录保留")
     : tr("移出列表，记录保留");
 }
 

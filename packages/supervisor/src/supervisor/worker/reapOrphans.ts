@@ -137,7 +137,7 @@ export function reapOrphans(
     if (only != null && w.supervisor_pid !== only) continue;
     // 本进程拉起的记录不归这一层处理。
     if (w.supervisor_pid === process.pid) continue;
-    if (!pidAlive(w.pid)) continue; // 进程已不在：交给调度轮次中的 reap 结单
+    if (!pidAlive(w.pid)) continue; // 进程已不在：交给调度轮次中的 reap 结束
 
     const ident = describePid(w.pid);
     if (!ident) {

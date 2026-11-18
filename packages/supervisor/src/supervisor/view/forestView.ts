@@ -28,7 +28,7 @@ function clearedDispatches(root: string): Set<string> {
 /**
  * 从派单行里摘掉被清除的任务。
  *
- * 同一血缘的尝试一起摘：清掉的是“这条任务”，不是某一次重派。被摘节点的子节点改判为根，
+ * 同一派生链的尝试一起摘：清掉的是“这条任务”，不是某一次重派。被摘节点的子节点改判为根，
  * 否则 `dispatchForest` 会把它们记成孤立前置，树上看不出它们只是父节点被隐藏了。
  */
 function dropCleared(rows: Dispatch[], cleared: Set<string>): Dispatch[] {
@@ -65,7 +65,7 @@ export interface ForestNodeView {
   started_at: string;
   /** 结束时刻（ISO）：终态的完成或关闭时刻；非终态为空串，由前端计算时长。 */
   ended_at: string;
-  /** 重派次数：同一血缘在它之前出现过几次，与 `attempt - 1` 取大。 */
+  /** 重派次数：同一派生链在它之前出现过几次，与 `attempt - 1` 取大。 */
   retries: number;
   /** 失败原因摘要（只对失败节点有值），已截断。 */
   reason: string;
@@ -80,8 +80,8 @@ export interface ForestNodeView {
   /**
    * 等待的前置单编号（如 `05`）。
    *
-   * `stuckOn` 是台账 id（`D-…`），界面上写“等待 #D-…”既不像任务号也读不通；
-   * 编号表能查到就填这里，查不到留空串，由前端退回显示 id 本身。
+   * `stuckOn` 是台账 id（`D-…`），界面上写“等待 #D-…”既不是任务编号，也不便阅读；
+   * 编号表能查到就填这里，查不到留空串，由前端改为显示 id 本身。
    */
   stuckOnNo: string;
   /** 自身失败、处于环上或祖先失败时置真；运行中或待验收的节点不标记。 */
@@ -158,7 +158,7 @@ function failureReason(d: Dispatch): string {
   return clipLine(String(d.note ?? ""), MAX_REASON);
 }
 
-/** 结项原因：取台账备注，缺失时按状态给默认说明。 */
+/** 结束原因：取台账备注，缺失时按状态给默认说明。 */
 function closeReason(d: Dispatch): string {
   const note = clipLine(String(d.note ?? ""), MAX_REASON);
   if (note) return note;
@@ -360,7 +360,7 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
   const reasonOf = (d: Dispatch): string => {
     const status = String(d.status ?? "");
     if (status === "failed") return failureReason(d);
-    /* 已结项的单同样给出原因。 */
+    /* 已结束的单同样给出原因。 */
     if (status === "closed" || status === "superseded") return closeReason(d);
     return "";
   };

@@ -1,7 +1,7 @@
 /**
  * 卡点识别：按日志尾部把进程停滞分成 error_loop、external、retry、idle 四类，判据不依赖模型。
  *
- * 本模块只分类，判定与干预在 loop 的 `checkStuckWorkers`；分类只影响建议措辞，判死由干预次数决定。
+ * 本模块只分类，判定与干预在 loop 的 `checkStuckWorkers`；分类只影响建议措辞，判定失败由干预次数决定。
  */
 
 import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
@@ -69,7 +69,7 @@ function shape(line: string): string {
     .trim();
 }
 
-/** 报错行的判据。只用于分类，不用于判死。 */
+/** 报错行的判据。只用于分类，不用于判定失败。 */
 const RE_ERROR = /error|exception|traceback|panic|fatal|\bfailed\b|\bfailure\b|错误|失败|报错|异常|堆栈/i;
 
 /** 需要人解除的外部条件。 */

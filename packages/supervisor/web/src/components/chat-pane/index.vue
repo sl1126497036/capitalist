@@ -101,8 +101,15 @@ const props = defineProps({
   talkBusy: {type: Set, default: () => new Set()},
   queueCollapsed: {type: Boolean, default: false},
   paused: {type: Boolean, default: false},
+  /**
+   * 权限裁决队列：监工无法判定、等用户裁决的申请，按先后顺序。
+   *
+   * 只在工作进程会话里显示。决策条放在输入框上方而不是覆盖消息区：用户要先看清
+   * 目标路径与理由，才知道正在批准的是什么。
+   */
+  guardQueue: {type: Array, default: () => []},
 });
-const emit = defineEmits(["send", "capitalist", "handback", "interject", "pick", "toggleQueue", "close", "loadOlder", "refresh", "pause", "locate"]);
+const emit = defineEmits(["send", "capitalist", "handback", "interject", "pick", "toggleQueue", "close", "loadOlder", "refresh", "pause", "locate", "guardDecision"]);
 
 /* 会话标题取任务根目录最后一段；根不可用时退回“监工”，不拼出“-监工”。 */
 const supervisorTitle = computed(() => {
@@ -196,7 +203,7 @@ const alsoBlock = ref(false);
 let toastTimer = 0;
 
 const closeAsk = ref(false);
-/* 暂停单可关闭：确认后直接结项，无需先唤醒。 */
+/* 暂停单可关闭：确认后直接结束，无需先唤醒。 */
 const CLOSEABLE = new Set(["running", "starting", "claimed", "queued", "open", "paused"]);
 const canCloseSel = computed(() => CLOSEABLE.has(String(props.thread?.status || "")));
 

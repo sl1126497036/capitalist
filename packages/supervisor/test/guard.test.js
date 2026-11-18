@@ -62,7 +62,7 @@ test("敏感路径按 POSIX 写法命中（/etc / /var/log 是契约里真实存
   assert.equal(hit.decision, "deny");
 });
 
-test("~/.ssh 下的普通文件也拦（不靠文件名判断）", () => {
+test("~/.ssh 下的普通文件也会被拦截（不靠文件名判断）", () => {
   // `id_rsa` 会在 sensitive_names 里命中；`config` 不在，只能靠 sensitive_paths 判定
   const hit = localCheck(minimal, ROOT, ["~/.ssh/config"], "read");
   assert.equal(hit.decision, "deny");
@@ -76,9 +76,10 @@ test("任务根以内放行，根外要理由", () => {
   assert.equal(outside.decision, "justify");
 });
 
-test("删除不许出任务根", () => {
+test("根外删除转申请，不直接拒绝也不直接放行", () => {
   const outside = localCheck(minimal, ROOT, ["/tmp/other"], "delete");
-  assert.equal(outside.decision, "deny");
+  /* 根外删除由监工裁决：本层只标出需要申请，放行判据在 core/guard/requests。 */
+  assert.equal(outside.decision, "justify");
 });
 
 test("删除目标不确定时拒绝：通配符与缺失目标语义不同，但都不放行", () => {
@@ -127,9 +128,9 @@ test("mtime_after_stage：缺时间字段时改用 created_at，而不是判定�
   writeFileSync(file, "x", "utf8");
 
   /*
-   * 两次检查之间要改同一份 state.json。走 `writeJson` 而不是裸 `writeFileSync`：
+   * 两次检查之间要改同一份 state.json。使用 `writeJson` 而不是直接调用 `writeFileSync`：
    * 前者会失效读缓存，后者不会，间隔小于 300ms 时第二次检查会读到上一次的内容，
-   * 判定随机翻车。断言本身不变。
+   * 判定结果不稳定。断言本身不变。
    */
   // 只有 created_at（老任务根 / 手工建根）
   writeJson(join(root, ".capitalist", "state.json"), {

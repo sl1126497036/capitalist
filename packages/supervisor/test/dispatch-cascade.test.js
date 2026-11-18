@@ -13,8 +13,8 @@ const { loadState } = require("../dist/core/record/state");
 const loop = require("../dist/supervisor/loop");
 
 /*
- * 判定通道指向一个不存在的可执行文件：本文件验的是“判死后怎么传导”，
- * 不验“模型认为该不该重试”。不挡的话每次判死都会真的拉起一个模型会话。
+ * 判定通道指向一个不存在的可执行文件：本文件验的是“判定失败后怎么传导”，
+ * 不验“模型认为该不该重试”。不挡的话每次判定失败都会真的拉起一个模型会话。
  */
 process.env.CAPITALIST_WORKER_BIN = join(tmpdir(), "no-such-worker-bin-for-cascade-test");
 
@@ -38,7 +38,7 @@ function put(root, id, extra = {}) {
   });
 }
 
-/** 直接改台账行（模拟收尸判死、外部改动），不改行序。 */
+/** 直接改台账行（模拟收尸判定失败、外部改动），不改行序。 */
 function patch(root, id, fields) {
   const rows = capitalist.readDispatches(root).map((x) => (x.id === id ? { ...x, ...fields } : x));
   writeJsonl(capitalist.dispatchPath(root), rows);
@@ -120,7 +120,7 @@ function scene(root, { log = "worker 崩了：unexpected exit" } = {}) {
 }
 
 
-test("父节点第三次失败：整棵子树判死、运行中的子进程被停、不再有重试", () => {
+test("父节点第三次失败：整棵子树判定失败、运行中的子进程被停、不再有重试", () => {
   const root = sandbox();
   const { c2 } = scene(root);
   const before = capitalist.readDispatches(root).length;
@@ -131,7 +131,7 @@ test("父节点第三次失败：整棵子树判死、运行中的子进程被�
     "worker 进程退出（code 1）",
     quiet,
   );
-  assert.equal(ok, true, "父节点应被结单");
+  assert.equal(ok, true, "父节点应被结束");
 
   assert.equal(row(root, "P2").status, "failed", "父节点失败");
 
@@ -224,7 +224,7 @@ test("上下文超限：重置子树重跑一次，父节点换新单、子孙�
   assert.ok(next, "父节点要有后续单");
   assert.equal(next.status, "open");
   assert.equal(next.source, "requeue");
-  assert.equal(next.lineage, "P0", "血缘不变：门禁靠血缘认前置");
+  assert.equal(next.lineage, "P0", "派生链不变：门禁靠派生链认前置");
   assert.equal(next.attempt, 4, "第 4 次尝试");
 
   for (const id of ["C1", "C2", "G1"]) {

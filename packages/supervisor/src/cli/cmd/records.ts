@@ -27,6 +27,7 @@ import {
   type ReviewRecord,
 } from "../../core/record/ledger";
 import { appendMq, wakeSupervisor } from "../../core/dispatch/mq";
+import { answerAsk } from "../../core/dispatch/inbox";
 import { findRoot, supervisorDir } from "../../core/record/paths";
 import { sleepSync } from "../../core/record/process";
 import { loadWorker } from "../../core/record/supervisor";
@@ -80,40 +81,10 @@ export function cmdAnswer(p: Parsed): number {
   if (!id || !guidance) throw new Error('用法：capitalist answer <问题id> "<指导>"');
 
   const { root } = ctxOrDie(p);
-  const file = qaPath(root);
-  const rows = readJsonl<Record<string, unknown>>(file);
-
-  let hit = false;
-  let hitText = "";
-  for (const r of rows) {
-    if (r.type !== "ask") continue;
-    // 三种定位方式：id 精确匹配、正文全文匹配、正文片段匹配。后两种是给“没有 id 的
-    // 历史记录”留的出口，早期监工登记 ask 不写 id，只能按 id 关的话它就永远关不掉，
-    // 而 open ask 会让监工一直暂停派单。
-    const text = String(r.text ?? r.question ?? "");
-    const matched = r.id === id || (text !== "" && (text === id || text.includes(id)));
-    if (!matched) continue;
-    r.status = "answered";
-    r.answered_at = new Date().toISOString();
-    hit = true;
-    hitText = text;
-  }
-  if (!hit) throw new Error(`没找到问题 ${id}（capitalist inbox 看当前待裁决）`);
-
-  // 同一问题只保留最新一条指导
-  for (const r of rows) {
-    if (r.type === "answer" && r.qid === id) r.status = "superseded";
-  }
-  rows.push({
-    at: new Date().toISOString(),
-    at_ts: Date.now() / 1000,
-    type: "answer",
-    qid: id,
-    status: "new",
-    text: guidance,
-  });
-
-  writeJsonl(file, rows);
+  /* 关闭问题与写回填记录的实现在 inbox，看板裁决走同一份。 */
+  const res = answerAsk(root, id, guidance);
+  if (!res.ok) throw new Error(`没找到问题 ${id}（capitalist inbox 看当前待裁决）`);
+  const hitText = res.text;
 
   // 重派上限这类 ask，裁决本身就是“放行该片”：把那批失败划到线下。不划的话重派计数
   // 仍超上限时，监工下一轮调度会重新登记同一条 ask，答复未登记即视为未答复，阶段持续卡住。
@@ -167,10 +138,10 @@ export function cmdCorrect(p: Parsed): number {
 /**
  * 某一个工作进程的动作时间线。
  *
- * 给监工的“上下文索引”用的：对话层只看到一行摘要（车道 / 余量 / 已经干过什么），
+ * 给监工的“上下文索引”用的：对话层只看到一行摘要（所属会话 / 剩余上下文 / 已执行的动作），
  * 无法判定该事项是否执行过时，用本命令查看明细，不推断，也不重新建单。
  *
- * 输出三块：身份（哪一单、哪条车道、什么状态）-> 统计（改过哪些文件、跑过几次构建测试）
+ * 输出三块：身份（哪一单、所属哪条会话、什么状态）-> 统计（改过哪些文件、执行过几次构建与测试）
  * -> 时间线（最近 15 条动作，正序）。全部来自 worker 自己的日志与记录，不做推断。
  */
 export function cmdWorker(p: Parsed): number {
@@ -188,7 +159,7 @@ export function cmdWorker(p: Parsed): number {
     `进程 ${w.id} · ${w.status}${w.exit_code !== null && w.exit_code !== undefined ? `（exit ${w.exit_code}）` : ""}\n`,
   );
   process.stdout.write(`派单 ${w.dispatch || "（无）"}${label?.title ? ` · ${label.title}` : ""}\n`);
-  process.stdout.write(`车道 ${lane || "（未登记）"}\n`);
+  process.stdout.write(`所属会话 ${lane || "（未登记）"}\n`);
 
   const log = String(w.log ?? "");
   if (!log || !existsSync(log)) {

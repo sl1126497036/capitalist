@@ -71,7 +71,7 @@ export function sendJson(ctx: BoardCtx, body: unknown, code = 200): void {
   ctx.res.end(JSON.stringify(body));
 }
 
-/** 统一的错误响应：路由内 catch 一律走这里，错误文案与前端约定保持一致。 */
+/** 统一的错误响应：路由内 catch 统一经此函数返回，错误文案与前端约定保持一致。 */
 export function sendError(ctx: BoardCtx, err: unknown, code = 500): void {
   sendJson(ctx, { error: String(err instanceof Error ? err.message : err) }, code);
 }

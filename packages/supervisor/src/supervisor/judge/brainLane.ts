@@ -1,6 +1,6 @@
 /**
- * 判定会话按车道分代，占用超阈值即换代并落 `context_compacted` 事件。
- * 换代后的首轮附上上一代最近的判定结论，使新会话无需重建上下文。
+ * 判定会话按代轮换，占用超阈值即更换并写 `context_compacted` 事件。
+ * 更换后的首轮附上上一代最近的判定结论，使新会话无需重建上下文。
  */
 
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
@@ -11,7 +11,7 @@ import { recordEvent } from "../../core/record/ledger";
 import { supervisorDir } from "../../core/record/paths";
 import { estimateSessionContextTokens } from "../context/reload";
 
-/** 一条车道（判定脑）。 */
+/** 一条会话（判定脑）。 */
 interface LaneState {
   base: string;
   current: string;
@@ -74,7 +74,7 @@ export interface BrainLane {
 }
 
 /**
- * 判定池并发最多 2；并发写入车道文件失败时不重试，两条判定共用同一会话，下一轮按实际占用再判。
+ * 判定池并发最多 2；并发写入会话文件失败时不重试，两条判定共用同一会话，下一轮按实际占用再判。
  */
 export function brainSessionOf(root: string, base: string): BrainLane {
   const name = String(base || "capitalist-brain").trim() || "capitalist-brain";

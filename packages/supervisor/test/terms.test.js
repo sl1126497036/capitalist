@@ -7,7 +7,7 @@
  * 2. 消息正文里的 worker / exit / pid / SIGTERM / hook 全部换成中文，
  *    `open` / `gone` 这类原始状态也不许直接摆出来；
  * 3. 标签表只有 `src/supervisor/terms.ts` 一份，前端 `fmt.js` 直接读它。
- *    谁再抄一张表出来，本测试会拦住（抄表就会漂移）。
+ *    谁再复制一份映射表出来，本测试会拦下（复制会导致漂移）。
  *
  * 空状态图标不放在这里（那是 .vue 的渲染口径），交付时用 SSR 探针验。
  */
@@ -28,7 +28,7 @@ const BANNED = /\b(worker|exit|pid|SIGTERM|hook|open|queued|closed|gone|missing|
 
 test("术语表：每条事件 / 指令 / 状态都有中文，dispatch_retry 是“重派任务”", () => {
   assert.equal(terms.zhEvent("dispatch_retry"), "重派任务");
-  assert.equal(terms.zhEvent("dispatch_orphan"), "判死重派");
+  assert.equal(terms.zhEvent("dispatch_orphan"), "判定失败重派");
   assert.equal(terms.zhStatus("open"), "待执行");
   assert.equal(terms.zhStatus("gone"), "已退出");
   assert.equal(terms.zhCommand("set-next"), "设定下一步");

@@ -3,7 +3,7 @@
  *
  * 三种角色，三种进程，互不同享上下文：
  *
- *   监工进程      长驻，独立进程。建根、定契约、派单、验收、判死重派。
+ *   监工进程      长驻，独立进程。建根、定契约、派单、验收、判定失败后重新派发。
  *   工作进程      监工拉起的独立宿主进程，一个 worker 一个上下文，互不可见。
  *   hook          宿主在 worker 进程内调用的判定层，不占 worker 上下文。
  *
@@ -101,7 +101,7 @@ export interface SupervisorRecord {
   note?: string;
 }
 
-/** 派单状态。`claimed` 表示已被某个 worker 领走且尚未结单。 */
+/** 派单状态。`claimed` 表示已被某个 worker 领走且尚未结束。 */
 /** 派单状态。 */
 export type DispatchStatus = "open" | "claimed" | "reported" | "review" | "done" | "failed" | "closed";
 
@@ -166,10 +166,10 @@ export interface Dispatch {
   attempt?: number;
   /**
    * 待确认截止时间（ISO）。只有 `status === "review"` 时有值：
-   * 到点还没人确认就自动结单，对应“3 分钟没动静就当他没别的要说了”。
+   * 到点还没人确认就自动结束，对应“3 分钟没动静就当他没别的要说了”。
    */
   review_until?: string;
-  /** worker 报完成时写的说明，确认后转成正式结单 note。 */
+  /** worker 报完成时写的说明，确认后转成正式结束 note。 */
   /** 树边：父派单 id。做完父节点，本单才允许启动（多节点结构，见 {@link dispatchForest}）。 */
   parent?: string;
   parent_reason?: string;
@@ -182,7 +182,7 @@ export interface Dispatch {
   /** 上报时刻（`markReported` 写）：监工据此判断“报了多久还没裁决”。 */
   reported_at?: string;
   review_note?: string;
-  /** 手动结项的时刻（ISO）。只有 `status === "closed"` 时有值。 */
+  /** 手动结束的时刻（ISO）。只有 `status === "closed"` 时有值。 */
   closed_at?: string;
   /** 谁关的：`user`（命令行 / 看板按钮）或调用方自报的来源。 */
   closed_by?: string;
@@ -198,22 +198,22 @@ export interface Dispatch {
   /** 合并单累计的来源消息标识（每追加一条同类需求记一个）。 */
   src_msgs?: string[];
   added_reqs?: string[];
-  /** 血缘：这一串重派单里第一张的 id。 */
+  /** 派生链：这一串重派单里第一张的 id。 */
   lineage?: string;
   retry_verdict?: "pending" | "retry" | "give_up" | "hold";
   retry_why?: string;
   /** 到这个决定为止，这条链已经重试过几次。 */
   retry_count?: number;
   cascade_from?: string;
-  /** 级联判死的时刻（ISO）。与 `done_at` 分开：`done_at` 是这一单自己的生命周期终点。 */
+  /** 级联判定失败的时刻（ISO）。与 `done_at` 分开：`done_at` 是这一单自己的生命周期终点。 */
   cascade_at?: string;
   cascade_resets?: number;
   role?: "work" | "diagnose" | "fix";
   /**
    * 分类标签，由 AI 在派单时打（不是固定枚举）。
    *
-   * 两个用途：会话车道按第一个标签分组（同一类活共用一条上下文，才谈得上复用），
-   * 看板按它分组显示。没有标签的插队单会落到 `misc` 车道，仍然能用，只是复用价值低。
+   * 两个用途：工作进程会话按第一个标签分组（同一类工作共用一条上下文，才谈得上复用），
+   * 看板按它分组显示。没有标签的单归入 `misc` 组，仍然可用，只是复用价值低。
    */
   tags?: string[];
   /** 绑定的任务池条目 id（见 `core/tasks.ts`）。缺省表示这单不属于任务池。 */
@@ -227,7 +227,7 @@ export interface Dispatch {
  * 拉起时续接同一条 AI 会话（见 `worker.ts` 的 `resolveSession`）。它既不算运行中
  * （不占并发槽），也不算失败（不触发重派与退避）。
  *
- * `exited` 与 `failed` 都是终态，`done` 表示该单已成功结单。
+ * `exited` 与 `failed` 都是终态，`done` 表示该单已成功结束。
  */
 export type WorkerStatus = "starting" | "running" | "suspended" | "exited" | "failed" | "done";
 
@@ -287,7 +287,7 @@ export interface WorkerRecord {
    * 启动方式。
    *
    * `visible` 表示 worker 跑在独立控制台窗口里，由人可见地执行；这类 worker 不写心跳，
-   * 因此监工不按心跳判死（见 `supervisor/loop.ts` 的 `reap`），只认它写回的 report。
+   * 因此监工不按心跳判定失败（见 `supervisor/loop.ts` 的 `reap`），只认它写回的 report。
    */
   mode?: "background" | "visible";
   /** 拉起它的监工进程号。 */
@@ -300,7 +300,7 @@ export interface WorkerRecord {
    * 与 `session` 字段必须分开看：`session` 是 worker 自己的记录 id（`W-xxxx`），
    * 由它自己续写心跳；`ai_session` 才是宿主那边的对话上下文标识，一个 ai_session
    * 可以被多个 worker 先后复用。看板“与这个进程说话”要送到 ai_session，
-   * 调度层判断“这条车道还占着吗”也只认它。
+   * 调度层判断“这条会话是否仍被占用”也只认它。
    *
    * 老记录没有这一项：按“不知道”处理，不以 `session` 代入，两者语义不同。
    */
@@ -787,7 +787,7 @@ export { pidAlive };
 /**
  * 日志“还在写”的默认阈值：五分钟。
  *
- * 这是卡点判定的默认观察窗口，不是判死阈值。两个信号（心跳、日志）任一在此窗口内
+ * 这是卡点判定的默认观察窗口，不是判定失败阈值。两个信号（心跳、日志）任一在此窗口内
  * 更新就算存活；两个都过期才进入卡点判定。可由 `--stuck-sec` / `CAPITALIST_STUCK_SEC` 覆盖。
  */
 export const DEFAULT_LOG_STALL_SEC = 300;
@@ -989,7 +989,7 @@ export interface WakeResult {
  * 只解除暂停标记。失败单退回 `open` 并清除终止字段：否则重派闸按 `retry_verdict` /
  * `done_at` 拦截该派单，唤醒后不会重新执行。`done` / `closed` 是终态，不唤醒。
  *
- * @returns 未找到、未暂停或已结项时返回 null。
+ * @returns 未找到、未暂停或已结束时返回 null。
  */
 export function wakeDispatch(root: string, id: string): WakeResult | null {
   const rows = readDispatches(root);
@@ -1020,20 +1020,20 @@ export function wakeDispatch(root: string, id: string): WakeResult | null {
   return { id, from, to };
 }
 
-/** 全部处于暂停、且尚未结项的派单。 */
+/** 全部处于暂停、且尚未结束的派单。 */
 export function pausedDispatches(root: string): Dispatch[] {
   return readDispatches(root).filter(
     (d) => dispatchPaused(d) && d.status !== "done" && d.status !== "closed",
   );
 }
 
-/** 同片上一张未结单的派单带过的附件，补到本单 action 末尾。 */
+/** 同片上一张未结束的派单带过的附件，补到本单 action 末尾。 */
 function carryAttachments(rows: Dispatch[], d: Dispatch): Dispatch {
   /** 只有“重派”才继承：同一片的任务未完成，重发一单时不能丢失用户提供的图。 */
   if (d.source !== "requeue") return d;
   const stage = String(d.stage ?? "");
   const shard = String(d.shard ?? "");
-  /* 还要是同一条血缘：同一片上的另一件事（另一次派单）不是这张单的前身。 */
+  /* 还要是同一条派生链：同一片上的另一件事（另一次派单）不是这张单的前身。 */
   const chain = String((d as { lineage?: string }).lineage ?? "");
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const prev = rows[i];
@@ -1159,7 +1159,7 @@ export function claimDispatch(root: string, id: string, worker: string, session 
 /**
  * 了这一单就再也没有下文的状态。
  *
- * `closed` 也在里面：结项是终态，`finishDispatch` 之类“改结论”的写入一律拒绝，
+ * `closed` 也在里面：结束是终态，`finishDispatch` 之类“改结论”的写入一律拒绝，
  * 否则一次晚到的 worker 上报能把人刚关掉的单重新打开。
  */
 function isSettled(status: DispatchStatus): boolean {
@@ -1169,8 +1169,8 @@ function isSettled(status: DispatchStatus): boolean {
 /**
  * 了结一单，把状态置为 `done` 或 `failed`。
  *
- * @param note 结单说明。省略时不写入 `note` 字段。
- * @returns 结单后的派单；单不存在或已是终态时返回 null。
+ * @param note 结束说明。省略时不写入 `note` 字段。
+ * @returns 结束后的派单；单不存在或已是终态时返回 null。
  */
 export function finishDispatch(
   root: string,
@@ -1192,7 +1192,7 @@ export function finishDispatch(
   };
   rows[idx] = next;
   writeJsonl(dispatchPath(root), rows);
-  /** 派单状态是事实，任务池是它的投影，每次结单必须同步一次。 */
+  /** 派单状态是事实，任务池是它的投影，每次结束必须同步一次。 */
   syncTaskForDispatch(root, next);
   return next;
 }
@@ -1286,7 +1286,7 @@ function lineageOf(x: Dispatch): string {
  * 一张单的“这是什么活”指纹：剥掉附件行、压平空白后的正文。
  *
  * 台账里同一件事会有多条记录（每次重派一条），它们只有 `action` 尾部可能被追加
- * 插话/验收清单。做归组（重建树）和认亲（血缘匹配）都靠这个指纹，口径必须同一份。
+ * 插话/验收清单。做归组（重建树）和认亲（派生链匹配）都靠这个指纹，口径必须同一份。
  *
  * 正文为空时退回 `stage/shard`，再为空退回标题。
  */
@@ -1330,7 +1330,7 @@ export function pendingPrerequisites(
 
   const settled = rows.filter((x) => x.status === "done" || x.status === "closed");
   const settledIds = new Set(settled.map((x) => String(x.id)));
-  /* 血缘 -> 已完成的那些记录。判据是“同一件事的后续尝试”，不是“同一条链上任一张”。 */
+  /* 派生链 -> 已完成的那些记录。判据是“同一件事的后续尝试”，不是“同一条链上任一张”。 */
   const settledByLineage = new Map<string, Dispatch[]>();
   for (const x of settled) {
     const k = lineageOf(x);
@@ -1473,7 +1473,7 @@ export interface TreeEdgeCheck {
   reason: string;
 }
 
-/** 建单前校验一条树边：父节点必须存在、没被结项、不成环，且理由必填。 */
+/** 建单前校验一条树边：父节点必须存在、没被结束、不成环，且理由必填。 */
 export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string, childId = ""): TreeEdgeCheck {
   const p = String(parentId ?? "").trim();
   if (!p) return { ok: true, code: "", reason: "" };
@@ -1500,7 +1500,7 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
     return {
       ok: false,
       code: "closed_parent",
-      reason: `父派单 ${p} 已被结项（closed），不会再有产出：本单不挂父节点重发，或改挂仍会产出的前置`,
+      reason: `父派单 ${p} 已被结束（closed），不会再有产出：本单不挂父节点重发，或改挂仍会产出的前置`,
     };
   }
   if (parent.status === "failed" && String((parent as { retry_verdict?: string }).retry_verdict ?? "") === "give_up") {
@@ -1508,7 +1508,7 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
       ok: false,
       code: "dead_parent",
       reason:
-        `父派单 ${p} 已判死且不再重试（${String(parent.note ?? "").slice(0, 60) || "无备注"}）：` +
+        `父派单 ${p} 已判定失败且不再重试（${String(parent.note ?? "").slice(0, 60) || "无备注"}）：` +
         `挂上去只会永久等待。要么先 capitalist retry ${p} 让它重新可跑，要么本单不挂父节点`,
     };
   }
@@ -1568,7 +1568,7 @@ export function frontDispatch(root: string, id: string, by = "user", at = new Da
   return next;
 }
 
-/** 手动结项：把一单关成终态 `closed`。 */
+/** 手动结束：把一单关成终态 `closed`。 */
 export interface WorkerModelRequest {
   shard: string;
   model: string;
@@ -1707,7 +1707,7 @@ export function openReviewDispatch(
   return next;
 }
 
-/** 扫一遍到点的待确认单，自动结单。每轮调度 调一次。 */
+/** 扫一遍到点的待确认单，自动结束。每轮调度 调一次。 */
 export function sweepReviews(root: string): Dispatch[] {
   const rows = readDispatches(root);
   const now = Date.now();
@@ -1732,7 +1732,7 @@ export function sweepReviews(root: string): Dispatch[] {
   }
   if (changed) {
     writeJsonl(dispatchPath(root), rows);
-    // 自动结单也是结单：任务池必须跟着走，否则“已验收”永远差这一批。
+    // 自动结束也是结束：任务池必须跟着走，否则“已验收”永远差这一批。
     for (const d of out) syncTaskForDispatch(root, d);
   }
   return out;

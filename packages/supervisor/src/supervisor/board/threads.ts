@@ -63,7 +63,7 @@ export function taskBucket(status: unknown): TaskBucket {
   if (s === "paused") return "paused";
   if (s === "done" || s === "exited" || s === "finished") return "done";
   if (s === "canceled") return "canceled";
-  /* 作废与结项单单独成档，不计入排队与运行。 */
+  /* 作废与结束单单独成档，不计入排队与运行。 */
   if (s === "closed" || s === "superseded") return "closed";
   return "bad";
 }
@@ -120,7 +120,7 @@ export function taskCountsOf(
   return out;
 }
 
-/** 已结项判据与前端 settled() 同源：派单台账里 done 或 closed 即算结项。 */
+/** 已结束判据与前端 settled() 同源：派单台账里 done 或 closed 即算结束。 */
 export function settledThreadKeys(dispatches: readonly Dispatch[]): Set<string> {
   const keys = new Set<string>();
   for (const d of dispatches) {
@@ -171,9 +171,9 @@ export function taskCounts(root: string): TaskCounts {
  * 取消判定的默认说明。
  *
  * 只作为写库时的默认 note，**不再作为判定条件**：用户在取消时填的理由会覆盖它，
- * 按 note 文案判会让“填了理由的取消”落到已完成档。
+ * 按 note 文案判定会让“填了理由的取消”被归入已完成档。
  */
-export const CANCEL_NOTE = "用户手动结项";
+export const CANCEL_NOTE = "用户手动结束";
 
 export const CANCELED_KEEP_MS = 24 * 3600 * 1000;
 
@@ -354,7 +354,7 @@ export function buildThreadsPageUncached(
 
   for (const d of dispatches) {
     if (d.status !== "closed") continue;
-    /* 只看是谁结的项：note 是可被用户理由覆盖的自由文本，按它判会让取消显示成已完成。 */
+    /* 只看结束动作由谁发起：note 是可被用户理由覆盖的自由文本，按它判定会让取消显示成已完成。 */
     if (String(d.closed_by ?? "") !== "user") continue;
     const closedAt = Date.parse(String(d.closed_at ?? d.done_at ?? d.at ?? ""));
     if (Number.isFinite(closedAt) && Date.now() - closedAt > CANCELED_KEEP_MS) continue;

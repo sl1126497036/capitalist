@@ -32,7 +32,7 @@ const HEARTBEAT_MIN_GAP_MS = 2000;
  * 或 `CAPITALIST_ROOT`、文件不存在、距上次写入不足最小间隔、读写失败时都不写。
  *
  * 监工判活只读 `heartbeat_ts`，该字段启动时写一次。不续写时，超过超时阈值的正常工作
- * 会被判死并重派，重派是新上下文。
+ * 会被判定失败并重派，重派是新上下文。
  */
 function touchWorkerHeartbeat(): void {
   const id = process.env.CAPITALIST_WORKER_ID;
@@ -131,7 +131,7 @@ function readStdin(): Promise<string> {
  * 取得要用的 impl。
  *
  * 显式 `--agent` 只加载那一个，取值经 `normalize` 归一；没给时才按目录猜。未知 id 返回
- * null，不回落到探测结果。
+ * null，不使用探测结果。
  */
 function pickImpl(hostArg: string | null): HostImpl | null {
   if (hostArg) {
