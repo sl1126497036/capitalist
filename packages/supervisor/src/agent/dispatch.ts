@@ -331,7 +331,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
     const why = local.hits.map((h) => `${h.path}（${h.why}）`).join("；") || "触犯本机边界";
     const v = recordViolation(ctx, event, {
       rule: "LOCAL-BOUNDARY",
-      label: "碰本机禁止区",
+      label: "访问本机禁区",
       evidence: cmd,
       decision: "BLOCK",
       kind: "local",
@@ -484,14 +484,14 @@ function guardFileLock(
     });
     if (!r.ok) {
       releaseGot();
-      const who = r.holder || "别的进程";
+      const who = r.holder || "其他进程";
       recordEvent(ctx, event, { lock: "denied", mode, path: p, holder: who, ahead: r.ahead ?? 0 });
       return hook.deny(
         [
-          `【文件锁】${p} 现在由 ${who} 拿着${mode === "write" ? "写锁" : "读锁"}，等了 ${cfg.waitMs}ms 没等到，前面还排着 ${r.ahead ?? 0} 个。`,
+          `【文件锁】${p} 当前被 ${who} 持有${mode === "write" ? "写锁" : "读锁"}，等待 ${cfg.waitMs}ms 未获锁，排队 ${r.ahead ?? 0} 个。`,
           "",
           "不要无限等待，也不要反复重试同一个调用：",
-          "  1) 先做不涉及这个文件的事（读别的、改别的、跑测试）；",
+          "  1) 先做与该文件无关的工作（修改其他文件、运行测试）；",
           "  2) 确实只剩这一件事，过一会儿再试一次；",
           `  3) 持续无法获取时，capitalist ask "${p} 被 ${who} 长期占用" 登记后停止执行，等待监工裁决。`,
         ].join("\n"),
@@ -560,7 +560,7 @@ function judgeLocal(
     const why = local.hits.map((h) => `${h.path}（${h.why}）`).join("；");
     const v = recordViolation(ctx, event, {
       rule: `LOCAL-${act.toUpperCase()}`,
-      label: "碰本机禁止区",
+      label: "访问本机禁区",
       evidence: why,
       decision: "BLOCK",
       kind: "local",
@@ -568,8 +568,8 @@ function judgeLocal(
     const modeNote =
       local.decision !== "deny" ? `\n（当前档位 ${ctx.mode} 收紧了这一动作，规则原判为放行）` : "";
     return hook.deny(
-      `【本机边界拦截】${event.tool} 要碰的位置不允许：${why}${modeNote}\n` +
-        "敏感信息（密钥/凭据/浏览器数据/个人文档/系统目录）一律不碰；删除不许出任务根。" +
+      `【本机边界拦截】${event.tool} 要访问的位置不允许：${why}${modeNote}\n` +
+        "敏感信息（密钥/凭据/浏览器数据/个人文档/系统目录）一律不得访问；删除不得超出任务根。" +
         escalation(v.nth),
       event.point,
       event.sessionId,

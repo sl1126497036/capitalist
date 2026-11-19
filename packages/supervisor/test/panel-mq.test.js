@@ -66,7 +66,7 @@ test("申报按 reports.jsonl 原文整篇下发，事件台账的 400 字截断
     evidence: "EVIDENCE-证据原文",
     needs: "none",
   });
-  /* 生产侧记事件时只留前 400 字，这里照原样模拟，验证面板不吃这份截断。 */
+  /* 生产侧记事件时只留前 400 字，这里照原样模拟，验证面板不受这份截断影响。 */
   recordEvent(root, "mq_message", {
     id: msg.id,
     from: worker,

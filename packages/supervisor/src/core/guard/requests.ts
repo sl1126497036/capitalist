@@ -249,7 +249,7 @@ export function findOpenByFingerprint(root: string, fp: string): GuardRequest | 
 export function escalation(nth: number): string {
   if (nth <= 1) return "";
   if (nth === 2) return "\n\n（同一问题第 2 次：更换做法，不要重试同一条命令。）";
-  return '\n\n（同一问题第 3 次：停手，先 capitalist ask "<为什么反复这样干>" 登记，等监工裁决。）';
+  return '\n\n（同一问题第 3 次：停手，先 capitalist ask "<为什么反复失败>" 登记，等监工裁决。）';
 }
 
 /**

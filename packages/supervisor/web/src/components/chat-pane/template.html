@@ -308,7 +308,7 @@
             <div class="pbhead">
               <span class="pbname">{{ t("这一单的验收项") }}</span>
               <span class="pbmeta">{{
-                  accItems.length ? t("{n} 条 派单原文", { n: accItems.length }) : t("派单没有编号验收项")
+                  accItems.length ? t("共 {n} 条，出自派单原文", { n: accItems.length }) : t("派单没有编号验收项")
                 }}</span>
             </div>
             <ol v-if="accItems.length" class="accs">
@@ -481,7 +481,10 @@
                 <span v-if="v.note" class="tnote">{{ t(v.note) }}</span>
                 <span v-if="v.m.event === 'supervisor_cmd' && v.m.action" class="cmdchip">{{ cmdLabel(v.m.action, v.m.urgent) }}</span>
                 <span class="btime">{{ stamp(v.m.at) }}</span>
-                <span v-if="v.m.event === 'supervisor_cmd'" class="bst" :class="v.m.ok ? 'ok' : 'bad'">
+                <button v-if="v.m.event === 'supervisor_cmd' && v.m.no" class="bst jump" :class="v.m.ok ? 'ok' : 'bad'" type="button" @click.stop="jumpThread(v.m)">
+                {{ evtReceipt(v.m) }}
+              </button>
+                <span v-else-if="v.m.event === 'supervisor_cmd'" class="bst" :class="v.m.ok ? 'ok' : 'bad'">
                 {{ evtReceipt(v.m) }}
               </span>
                 <span v-if="v.m.event === 'mq_message'" class="bst" :class="v.m.status === 'done' ? 'ok' : ''">
@@ -593,7 +596,7 @@
                       class="assocchip jump"
                       type="button"
                       :aria-label="t('切到该单的工作进程')"
-                      @click.stop="emit('locate', String(v.m.no))"
+                      @click.stop="jumpThread(v.m)"
                     >{{ t("同一派单") }} {{ v.assoc }}</button>
                     <span
                       v-else-if="v.assoc"
@@ -638,7 +641,7 @@
                       :class="v.m.status"
                       type="button"
                       data-tip=""
-                      @click.stop="emit('locate', String(v.m.no))"
+                      @click.stop="jumpThread(v.m)"
                       @mouseenter="saystTipOn($event, v)"
                     >{{ stat(v) }}</button>
                     <span
@@ -821,7 +824,7 @@
               class="sendbtn"
               type="button"
               :disabled="!canSend"
-              :aria-label="uploading ? t('图片上传中，完成后可发送') : sending ? t('已发出 仍可继续发送') : t('发送')"
+              :aria-label="uploading ? t('图片上传中，完成后可发送') : sending ? t('已发出；仍可继续发送') : t('发送')"
               @click="submit"
             >
               <ArrowUpOutlined aria-hidden="true"/>

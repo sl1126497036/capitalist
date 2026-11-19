@@ -22,7 +22,7 @@ function newRoot() {
   return root;
 }
 
-test("记忆里配置后，涉及用户可见文案的单子带上文案规范块", () => {
+test("记忆里配置后，涉及用户可见文案的派单带上文案规范块", () => {
   const root = newRoot();
   assert.ok(memory.addMemory(root, NOTE, "habit"), "配置写入记忆");
   const action = "改看板顶部标题文案，去掉拟人说法";
@@ -48,7 +48,7 @@ test("删除记忆条目 = 关开关：之后不再带", () => {
   assert.equal(withCopyStandard(root, "调整界面提示语"), "调整界面提示语");
 });
 
-test("按需判据保留：记忆有配置，纯逻辑单子仍不带", () => {
+test("按需判据保留：记忆有配置，纯逻辑派单仍不带", () => {
   const root = newRoot();
   memory.addMemory(root, NOTE, "habit");
   const out = withCopyStandard(root, "修接口层超时重试：失败后按指数退避重试三次");

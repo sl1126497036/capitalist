@@ -81,7 +81,7 @@ export function validateInboxRecord(row: unknown): string | null {
  * 同目录下哪些文件不是台账。
  *
  * 显式枚举而不是“只拼路径读一次”：并发写遗留的临时文件必须以可观测的方式被跳过。
- * 读不到目录（inbox 还没建）时返回空数组，调用方按“没有台账”处理。
+ * 读不到目录（inbox 尚未建立）时返回空数组，调用方按“没有台账”处理。
  */
 export function skippedInboxFiles(root: string): string[] {
   let names: string[];

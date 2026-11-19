@@ -99,7 +99,7 @@ test("列表按行首符号收集，续行并入上一项", () => {
   assert.strictEqual(ol.items.length, 2);
 });
 
-test("围栏代码块原样保留，未闭合时吃到结尾", () => {
+test("围栏代码块原样保留，未闭合时读到结尾", () => {
   const closed = md.parseMarkdown("```bash\nls -la\n```\n尾巴");
   assert.strictEqual(closed[0].t, "code");
   assert.strictEqual(closed[0].lang, "bash");

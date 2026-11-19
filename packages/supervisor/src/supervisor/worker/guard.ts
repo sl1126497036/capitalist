@@ -196,7 +196,7 @@ export function runGuard(root: string, supervisorPid: number): void {
       const reaped = reapOrphans(root, log, { onlySupervisorPid: supervisorPid });
       log(
         reaped.length > 0
-          ? `[guard] 已收掉 ${reaped.length} 个 worker：${reaped.map((r) => r.id).join("、")}`
+          ? `[guard] 已回收 ${reaped.length} 个 worker：${reaped.map((r) => r.id).join("、")}`
           : "[guard] 没有需要收的 worker",
       );
     } catch (err) {

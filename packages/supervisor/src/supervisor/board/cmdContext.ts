@@ -2,6 +2,8 @@
 import { stripAttachments } from "../../core/message/attachments";
 import { listWorkers, readDispatches } from "../../core/record/supervisor";
 import { readTasks } from "../../core/record/tasks";
+import { taskNoOfDispatchId } from "../../core/record/tasks";
+import { taskNoLabel, dispatchNoLabel } from "../../core/record/idMap";
 import { laneContextWindow, readLane } from "../judge/sessionLane";
 import { dispatchNoTable } from "../usage/threadNo";
 import { parseWorkerLog } from "../worker/workerLog";
@@ -32,7 +34,7 @@ export function taskNoLines(threads: readonly ThreadSummary[], limit = 24): stri
     ...picked.map((t) => {
       const who = t.worker ? "执行中" : "排队中";
       const title = t.title ? ` · ${t.title}` : "";
-      return `  #${t.no} [${t.shard || t.stage}] ${t.status}${title} · ${who}`;
+      return `  ${taskNoLabel(Number(t.no))} [${t.shard || t.stage}] ${t.status}${title} · ${who}`;
     }),
   ];
 }
@@ -40,11 +42,11 @@ export function taskNoLines(threads: readonly ThreadSummary[], limit = 24): stri
 export function workerRuntimeLines(root: string, max = 5): string[] {
   const live = listWorkers(root).filter((w) => w.status === "running" || w.status === "starting");
   if (live.length === 0) return [];
-  const noTable = dispatchNoTable(root);
   const disps = readDispatches(root);
   const rows: string[] = [];
   for (const w of live.slice(0, max)) {
-    const no = w.dispatch ? String(noTable.get(String(w.dispatch)) ?? "") : "";
+    const noNum = w.dispatch ? taskNoOfDispatchId(String(w.dispatch)) : 0;
+    const no = noNum > 0 ? taskNoLabel(noNum) : "";
     const laneId = String((w as unknown as { ai_session?: string }).ai_session ?? "");
     const base = laneId.replace(/-g\d+$/, "");
     const st = base ? readLane(root, base) : null;
@@ -59,7 +61,7 @@ export function workerRuntimeLines(root: string, max = 5): string[] {
     const what = rawWhat.replace(/\s+/g, " ").trim().slice(0, 40);
     const digest = workerDigest(w);
     const tail = [what, digest].filter(Boolean).join(" · ");
-    rows.push(`  ${no ? `#${no}` : `进程 ${w.id}`} · ${w.id} · ${short}${gen} · ${room}${tail ? ` · ${tail}` : ""}`);
+    rows.push(`  ${no ? no : `进程 ${w.id}`} · ${w.id} · ${short}${gen} · ${room}${tail ? ` · ${tail}` : ""}`);
   }
   return [
     "",
@@ -142,7 +144,7 @@ export function settledLines(root: string, limit = 8): string[] {
     if (seen.has(key)) continue;
     seen.add(key);
     const res = verdict(t.note);
-    rows.push(`  ${no ? `#${no}` : "-"} ${word(String(t.state ?? ""))} · ${ask(t.detail)}${res ? ` · ${res}` : ""}`);
+    rows.push(`  ${no ? dispatchNoLabel(no) : "-"} ${word(String(t.state ?? ""))} · ${ask(t.detail)}${res ? ` · ${res}` : ""}`);
     if (rows.length >= limit) break;
   }
   return [

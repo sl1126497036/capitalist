@@ -108,9 +108,10 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       /** 给全 id，不给四位短号，便于前端渲染成任务号。 */
       const from = String(e.from ?? "");
       const evTaskNo = d && nos ? nos.get(d) ?? "" : "";
+      /** 正文只写裸编号，`#` 由外层 {@link maskDispatchIds} 统一补一次，避免双重补 `#`。 */
       const fromLabel = from
         ? evTaskNo
-          ? `来自 #${evTaskNo}`
+          ? `来自 ${evTaskNo}`
           : `来自进程 ${from}`
         : "";
       const shard = shardTitle(e.shard) || "";

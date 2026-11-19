@@ -31,7 +31,7 @@ const LOGIN_HINT =
 /**
  * 会话续载参数。
  *
- * `--resume <id>` 续接上一次会话，会话已存在时接着上次的上下文跑。
+ * `--resume <id>` 续接上一次会话，会话已存在时沿用上次的上下文。
  * `--session-id <id>` 用在要求变过的场合：同 id 新开会话，旧上下文不带过来。
  */
 function sessionArgs(session?: WorkerSession): string[] {

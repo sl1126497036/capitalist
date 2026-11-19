@@ -43,7 +43,7 @@ async function withBoard(root, fn) {
   }
 }
 
-test("接口：列出 -> 建单（原话预填、只带本条附件）-> 出列；再来一次 409", async () => {
+test("接口：列出 -> 建单（原话预填、只带本条附件）-> 出列；重复请求返回 409", async () => {
   const root = sandbox();
   /* 前一条带过一张旧图，后一条本身没贴图：建单时不许把旧图带进来。 */
   recordUserMessage(root, { text: "上一张图是别的单的", atts: [".capitalist/attachments/old.png"] });

@@ -5,7 +5,7 @@
 import { CMD_ZH, EVENT_ZH, EVENT_ZH_FALLBACK } from "../../../src/supervisor/context/terms.ts";
 import { lang, t } from "./i18n.js";
 import { rejectTail } from "./rejectTail.js";
-import { noLabel } from "./no.js";
+import { noLabel, bareNoLabel } from "./no.js";
 
 /* 时间格式随界面语言：英文用 en-GB（24 小时制、日/月顺序），中文用 zh-CN。 */
 const locale = () => (lang.value === "en" ? "en-GB" : "zh-CN");
@@ -108,8 +108,9 @@ export function isSupervisorSpeech(m, supervisorView) {
  */
 export function sayStatus(s, no, reason, detail) {
   const v = String(s || "");
-  const raw = String(no || "");
+  /* 编号一律经 lib/no.js 取：`n` 带 `#`（直接拼在句尾），`b` 不带 `#`（填 `#{no}` 占位）。 */
   const n = noLabel(no);
+  const b = bareNoLabel(no);
   const withNo = (base) => (n ? `${base} ${n}` : base);
   if (v === "executed") return withNo(t("已执行"));
   if (v === "rejected") {
@@ -118,10 +119,10 @@ export function sayStatus(s, no, reason, detail) {
   }
   if (v === "pending") return t("等待下一轮调度");
   if (v === "已并入派单") {
-    return raw ? t("已并入派单 #{no} 随该单启动生效", { no: raw }) : t("已并入派单 随该单启动生效");
+    return b ? t("已并入派单 #{no}；随该单启动生效", { no: b }) : t("已并入派单；随该单启动生效");
   }
   if (v === "已送达执行中的进程") {
-    return raw ? t("已送达 #{no} 执行中的进程已收到", { no: raw }) : t("已送达 执行中的进程已收到");
+    return b ? t("已送达 #{no}；执行中的进程已收到", { no: b }) : t("已送达；执行中的进程已收到");
   }
   if (v === "随派单启动带入") return t("随派单启动带入");
   if (v === "已登记，进程下一次动作间隙送达") return t("已登记，进程下一次动作间隙送达");

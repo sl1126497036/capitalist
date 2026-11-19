@@ -1,4 +1,4 @@
-/** 任务池台账（`.capitalist/tasks.jsonl`）：一件“要做的活”而不是“一次执行尝试”。 */
+/** 任务池台账（`.capitalist/tasks.jsonl`）：一项“要做的任务”而不是“一次执行尝试”。 */
 
 import { join } from "node:path";
 
@@ -83,23 +83,33 @@ export function taskNoOfDispatchId(dispatchId: string): number {
 /**
  * 为一张派单确定任务号与派发序，返回派单号（落盘形式 `2-3`，不带 `#`）。
  *
- * 这是“任务号 + 派发序”的唯一发行点：同一分片复用原任务号、派发序加一；否则分配新任务号。
- * 派单号本身编码任务号，`ensureTaskForDispatch` 据此对齐，不再靠 `thread-no.json` 事后映射。
+ * 这是“任务号 + 派发序”的唯一发行点，派单号本身编码任务号，`ensureTaskForDispatch`
+ * 据此对齐，不再靠 `thread-no.json` 事后映射。
+ *
+ * 新任务与重派的区分由 `originDispatchId` 显式表达，不靠 `stage + shard` 猜测：
+ *   - `originDispatchId` 缺省：这是新任务，发行新任务号（`nextTaskNo`），派发序从 1 起；
+ *   - `originDispatchId` 给定：这是对原派单（`originDispatchId`）的重派，沿用原任务号，
+ *     派发序在原任务已派发次数上 +1。
+ *
+ * `stage + shard` 相同不代表同一任务：一次不可分片阶段（`shard` 为空）里，用户可以
+ * 连续派多个互不相干的任务（`dispatch` 命令逐个建的 adhoc 单），它们 `stage` 相同、
+ * `shard` 均为空，却各自是独立任务。只有调用方明确说“这是对某张单的重派”，才复用任务号。
  */
 export function resolveDispatchNo(
   root: string,
   stage: string,
   shard: string | undefined,
+  originDispatchId?: string,
 ): { no: number; attempt: number; dispatchId: string } {
   const rows = readTasks(root);
-  const same = shard
-    ? rows.find((t) => t.stage === stage && t.shard === shard && t.state !== "void")
-    : undefined;
-  if (same) {
-    const no = Number(same.no) > 0 ? Number(same.no) : nextTaskNo(rows);
-    const attempt = (same.attempts ?? 0) + 1;
-    return { no, attempt, dispatchId: `${no}-${attempt}` };
+  /* 重派：按原派单号反解任务号并复用，派发序在原任务累计次数上 +1。 */
+  const originNo = originDispatchId ? taskNoOfDispatchId(originDispatchId) : 0;
+  if (originNo > 0) {
+    const task = rows.find((t) => Number(t.no) === originNo);
+    const attempt = (task?.attempts ?? 0) + 1;
+    return { no: originNo, attempt, dispatchId: `${originNo}-${attempt}` };
   }
+  /* 新任务：发行新任务号，第一次派发。 */
   const no = nextTaskNo(rows);
   return { no, attempt: 1, dispatchId: `${no}-1` };
 }
@@ -116,21 +126,23 @@ export function ensureTaskForDispatch(root: string, d: Dispatch): TaskItem {
   if (hit) return hit;
 
   const no = taskNoOfDispatchId(String(d.id));
-  /* 同一分片的重复派单（重派）挂到同一项上，而不是每次都新建一条。 */
-  const sameShard = d.shard
-    ? rows.find((t) => t.stage === d.stage && t.shard === d.shard && t.state !== "void")
-    : undefined;
-  if (sameShard) {
+  /*
+   * 新格式派单号（`2-3`）编码了任务号：按任务号找已有任务项复用，找不到就新建一条。
+   * 重派（同一任务号的第 N 次派发）因此挂到同一项上、`attempts` 累计，而不是每次都新建。
+   * 不再按 `stage + shard` 判定“同一任务”。一次不可分片阶段里可以派多个互不相干的
+   * 任务，它们的 `stage` 相同、`shard` 均为空，却不是同一件事。
+   */
+  const sameTask = no > 0 ? rows.find((t) => Number(t.no) === no) : undefined;
+  if (sameTask) {
     const next: TaskItem = {
-      ...sameShard,
-      ...(no > 0 && sameShard.no !== no ? { no } : {}),
+      ...sameTask,
       dispatch: d.id,
       state: "dispatched",
-      attempts: (sameShard.attempts ?? 0) + 1,
+      attempts: (sameTask.attempts ?? 0) + 1,
       updated_at: nowIso(),
     };
-    writeAll(root, rows.map((t) => (t.id === sameShard.id ? next : t)));
-    registerDispatch(root, Number(next.no) || no || nextTaskNo(rows), next.attempts);
+    writeAll(root, rows.map((t) => (t.id === sameTask.id ? next : t)));
+    registerDispatch(root, Number(next.no) || no, next.attempts);
     return next;
   }
 
@@ -199,7 +211,7 @@ export interface TaskSummary {
   failed: number;
   /** 人关掉的。 */
   voided: number;
-  /** 还没派出去的。 */
+  /** 尚未派出的。 */
   pending: number;
   /** 未完成 = 总数 - 已验收 - 已关闭。 */
   remaining: number;
@@ -238,7 +250,7 @@ export function voidTask(root: string, id: string, note = ""): TaskItem | null {
   return next;
 }
 
-/** 人手动建一项（动态追加的需求，还没有对应派单时用）。 */
+/** 人手动建一项（动态追加的需求，尚无对应派单时用）。 */
 export function createTask(
   root: string,
   input: { title: string; detail?: string; tags?: string[]; stage?: string },

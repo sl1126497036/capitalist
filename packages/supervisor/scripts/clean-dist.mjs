@@ -49,7 +49,7 @@ if (existsSync(DIST)) {
   if (removed > 0) console.log(`[clean] 删掉 ${removed} 个没有对应源文件的产物`);
   if (failed > 0) {
     console.error(
-      `[clean] ${failed} 个旧产物没删掉。构建会加载到旧模块，请在不受删除策略限制的终端重跑构建。`,
+      `[clean] ${failed} 个旧产物未删除。构建会加载旧模块，请解除文件占用后重新执行构建。`,
     );
     process.exit(1);
   }

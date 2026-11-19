@@ -88,7 +88,7 @@ test("同类卡点合并更新，不同类不合并", () => {
   assert.equal(loadMemories(root).length, 2);
 });
 
-test("上限：条数、单条字数都裁到位", () => {
+test("上限：条数与单条字数都按上限裁剪", () => {
   const root = sandbox();
   for (let i = 0; i < MEMORY_MAX + 5; i += 1) {
     addMemory(root, `卡点样本 ${i}：第 ${i} 次观测到的排队超时`, "blocker");
@@ -136,7 +136,7 @@ test("条目可编辑可删除，关键词随正文重算", () => {
   assert.equal(loadMemories(root).length, 0);
 });
 
-test("删除留痕：同文正文不再被自动记录复活，人工新增可解除", () => {
+test("删除留痕：同文正文不再被自动重新收录，人工新增可解除", () => {
   const root = sandbox();
   const text = "本机装 node-gyp 依赖失败：缺 python3-dev，需先装系统包";
   const made = addMemory(root, text, "blocker");

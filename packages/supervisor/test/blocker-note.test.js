@@ -28,14 +28,14 @@ function fail(root, extra) {
   });
 }
 
-test("卡点段只写卡点与打法，长度不超过上限", () => {
+test("卡点段只写卡点与处置方式，长度不超过上限", () => {
   const text = worker.buildSkipBlocker({ note: "跑测试时进程挂住，十分钟没有任何新输出。" });
   assert.ok(text.includes(worker.BLOCKER_MARKER), "要标明这是上一轮卡点，不是新要求");
   assert.match(text, /挂住/);
   assert.ok(text.length <= worker.BLOCKER_MAX_CHARS, `卡点段 ${text.length} 字，超过上限`);
 });
 
-test("拿不到失败原因时明说，并让 worker 先复现", () => {
+test("拿不到失败原因时如实说明，并让 worker 先复现", () => {
   const text = worker.buildSkipBlocker({});
   assert.match(text, /未记录失败原因/);
   assert.match(text, /复现/);

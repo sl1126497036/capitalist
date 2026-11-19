@@ -112,7 +112,7 @@ test("送达不等于落实：领走之后仍然算“没落实”", () => {
   assert.equal(cmds.isDirectiveOpen(after), true, "没结论就是没落实");
 });
 
-test("老台账（只有 consumed、没有 delivered）按原口径读，不许集体复活", () => {
+test("老台账（只有 consumed、没有 delivered）按原口径读，不恢复为已送达", () => {
   const legacyDone = { at: "2026-11-01T00:00:00.000Z", at_ts: 0, type: "direct", text: "老要求", consumed: true };
   const legacyOpen = { at: "2026-11-01T00:00:00.000Z", at_ts: 0, type: "direct", text: "老要求", consumed: false };
   assert.equal(cmds.isDirectiveOpen(legacyDone), false);
@@ -166,7 +166,7 @@ test("结论只认 done / not_mine / blocked", () => {
   assert.equal(r.ok, false);
 });
 
-test("not_mine / blocked 不带说明要拒：不许给它一条比“说句收到过”更省事的甩掉通道", () => {
+test("not_mine / blocked 不带说明要拒：不允许用一句“说句收到过”代替必要说明", () => {
   const root = sandbox();
   seed(root, "D-i2");
   const a = put(root, "一条要求");

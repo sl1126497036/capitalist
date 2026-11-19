@@ -4,6 +4,7 @@
  * 映射用普通对象：在 computed 中写入 reactive 映射会触发递归更新，导致渲染失败。
  */
 import { queueOrder } from "./queueOrder.js";
+import { bareNoLabel } from "./no.js";
 
 const KEY = "capitalist-thread-nos-v2";
 
@@ -29,7 +30,7 @@ export function shortOf(id) {
       /* 写入失败只影响跨会话稳定，本会话内编号仍一致。 */
     }
   }
-  return String(shortIds[key]).padStart(2, "0");
+  return bareNoLabel(String(shortIds[key]));
 }
 
 /**

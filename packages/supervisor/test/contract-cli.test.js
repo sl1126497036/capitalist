@@ -47,7 +47,7 @@ test("契约里引用的 capitalist 命令都真实存在（否则执行侧照�
   assert.deepEqual(missing, [], `契约引用了不存在的命令：\n${missing.join("\n")}`);
 });
 
-test("契约引用的命令不该少到只剩一两个（防止匹配规则写坏后测试假通过）", () => {
+test("契约引用的命令不该少到只剩一两个（防止匹配规则写错后测试假通过）", () => {
   const refs = referencedCommands();
   /* 内置契约只有 minimal 一份，其中引用的命令是 record 与 ask。下限按现状定，用途是发现正则失效。 */
   assert.ok(refs.size >= 2, `只匹配到 ${refs.size} 个命令，检查正则是否失效`);

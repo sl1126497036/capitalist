@@ -57,7 +57,7 @@ export function cmdGate(p: Parsed): number {
       }
       write("本机边界拦截：删除范围限于任务根以内。\n");
       for (const h of del.hits) write(`  ${h.path}\n    ${h.why}\n`);
-      write("\n只删任务根以内的东西；要动根外的，先问用户。\n");
+      write("\n只删除任务根以内路径；要改根外路径，先征得用户同意。\n");
       return 3;
     }
   }

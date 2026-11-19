@@ -385,7 +385,7 @@ const HELP_GROUPS: HelpGroup[] = [
         brief: ["释放指定锁"],
         opts: [{ f: "--force", d: ["不校验持有者"] }],
       },
-      { cmd: "lock reap", brief: ["回收持有者进程已退出且心跳超时的锁；监工每 tick 自动执行"] },
+      { cmd: "lock reap", brief: ["回收持有者进程已退出且心跳超时的锁；监工每轮调度自动执行"] },
     ],
   },
   {
@@ -574,7 +574,7 @@ export const COMMAND_HELP: Record<string, string> = {
 监工上下文重载：从事件台账提取进度，切换会话后继续执行。
   - 写入 .capitalist/reload/snapshot.json（+ history/ 副本）：当前阶段、已达标的验收项、
     每片的最后状态与未完成条目、用户未处理的插话、未裁决提问、重派计数
-  - 压缩成 .capitalist/reload/context.md：移除心跳 / 重复 tick / 已完成条目详情 / 一次性调试输出；
+  - 压缩成 .capitalist/reload/context.md：移除心跳 / 重复调度轮次 / 已完成条目详情 / 一次性调试输出；
     保留需求原文、未完成项、决策结论、待复验清单
   - 切换监工对话会话，原会话中的工具输出不再读取
   - 写 .capitalist/reload/resume.json：done_verified 不重派；done_unverified（已做但未验证）

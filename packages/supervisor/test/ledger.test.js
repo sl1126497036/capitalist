@@ -47,7 +47,7 @@ const hit = (root, evidence, session = "s1") =>
     session,
   });
 
-test("同一命令 60 秒内只记一次（否则“第几次”这个信号就废了）", () => {
+test("同一命令 60 秒内只记一次（保证“第几次”计数有效）", () => {
   const root = tmpRoot();
   const a = hit(root, "rm -rf /tmp/x");
   const b = hit(root, "rm -rf /tmp/x");
@@ -70,7 +70,7 @@ test("内容不同则累加：nth 递增到 3，level 同步升到 3", () => {
   assert.equal(third.level, 3);
 });
 
-test("会话隔离：别的会话的账不算到本会话头上", () => {
+test("会话隔离：其他会话的记录不计入本会话", () => {
   const root = tmpRoot();
   hit(root, "rm -rf /tmp/a", "s1");
   hit(root, "rm -rf /tmp/b", "s2");

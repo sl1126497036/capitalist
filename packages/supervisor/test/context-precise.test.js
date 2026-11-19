@@ -22,7 +22,7 @@ test("assistant 行：input_tokens 原样作为已用（已含缓存命中）", 
   assert.equal(contextUsedOfAssistantMessage(line), 19618);
 });
 
-test("assistant 行：没有读数时返回 null，不拿 0 冒充", () => {
+test("assistant 行：没有读数时返回 null，不用 0 代替", () => {
   assert.equal(contextUsedOfAssistantMessage(null), null);
   assert.equal(contextUsedOfAssistantMessage({ type: "assistant" }), null);
   assert.equal(contextUsedOfAssistantMessage({ message: null }), null);

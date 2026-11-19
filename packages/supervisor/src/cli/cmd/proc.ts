@@ -271,7 +271,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
     /** 收工闸与送达用同一套匹配（`directiveMatches`），不各写一份。 */
     const me = String(process.env.CAPITALIST_WORKER_ID ?? "");
     const pending = listDirectives(root).filter((x) => {
-      /** “还没落实”而不是“还没被领走”。 */
+      /** “尚未落实”而不是“尚未被领取”。 */
       if (!isDirectiveOpen(x)) return false;
       const mine = directiveMatches(x, {
         shard: target.shard,
@@ -282,7 +282,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       });
       if (!mine) return false;
       /*
-       * 送达太久还没结论：不再拿它挡收工。
+       * 送达太久尚无结论：不再拿它挡收工。
        *
        * 新语义多了一条死锁路径（收到不回报 -> 永远报不了完成）。留这个窗口放行，
        * 让单能结出去；缺的那几条由验收判定在材料里点出来，不由收工闸拦截。
@@ -299,8 +299,8 @@ export async function cmdReport(p: Parsed): Promise<number> {
        * 直接把命令行拼好。
        *
        * 这道闸挡的是“没回报”，不是“没做”，挡回一次就该让 worker 能一次补齐。
-       * 只列原文不列命令的话，它会按自己的理解重写一遍格式，再被挡一次，来回几次就
-       * 变成新的卡点（历史上有过卡整夜的先例）。
+       * 只列原文不列命令的话，它会按自己的理解重写一遍格式，再被挡一次，重复几次就
+       * 变成新的卡点（此前出现过整夜卡住的情况）。
        */
       const args: string[] = [];
       for (const x of pending) {
@@ -402,7 +402,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
     write(t(`Reported ${id}; waiting for the supervisor's verdict (it reviews the report and evidence before closing).\n`, `已上报完成 ${id}，等监工裁决（它看完报告与证据再决定结不结束，不再有倒计时）\n`));
     if (note) write(t(`Note: ${note}\n`, `说明：${note}\n`));
     if (added) write(t(`New requirement recorded; review follows it: ${added.slice(0, 200)}\n`, `已记录新增要求，监工按最新要求审这一单：${added.slice(0, 200)}\n`));
-    write(t("The dispatch stays in flight until the verdict. Do not start another one for the same work.\n", "这一单在监工裁决前仍然算在途：不要再派一张去做同一件事。\n"));
+    write(t("The dispatch stays in flight until the verdict. Do not start another one for the same work.\n", "这一单在监工裁决前仍然算在途：不要另派一单做同一件事。\n"));
 
     const verdict = await awaitVerdict(root, id, 240_000);
     if (verdict === "accepted") {
@@ -420,7 +420,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
     }
     if (verdict === "error") {
       write(t(`Error (not a rejection). Stop as recorded by the supervisor:\n${verdictReason(root, id)}\n`, `本单出现异常（非打回），按监工记录停手：\n${verdictReason(root, id)}\n`));
-      write(t("Once the blocker is clear, describe it with capitalist ask. Do not open a new dispatch.\n", "确认卡在哪之后用 capitalist ask 说明，不要自己重开一张。\n"));
+      write(t("Once the blocker is clear, describe it with capitalist ask. Do not open a new dispatch.\n", "确认卡在哪之后用 capitalist ask 说明，不要重开新单。\n"));
       return 0;
     }
     write(t("No verdict yet (the supervisor is busy). Do not re-report; keep working on what remains.\n", "裁决未出（监工正忙）。不要重报同一份，继续完成剩余部分；\n"));
@@ -613,8 +613,7 @@ export function cmdWorkers(p: Parsed): number {
  * 中断指定工作进程。
  *
  * 结束进程与把它的派单一并按失败结束，两件事都在 core/commands.stopWorker 里做。
- * 只标 worker 不结束会留下 claimed 僵尸：监工以为有人还在干，这张单不再重派，界面上的
- * 进行中状态一直转着。
+ * 只标 worker 不结束会留下 claimed 占位记录：监工误判仍有人执行，这张单不再重派，界面持续显示进行中。
  */
 export function cmdStopWorker(p: Parsed): number {
   const id = p.positional[0];
@@ -631,7 +630,7 @@ export function cmdStopWorker(p: Parsed): number {
       (r.dispatch
         ? requeue
           ? t(`Dispatch ${r.dispatch} requeued; it restarts next round.\n`, `派单 ${r.dispatch} 已退回待派，下一轮调度重新拉起。\n`)
-          : t(`Dispatch ${r.dispatch} closed as failed.\n`, `派单 ${r.dispatch} 已按失败结束（不留 claimed 僵尸）。\n`)
+          : t(`Dispatch ${r.dispatch} closed as failed.\n`, `派单 ${r.dispatch} 已按失败结束（不残留占位记录）。\n`)
         : t("This worker had no open dispatch.\n", "该 worker 没有在途派单。\n")) +
       (requeue
         ? t("Effect: the dispatch is re-dispatched next round; the session continues on the same lane with history intact.\n", "后果：下一轮调度重派这一单，会话按同一 lane 续接，历史不丢失。\n")

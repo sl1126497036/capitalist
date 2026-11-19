@@ -8,6 +8,7 @@ import { loadState } from "../../core/record/state";
 import { clearStopFlag, listWorkers, readDispatches, Dispatch } from "../../core/record/supervisor";
 import { pausePath } from "../../core/record/pause";
 import { dispatchNoTable } from "../usage/threadNo";
+import { dispatchNoLabel } from "../../core/record/idMap";
 import { buildThreadMessages } from "./messages";
 import { buildThreads } from "./threads";
 import { spawnSync } from "node:child_process";
@@ -30,7 +31,7 @@ export function quoteDispatchLabel(root: string, msgId: string): string {
   if (hits.length === 0) return "";
   const noTable = dispatchNoTable(root);
   const nos = hits.map((d) => noTable.get(String(d.id)) ?? "").filter(Boolean);
-  return nos.length ? nos.map((n) => `#${n}`).join("、") : "";
+  return nos.length ? nos.map((n) => dispatchNoLabel(n)).join("、") : "";
 }
 
 export function sayArgsOf(input: {

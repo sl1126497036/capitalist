@@ -28,19 +28,38 @@ export function idMapPath(root: string): string {
   return join(supervisorDir(root), "id-map.json");
 }
 
-/** 任务号显示形式：`#01`。 */
+/** 任务号段补零到两位；超过 99 原样（不截断）。只用于显示，落盘不变。 */
+function padTaskNo(n: string): string {
+  return /^\d+$/.test(n) ? n.padStart(2, "0") : n;
+}
+
+/**
+ * 裸编号里第一段任务号补零到两位：`2-2` -> `02-2`、`2-P1` -> `02-P1`、`2` -> `02`；
+ * 非数字开头原样（如 `S0-S-<毫秒>`、旧 `D-` 号）。
+ *
+ * 编号显示的唯一补零入口：任务号、派单号、进程号、消息编号都经这里，避免各自实现。
+ */
+export function padBareNo(s: string): string {
+  const bare = String(s ?? "").replace(/^#/, "").trim();
+  const m = /^(\d+)(.*)$/.exec(bare);
+  return m ? `${padTaskNo(m[1] ?? "")}${m[2] ?? ""}` : bare;
+}
+
+/** 任务号显示形式：`#01`。入参为任务号数字，显示补零到两位；无效号返回空串。 */
 export function taskNoLabel(no: number): string {
-  return `#${Math.trunc(no)}`;
+  const n = Math.trunc(Number(no));
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return `#${padTaskNo(String(n))}`;
 }
 
 /** 派单号显示形式：`#02-2`。入参为落盘形式 `2-2`。 */
 export function dispatchNoLabel(no: string): string {
-  return `#${no}`;
+  return `#${padBareNo(no)}`;
 }
 
 /** 进程号显示形式：`#02-P1`。入参为落盘形式 `2-P1`。 */
 export function workerNoLabel(no: string): string {
-  return `#${no}`;
+  return `#${padBareNo(no)}`;
 }
 
 /**

@@ -189,7 +189,7 @@ test("建单：父节点不存在被拒，原因写明 PARENT，不静默变成�
   );
 });
 
-test("建单：父节点已 closed 被拒——父节点不会再有产出，挂上去等于永久等待", async () => {
+test("建单：父节点已 closed 被拒，父节点不会再有产出，挂上去等于永久等待", async () => {
   const root = sandbox();
   put(root, "A", { status: "closed", done_at: new Date().toISOString() });
   const rec = await dispatchViaDirective(root, { parent: "A", parent_reason: "要 A 的产物" });
@@ -201,7 +201,7 @@ test("建单：父节点已 closed 被拒——父节点不会再有产出，挂
   );
 });
 
-test("建单：写了 PARENT 没写理由被拒——树边要能被判断真假", async () => {
+test("建单：写了 PARENT 没写理由被拒，树边要能被判断真假", async () => {
   const root = sandbox();
   put(root, "A");
   const rec = await dispatchViaDirective(root, { parent: "A" });
@@ -270,7 +270,7 @@ test("挂父节点的单不参与同类合并：合进去等于替它背一条�
 });
 
 
-test("场景：异常中断 / 进程被杀——重启后树与队列和中断前一致", () => {
+test("场景：异常中断 / 进程被杀，重启后树与队列和中断前一致", () => {
   const root = sandbox();
   put(root, "A");
   put(root, "B", { parent: "A", parent_reason: "要 A" });
@@ -291,7 +291,7 @@ test("场景：异常中断 / 进程被杀——重启后树与队列和中断�
   assert.deepStrictEqual(queueAfterRestart(root), ["C", "X", "B2"], "重派单排到队尾，树边仍在");
 });
 
-test("场景：机器重启——换一个进程只读台账重算，树与队列完全一致", () => {
+test("场景：机器重启，换一个进程只读台账重算，树与队列完全一致", () => {
   const root = sandbox();
   put(root, "A");
   put(root, "B", { parent: "A", parent_reason: "要 A" });
@@ -321,7 +321,7 @@ test("场景：机器重启——换一个进程只读台账重算，树与队�
   assert.deepStrictEqual(out.cycles, []);
 });
 
-test("场景：插队——urgent / 置顶写在台账上，重启后仍在同一棵树里按原顺序", () => {
+test("场景：插队，urgent / 置顶写在台账上，重启后仍在同一棵树里按原顺序", () => {
   const root = sandbox();
   put(root, "A");
   put(root, "B", { parent: "A", parent_reason: "要 A" });
@@ -335,7 +335,7 @@ test("场景：插队——urgent / 置顶写在台账上，重启后仍在同�
   assert.deepStrictEqual(queueAfterRestart(root), after, "再重启一次顺序不变");
 });
 
-test("场景：派单失败——父节点失败期间子节点继续等，重派完成后子节点解锁", () => {
+test("场景：派单失败，父节点失败期间子节点继续等，重派完成后子节点解锁", () => {
   const root = sandbox();
   put(root, "A");
   put(root, "B", { parent: "A", parent_reason: "要 A" });

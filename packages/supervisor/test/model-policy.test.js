@@ -16,7 +16,7 @@ function rootWith(supervisor) {
   return root;
 }
 
-test("名字归一化：大小写、空格、下划线都吃掉", () => {
+test("名字归一化：大小写、空格、下划线统一去除", () => {
   assert.equal(normalizeModelName("  DeepSeek-V4.1-Flash "), "deepseek-v4.1-flash");
   assert.equal(normalizeModelName("deepseek v4 pro"), "deepseek-v4-pro");
   assert.equal(normalizeModelName("MiniMax_M3.1_Flash"), "minimax-m3.1-flash");
@@ -67,7 +67,7 @@ test("配置能追加禁用名单（并集，不能减）", () => {
   assert.equal(resolveModel({ root, host: "codebuddy", wanted: "glm-5.3-flash" }).denied, "glm-5.3-flash");
 });
 
-test("平台声明的默认档自己不在禁用名单里（否则会绕死自己）", () => {
+test("平台声明的默认档不在禁用名单里（否则会被自身规则拦截）", () => {
   const rules = modelRulesOf(undefined, "codebuddy");
   assert.ok(rules);
   assert.ok(!rules.deny.includes(normalizeModelName(rules.def)), "默认档被自己禁用会让每次调用都改用禁用值");

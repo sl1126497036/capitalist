@@ -25,8 +25,8 @@ export interface RebuildItem {
   /**
    * 这条处置是否真的会改台账。
    *
-   * “再跑一次什么都不做”要能被说出口：幂等的前提是计划能分清“该关但已经关了”
-   * 与“该关还没关”。`stats.close` / `stats.reopen` 只数 pending 的，
+   * “重复执行不做任何改动”要能成立：幂等的前提是计划能分清“该关但已经关了”
+   * 与“该关尚未关”。`stats.close` / `stats.reopen` 只数 pending 的，
    * 命令行据此输出“没有需要改的行”。
    */
   pending: boolean;

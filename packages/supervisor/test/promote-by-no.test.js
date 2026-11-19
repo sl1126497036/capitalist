@@ -53,7 +53,7 @@ test("按号定位：`#75` 能翻到它那条线程上的在途单", () => {
   }
 });
 
-test("按号定位：单已终结时不返回（不拿死单去置顶）", () => {
+test("按号定位：单已终结时不返回（不用已终结的单置顶）", () => {
   const root = sandbox();
   try {
     const { no } = seedWithNo(root, "D-done1", { status: "done" });
@@ -73,7 +73,7 @@ test("按号定位：编号表里没有这个号 -> undefined，不按队列顺�
   }
 });
 
-test("监工我说“立即执行 #N”：指令落下去能真的置顶", async () => {
+test("监工发出“立即执行 #N”：指令落实后置顶生效", async () => {
   const root = sandbox();
   try {
     const { id, no } = seedWithNo(root, "D-queued1");
@@ -97,7 +97,7 @@ test("监工我说“立即执行 #N”：指令落下去能真的置顶", async
   }
 });
 
-test("监工我说“立即执行 #N”而号不存在：给明确的拒绝理由，不再说“找不到排队中的单”", async () => {
+test("监工发出“立即执行 #N”而编号不存在：给出明确的拒绝理由，不再沿用“找不到排队中的单”", async () => {
   const root = sandbox();
   try {
     seedWithNo(root, "D-queued2");

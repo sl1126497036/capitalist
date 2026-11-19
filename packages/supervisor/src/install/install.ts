@@ -53,7 +53,7 @@ export interface InstallOptions {
    * 缺省取当前工作目录，`capitalist install` 的语义是“把本项目的监工接到宿主上”，
    * 站在项目里执行就装到这个项目。不再退到用户级：写宿主的用户级配置目录
    * 会让这台机器上所有项目、所有会话的每次工具调用都 spawn 一次 hook，
-   * Windows 上就是一直闪窗。要装到别的项目就显式 `--root`。
+   * Windows 上表现为反复弹出窗口。要装到别的项目就显式 `--root`。
    */
   root?: string | undefined;
 }
@@ -378,7 +378,7 @@ export function ensureHooks(hostIds: string[], root?: string): HealResult {
     if (!impl?.install) continue;
     const file = hookSettingsFile(impl, root);
     if (!file) {
-      // 没有项目级落点就别装：写用户级会让这台机器上每个会话都背上这个 hook。
+      // 没有项目级落点时不安装：写入用户级会让这台机器上所有会话都触发该 hook。
       result.failed.push({
         id: impl.id,
         message: "该宿主只有用户级配置，已跳过（写用户级会污染所有会话的每次工具调用）",
@@ -638,7 +638,7 @@ export function ensureSkillManual(
  * 用户级接入：hook 写入 `~/<宿主配置目录>/settings.json`。
  *
  * 只在显式要求时使用（`capitalist install --user`）。缺省落点是项目级：用户级写入会让这台
- * 机器上所有项目、所有会话的每次工具调用都起一次 hook 进程，Windows 上表现为持续闪窗。
+ * 机器上所有项目、所有会话的每次工具调用都会触发 hook 进程，Windows 上表现为反复弹出窗口。
  * 需要换目录即生效时由用户显式选择。
  */
 export function installUserHooks(hostIds: readonly string[]): {

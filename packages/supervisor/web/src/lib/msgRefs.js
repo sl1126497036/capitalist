@@ -9,8 +9,12 @@
  *   - 进程号 `2-P1`（数字-P数字）
  *   - 消息编号 `2-U2W-<毫秒>`、`2-U2S-<毫秒>`、`2-W-<毫秒>`、`2-S-<毫秒>`、`S0-S-<毫秒>`、`S0-SP-<毫秒>`
  * 前后须为非单词字符，避免从更长的含连字符串里切出片段。
+ *
+ * 编号前允许带 `#`：服务端回执正文（`maskDispatchIds`）已把编号补成 `#2-2`，这里把 `#` 一并
+ * 纳入引用片段，避免 `#` 被孤立成一段文字、编号又被二次映射，出现「# #02」这种重复。带 `#` 的
+ * 片段由调用方原样显示，不带 `#` 的仍按映射补 `#`。
  */
-const REF_RE = /(?<![A-Za-z0-9_-])(S0-(?:S|SP)-\d+|\d+-(?:P\d+|U2W|U2S|W|S|SP)-\d+|\d+-\d+)(?![A-Za-z0-9_-])/g;
+const REF_RE = /(?<![A-Za-z0-9_#-])(#?)(S0-(?:S|SP)-\d+|\d+-(?:P\d+|U2W|U2S|W|S|SP)-\d+|\d+-\d+)(?![A-Za-z0-9_-])/g;
 
 /**
  * 技能路径：以 `SKILL.md` 结尾的绝对路径（Windows 盘符或 POSIX 根、家目录均可），
@@ -36,10 +40,12 @@ function pushRefs(out, text) {
   REF_RE.lastIndex = 0;
   let m = REF_RE.exec(text);
   while (m) {
-    const raw = m[1] || "";
+    /* m[1] 是可选的 `#` 前缀，m[2] 是编号主体；`#` 并入 raw，避免被孤立。 */
+    const hash = m[1] || "";
+    const raw = m[2] || "";
     if (m.index > last) out.push({ type: "text", text: text.slice(last, m.index) });
-    if (raw) out.push({ type: "ref", raw });
-    last = m.index + raw.length;
+    if (raw) out.push({ type: "ref", raw: hash + raw });
+    last = m.index + hash.length + raw.length;
     m = REF_RE.exec(text);
   }
   if (last < text.length) out.push({ type: "text", text: text.slice(last) });

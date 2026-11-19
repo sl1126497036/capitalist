@@ -51,7 +51,7 @@ test("联网 / 子代理类工具 -> waiting", () => {
   assert.strictEqual(doingOfAction(parts.lastAction), "waiting");
 });
 
-test("本地读写工具不硬塞动作：判不出来就回空，交给界面回退", () => {
+test("本地读写工具不硬塞动作：无法判定时返回空，交给界面回退", () => {
   const parts = parseWorkerLog(
     [assistant([{ type: "tool_use", id: "t1", name: "Read", input: { file_path: "a.ts" } }])],
     { stream: true },

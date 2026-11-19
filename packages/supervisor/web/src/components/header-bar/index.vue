@@ -43,7 +43,7 @@ const connBad = computed(() => connState.value === "fail");
 const connText = computed(() => {
   const s = connState.value;
   if (s === "live") return t("已连接");
-  if (s === "degraded") return t("降级 轮询");
+  if (s === "degraded") return t("已降级，轮询中");
   if (s === "online") return t("在线");
   if (s === "fail") return t("连接失败（第 {n} 次）", { n: connFails.value });
   return t("连接中…");

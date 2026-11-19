@@ -48,7 +48,7 @@ import { dedupeMessages, isBlankMessage } from "../../lib/msgDedup.js";
 import {toneOf} from "../../lib/msgTone.js";
 import {isLog, logRowsOf} from "../../lib/msgNoise.js";
 import {shortOf, numberQueue} from "../../lib/shortId.js";
-import { noLabel } from "../../lib/no.js";
+import { noLabel, bareNoLabel, stripHash } from "../../lib/no.js";
 /* 结束态判定与左栏队列卡共用 lib/status.js。 */
 import {endedWord} from "../../lib/status.js";
 import {taskTitle} from "../../lib/taskTitle.js";
@@ -695,7 +695,7 @@ const thinkLine = computed(() => {
 });
 
 /** 上层压成一行的思考占位文案不进入消息流。 */
-const THINKY = /^(思考中\s*[·\s]\s*|已发出\s*[·\s]\s*模型在想)/;
+const THINKY = /^(思考中\s*[·\s]\s*|已发出)/;
 
 /** 活行文案与落库回执、block 同源时不重复上屏。 */
 function echoed(text) {
@@ -747,9 +747,9 @@ const stateRowBase = computed(() => {
   }
   if (isSupervisor.value) {
     if (!props.root) return null;
-    /* 对话回执未到时状态行持续占位：有过程文案就用过程，否则显示“已发出 模型在想”。 */
+    /* 对话回执未到时状态行持续占位：有过程文案就用过程，否则显示“已发出，等待模型回复”。 */
     if (props.sending) {
-      return {text: note || tr("已发出 模型在想"), bad: false, warn: false, run: true, dots: true};
+      return {text: note || tr("已发出，等待模型回复"), bad: false, warn: false, run: true, dots: true};
     }
     /* 状态行优先报过程内容，没有过程时才回退动作档位。 */
     if (note && !live.final) {
@@ -901,7 +901,7 @@ const lastAt = computed(() => {
 
 const headMeta = computed(() => {
   const t = lastAt.value ? clock(lastAt.value) : "—";
-  return tr("{n} 条消息 最近 {t}", { n: view.value.length, t });
+  return tr("共 {n} 条消息，最近 {t}", { n: view.value.length, t });
 });
 
 
@@ -927,7 +927,7 @@ function stat(v) {
   if (v.m.event === "supervisor_cmd") return evtReceipt(v.m);
   const s = String(v.m.status || "");
   if (s === "pending") return tr("等待下一轮调度");
-  if (s === "executed") return v.m.no ? tr("已执行 #{no}", { no: v.m.no }) : tr("已执行");
+  if (s === "executed") return v.m.no ? tr("已执行 #{no}", { no: bareNoLabel(v.m.no) }) : tr("已执行");
   /* 失败尾标按 reason 优先、回落 detail，两者皆空只显示“失败”；字段由 supervisor_cmd 事件与 SC- 指令卡下发。 */
   if (s === "rejected") {
     const tail = rejectTail(v.m.reason, v.m.detail);
@@ -2254,7 +2254,16 @@ function clearQuote() {
   quote.value = null;
 }
 
-/* 跳转入口只有带编号的回执标签，emit("locate", no) 后由 App 转交 QueuePane 做滚动定位与高亮。 */
+/* 跳转入口只有带编号的回执标签：优先切到该单自己的线程，查不到线程时退回队列滚动定位。 */
+function jumpThread(m) {
+  const raw = String(m?.no ?? "");
+  const e = raw ? refIndex.value.get(stripHash(raw)) : null;
+  if (e && e.threadId) {
+    emit("pick", e.threadId);
+    return;
+  }
+  emit("locate", raw);
+}
 
 function jumpTo(ref) {
   const box = streamEl.value;
@@ -2263,7 +2272,7 @@ function jumpTo(ref) {
   const el = box.querySelector(`[data-mref="${safe}"]`);
   if (!el) {
     /* 引用失败只表示消息不在当前窗口，显示提示，不按异常上报。 */
-    pushLive(tr("原消息不在当前窗口内 待确认"), "warn");
+    pushLive(tr("原消息不在当前窗口内，待确认"), "warn");
     return;
   }
   el.scrollIntoView({block: "center"});
@@ -2317,8 +2326,8 @@ async function uploadOne(file, gen = draftGen) {
     /* 超时、断网与后端异常按可重试失败处理并给出重试入口。 */
     pushLive(
       timedOut
-        ? tr("上传超时（{n} 秒） 图片未上传，点击“重试”重新上传", { n: UPLOAD_TIMEOUT_MS / 1000 })
-        : tr("上传中断 连接已断开，点击“重试”重新上传"),
+        ? tr("上传超时（{n} 秒）：图片未上传，点击“重试”重新上传", { n: UPLOAD_TIMEOUT_MS / 1000 })
+        : tr("上传中断：连接已断开，点击“重试”重新上传"),
       "bad",
     );
     if (gen === draftGen) uploadFails.value = [...uploadFails.value, {file, name: file.name || "clipboard.png"}];
@@ -2438,7 +2447,7 @@ async function onDrop(e) {
       insertText(paths);
       return;
     }
-    insertText([tr("（拖入的 {list} 拿不到本机路径，请用“图片/路径”选）", { list: files.map((f) => f.name).join(tr("、")) })]);
+    insertText([tr("（拖入的 {list} 没有本机路径，请用“图片/路径”选择）", { list: files.map((f) => f.name).join(tr("、")) })]);
     return;
   }
 
@@ -2572,14 +2581,14 @@ const stopDetail = computed(() => {
 });
 
 const placeholder = computed(() => {
-  if (props.readonly) return tr("没有可发送的进程 请先在左栏选择");
+  if (props.readonly) return tr("没有可发送的进程：先在左栏选择");
   if (!isSupervisor.value) {
     /* 已结束的单仍可发消息，服务端把原单置回 open 带原上下文续跑。 */
     const st = String(props.thread?.status || "");
-    if (st === "queued") return tr("这一单在排队 此时发送的内容会并入这一单，启动时一并带入");
+    if (st === "queued") return tr("这一单在排队；此时发送的内容会并入这一单，启动时一并带入");
     if (!["running", "starting"].includes(st))
       return tr("派单已结束，消息在原会话中回复");
-    return tr("给执行中的进程发消息 会在下一个动作间隙收到，不打断当前执行");
+    return tr("给执行中的进程发消息；会在下一个动作间隙收到，不打断当前执行");
   }
   return tr("给监工派单或发送消息");
 });

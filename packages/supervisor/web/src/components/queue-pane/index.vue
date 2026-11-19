@@ -7,7 +7,7 @@ import { t } from "../../lib/i18n.js";
 const tr = t;
 import { isAlive, queueCompare } from "../../lib/queueOrder.js";
 import { numberQueue, shortOf } from "../../lib/shortId.js";
-import { noLabel, stripHash } from "../../lib/no.js";
+import { noLabel, bareNoLabel, stripHash } from "../../lib/no.js";
 /* 结束态判定与详情面板共用 lib/status.js。 */
 import { endedKind, settled } from "../../lib/status.js";
 import { taskTitle } from "../../lib/taskTitle.js";
@@ -120,9 +120,9 @@ function cell(t) {
   /* 排队区分等待前置单与普通排队；stuck_on 与 stuck_on_no 由后端下发，前端不读 after、不自行推导。 */
   if (s === "queued" || s === "open") {
     const no = String(t?.stuck_on_no || "").trim();
-    if (no) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no }) };
+    if (no) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(no) }) };
     const id = String(t?.stuck_on || "").trim();
-    if (id) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: shortOf(id) }) };
+    if (id) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(shortOf(id)) }) };
     return { tone: "warn", kind: "word", text: tr("排队") };
   }
   if (s === "suspended") return { tone: "warn", kind: "word", text: tr("已让位") };
@@ -371,7 +371,7 @@ function histRowOf(t) {
     short: numbering.value.get(t.id) || shortOf(t.id),
     tone: c.tone,
     word: c.kind === "word" ? c.text : "",
-    at: m.at ? `${m.at} ${tr("启动")}` : tr("启动 未记录"),
+    at: m.at ? `${m.at} ${tr("启动")}` : tr("启动：未记录"),
     durText: m.durText,
     spend: m.spend,
     tip: tipOf(t),
@@ -552,10 +552,10 @@ function clearConfirm(r) {
 function tipOf(t) {
   const ctx = ctxOf(t);
   const sp = spendOf(t).text;
-  const parts = [ctx ? tr("上下文 {v}", { v: ctx }) : tr("上下文 未上报")];
+  const parts = [ctx ? tr("上下文 {v}", { v: ctx }) : tr("上下文：未上报")];
   /* 积分制宿主无积分读数时整项省略。 */
   if (sp) parts.push(tr("消耗 {v}", { v: sp }));
-  else if (!creditHost.value) parts.push(tr("消耗 未上报"));
+  else if (!creditHost.value) parts.push(tr("消耗：未上报"));
   return parts.join(" ");
 }
 
@@ -594,7 +594,7 @@ const supervisorMeta = computed(() => {
   if (queued > 0) bits.push(tr("排队 {n}", { n: queued }));
   const used = supervisorUsage.value;
   if (used) bits.push(tr("累计 {v}", { v: used }));
-  else if (s.usage && s.usage.unreported_runs > 0) bits.push(tr("累计 未上报"));
+  else if (s.usage && s.usage.unreported_runs > 0) bits.push(tr("累计：未上报"));
   if (!s.online) bits.push(tr("已停"));
   return bits.join(" ");
 });
@@ -675,7 +675,11 @@ watch(
 
 /* 按任务编号滚动定位并短暂高亮（1.2 秒后移除）；编号缺失、任务不在当前列表或整栏收起时静默返回。 */
 function revealByNo(no) {
-  const want = Number(String(no ?? "").replace(/^#/, ""));
+  /*
+   * 入参可能是任务号（`2`），也可能是派单号 / 进程号（`2-3`、`2-P1`）；
+   * 卡片按任务号定位，这里统一取第一段任务号，避免 `Number("2-3")` 得 NaN 后直接失效。
+   */
+  const want = Number(String(no ?? "").replace(/^#/, "").trim().split("-")[0]);
   if (!Number.isFinite(want) || want <= 0) return;
   const hit = rows.value.find((r) => Number(r.short) === want);
   if (!hit) return;

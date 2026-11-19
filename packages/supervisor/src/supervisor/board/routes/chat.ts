@@ -24,7 +24,7 @@ import { readPause } from "../../../core/record/pause";
 import { memoryLines } from "../../context/memory";
 import { supervisorReplyView } from "../../view/msgView";
 import { estimateSessionContextTokens, recentUserLines, recordSupervisorContext, reloadBrief, severeSupervisorEventLines, supervisorChatTurnSessionId } from "../../context/reload";
-import { dispatchNoTable } from "../../usage/threadNo";
+import { taskNoLabel } from "../../../core/record/idMap";
 import { noteSupervisorModelUsed } from "../assets";
 import { cStr, cId, pickShots } from "../cmdArgs";
 import { preemptedPromptLines, replyPreempted } from "../chatPreempt";
@@ -131,7 +131,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       const taskShard = String(me?.shard ?? threadDispatch?.shard ?? "");
       const taskTitle = String(me?.title ?? (threadDispatch ? dispatchTitle(threadDispatch) : "") ?? "");
       const talkDispatch = String(me?.dispatch ?? threadDispatch?.id ?? "");
-      const talkNo = talkDispatch ? dispatchNoTable(ctx.opts.root).get(talkDispatch) ?? "" : "";
+      const talkNoNum = talkDispatch ? taskNoOfDispatchId(talkDispatch) : 0;
+      const talkNo = talkNoNum > 0 ? String(talkNoNum) : "";
       const mine = thread
         ? [
             "",
@@ -162,14 +163,14 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
                   "",
                   "【用户按了“监工介入”】提问发生在该进程的会话里，携带上面的任务编号直接回答；",
                   "本次提问不登记回该派单，也不转给该进程，由监工直接回复。",
-                  `用户所指即当前派单（#${talkNo}）。回答只围绕该单：状态、正在执行的内容、未完成的部分。`,
+                  `用户所指即当前派单（${talkNo ? taskNoLabel(Number(talkNo)) : "编号未定位"}）。回答只围绕该单：状态、正在执行的内容、未完成的部分。`,
                   "不提及其他派单，避免被当作在描述当前派单。",
                   "确需提及别的派单时，先说明其与所问无关。",
                   talkNo
-                    ? `用户说“插队 / 排到前面”：DO: queue #${talkNo}：仅插入队首，运行中的派单不受影响。`
+                    ? `用户说“插队 / 排到前面”：DO: queue ${taskNoLabel(Number(talkNo))}：仅插入队首，运行中的派单不受影响。`
                     : "用户说“插队 / 排到前面”：先按【任务编号表】找号，再写 DO: queue #NN。",
                   talkNo
-                    ? `用户说“立即执行 / 马上跑 / 别等”：DO: promote #${talkNo}：抢占槽位，运行中的派单退回队首，本单结束后继续执行。`
+                    ? `用户说“立即执行 / 马上跑 / 别等”：DO: promote ${taskNoLabel(Number(talkNo))}：抢占槽位，运行中的派单退回队首，本单结束后继续执行。`
                     : "用户说“立即执行 / 马上跑”：DO: promote #NN：抢占槽位。",
                   "要新建派单并立刻抢占槽位（不等排队）：DO: dispatch --now <内容>（--now 表示立即执行，会挂起运行中的派单）。",
                   "要继续执行该单：排队中用 queue 或 promote；已结束用 DO: redo #<本单编号>，沿用原单与原会话，不新建单。",
@@ -434,7 +435,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ...settledLines(ctx.opts.root),
         `并行度：${capitalist.parallel ?? "?"} ｜ 运行中 ${running.length} 个${
           running.length
-            ? `（${running.map((t) => `#${t.no} ${t.title || t.shard || t.id}${t.worker ? ` · ${t.worker}` : ""}`).join("、")}）`
+            ? `（${running.map((t) => `${taskNoLabel(Number(t.no))} ${t.title || t.shard || t.id}${t.worker ? ` · ${t.worker}` : ""}`).join("、")}）`
             : ""
         } ｜ 排队 ${queued} ｜ 异常 ${failed}`,
         ...(idleQueue ? ["队列状态：空（待命，没有派单在执行，也没有排队项）"] : []),

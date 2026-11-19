@@ -32,7 +32,7 @@ test("家目录写法保持原样，交给 normLocal 展开", () => {
   assert.deepEqual(extractLocalPaths("cat ~\\AppData\\x", ROOT), ["~\\AppData\\x"]);
 });
 
-test("Windows 盘符路径仍然能抽出来（不要把已有能力改坏）", () => {
+test("Windows 盘符路径仍然能抽出来（保持既有能力不回退）", () => {
   assert.deepEqual(extractLocalPaths("type C:\\Windows\\win.ini", ROOT), ["C:\\Windows\\win.ini"]);
   assert.deepEqual(extractLocalPaths("type C:/Windows/win.ini", ROOT), ["C:/Windows/win.ini"]);
 });
@@ -147,7 +147,7 @@ test("mtime_after_stage：缺时间字段时改用 created_at，而不是判定�
   assert.equal(runCheck({ type: "mtime_after_stage", path: "memory.md" }, root).ok, false);
 });
 
-test("mtime_after_stage：完全没有时间字段时说明原因，不假装已满足", () => {
+test("mtime_after_stage：完全没有时间字段时说明原因，不视为已满足", () => {
   const root = tmpRoot();
   writeFileSync(join(root, "memory.md"), "x", "utf8");
   writeFileSync(join(root, ".capitalist", "state.json"), JSON.stringify({ stage: "S5" }));

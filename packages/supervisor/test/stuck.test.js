@@ -108,13 +108,13 @@ test("分类：同一段报错反复出现 -> 报错循环", () => {
   assert.match(ev.why, /重复/);
 });
 
-test("分类：同一句命令反复刷且不是报错 -> 重复无效重试", () => {
+test("分类：同一命令反复执行且不是报错 -> 重复无效重试", () => {
   const line = "执行 pytest tests/test_billing.py -q，结果没有任何变化";
   const ev = stuckMod.classifyStuck([line, line, line, "读取 tests/test_billing.py"]);
   assert.equal(ev.kind, "retry");
 });
 
-test("四类各有不同的跳出办法，且都给出可执行动作", () => {
+test("四类各有不同的处置办法，且都给出可执行动作", () => {
   const kinds = ["idle", "retry", "external", "error_loop"];
   const seen = new Set();
   for (const kind of kinds) {
@@ -129,7 +129,7 @@ test("四类各有不同的跳出办法，且都给出可执行动作", () => {
   assert.equal(seen.size, 4, "四类不能给同一句话");
 });
 
-test("原地打转：日志持续增长也会判卡点，并在本轮写入指导；领取后留下送达记录", async () => {
+test("原地空转：日志持续增长也判卡点，并在本轮写入指导；领取后留下送达记录", async () => {
   const root = sandbox();
   openClaimed(root);
   const line = "执行 pytest tests/test_billing.py -q，结果没有任何变化";

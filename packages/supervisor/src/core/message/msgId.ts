@@ -14,6 +14,8 @@
  * 方向段由 {@link MsgDirection} 决定；单号缺失（监工面板全局消息）用 `S0` 占位。
  */
 
+import { padBareNo } from "../record/idMap";
+
 /** 消息方向。 */
 export type MsgDirection = "U2W" | "U2S" | "W" | "S" | "SP";
 
@@ -42,11 +44,11 @@ export function msgId(taskNo: string | number, dir: MsgDirection, now = Date.now
   return `${taskNo}-${dir}-${suffix}`;
 }
 
-/** 消息编号显示形式：裸编号补 `#`；已带 `#` 或空值原样返回。 */
+/** 消息编号显示形式：裸编号补 `#` 并把任务号段补零到两位；与其它编号同一套补零入口。 */
 export function msgNoLabel(no: string): string {
   const s = String(no ?? "").trim();
   if (!s) return "";
-  return s.startsWith("#") ? s : `#${s}`;
+  return `#${padBareNo(s)}`;
 }
 
 /** 剥掉消息编号开头的 `#`，得落盘形式；容忍带或不带。 */

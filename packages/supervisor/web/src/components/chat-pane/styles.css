@@ -209,7 +209,7 @@
   gap: var(--s8);
 }
 
-/* 滚动下沉到 .plist，仅对 [data-pmode="capitalist"] 生效；flex 收缩链路须逐层设 min-height: 0，否则 .plist 拿不到滚动高度。 */
+/* 滚动下沉到 .plist，仅对 [data-pmode="capitalist"] 生效；flex 收缩链路须逐层设 min-height: 0，否则 .plist 取不到滚动高度。 */
 .pblocks[data-pmode="capitalist"] {
   overflow: hidden;
 }
@@ -1319,6 +1319,22 @@
   order: 2;
   font-size: var(--f-meta);
   flex: 0 0 auto;
+}
+
+/* 回执标签带编号时可点：清掉 button 默认样式并继承字体，否则会退回 Arial 13.33px。 */
+.bst.jump {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.bst.jump:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .cmdchip {

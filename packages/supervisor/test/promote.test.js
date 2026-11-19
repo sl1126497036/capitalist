@@ -111,7 +111,7 @@ test("看板接口：promote 走同一套原语，回执说清越过了几张", 
 
 const preempt = require("../dist/core/dispatch/preempt");
 
-test("立即执行回执：没有别的立即执行运行中时说会腾槽，有的话说排在谁后面", () => {
+test("立即执行回执：没有其他立即执行运行中时说明会腾槽，有则说明排在谁之后", () => {
   const root = sandbox();
   put(root, "D-run", { status: "claimed", worker: "W-run" });
   put(root, "D-now");

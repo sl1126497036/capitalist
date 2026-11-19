@@ -33,8 +33,8 @@ const STATE_MARK: Record<string, string> = {
 };
 
 /**
- * 打印森林。数据取 `buildForestView`（与界面同一份），不在这里另算一遍，
- * 命令行和界面看到的结构不一样，排查时会白走一趟。
+ * 打印森林。数据取 `buildForestView`（与界面同一份），不在这里另算一遍：
+ * 命令行与界面的结构不一致会误导排查。
  */
 function listTrees(root: string, all = false): number {
   const view = buildForestView(root);

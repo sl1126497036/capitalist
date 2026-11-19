@@ -5,7 +5,7 @@
  */
 import { t } from "../../lib/i18n.js";
 import { hhmm, dur } from "../../lib/fmt.js";
-import { noLabel } from "../../lib/no.js";
+import { noLabel, bareNoLabel } from "../../lib/no.js";
 
 defineProps({
   /** { node, kids }：node 为后端下发的节点视图，kids 为同形状子项。 */
@@ -77,14 +77,14 @@ function durText(node) {
         {{ t("失败原因：{why}", { why: item.node.reason || t("未记录") }) }}
       </p>
       <p v-if="item.node.state === 'failed'" class="fv-nflag">
-        {{ item.node.childCount ? t("断链 其下子树无法推进") : t("断链") }}
+        {{ item.node.childCount ? t("断链：其下子树无法推进") : t("断链") }}
       </p>
-      <p v-else-if="item.node.inCycle" class="fv-nflag">{{ t("成环 无可达根节点") }}</p>
+      <p v-else-if="item.node.inCycle" class="fv-nflag">{{ t("成环：无可达根节点") }}</p>
       <p v-else-if="item.node.blocked" class="fv-nflag">{{ t("受 #{id} 断链影响", { id: item.node.blockedBy }) }}</p>
       <p v-else-if="item.node.state === 'waiting'" class="fv-nwait">
         {{
           item.node.stuckOnNo
-            ? t("等待 #{no}", { no: item.node.stuckOnNo })
+            ? t("等待 #{no}", { no: bareNoLabel(item.node.stuckOnNo) })
             : t("等待 {id}", { id: item.node.stuckOn })
         }}
       </p>

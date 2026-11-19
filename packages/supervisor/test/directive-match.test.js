@@ -46,7 +46,7 @@ test("target 指向同链的中途单：重派出来的新单照样领得到", (
   assert.equal(taken[0].text, "改跳过卡点的提示词");
 });
 
-test("target 指向别的链：一张都领不走（串台是这条通道要根除的东西）", () => {
+test("target 指向别的链：一张都领不走（串台是这条通道必须根除的问题）", () => {
   const root = sandbox();
   seed(root, { id: "D-chain", lineage: "D-chain" });
   seed(root, { id: "D-other", lineage: "D-other" });
@@ -93,7 +93,7 @@ test("thread 里是线程键时按线程认领：重派换了进程也还归这�
   assert.equal(taken.length, 1, "线程上的话必须能被这条线程的新进程领走");
 });
 
-test("线程对不上就不领：别的线程的话不许被这条线程吃掉", () => {
+test("线程对不上就不领：其他线程的插话不会被这条线程认领", () => {
   const root = sandbox();
   seed(root, { id: "D-chain", lineage: "D-chain" });
   cmds.appendDirective(root, { text: "别的线程说的", lane: "s0/a", stage: "S0" });
@@ -203,7 +203,7 @@ test("悬空追加回收：链上还有活单时不动它（那一单自己会�
   assert.equal(rowOf(root, "D-live").status, "claimed", "在途的单不该被回收动到");
 });
 
-test("悬空追加回收：每拍只救一条链，不一次拉起一堆进程", () => {
+test("悬空追加回收：每拍只回收一条链，不一次拉起多个进程", () => {
   const root = sandbox();
   seed(root, { id: "D-a", lineage: "D-a", status: "failed" });
   seed(root, { id: "D-b", lineage: "D-b", status: "failed" });
@@ -237,7 +237,7 @@ test("悬空追加回收：正常完成的单也不被自动拉起", () => {
   assert.equal(rowOf(root, "D-done").status, "done", "已完成不等于失败，不该由监工自动返工");
 });
 
-test("悬空追加回收：超过追诉期的老追加不再翻旧账", () => {
+test("悬空追加回收：超过追诉期的老追加不再回收", () => {
   const root = sandbox();
   seed(root, { id: "D-old", lineage: "D-old" });
   const stale = {

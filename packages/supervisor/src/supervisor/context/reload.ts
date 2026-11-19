@@ -414,7 +414,7 @@ function oneLine(text: string): string {
   return String(text ?? "").replace(/\s+/g, " ").trim();
 }
 
-/** 噪音事件：只表明进程存活、不反映进度，压缩时丢弃，避免挤掉派单与裁决记录。 */
+/** 噪音事件：只表明进程存活、不反映进度，压缩时丢弃，避免挤占派单与裁决记录的空间。 */
 const NOISE_EVENT =
   /^(supervisor_tick|heartbeat|heartbeat_.*|worker_heartbeat.*|board_.*|.*_debug|.*_probe|probe.*|tool|tool_result|stream.*|message_.*|usage|token_.*)$/i;
 
@@ -1860,7 +1860,7 @@ export function reloadBrief(root: string, maxChars = 12000): string {
   };
 
   const sorted = [...sections].sort((a, b) => rank(a.title) - rank(b.title));
-  /* 需求原体量最大且排在简报最前，按序取或纯按优先级都会挤掉其他段落，故先划出 30% 固定配额，其余给增量段落。 */
+  /* 需求原体量最大且排在简报最前，按序取或纯按优先级都会挤占其他段落的空间，故先划出 30% 固定配额，其余给增量段落。 */
   const needQuota = Math.floor(maxChars * 0.3);
   let budget = maxChars - head.length - 200;
   const kept: string[] = [];

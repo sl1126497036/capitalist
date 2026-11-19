@@ -350,7 +350,7 @@ test("合并回执显示并入的任务编号：卡片与结果说明都不出�
   assert.equal(card.no, "01", "合并回执卡片带目标单号（与任务列表同源）");
 });
 
-test("历史合并回执按自己的说明回填编号：查不到归属时不显示，也不猜", () => {
+test("历史合并回执按自己的说明回填编号：查不到归属时不显示，不推测", () => {
   const root = sandbox();
   capitalist.appendDispatch(root, {
     id: "D-old",
@@ -411,7 +411,7 @@ test("追加被启动带入时，卡片状态写“已并入派单 #号”而不
   assert.equal(say2.status, "已并入派单 · 已落实");
 });
 
-test("没有归属单的追加：不显示单号（宁可不写，也不猜）", () => {
+test("没有归属单的追加：不显示单号，不推测", () => {
   const root = sandbox();
   seedDispatch(root, { status: "claimed", lineage: "D-other" });
   assignThreadNos(root, ["s0/a"]);

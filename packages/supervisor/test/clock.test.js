@@ -37,7 +37,7 @@ test("hhmmOf 只给到分钟", () => {
   assert.strictEqual(hhmmOf(d.toISOString()), "09:07");
 });
 
-test("空值与非法值返回空串，不抛异常、不编时间", () => {
+test("空值与非法值返回空串，不抛异常、不虚构时间", () => {
   assert.strictEqual(clockOf(""), "");
   assert.strictEqual(clockOf(null), "");
   assert.strictEqual(clockOf(undefined), "");

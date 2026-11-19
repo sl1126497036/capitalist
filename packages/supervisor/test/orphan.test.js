@@ -148,7 +148,7 @@ test("worker 自保：监工还活着时一次都不查文件，也不结束进�
   }
 });
 
-test("启动清孤儿：命令行带任务根的遗留 worker 会被收掉并记 worker_reaped", () => {
+test("启动清孤儿：命令行带任务根的遗留 worker 会被清理并记 worker_reaped", () => {
   const root = sandbox();
   const worker = dummy([root]);
   putWorker(root, { id: "W-orphan", pid: worker.pid, status: "running", supervisor_pid: deadPid() });
@@ -180,7 +180,7 @@ test("启动清孤儿：命令行带任务根的遗留 worker 会被收掉并记
   }
 });
 
-test("启动清孤儿：命令行与父进程都对不上时不动手（防 pid 复用误杀）", () => {
+test("启动清孤儿：命令行与父进程都对不上时不执行清理（防止 pid 复用误清）", () => {
   const root = sandbox();
   // 命令行里没有任务根，父进程也不是记录里的监工 pid。
   const worker = dummy(["foreign-marker"]);
@@ -209,7 +209,7 @@ test("退出清理表：逆序执行一次，重复 dispose 不再动", () => {
   __resetDisposers();
 });
 
-test("被强杀的监工不算在线：心跳还新鲜，但 pid 已经不在了", () => {
+test("被强杀的监工不算在线：心跳未过期，但 pid 已不存在", () => {
   const root = sandbox();
   const now = new Date().toISOString();
   capitalist.saveSupervisor(root, {

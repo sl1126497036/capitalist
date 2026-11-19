@@ -128,7 +128,7 @@ export interface Dispatch {
    * 手动置顶的时刻（ISO）。只有用户在看板上点“立即执行”/`capitalist promote` 才写。
    *
    * 与 `urgent` 分开是因为两者语义不同：`urgent` 是“创建时就是插队单”，
-   * 会在一批插队单里按台账顺序排队；`promoted_at` 是“用户刚刚把它拎到队首”，
+   * 会在一批插队单里按台账顺序排队；`promoted_at` 是“用户刚刚把它提到队首”，
    * 调度层按这个时间倒序取单，后点的那张先上。没有这个字段的旧单不受影响。
    */
   promoted_at?: string;
@@ -167,7 +167,7 @@ export interface Dispatch {
   attempt?: number;
   /**
    * 待确认截止时间（ISO）。只有 `status === "review"` 时有值：
-   * 到点还没人确认就自动结束，对应“3 分钟没动静就当他没别的要说了”。
+   * 到点无人确认即自动结束。
    */
   review_until?: string;
   /** worker 报完成时写的说明，确认后转成正式结束 note。 */
@@ -180,7 +180,7 @@ export interface Dispatch {
 
   retry_context?: string;
 
-  /** 上报时刻（`markReported` 写）：监工据此判断“报了多久还没裁决”。 */
+  /** 上报时刻（`markReported` 写）：监工据此判断“上报后多久尚未裁决”。 */
   reported_at?: string;
   review_note?: string;
   /** 手动结束的时刻（ISO）。只有 `status === "closed"` 时有值。 */
@@ -192,7 +192,7 @@ export interface Dispatch {
   /**
    * 这一单是从哪条用户消息派出来的（消息标识 `2-U2W-<毫秒>`）。
    *
-   * 附件归属的权威键：发车前按它回查那条消息自己的 `atts`，正文里别处抄来的路径
+   * 附件归属的权威键：派发前按它回查那条消息自己的 `atts`，正文里别处抄来的路径
    * 会被摘掉。老记录没有这个字段时退回 `atts`，再没有才从正文解析。
    */
   src_msg?: string;
@@ -299,7 +299,7 @@ export interface WorkerRecord {
    * 这个 worker 实际续接/新开的 AI 会话 id（例如 `capitalist-u6-main-g2`）。
    *
    * 与 `session` 字段必须分开看：`session` 是 worker 自己的记录 id（进程号 `2-P1`），
-   * 由它自己续写心跳；`ai_session` 才是宿主那边的对话上下文标识，一个 ai_session
+   * 由它自己续写心跳；`ai_session` 才是宿主侧的对话上下文标识，一个 ai_session
    * 可以被多个 worker 先后复用。看板“与这个进程说话”要送到 ai_session，
    * 调度层判断“这条会话是否仍被占用”也只认它。
    *
@@ -907,7 +907,7 @@ export function readDispatches(root: string): Dispatch[] {
     const st = statSync(file);
     key = `${st.size}:${st.mtimeMs}`;
   } catch {
-    /* 台账还没建：空队列，不写入缓存（建好后要能读到） */
+    /* 台账尚未建立：空队列，不写入缓存（建好后要能读到） */
     return [];
   }
   if (dispatchCache && dispatchCache.root === root && dispatchCache.key === key) {
@@ -936,9 +936,11 @@ let dispatchCache: { root: string; key: string; rows: Dispatch[] } | null = null
  * 生成派单号：任务号 + 派发序，落盘形式 `2-3`（不带 `#`）。
  *
  * 任务号与派发序由 {@link resolveDispatchNo} 统一发行，派单号编码任务号。
+ *
+ * @param originDispatchId 重派时传入原派单号，复用其任务号、派发序 +1；新任务不传，发行新任务号。
  */
-export function newDispatchId(root: string, stage: string, shard?: string): string {
-  return resolveDispatchNo(root, stage, shard).dispatchId;
+export function newDispatchId(root: string, stage: string, shard?: string, originDispatchId?: string): string {
+  return resolveDispatchNo(root, stage, shard, originDispatchId).dispatchId;
 }
 
 /** 追加一张派单。 */
@@ -1088,11 +1090,11 @@ function carryAttachments(rows: Dispatch[], d: Dispatch): Dispatch {
   return d;
 }
 
-/** 全部还没了结的单：open（等着领）或 claimed（已领在干）。分片并行时会有多张。 */
+/** 全部尚未了结的单：open（等待领取）或 claimed（已领取执行中）。分片并行时会有多张。 */
 export function activeDispatches(root: string): Dispatch[] {
   /*
-   * `reported` 也算在途：工作进程说了“我完成了”，但关不关是监工裁决。
-   * 裁决之前这一单不算完，也不能再派一张去做同一件事。
+   * `reported` 也算在途：工作进程上报完成后，是否结束由监工裁决。
+   * 裁决之前这一单不算完，也不能另派一单做同一件事。
    */
   return readDispatches(root).filter(
     (d) => d.status === "open" || d.status === "claimed" || d.status === "reported",
@@ -1116,7 +1118,7 @@ export function markReported(
   const next: Dispatch = {
     ...cur,
     status: "reported",
-    /* 记上报时刻：监工要靠它判断“报了多久还没人裁决”，见 sweepReported。 */
+    /* 记上报时刻：监工要靠它判断“上报后多久尚未裁决”，见 sweepReported。 */
     reported_at: new Date().toISOString(),
     ...(note ? { review_note: note } : {}),
     ...(ev ? { report_evidence: ev.slice(0, 4000) } : {}),
@@ -1146,7 +1148,7 @@ export function sweepReported(root: string, maxAgeMs = 10 * 60_000): Dispatch[] 
   return hit;
 }
 
-/** 最后一张还没了结的单。只用于“有没有在途工作”这类整体判断，逐单处理请用 activeDispatches。 */
+/** 最后一张尚未了结的单。只用于“有没有在途工作”这类整体判断，逐单处理请用 activeDispatches。 */
 export function activeDispatch(root: string): Dispatch | undefined {
   return activeDispatches(root).pop();
 }
@@ -1312,7 +1314,7 @@ function lineageOf(x: Dispatch): string {
 }
 
 /**
- * 一张单的“这是什么活”指纹：剥掉附件行、压平空白后的正文。
+ * 一张单的任务内容指纹：剥掉附件行、压平空白后的正文。
  *
  * 台账里同一件事会有多条记录（每次重派一条），它们只有 `action` 尾部可能被追加
  * 插话/验收清单。做归组（重建树）和认亲（派生链匹配）都靠这个指纹，口径必须同一份。

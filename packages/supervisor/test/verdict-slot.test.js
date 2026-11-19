@@ -30,7 +30,7 @@ test("没有上报时刻的老记录不占槽", () => {
   assert.strictEqual(awaitingVerdict([row("reported")]), 0);
 });
 
-test("只有 reported 占槽，其它状态一律不算", () => {
+test("只有 reported 占槽，其他状态一律不算", () => {
   const rows = [
     row("open"),
     row("claimed"),

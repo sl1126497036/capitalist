@@ -270,7 +270,7 @@ export function isWorkerRef(v: string): boolean {
  * 的这句话”必须落到这个键上，落到派单 id 或进程 id 上，一次重派就换一代身份，
  * 这句话跟着那代一起作废。
  *
- * 规则与看板的 `taskKeyOf` 逐字一致（那边已改为调用本函数）。两处各写一遍必然漂，
+ * 规则与看板的 `taskKeyOf` 逐字一致（看板侧已改为调用本函数）。两处各写一遍必然漂，
  * 漂了之后界面上显示的线程和插话归的线程就不是同一条了。
  */
 export function laneKeyOf(d: {
@@ -632,7 +632,7 @@ export function markDirectiveOutcome(
 }
 
 /**
- * 某张单送出、但还没有结论的插话。
+ * 某张单送出、但尚无结论的插话。
  *
  * 收工闸与验收判定共用这一份：一处回答“还差哪几项未完成”，一处回答“这些要求是否落实”。
  * 两处各算一遍必然产生偏差，偏差会导致收工闸放行而验收判定未完成，且无法判断以哪一处为准。
@@ -950,10 +950,10 @@ export function closeTask(
    * 结束后冻住这一片。
    *
    * 只把这一张单改成 closed 不够：阶段门槛仍未达标，监工下一轮调度会重新建一张单派出去，
-   * 用户看到的就是“说了停，它还在派”。接管态是现成的抑制开关，loop 的 held() 会跳过
+   * 用户看到的就是“已要求停止，调度仍在派单”。接管态是现成的抑制开关，loop 的 held() 会跳过
    * 该片的派单与自动验收。要恢复自动调度，用户执行 `capitalist release <片>`。
    *
-   * 只在“这一片已经没有别的活单”时冻：一片上还有别的运行中，冻住会误伤那些单。
+   * 只在“这一片已经没有别的未结束单”时冻：一片上还有别的运行中，冻住会误伤那些单。
    */
   let held = false;
   if (d.shard) {
@@ -1025,7 +1025,7 @@ export function promoteTask(
         ? "该派单已在执行（进程已领单），无需置顶"
         : d.status === "review"
           ? "该派单正在等待结束确认，不在排队中"
-          : `该派单已处于终态 ${d.status}，重跑请使用 capitalist retry 或发送消息唤醒`;
+          : `该派单已处于终态 ${d.status}，重新执行请使用 capitalist retry 或发送消息唤醒`;
     return { ok: false, reason: why };
   }
   const self = rows.findIndex((x) => x.id === d.id);

@@ -125,7 +125,7 @@ test("分页不改变统计：limit=1 时数字仍是全量", () => {
   }
 });
 
-test("未知状态归异常，不藏进已完成", () => {
+test("未知状态归异常，不计入已完成", () => {
   const counts = board.taskCountsOf([
     { id: "a", status: "running" },
     { id: "b", status: "gone" },

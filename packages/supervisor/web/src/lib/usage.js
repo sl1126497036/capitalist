@@ -138,7 +138,7 @@ export function spendOf(usage) {
     return {
       text: `${fmtTokens(u.total_tokens)} ${t("token")}`,
       tip: t(
-        "输入 {a} + 输出 {b}；缓存命中 {c} 单列，不计入总量",
+        "输入 {a} + 输出 {b}；缓存命中 {c} 单独列出，不计入总量",
         {
           a: fmtTokens(u.input_tokens) || t("未上报"),
           b: fmtTokens(u.output_tokens) || t("未上报"),

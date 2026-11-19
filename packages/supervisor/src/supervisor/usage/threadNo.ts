@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { laneKeyOf } from "../../core/dispatch/commands";
+import { padBareNo } from "../../core/record/idMap";
 import { supervisorDir } from "../../core/record/paths";
 import { readDispatches } from "../../core/record/supervisor";
 import type { Dispatch } from "../../core/record/supervisor";
@@ -82,11 +83,11 @@ export function assignThreadNos(root: string, orderedIds: readonly string[]): Ma
   return out;
 }
 
-/** 号 -> 显示串，至少两位；超过 99 时显示三位，不截断。 */
+/** 号 -> 显示串（裸，不带 `#`），任务号段补零到两位；超过 99 时三位，不截断。 */
 export function threadNoLabel(n: number | undefined | null): string {
   const v = Number(n);
   if (!Number.isFinite(v) || v <= 0) return "";
-  return String(Math.trunc(v)).padStart(2, "0");
+  return padBareNo(String(Math.trunc(v)));
 }
 
 /** 直接读某条线程的号（不分配）；没有号时返回空串。 */
@@ -153,9 +154,13 @@ export function threadNoTable(root: string): Record<string, number> {
 }
 
 /**
- * 派单 id -> 任务号（带 `#`，如 `#02`）。
+ * 派单 id -> 派单号（裸编号，不带 `#`，如 `"2-2"`）。
  *
- * 新编号体系里任务号直接编码在派单号里（`2-2` -> `#02`），不再查 `thread-no.json`。
+ * 新编号体系里派单 id 即派单号（`2-2`），直接取 id 本身，不再查 `thread-no.json`。
+ * 旧格式派单 id（随机串）按线程键查旧编号表兜底。
+ *
+ * 全系统编号的落盘/下发口径统一为不带 `#`，`#` 只在显示层经
+ * {@link idMap.dispatchNoLabel} 等统一入口补，任何消费点都不得自行拼 `#` 或自行去 `#`。
  *
  * 只查不建，取不到时返回空串；整表一次读完返回 Map。
  */
@@ -165,9 +170,8 @@ export function dispatchNoTable(root: string): Map<string, string> {
     const table = threadNoTable(root);
     for (const d of readDispatches(root)) {
       const id = String(d.id ?? "");
-      const m = /^(\d+)-(\d+)$/.exec(id);
-      if (m) {
-        out.set(id, `#${m[1]}`);
+      if (/^\d+-\d+$/.test(id)) {
+        out.set(id, id);
         continue;
       }
       /* 非新格式的派单 id：按线程键查旧编号表，仅兜底。 */

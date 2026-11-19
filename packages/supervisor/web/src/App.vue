@@ -217,7 +217,7 @@ const inflight = ref(0);
 const sending = computed(() => inflight.value > 0);
 /* 切换会话后消息清空到新数据返回之间保持载入态，避免先闪现空态。 */
 const loading = ref(true);
-/* 当前缓冲拿到第一份结果前只显示载入指示，避免刷新时先闪空态；请求失败不清成空态，走失败提示。 */
+/* 当前缓冲取到第一份结果前只显示载入指示，避免刷新时先闪空态；请求失败不清成空态，走失败提示。 */
 const msgPending = ref(true);
 const conn = ref("connecting");
 const fails = ref(0);
@@ -1028,7 +1028,7 @@ async function talkTo(text, thread, via = "", quote = null, skills = []) {
   const paint = () => {
     if (mine !== talkSeq) return;
     if (isSupervisorTalk) {
-      notice.value = { text: process || stage || $t("已发出 模型在想"), bad: false, thread: owner };
+      notice.value = { text: process || stage || $t("已发出，等待模型回复"), bad: false, thread: owner };
       return;
     }
     /* 状态条按正文、工具、思考、过程帧的优先级取当前可显示内容。 */
@@ -1037,7 +1037,7 @@ async function talkTo(text, thread, via = "", quote = null, skills = []) {
       (tool ? $t("正在调用 {tool}", { tool }) : "") ||
       (think ? `${$t("思考中")} ${think.slice(-48)}` : "") ||
       stage ||
-      $t("已发出 模型在想");
+      $t("已发出，等待模型回复");
     notice.value = { text: line, bad: false, thread: owner };
     paintBubble(acc);
   };

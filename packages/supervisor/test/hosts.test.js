@@ -84,7 +84,7 @@ test("worker 参数快照：argv 与 stdin 两种路径都在 impl 里定死", (
   assert.equal(seen.workbuddy.autoDetect, false, "没有可靠非交互入口的宿主不得参与自动探测");
 });
 
-test("探测顺序：自动探测仍是 codebuddy -> claude（外部行为，不许变）", () => {
+test("探测顺序：自动探测仍是 codebuddy -> claude（外部行为，保持不变）", () => {
   const auto = registry
     .workerHosts()
     .filter((impl) => impl.worker.detectPriority !== undefined)
@@ -167,7 +167,7 @@ test("Windows hook 依赖：缺 Git Bash 时判定不可用，非 Windows 不检
   );
 });
 
-test("capitalist hosts 的输出与注册表一致（自检出口不会各说各话）", () => {
+test("capitalist hosts 的输出与注册表一致（自检出口与注册表同一口径）", () => {
   /* 测试进程本身可能跑在 worker 环境里；`capitalist hosts` 是监工命令，先把 worker 标记摘掉。 */
   const env = { ...process.env };
   delete env.CAPITALIST_WORKER_ID;
@@ -189,7 +189,7 @@ test("capitalist hosts 的输出与注册表一致（自检出口不会各说各
   }
 });
 
-test("hook 入口：未知宿主不阻断，也不假装跑的是别的 impl", () => {
+test("hook 入口：未知宿主不阻断，也不伪装运行的是其他 impl", () => {
   const r = spawnSync(process.execPath, [join(PKG, "dist", "agent", "main.js"), "PreToolUse", "--agent", "nope"], {
     encoding: "utf8",
     input: "{}",

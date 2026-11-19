@@ -92,7 +92,7 @@ function invalidateBoardCaches(): void {
   clearSupervisorLogCache();
 }const RESTART_DELAY_MS = 3000;
 
-/** 监工被强制结束后，由看板收掉它拉起的工作进程。 */
+/** 监工被强制结束后，由看板回收它拉起的工作进程。 */
 function watchOrphanSupervisors(root: string, out: (s: string) => void): () => void {
   const handled = new Set<string>();
   const tick = (): void => {
@@ -119,7 +119,7 @@ function watchOrphanSupervisors(root: string, out: (s: string) => void): () => v
       handled.add(key);
       out(
         `[看板] 监工 pid ${rec.pid} 已不在（记录状态仍是 running，判定被强杀），` +
-          `收掉它拉起的 ${reaped.length} 个 worker`,
+          `已回收它拉起的 ${reaped.length} 个 worker`,
       );
     } catch (err) {
       out(`[看板] 收孤儿失败：${err instanceof Error ? err.message : String(err)}`);

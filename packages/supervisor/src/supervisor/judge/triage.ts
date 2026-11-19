@@ -67,7 +67,7 @@ function buildPrompt(input: TriageInput): string {
     "你是 capitalist 监工的判定层。工作进程刚发来一条申报，你要决定监工怎么处理。",
     "",
     "【这一单原本要做什么】",
-    String(input.action || "(未记录)").slice(0, 900),
+    String(input.action || "（未记录）").slice(0, 900),
     "",
     "【工作进程申报了什么】",
     `类型：${m.kind} ｜ 自报严重度：${m.severity} ｜ 是否需要监工：${m.needs}`,
@@ -126,7 +126,7 @@ export function parseVerdict(raw: string): TriageVerdict | null {
 export async function triage(input: TriageInput): Promise<TriageVerdict> {
   const m = input.msg;
   const facts: string[] = [
-    `这一单原本要做什么：${String(input.action || "(未记录)").replace(/\s+/g, " ").slice(0, 700)}`,
+    `这一单原本要做什么：${String(input.action || "（未记录）").replace(/\s+/g, " ").slice(0, 700)}`,
     `工作进程申报的类型：${m.kind}（自报严重度 ${m.severity}，是否需要监工：${m.needs}）`,
     `工作进程的表述：${String(m.text || "").replace(/\s+/g, " ").slice(0, 900)}`,
   ];

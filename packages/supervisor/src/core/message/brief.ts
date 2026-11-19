@@ -38,10 +38,10 @@ interface Texts {
 
 const TEXTS: Record<BriefLang, Texts> = {
   zh: {
-    fallbackHead: "▸ 通用任务列表 · 无领域判据（不阻断，但别当它有）",
+    fallbackHead: "▸ 通用任务列表 · 无领域判据（不阻断）",
     fallbackBody: [
       "  未指定领域任务列表，跑的是通用三阶段：通用红线（破坏性删除 / SQL 清库 / 凭据）生效，",
-      "  但“这个领域什么算做完、哪些动作绝对禁”没有定义。",
+      "  但“这个领域什么算做完、哪些动作一律禁止”没有定义。",
       "  若这是明确领域任务：capitalist adopt --contract <任务列表名>",
     ],
     mode: (m) => `▸ 权限档位：${m}（非默认，动作被拦可能由档位导致，而非任务列表红线）`,

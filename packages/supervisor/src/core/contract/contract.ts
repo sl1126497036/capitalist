@@ -712,7 +712,7 @@ export function isLastStage(contract: Contract, id: string): boolean {
  */
 export function redlineFix(contract: Contract, id: string): string {
   const r = contract.redlines.find((x) => x.id === id);
-  return r?.fix || "换一条不越界的做法；拿不准就 capitalist ask 让监工裁决。";
+  return r?.fix || "换一条不越界的做法；不确定时用 capitalist ask 由监工裁决。";
 }
 
 

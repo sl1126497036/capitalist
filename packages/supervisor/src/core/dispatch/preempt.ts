@@ -10,7 +10,7 @@ import { compareQueueOrder, dispatchPath, readDispatches, type Dispatch } from "
 export interface PreemptLease {
   /** 立即执行的那张派单 id。 */
   dispatch: string;
-  /** 它的工作进程 id；还没拉起时为空串。 */
+  /** 它的工作进程 id；尚未拉起时为空串。 */
   worker: string;
   /** 租约建立的时刻（ISO）。 */
   at: string;

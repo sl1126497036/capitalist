@@ -173,6 +173,7 @@ import { ensureGuard, stopGuard } from "./worker/guard";
 import { laneOfWorker, recordLaneUsage } from "./judge/sessionLane";
 import { shardTitle, taskTitle } from "./usage/taskTitle";
 import { dispatchNoTable, dispatchOfThreadNo, threadIdByNo } from "./usage/threadNo";
+import { dispatchNoLabel as dispatchDisplayLabel, taskNoLabel } from "../core/record/idMap";
 import { msgId } from "../core/message/msgId";
 import { decide } from "./judge/brain";
 import { brainSessionOf } from "./judge/brainLane";
@@ -743,7 +744,7 @@ function resetSubtree(
   out: (s: string) => void,
 ): void {
   const de = failed as DispatchEx;
-  const nextId = newDispatchId(root, failed.stage, failed.shard ?? undefined);
+  const nextId = newDispatchId(root, failed.stage, failed.shard ?? undefined, failed.id);
   const next: Dispatch = {
     id: nextId,
     at: new Date().toISOString(),
@@ -1273,7 +1274,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       ),
     );
     const liveBoard = String(existing.board_url ?? "").trim();
-    if (liveBoard) out(t(`[supervisor] board: ${liveBoard}`, `[监工] 看板：${liveBoard}`));
+    if (liveBoard) out(t(`[supervisor] host: ${liveBoard}`, `[监工] 看板：${liveBoard}`));
     return 1;
   }
   clearStopFlag(opts.root);
@@ -1531,17 +1532,17 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   if (boardEnabled) {
     const loaded = await loadBoardModule();
     if (!loaded.ok) {
-      out(t(`[supervisor] board not started: ${loaded.message}`, `[监工] 看板未启动：${loaded.message}`));
+      out(t(`[supervisor] host not started: ${loaded.message}`, `[监工] 看板未启动：${loaded.message}`));
     } else {
       try {
         const served = await serveBoardNow(loaded.serve, true);
-        detail(t(`[supervisor] board ${served.url}`, `[监工] 看板 ${served.url}`));
+        out(t(`[supervisor] host ${served.url}`, `[监工] 看板 ${served.url}`));
         boardStamp = boardBuildStamp()?.stamp ?? null;
         /* 记下启动时的 core 指纹：热重载不换 core，core 变化须拦下热重载。 */
         coreHashAtBoot = coreContentHash();
       } catch (err) {
         // 端口占用、监听失败时监工照常运行，仅无看板。
-        out(t(`[supervisor] board not started: ${errText(err)}`, `[监工] 看板未启动：${errText(err)}`));
+        out(t(`[supervisor] host not started: ${errText(err)}`, `[监工] 看板未启动：${errText(err)}`));
       }
     }
   }
@@ -1616,7 +1617,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
           /* 旧版也恢复失败，走下面的统一失败提示。 */
         }
       }
-      out(t(`[supervisor] board not started: ${message}`, `[监工] 看板未启动：${message}`));
+      out(t(`[supervisor] host not started: ${message}`, `[监工] 看板未启动：${message}`));
     }
   };
 
@@ -2201,7 +2202,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         pause !== null,
         opts.autoDispatch === true,
       );
-      /* 状态行只在内容变化时打印：常态是一行“运行中”，逐轮重刷会把真正发生的事挤掉。 */
+      /* 状态行只在内容变化时打印：常态是一行“运行中”，逐轮重刷会把真正发生的事挤出窗口。 */
       const statusLine = describeStatusLine(opts.root, capacity);
       if (statusLine && statusLine !== statusSig) {
         out(statusLine);
@@ -2925,7 +2926,7 @@ function handleModelFallback(
     detail(`[监工] 模型 ${ex.model ?? "（宿主默认）"} 启动即失败，回退到 ${ex.model_fallback} 重试一次（单 ${d.id}）`);
 
     const fb = ex.model_fallback;
-    const nid = newDispatchId(root, d.stage, d.shard ?? undefined);
+    const nid = newDispatchId(root, d.stage, d.shard ?? undefined, d.id);
     const taken = claimDirectives(root, {
       shard: d.shard ?? "",
       stage: d.stage,
@@ -3032,7 +3033,8 @@ function reject(reason: string): SupervisorResult {
  * 表中无此单时返回空串，不退回内部 id，也不按队列顺序生成。
  */
 function dispatchNoLabel(root: string, id: string): string {
-  return dispatchNoTable(root).get(String(id ?? "").trim()) ?? "";
+  const no = dispatchNoTable(root).get(String(id ?? "").trim());
+  return no ? dispatchDisplayLabel(no) : "";
 }
 
 /**
@@ -3555,7 +3557,7 @@ async function applyOneDirective(
     return {
       ok: true,
       reason: "",
-      detail: `已插入队列优先执行 ${id}：${argClean.slice(0, 80)}｜${when}`,
+      detail: `已插入队列优先执行 ${dispatchNoLabel(root, id) || id}：${argClean.slice(0, 80)}｜${when}`,
       /* urgent 标识插队单，回显前缀据此显示。 */
       urgent: true,
       /* dispatch 供执行回执卡查任务编号。 */
@@ -4343,7 +4345,7 @@ function advanceStage(
   autoDispatch = false,
 ): "continue" | "done" {
   /*
-   * 状态里的阶段必须存在于契约中。对不上时停下来：此时 nextStageId 无解，继续走会把任务
+   * 状态里的阶段必须存在于契约中。不一致时停下来：此时 nextStageId 无解，继续走会把任务
    * 误判为完成，或写出一次 X -> X 的假推进。常见来源是手工改过 state.json，或契约阶段被
    * 改名后未重新登记。
    */
@@ -4680,7 +4682,7 @@ function requeueAdhoc(root: string, state: TaskState, out: (s: string) => void):
     const lastAt = Math.max(...failed.map((x) => Date.parse(String(x.done_at ?? x.at ?? "")) || 0));
     if (Date.now() - lastAt < retryDelayMs(failures)) continue;
 
-    const id = newDispatchId(root, d.stage, undefined);
+    const id = newDispatchId(root, d.stage, undefined, d.id);
     const accept = retryAcceptOf(chain);
     /*
      * 卡点经 appendSection / BLOCKER_MARKER 写进 action 追加段：action 重启后必读，
@@ -5260,7 +5262,13 @@ function createOpenShardDispatch(
 ): void {
   const model = defaultDispatchModel(root, resolveShardModel(shard, contract, wopts.model));
   const fb = resolveShardModelFallback(shard, contract, wopts.model);
-  const id = newDispatchId(root, state.stage, shard.id);
+  /* 分片重派（attempt > 1）沿用该分片最近一次派单的任务号，派发序 +1，而不是发行新任务号。 */
+  const prevId = attempt > 1
+    ? readDispatches(root)
+        .filter((x) => String(x.stage ?? "") === state.stage && String(x.shard ?? "") === shard.id)
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)))[0]?.id
+    : undefined;
+  const id = newDispatchId(root, state.stage, shard.id, prevId);
   const taken = claimDirectives(root, {
     shard: shard.id,
     stage: state.stage,
@@ -6036,12 +6044,16 @@ async function consumeMq(args: {
   }
 
   for (const msg of messages) {
+    /* 申报跳转要用派单记录的派生链（lineage）构造线程键，不能用派单号（`2-1` 与 lineage `1-1` 不同）。 */
+    const src = msg.dispatch ? readDispatches(root).find((x) => x.id === msg.dispatch) : undefined;
+    const srcLineage = String((src as (Dispatch & { lineage?: string }) | undefined)?.lineage ?? "");
     recordEvent(root, "mq_message", {
       id: msg.id,
       from: msg.from,
       dispatch: msg.dispatch,
       stage: msg.stage,
       shard: msg.shard,
+      ...(srcLineage ? { lineage: srcLineage } : {}),
       kind: msg.kind,
       severity: msg.severity,
       needs: msg.needs,

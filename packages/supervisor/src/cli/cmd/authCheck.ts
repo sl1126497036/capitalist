@@ -113,7 +113,7 @@ function verdictOfProbe(
         verdict: "登录态可用。",
         /*
          * 探测带的是当前可用的令牌，与实际派单口径一致。令牌来自启动命令的读取结果，
-         * 已写进环境；监工若未持有，说明启动时那次读取被拒，需要重跑一次并允许弹窗。
+         * 已写进环境；监工若未持有，说明启动时那次读取被拒，需要重新执行一次并允许弹窗。
          */
         action: tokenHeld
           ? ""
@@ -179,7 +179,7 @@ export function cmdAuthCheck(p: Parsed): number {
   const { verdict, action } = skipProbe
     ? {
         verdict: "未做通道探测，登录态未判定。",
-        action: "去掉 --no-probe 重跑。",
+        action: "去掉 --no-probe 后重新执行。",
       }
     : verdictOfProbe(result.kind, host, tokenHeld);
 

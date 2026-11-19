@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { splitMessageRefs } from "../../lib/msgRefs.js";
 import { parseMarkdown } from "../../lib/markdown.js";
 import { t } from "../../lib/i18n.js";
-import { noLabel } from "../../lib/no.js";
+import { noLabel, bareNoLabel, stripHash } from "../../lib/no.js";
 import MdBlocks from "./MdBlocks.js";
 
 const props = defineProps({
@@ -21,7 +21,17 @@ const blocks = computed(() => (props.md ? parseMarkdown(props.text) : []));
 function entry(raw) {
   const m = props.refs;
   if (!m) return null;
-  return typeof m.get === "function" ? m.get(raw) : m[raw] || null;
+  /* 带 `#` 的编号（服务端回执已补 `#`）剥 `#` 后查表，跳转与详情卡不受影响。 */
+  const key = stripHash(raw);
+  return typeof m.get === "function" ? m.get(key) : m[key] || null;
+}
+
+/** 引用片段的显示标签：带 `#` 的编号（服务端已给最终号）只补零不查表，不带 `#` 的按映射补 `#`。 */
+function refLabel(raw) {
+  const s = String(raw ?? "");
+  if (s.startsWith("#")) return noLabel(s);
+  const e = entry(s);
+  return e ? noLabel(e.no) : s;
 }
 
 

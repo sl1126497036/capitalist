@@ -96,7 +96,7 @@ test("前置是契约分片单：分片重派另起新派生链，重派完成�
   assert.deepStrictEqual(queueAfterRestart(root2), ["T1"], "T1 照常在队列；s2 完成不代表 s1 完成，B2 不进队列");
 });
 
-test("通配依赖 after:[*]：其它单全部到终态（含 failed）才启动", () => {
+test("通配依赖 after:[*]：其他单全部到终态（含 failed）才启动", () => {
   const root = sandbox();
   put(root, "A");
   put(root, "B");
@@ -107,7 +107,7 @@ test("通配依赖 after:[*]：其它单全部到终态（含 failed）才启动
   assert.deepStrictEqual(queueAfterRestart(root), ["Z"], "全部到终态后收尾单启动");
 });
 
-test("场景：异常中断与关机——重启后队列顺序与启动前一致，被杀单重派后排到队尾", () => {
+test("场景：异常中断与关机，重启后队列顺序与启动前一致，被杀单重派后排到队尾", () => {
   const root = sandbox();
   put(root, "D1");
   put(root, "D2");
@@ -128,7 +128,7 @@ test("场景：异常中断与关机——重启后队列顺序与启动前一�
   assert.deepStrictEqual(queueAfterRestart(root), after, "二次重启顺序不变");
 });
 
-test("场景：插队——urgent 与手动置顶都写在台账上，重启后插队顺序照旧", () => {
+test("场景：插队，urgent 与手动置顶都写在台账上，重启后插队顺序照旧", () => {
   const root = sandbox();
   put(root, "P1");
   put(root, "P2", { urgent: true });
@@ -143,7 +143,7 @@ test("场景：插队——urgent 与手动置顶都写在台账上，重启后�
   assert.deepStrictEqual(queueAfterRestart(root), ["P4", "P3", "P2", "P1"], "再重启仍一致");
 });
 
-test("场景：被拒——closed 是终态，重启后不回队列；依赖它的单按“前置已结”处理", () => {
+test("场景：被拒，closed 是终态，重启后不回队列；依赖它的单按“前置已结”处理", () => {
   const root = sandbox();
   put(root, "R1", { status: "closed" });
   put(root, "R2", { after: ["R1"] });
@@ -153,7 +153,7 @@ test("场景：被拒——closed 是终态，重启后不回队列；依赖它�
   assert.deepStrictEqual(queueAfterRestart(root), sel, "重启后一致");
 });
 
-test("场景：派单失败——依赖链在失败重派后依然成立，顺序不漂移", () => {
+test("场景：派单失败，依赖链在失败重派后依然成立，顺序不漂移", () => {
   const root = sandbox();
   put(root, "F1");
   put(root, "F2", { after: ["F1"] });
@@ -282,7 +282,7 @@ test("多前置孤儿：AFTER 挂了台账里没有的编号，放行时记 disp
   assert.strictEqual(m3.length, 0, "前置齐全的单不报");
 });
 
-test("场景：立即执行——让位不改台账行序，恢复后与重启后都是原来的顺序", () => {
+test("场景：立即执行，让位不改台账行序，恢复后与重启后都是原来的顺序", () => {
   const root = sandbox();
   const preempt = require("../dist/core/dispatch/preempt");
   put(root, "A", { status: "claimed", worker: "W-a" });

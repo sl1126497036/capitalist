@@ -125,7 +125,7 @@ test("成环：不死循环，环上节点收进降级树并给出提示", () =>
   assert.ok(cyclic[0].nodes.every((n) => n.blocked), "环上节点按断链处理：这条链做不下去");
 });
 
-test("成环 + 环下子树：下游一路带上，渲染层不会转圈", () => {
+test("成环 + 环下子树：下游一路带上，渲染层不会死循环", () => {
   const root = sandbox();
   put(root, "C1", { parent: "C2", parent_reason: "环" });
   put(root, "C2", { parent: "C1", parent_reason: "环" });
@@ -165,7 +165,7 @@ test("堵点：父节点失败后整棵子树标断链，并指回那张失败�
   }
 });
 
-test("失败后重派：兄弟照旧按各自父节点算，不互相连坐", () => {
+test("失败后重派：兄弟照旧按各自父节点算，不互相牵连", () => {
   const root = sandbox();
   put(root, "A1");
   put(root, "A1b", { lineage: "A1", attempt: 2 });

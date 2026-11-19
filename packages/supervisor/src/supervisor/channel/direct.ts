@@ -328,7 +328,7 @@ export function pendingSupervisorDirectives(root: string): SupervisorDirective[]
 
 /**
  * 标记指令已消费并写入结果。读改写必须带锁：看板进程与监工循环并发写入，不加锁会丢失指令。
- * 拿不到锁返回 false，下一轮重试；同一 同一轮调度内的去重由调用方按 id 负责。
+ * 拿不到锁返回 false，下一轮重试；同一轮调度内的去重由调用方按 id 负责。
  */
 export function markSupervisorDirective(root: string, id: string, result: SupervisorResult): boolean {
   const file = supervisorDirectPath(root);

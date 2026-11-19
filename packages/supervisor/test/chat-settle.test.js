@@ -118,7 +118,7 @@ test("有动作的 verdict 不会落 chat_unhandled（即便原话带要求特�
   assert.strictEqual(eventsOf(root, "chat_unhandled").length, 0);
 });
 
-test("人后来补建单 -> 出列；人点“已答复”-> 出列", () => {
+test("人工补建单 -> 出列；人工标记“已答复”-> 出列", () => {
   const root = sandbox();
   settleChat(root, { msg_id: "M-a", verdict: "answered_only", text: "新增一个入口" });
   settleChat(root, { msg_id: "M-b", verdict: "answered_only", text: "把按钮挪到中间" });

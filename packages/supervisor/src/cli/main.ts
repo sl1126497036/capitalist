@@ -39,6 +39,7 @@ import { describeMode, modeNames, normalizeMode } from "../core/guard/permission
 import { generateContract, describeGenerated } from "../supervisor/genContract";
 import { loadState, resolveModeFor, saveState, statePath, supervisorDisplayState, SUPERVISOR_STATE_LABEL, updateState } from "../core/record/state";
 import { applyMerges, ensureTaskForDispatch, planMerges, readTasks, summaryLine, syncTaskForDispatch, taskSummary, type TaskState } from "../core/record/tasks";
+import { taskNoLabel } from "../core/record/idMap";
 import {
   cmdAnswer,
   cmdBlock,
@@ -404,7 +405,7 @@ function cmdTasks(p: Parsed): number {
     write(t(`\n[${label[st]}] ${list.length} item(s)\n`, `\n[${label[st]}] ${list.length} 项\n`));
     for (const t of list.slice(-40)) {
       const tag = t.tags.length > 0 ? `  #${t.tags.join(",")}` : "";
-      write(`  #${t.no}  ${t.title}${tag}\n`);
+      write(`  ${taskNoLabel(Number(t.no))}  ${t.title}${tag}\n`);
     }
     if (list.length > 40) write(t(`  …and ${list.length - 40} more\n`, `  …另有 ${list.length - 40} 项\n`));
   }
@@ -984,7 +985,7 @@ async function main(): Promise<number> {
       write(t(`Latest on npm ${r.status.latest}\n`, `npm 上最新 ${r.status.latest}\n`));
       if (r.status.outdated) {
         write(t(`\nNew version available. Upgrade: npm i -g capitalist\n`, `\n有新版本。升级：npm i -g capitalist\n`));
-        write(t(`After upgrading, rerun capitalist install: the hook records the absolute path of the entry script.\n`, `升级后重跑 capitalist install：hook 里记的是入口脚本的绝对路径。\n`));
+        write(t(`After upgrading, rerun capitalist install: the hook records the absolute path of the entry script.\n`, `升级后重新执行 capitalist install：hook 里记的是入口脚本的绝对路径。\n`));
       } else {
         write(t(`\nUp to date.\n`, `\n已是最新版本。\n`));
       }
@@ -1089,8 +1090,8 @@ async function main(): Promise<number> {
           if (!impl) {
             write(
               t(
-                `unknown host: ${declHost}. Available: ${reg.all().map((x) => x.id).join(" / ")}\n`,
-                `未知宿主：${declHost}。可用取值：${reg.all().map((x) => x.id).join(" / ")}\n`,
+                `unknown agent: ${declHost}. Available: ${reg.all().map((x) => x.id).join(" / ")}\n`,
+                `未知 agent：${declHost}。可用取值：${reg.all().map((x) => x.id).join(" / ")}\n`,
               ),
             );
             return 1;
@@ -1098,8 +1099,8 @@ async function main(): Promise<number> {
           reg.setHostOverride(impl.id);
           write(
             t(
-              `[supervisor] host set by --agent: ${impl.id}\n`,
-              `[监工] 宿主使用显式声明：${impl.id}\n`,
+              `[supervisor] agent set by --agent: ${impl.id}\n`,
+              `[监工] 已按 --agent 指定 agent：${impl.id}\n`,
             ),
           );
         }
@@ -1126,7 +1127,7 @@ async function main(): Promise<number> {
       );
       /*
        * hook 自动补装：非 Windows 默认执行，装完插件直接启动即可，不必先单独跑 install。
-       * Windows 保持显式 `--with-hooks`：hook 为每次工具调用起一个短命进程，那边表现为持续闪窗。
+       * Windows 保持显式 `--with-hooks`：hook 为每次工具调用起一个短命进程，表现为反复弹出窗口。
        * 两种平台都能用 `--no-hooks` 关掉。
        */
       const wantHooks =
@@ -1203,7 +1204,7 @@ async function main(): Promise<number> {
         force: flagBool(p, "force"),
         spawnWorkers: flagBool(p, "no-spawn") ? false : undefined,
         // 主循环里的 hook 周期补装同样要跟着这个开关：否则启动时说“不装”，跑满 60 秒
-        // 又写回去，闪窗与“配置被重置”都会复发。
+        // 又写回去，反复弹窗与“配置被重置”都会复发。
         installHooks: !skipHooks,
         // 看板默认随监工起；--no-board 显式关掉（不监听任何端口）。
         board: flagBool(p, "no-board") ? false : undefined,

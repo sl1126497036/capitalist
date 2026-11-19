@@ -11,7 +11,7 @@
 import { defineComponent, h } from "vue";
 import { splitMessageRefs } from "../../lib/msgRefs.js";
 import { t } from "../../lib/i18n.js";
-import { noLabel } from "../../lib/no.js";
+import { noLabel, bareNoLabel } from "../../lib/no.js";
 
 /** 单号与技能路径的色块，与纯文本模式下的 .mref / .mskill 同一套样式。 */
 function refNode(seg, ctx, key) {
@@ -20,7 +20,8 @@ function refNode(seg, ctx, key) {
   }
   const e = ctx.entry ? ctx.entry(seg.raw) : null;
   if (!e) return seg.raw;
-  const label = noLabel(e.no);
+  /* 带 `#` 的编号（服务端已给最终号）只补零不查表，避免被二次映射成任务号；不带 `#` 的按映射补 `#`。 */
+  const label = String(seg.raw ?? "").startsWith("#") ? noLabel(seg.raw) : noLabel(e.no);
   return h(
     "button",
     {
@@ -29,7 +30,7 @@ function refNode(seg, ctx, key) {
       type: "button",
       "aria-haspopup": "dialog",
       "aria-expanded": ctx.activeRef === seg.raw ? "true" : "false",
-      "aria-label": t("查看任务 #{no}", { no: e.no }),
+      "aria-label": t("查看任务 #{no}", { no: bareNoLabel(e.no) }),
       onClick: (ev) => {
         ev.stopPropagation();
         if (ctx.onRef) ctx.onRef(ev, seg.raw);

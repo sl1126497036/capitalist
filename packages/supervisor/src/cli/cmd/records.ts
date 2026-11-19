@@ -414,7 +414,7 @@ export function cmdLedger(p: Parsed): number {
         process.stdout.write(`证据不全，自动降级为 unconfirmed（缺 ${lack.join("、")}）\n`);
         recordViolation(root, {
           rule: "EVIDENCE_FAKE",
-          label: "证据不全就想标 confirmed 定论",
+          label: "证据不全即标 confirmed 定论",
           fix: "补齐 baseline / probe / diff / repro 四项再加账；证据不全时标记 unconfirmed，不把推测写成已验证。",
           evidence: `${String(entry.id)} ${claim.slice(0, 80)}`,
           decision: "DOWNGRADED",

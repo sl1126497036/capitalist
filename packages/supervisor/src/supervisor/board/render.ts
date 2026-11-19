@@ -9,7 +9,7 @@ import { zh } from "./zh";
 import { isShellTool, summarizeCommand } from "../worker/workerLog";
 import { dispatchOfThreadNo } from "../usage/threadNo";
 import { splitDirectiveTag } from "../../core/dispatch/commands";
-import { dispatchNoLabel } from "../../core/record/idMap";
+import { dispatchNoLabel, taskNoLabel, workerNoLabel } from "../../core/record/idMap";
 export const MQ_KIND_LABEL: Record<string, string> = {
   stuck: "卡住",
   question: "要方向",
@@ -61,11 +61,11 @@ export function toolSummary(e: Record<string, unknown>): { text: string; cmd: st
   return { text: short ? `${verb} ${short}` : verb, cmd };
 }
 
-/** worker id 显示加 `#` 前缀（`2-P1` -> `#2-P1`）；`#` 只属于任务/派单/进程编号体系。 */
+/** worker id 显示加 `#` 前缀（`2-P1` -> `#02-P1`）；编号统一经 idMap 的 workerNoLabel 补 `#` 与两位任务号。 */
 export function workerLabel(id: string): string {
   const s = String(id ?? "").trim();
   if (!s) return s;
-  if (/^\d+-P\d+$/.test(s)) return `#${s}`;
+  if (/^\d+-P\d+$/.test(s)) return workerNoLabel(s);
   return s;
 }
 
@@ -125,15 +125,32 @@ export function verdictText(
   return maskDispatchIds(describeEvent(e), nos);
 }
 
+/** 正则转义，供编号按字面量匹配。 */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function maskDispatchIds(text: string, nos?: Map<string, string>): string {
   if (!text || !nos || nos.size === 0) return text;
   let out = text;
-  /* 新派单号（`2-2`）按派单号显示（`#2-2`），经统一入口补 `#`。 */
+  /*
+   * `nos` 的值统一为裸编号（不带 `#`）。新派单号（`2-2`）显示成派单号 `#02-2`，
+   * 旧格式派单显示成任务号 `#02`；两者都经补 `#` 的统一口径，不各自拼。
+   *
+   * 已被 `#` 前缀的编号不再替换：正文若已被上游补过 `#`，二次替换会生成 `##3-1`。
+   * 前后须为非编号字符，避免从 `13-1`、`3-12` 这类更长串里切出片段。
+   */
   for (const [id] of nos) {
     if (!id) continue;
-    const label = /^\d+-\d+$/.test(id) ? dispatchNoLabel(id) : nos.get(id);
-    if (!label) continue;
-    out = out.split(id).join(label);
+    const raw = nos.get(id);
+    if (!raw) continue;
+    /* 新派单号显示成派单号 `#02-2`，旧格式派单显示成任务号 `#02`；都经 idMap 统一补 `#` 与两位任务号。 */
+    const label = /^\d+-\d+$/.test(id)
+      ? dispatchNoLabel(id)
+      : /^\d+$/.test(raw)
+        ? taskNoLabel(Number(raw))
+        : `#${raw}`;
+    out = out.replace(new RegExp(`(?<![\\d#-])${escapeRe(id)}(?![\\d-])`, "g"), label);
   }
   return out;
 }

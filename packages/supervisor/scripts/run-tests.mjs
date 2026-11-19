@@ -14,7 +14,7 @@ const files = readdirSync(TEST_DIR)
   .map((f) => join(TEST_DIR, f));
 
 if (files.length === 0) {
-  console.error(`[test] ${TEST_DIR}/ 下没有 *.test.js，检查是不是在包根目录跑的`);
+  console.error(`[test] ${TEST_DIR}/ 下没有 *.test.js，请在包根目录运行`);
   process.exit(1);
 }
 
@@ -32,7 +32,7 @@ const child = spawn(
 let killedByTimeout = false;
 const timer = setTimeout(() => {
   killedByTimeout = true;
-  /* 先礼后兵：SIGTERM 让 node 自己收尾，5 秒还不走就 SIGKILL。 */
+  /* 先 SIGTERM 让 node 自行退出，5 秒后仍存活则 SIGKILL。 */
   child.kill("SIGTERM");
   setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
 }, TOTAL_TIMEOUT_MS);
@@ -42,7 +42,7 @@ child.on("exit", (code, signal) => {
   if (killedByTimeout) {
     console.error(
       `\n[test] 整体超过 ${Math.round(TOTAL_TIMEOUT_MS / 1000)}s，已中止（signal=${signal ?? "?"}）。\n` +
-        `[test] 想放宽：CAPITALIST_TEST_TIMEOUT_MS=600000 npm test；想缩范围：单独跑相关文件。`,
+        `[test] 放宽时限：CAPITALIST_TEST_TIMEOUT_MS=600000 npm test；缩小范围：单独运行相关文件。`,
     );
     process.exit(124);
   }

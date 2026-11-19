@@ -34,7 +34,7 @@ function openDispatch(root, id = "D-test1", action = "把重试改成指数退�
   return d;
 }
 
-test("派单是抢占的：第二个人领不到同一张单", () => {
+test("派单是抢占的：第二个 worker 领不到同一张单", () => {
   const root = sandbox();
   openDispatch(root);
 
@@ -115,7 +115,7 @@ test("worker 进程已退出时判定失败，并回收它手上的单", () => {
   assert.equal(capitalist.readDispatches(root)[0].status, "failed");
 });
 
-test("tick 收割所有 claimed 僵尸，不只最后一张", () => {
+test("tick 回收所有 claimed 僵尸单，不只最后一张", () => {
   const root = sandbox();
   const now = new Date().toISOString();
   const rows = [
@@ -238,7 +238,7 @@ process.stdin.on("end", () => {
   delete env.CAPITALIST_DISPATCH_ID;
   delete env.CAPITALIST_STAGE;
   /*
-   * 用异步 spawn + 主动等待，不用 spawnSync：Windows 上同步子进程会连带收掉它拉起的
+   * 用异步 spawn + 主动等待，不用 spawnSync：Windows 上同步子进程会连带清理它拉起的
    * 后代，`--once` 又只跑一拍就退，假 worker 常常还没执行就被一起带走。异步拉起后
    * 等它落盘再收尾，测的仍是“监工自己建根并拉出独立进程”。
    */
@@ -253,7 +253,7 @@ process.stdin.on("end", () => {
   while (!existsSync(join(base, ".capitalist", "state.json")) && Date.now() < rootDeadline) await sleep(50);
   assert.ok(existsSync(join(base, ".capitalist", "state.json")), "监工应当自己建任务根");
 
-  /* 建根与服务启动之间隔着一拍调度：等 worker 记录出现再断言，避免抢跑。 */
+  /* 建根与服务启动之间隔着一拍调度：等 worker 记录出现再断言，避免过早判定。 */
   const bootDeadline = Date.now() + 10_000;
   while (
     (capitalist.listWorkers(base).length === 0 || capitalist.readDispatches(base).length === 0) &&
@@ -304,7 +304,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-test("宿主探测：没有可用 CLI 的机器直接报错，不假装拉起", () => {
+test("宿主探测：没有可用 CLI 的机器直接报错，不伪装拉起成功", () => {
   const saved = process.env.CAPITALIST_WORKER_BIN;
   delete process.env.CAPITALIST_WORKER_BIN;
   const host = detectWorkerHost();
@@ -379,7 +379,7 @@ const SHARD_CONTRACT = {
   ],
 };
 
-test("刚失败的单按退避等待，不会每 tick 刷进程", () => {
+test("刚失败的单按退避等待，不会每个 tick 重拉进程", () => {
   const root = sandbox();
   failedDispatch(root, "D-now", "a", 0);
 

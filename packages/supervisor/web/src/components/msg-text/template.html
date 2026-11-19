@@ -14,9 +14,9 @@
         type="button"
         aria-haspopup="dialog"
         :aria-expanded="card && card.raw === s.raw ? 'true' : 'false'"
-        :aria-label="t('查看任务 #{no}', { no: entry(s.raw).no })"
+        :aria-label="t('查看任务 #{no}', { no: bareNoLabel(s.raw) })"
         @click.stop="openRef($event, s.raw)"
-        >{{ noLabel(entry(s.raw).no) }}</button
+        >{{ refLabel(s.raw) }}</button
       >
       <span v-else-if="s.type === 'skill'" class="mskill" :title="s.raw">{{ s.name || "skill" }}</span>
       <span v-else>{{ s.type === "ref" ? s.raw : s.text }}</span>

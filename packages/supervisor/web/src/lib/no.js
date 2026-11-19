@@ -9,11 +9,29 @@
  * 显示时经 {@link noLabel} 补 `#`；解析输入时经 {@link stripHash} 剥 `#`。
  */
 
-/** 裸编号补 `#`：`"2"` -> `#2`、`"2-2"` -> `#2-2`；已带 `#` 或空值原样返回。 */
+/** 任务号段补零到两位；超过 99 原样（不截断）。 */
+function padTaskNo(n) {
+  return /^\d+$/.test(n) ? n.padStart(2, "0") : n;
+}
+
+/** 裸编号里第一段任务号补零到两位：`2-2` -> `02-2`、`2-P1` -> `02-P1`、`2` -> `02`；非数字开头原样。 */
+function padNo(s) {
+  const m = /^(\d+)(.*)$/.exec(s);
+  return m ? `${padTaskNo(m[1])}${m[2]}` : s;
+}
+
+/** 裸编号（任务号段补零、不带 `#`）：`"2-2"` -> `"02-2"`、`"2"` -> `"02"`；空值返回空串。 */
+export function bareNoLabel(no) {
+  const s = String(no ?? "").trim();
+  if (!s) return "";
+  return padNo(s.replace(/^#/, ""));
+}
+
+/** 裸编号补 `#` 并把任务号段补零到两位：`"2"` -> `#02`、`"2-2"` -> `#02-2`；空值返回空串。 */
 export function noLabel(no) {
   const s = String(no ?? "").trim();
   if (!s) return "";
-  return s.startsWith("#") ? s : `#${s}`;
+  return `#${padNo(s.replace(/^#/, ""))}`;
 }
 
 /** 剥掉编号开头的 `#`，得裸编号；容忍用户带或不带 `#`。 */

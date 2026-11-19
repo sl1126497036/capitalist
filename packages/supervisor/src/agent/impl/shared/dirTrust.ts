@@ -95,7 +95,7 @@ function ensureTrustedDir(root: string, opts: WorkspaceOptions): { ok: boolean; 
     return {
       ok: false,
       added: false,
-      message: `没找到 ${file}（${opts.label} 尚未初始化）。先手动跑一次 ${opts.label} 完成登录与初始配置。`,
+      message: `没找到 ${file}（${opts.label} 尚未初始化）。先手动执行一次 ${opts.label}，完成登录与初始配置。`,
     };
   }
 

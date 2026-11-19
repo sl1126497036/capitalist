@@ -32,7 +32,7 @@ test("读数解析：result 行里的 contextUsed 与 contextWindow 能读出来
   assert.equal(u.window, 200000);
 });
 
-test("读数解析：没有读数时一律 null，不拿 0 冒充", () => {
+test("读数解析：没有读数时一律 null，不用 0 代替", () => {
   assert.deepEqual(contextUsageOfResult({ type: "result" }), { used: null, window: null });
   assert.deepEqual(contextUsageOfResult(null), { used: null, window: null });
   // 空串 / 负数 / 非数字都算“没有读数”

@@ -147,7 +147,7 @@ export function reapOrphans(
 
     const via = identityOf(w, ident, root);
     if (!via) {
-      out(`[监工] 遗留 worker ${w.id}（pid ${w.pid}）命令行与父进程都对不上本任务根，跳过`);
+      out(`[监工] 遗留 worker ${w.id}（pid ${w.pid}）命令行与父进程均不匹配本任务根，跳过`);
       continue;
     }
 

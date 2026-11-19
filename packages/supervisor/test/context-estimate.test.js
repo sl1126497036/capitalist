@@ -138,7 +138,7 @@ test("长会话：无宿主 contextUsed 时按消息估算，不拿 result 的�
   assert.ok(row.context_used <= row.context_window, "已用不能大于分母");
 });
 
-test("超长会话：已用夹到生效上限，并标超限", () => {
+test("超长会话：已用封顶到生效上限，并标超限", () => {
   usage.__resetUsageCache();
   /* 4,000,012 个非中文 = 1,000,003 token > 1M */
   const root = withWorker(emptyRoot(), [assistantText("a".repeat(4_000_012)), resultNoCtx(300_000)].join("\n"));
@@ -149,7 +149,7 @@ test("超长会话：已用夹到生效上限，并标超限", () => {
   assert.ok(row.context_used <= row.context_window, "绝不允许已用大于分母");
 });
 
-test("宿主 contextUsed 优先：有真读数就不估算；超过上限同样夹取", () => {
+test("宿主 contextUsed 优先：有真读数就不估算；超过上限同样封顶", () => {
   usage.__resetUsageCache();
   const normal = withWorker(emptyRoot(), [assistantText("a".repeat(400)), resultWithCtx(120_000)].join("\n"));
   const n = usage.collectWorkerUsage(normal)[0];
@@ -165,7 +165,7 @@ test("宿主 contextUsed 优先：有真读数就不估算；超过上限同样�
   assert.equal(o.context_estimate, false);
 });
 
-test("监工链路：估算标记落盘，视图夹到生效上限并标超限", () => {
+test("监工链路：估算标记落盘，视图封顶到生效上限并标超限", () => {
   const root = emptyRoot();
   writeFileSync(
     join(root, ".capitalist", "supervisor.json"),
