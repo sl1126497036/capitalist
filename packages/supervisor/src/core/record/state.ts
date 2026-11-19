@@ -10,13 +10,13 @@ import { join } from "node:path";
 import type { Contract } from "../contract/contract";
 import { readJson, writeJson } from "./json";
 import { resolveMode } from "../guard/permission";
-import { supervisorDir } from "./paths";
+import { runtime } from "./locations";
 import { loadSupervisor, pidAlive, supervisorStaleSec } from "./supervisor";
 import type { Mode, TaskState } from "../types";
 
-/** 返回任务根下 `state.json` 的路径。 */
+/** 返回任务根下 `runtime/state.json` 的路径。 */
 export function statePath(root: string): string {
-  return join(supervisorDir(root), "state.json");
+  return runtime.state(root);
 }
 
 /**

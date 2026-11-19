@@ -1,6 +1,6 @@
 import { THREAD_PAGE_LIMIT, THREAD_PEEK_TAIL_BYTES, ThreadSummary, dispatchTitle, ageSec } from "./snapshot";
 import { join } from "node:path";
-import { supervisorDir } from "../../core/record/paths";
+import { board as boardLoc } from "../../core/record/locations";
 import { readJson, writeJson } from "../../core/record/json";
 import { Dispatch, WorkerRecord, loadSupervisor, dispatchPaused, workerLivenessOf, DEFAULT_LOG_STALL_SEC, parentOf, pendingPrerequisites } from "../../core/record/supervisor";
 import { taskKeyOf, readClearedMarks, threadStatusTerminal, threadStatusAbnormal } from "./state";
@@ -28,7 +28,7 @@ export const threadSeen = new Map<string, number>();
 export let threadSeenLoadedFor = "";
 
 export function threadSeenPath(root: string): string {
-  return join(supervisorDir(root), "board-seen.json");
+  return boardLoc.seen(root);
 }
 
 /** 首次用到时从盘上恢复一次；同一任务根只读一次。 */

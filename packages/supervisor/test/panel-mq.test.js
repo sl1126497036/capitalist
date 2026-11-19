@@ -14,7 +14,10 @@ const { buildThreadMessages } = require("../dist/supervisor/board");
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-mq-"));
   createTaskRoot({ target: "申报面板", contractSpec: "minimal", root: base });
-  mkdirSync(join(base, ".capitalist", "workers"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
+  mkdirSync(join(base, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(base, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(base, ".capitalist", ".root"), { recursive: true });
   return base;
 }
 
@@ -22,7 +25,8 @@ function seed(root) {
   const now = new Date().toISOString();
   const dispatch = "D-mq-full-1";
   const worker = "W-mq-full-1";
-  const log = join(root, ".capitalist", "workers", `${worker}.log`);
+  const log = join(root, ".capitalist", "workers", worker, "output.log");
+  mkdirSync(join(root, ".capitalist", "workers", worker), { recursive: true });
   writeFileSync(log, "这一片只做 a\n", "utf8");
   capitalist.appendDispatch(root, {
     id: dispatch,

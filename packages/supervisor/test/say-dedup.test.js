@@ -14,13 +14,16 @@ const TEXT = "这条消息只该出现一次";
 
 function scratch() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-saydedup-"));
-  mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   return root;
 }
 
 function seedDirect(root, rows) {
-  writeFileSync(join(root, ".capitalist", "direct.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  writeFileSync(join(root, ".capitalist", "ledger", "direct.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
 }
 
 async function withBoard(root, fn) {
@@ -33,7 +36,7 @@ async function withBoard(root, fn) {
 }
 
 async function userSays(served, root, id) {
-  const key = readFileSync(join(root, ".capitalist", "board.key"), "utf8").trim();
+  const key = readFileSync(join(root, ".capitalist", "board", "key"), "utf8").trim();
   const base = new URL(served.url);
   const res = await fetch(`${base.origin}/api/thread?id=${encodeURIComponent(id)}&shard=s1&limit=300`, {
     headers: {

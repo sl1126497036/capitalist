@@ -12,7 +12,7 @@ import { resolve, join } from "node:path";
 
 import { readJson, writeJson } from "../../core/record/json";
 import { pidAlive } from "../../core/record/supervisor";
-import { supervisorDir } from "../../core/record/paths";
+import { board as boardLoc } from "../../core/record/locations";
 import { SupervisorRecord, listWorkers, WorkerRecord, loadSupervisor } from "../../core/record/supervisor";
 import { reapOrphans } from "../worker/reapOrphans";
 import { parseWorkerLog } from "../worker/workerLog";
@@ -144,7 +144,7 @@ function workerGone(w: WorkerRecord): boolean {
 
 async function reclaimStaleBoard(root: string, port: number): Promise<boolean> {
   try {
-    const rec = readJson<{ pid?: number; port?: number; root?: string } | null>(join(supervisorDir(root), "board.pid"), null);
+    const rec = readJson<{ pid?: number; port?: number; root?: string } | null>(boardLoc.pid(root), null);
     if (!rec || !rec.pid || Number(rec.port) !== port) return false;
     if (rec.root && resolve(rec.root) !== resolve(root)) return false;
     try {
@@ -476,7 +476,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
     });
     if (bound) {
       try {
-        writeJson(join(supervisorDir(opts.root), "board.pid"), {
+        writeJson(boardLoc.pid(opts.root), {
           pid: process.pid,
           port,
           root: opts.root,

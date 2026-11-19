@@ -12,7 +12,7 @@ import { UsageFigures } from "../usage/usage";
 import { shardTitle, summarizeTitle } from "../usage/taskTitle";
 import { statCached } from "../../core/record/fsCache";
 import { join, resolve } from "node:path";
-import { supervisorDir } from "../../core/record/paths";
+import { ledger as ledgerLoc, runtime as runtimeLoc, inbox as inboxLoc } from "../../core/record/locations";
 import { tailLines, readJsonlFromTail, meaningfulLines } from "./logs";
 import { zh } from "./zh";
 import { loadState } from "../../core/record/state";
@@ -241,13 +241,14 @@ export function dispatchTitle(d: Dispatch): string {
 
 /** 结构指纹只用于 /api/tasks 的 rev 字段。 */
 export function signature(root: string): string {
-  const parts = ["state.json", "supervisor.json", "inbox/dispatch.jsonl"];
+  /* 走统一入口取绝对路径：目录重排后运行态在 runtime/，台账在 ledger/，不再按相对名拼。 */
+  const parts = [runtimeLoc.state(root), runtimeLoc.supervisor(root), inboxLoc.dispatch(root)];
   let s = "";
-  for (const rel of parts) {
+  for (const file of parts) {
     try {
-      s += `${rel}:${statCached(join(supervisorDir(root), rel))?.mtimeMs ?? "-"};`;
+      s += `${file}:${statCached(file)?.mtimeMs ?? "-"};`;
     } catch {
-      s += `${rel}:-;`;
+      s += `${file}:-;`;
     }
   }
   for (const w of listWorkers(root)) {
@@ -472,7 +473,7 @@ export function buildSnapshot(root: string): BoardSnapshot {
 
   // 事件窗口需容纳 tool 事件，否则派单与回报事件会被挤出尾部窗口。
   const ledgerOnly = ledgerOnlyRoot(root);
-  const feed: BoardEvent[] = readJsonlFromTail(join(supervisorDir(root), "events.jsonl"), 512_000)
+  const feed: BoardEvent[] = readJsonlFromTail(ledgerLoc.events(root), 512_000)
     .filter((e) => FEED_EVENTS.has(String(e.event ?? e.kind ?? "")))
     .filter((e) => !(ledgerOnly && String(e.event ?? e.kind ?? "") === "supervisor_done"))
     .slice(-FEED_LIMIT)
@@ -616,7 +617,7 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
     return {
       level: "bad",
       title: "当前目录没有任务根",
-      detail: "看板读不到 .capitalist/state.json。",
+      detail: "看板读不到 .capitalist/runtime/state.json。",
       fix: 'capitalist start "<目标>" --contract <任务列表名>',
     };
   }

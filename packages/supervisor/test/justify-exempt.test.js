@@ -67,7 +67,7 @@ test("登记动作的免检识别：同包的绝对路径入口", () => {
 test("没有匹配申请时明确报错，不误报已提交", () => {
   /* 理由只能补到已被拦下的申请上。凭空提交等于给了一个不存在的批准预期。 */
   const root = mkdtempSync(join(tmpdir(), "capitalist-justify-"));
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   const r = spawnSync(
     process.execPath,
     [join(__dirname, "..", "dist", "cli", "main.js"), "justify", "/tmp/probe-path", "核对文案", "--root", root],

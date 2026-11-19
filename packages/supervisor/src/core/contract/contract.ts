@@ -14,7 +14,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import { readJson, writeJson } from "../record/json";
 import { recordEvent } from "../record/ledger";
-import { supervisorDir } from "../record/paths";
+import { config as configLoc, locks as locksLoc } from "../record/locations";
 import { pidAlive } from "../record/supervisor";
 import type { ContractData, GateResult, LocalGuardConfig, Redline, RedlineHit, Stage } from "../types";
 
@@ -570,7 +570,7 @@ export function orchestrationDiff(prev: ContractData, next: ContractData): Orche
 }
 
 export function prevContractPath(root: string): string {
-  return join(supervisorDir(root), "contract.prev.json");
+  return configLoc.contractPrev(root);
 }
 
 export function savePrevContract(root: string, data: ContractData): void {
@@ -748,7 +748,7 @@ export interface InstanceLease {
 
 /** 锁目录：`<root>/.capitalist/locks`。 */
 export function locksDir(root: string): string {
-  return join(supervisorDir(root), "locks");
+  return locksLoc.dir(root);
 }
 
 /** 文件名安全段：只留字母数字与 `-` `_` `.`，其余压成 `-`。 */

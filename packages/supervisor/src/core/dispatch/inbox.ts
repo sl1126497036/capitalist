@@ -4,19 +4,19 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { appendJsonl, readJsonl, writeJsonl } from "../record/json";
-import { supervisorDir } from "../record/paths";
+import { inbox as inboxLoc } from "../record/locations";
 
 /** 裁决台账的文件名。只认这一个，别的一律不是台账。 */
 export const INBOX_LEDGER = "qa.jsonl";
 
 /** 收件箱目录：`<root>/.capitalist/inbox`。 */
 export function inboxDir(root: string): string {
-  return join(supervisorDir(root), "inbox");
+  return inboxLoc.dir(root);
 }
 
 /** 裁决台账的绝对路径：`<root>/.capitalist/inbox/qa.jsonl`。 */
 export function inboxLedgerPath(root: string): string {
-  return join(inboxDir(root), INBOX_LEDGER);
+  return inboxLoc.qa(root);
 }
 
 /** 一条通过校验的裁决记录。字段保持原样，只用类型收窄。 */
@@ -163,7 +163,7 @@ export function appendAsk(
   shard = "",
 ): string {
   const id = `Q${Math.floor(Date.now() / 1000) % 100000}-${Math.random().toString(36).slice(2, 6)}`;
-  appendJsonl(join(inboxDir(root), INBOX_LEDGER), {
+  appendJsonl(inboxLoc.qa(root), {
     type: "ask",
     status: "open",
     /* id 加随机后缀，使同一秒内连续登记不重复。 */
@@ -187,7 +187,7 @@ export function appendAsk(
  * @returns 是否命中，以及命中问题的正文。没命中时调用方按“找不到问题”处理。
  */
 export function answerAsk(root: string, id: string, guidance: string): { ok: boolean; text: string } {
-  const file = join(inboxDir(root), INBOX_LEDGER);
+  const file = inboxLoc.qa(root);
   const rows = readJsonl<Record<string, unknown>>(file);
   let hit = false;
   let hitText = "";

@@ -69,8 +69,8 @@ test("重建路径：buildSupervisorLog 把引用原样下发", () => {
 
 test("严重异常摘要：心跳与过程流水进不来，只有白名单内的严重事件", () => {
   const root = sandbox();
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
-  const events = join(root, ".capitalist", "events.jsonl");
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
+  const events = join(root, ".capitalist", "ledger", "events.jsonl");
   const row = (e) => `${JSON.stringify(e)}\n`;
   appendFileSync(
     events,
@@ -92,8 +92,8 @@ test("严重异常摘要：心跳与过程流水进不来，只有白名单内�
 
 test("严重异常摘要：最多 max 条，取最近的", () => {
   const root = sandbox();
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
-  const events = join(root, ".capitalist", "events.jsonl");
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
+  const events = join(root, ".capitalist", "ledger", "events.jsonl");
   let body = "";
   for (let i = 0; i < 12; i += 1) {
     body += JSON.stringify({

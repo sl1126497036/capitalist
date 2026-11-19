@@ -33,7 +33,7 @@ test("取图接口：<img> 形状的请求能拿到图，安全模式仍需 key�
     served = await board.serveBoard({ root, port: 0, out: () => {} });
     const port = served.server.address().port;
     const base = `http://127.0.0.1:${port}`;
-    const key = readFileSync(join(supervisorDir(root), "board.key"), "utf8").trim();
+    const key = readFileSync(join(supervisorDir(root), "board", "key"), "utf8").trim();
     const cookie = `supervisor_board_key=${key}`;
 
     const get = (path, headers = {}) => fetch(`${base}${path}`, {headers, redirect: "manual"});

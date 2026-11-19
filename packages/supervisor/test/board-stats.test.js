@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const { mkdtempSync, writeFileSync, rmSync } = require("node:fs");
+const { mkdtempSync, writeFileSync, rmSync, mkdirSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
@@ -14,6 +14,7 @@ const { supervisorDir } = require(join(PKG, "dist/core/record/paths.js"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-stats-"));
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   createTaskRoot({ target: "统计一致", contractSpec: "minimal", root, supervisor: false });
   return root;
 }
@@ -32,7 +33,7 @@ function worker(root, id, dispatch, status, shard) {
     heartbeat_at: at,
     heartbeat_ts: Date.now() / 1000 - 60,
     status,
-    log: join(supervisorDir(root), "workers", `${id}.log`),
+    log: join(supervisorDir(root), "workers", id, "output.log"),
   });
 }
 
@@ -52,7 +53,7 @@ function seed(root) {
 
   /* 任务池：D-done 这一单验收通过；其余不在 accepted 状态。 */
   writeFileSync(
-    join(supervisorDir(root), "tasks.jsonl"),
+    join(supervisorDir(root), "ledger", "tasks.jsonl"),
     [
       { id: "T-run", title: "运行", state: "dispatched", dispatch: "D-run", stage: "S0" },
       { id: "T-done", title: "完成", state: "accepted", dispatch: "D-done", stage: "S0" },

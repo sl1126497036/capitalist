@@ -27,7 +27,7 @@ const {
 
 function tmpRoot() {
   const dir = mkdtempSync(join(tmpdir(), "capitalist-guard-req-"));
-  mkdirSync(join(dir, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(dir, ".capitalist", _d), { recursive: true });
   return dir;
 }
 

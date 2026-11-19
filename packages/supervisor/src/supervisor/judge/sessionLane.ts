@@ -5,12 +5,14 @@
  * 上下文占用超过窗口比例时换代；同一会话同时只允许一个进程续接；action 指纹只作记录，不参与换代判定。
  */
 
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { dirs } from "../../agent/registry";
 import { recordEvent } from "../../core/record/ledger";
-import { supervisorDir } from "../../core/record/paths";
+import { sessions } from "../../core/record/locations";
 import { resolveContextWindow } from "../../core/guard/limits";
 import type { Dispatch, WorkerRecord } from "../../core/record/supervisor";
 import type { WorkerSession } from "../../agent/contract";
@@ -19,7 +21,7 @@ import type { WorkerSession } from "../../agent/contract";
 export interface LaneState {
   /** 会话基名，例如 `capitalist-u6-main`、`capitalist-u6-ui`。 */
   base: string;
-  /** 当前使用的会话 id，例如 `capitalist-u6-main-g3`。 */
+  /** 当前使用的会话 id（宿主会话 UUID）。 */
   current: string;
   /** 第几代，从 0 起（0 表示基名本身）。 */
   gen: number;
@@ -35,6 +37,10 @@ export interface LaneState {
   resumes?: number;
   /** 上一次更新的时刻。 */
   at: string;
+  /** 实际跑这一代的宿主（`codebuddy` / `claude-code`）；记录用，不参与判定。 */
+  host?: string;
+  /** 宿主会话文件的落盘路径；宿主决定位置，capitalist 只记录不写。 */
+  path?: string;
 }
 
 /** 上下文的更换会话阈值：占窗口的比例。 */
@@ -47,11 +53,11 @@ const CTX_UNKNOWN_MAX_RESUME = 2;
 const CTX_MAX_AGE_MS = 3600_000;
 /** `.capitalist/sessions` 目录。 */
 export function sessionsDir(root: string): string {
-  return join(supervisorDir(root), "sessions");
+  return sessions.dir(root);
 }
 
 function basePath(root: string, base: string): string {
-  return join(sessionsDir(root), `${base}.json`);
+  return sessions.lane(root, base);
 }
 
 /** 会话基名的字符集归一化：只留小写字母、数字与连字符。 */
@@ -81,13 +87,85 @@ export function laneBaseId(
   dispatchId = "",
 ): string {
   const fromDispatch = String(dispatchId ?? "").trim().replace(/^d-/i, "");
+  /*
+   * 派单号形如 `任务号-派发序`（`4-1`）。会话基名只取任务号 `4`，不取派发序：
+   * 同一任务的重派（`4-2`、`4-3`）应续接同一条会话，而不是各自开新文件。
+   * 历史 `D-<随机串>` 派单号整体取用，随机串本身保证唯一。
+   */
+  const taskNo = /^\d+/.exec(fromDispatch)?.[0] ?? "";
   const pick =
-    slug(fromDispatch) || String(shard ?? "").trim() || String(tags[0] ?? "").trim() || "misc";
+    slug(taskNo || fromDispatch) || String(shard ?? "").trim() || String(tags[0] ?? "").trim() || "misc";
   const tail = (slug(pick) || "misc").slice(0, 24);
   /* 先留出派单标识的位置再截阶段名：从尾部截断会把隔离键切掉，退化成共用会话。 */
   const budget = Math.max(2, BASE_MAX - "capitalist-".length - 1 - tail.length);
   const head = slug(stage).slice(0, budget) || "s";
   return `capitalist-${head}-${tail}`;
+}
+
+/** 生成唯一会话 id 时查重冲突的重试上限；UUID 撞名概率极低，仍撞则抛错，不静默复用。 */
+const ID_RETRY_MAX = 5;
+
+/** 扫 `.capitalist/sessions` 下已登记映射，返回已占用的 current 集合。 */
+function usedLaneIds(root: string): Set<string> {
+  const out = new Set<string>();
+  const dir = sessionsDir(root);
+  let names: string[] = [];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return out;
+  }
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const st = JSON.parse(readFileSync(join(dir, name), "utf8")) as LaneState;
+      if (st && typeof st.current === "string" && st.current) out.add(st.current);
+    } catch {
+      /* 损坏的记录跳过 */
+    }
+  }
+  return out;
+}
+
+/** 查 codebuddy / claude 等宿主配置目录下是否已有该会话文件（防清理 .capitalist 后残留文件撞名）。 */
+function hostSessionExists(sessionId: string): boolean {
+  const id = String(sessionId ?? "").trim();
+  if (!id) return false;
+  for (const d of dirs()) {
+    const base = join(homedir(), d.dir, "projects");
+    if (!existsSync(base)) continue;
+    let projects: string[] = [];
+    try {
+      projects = readdirSync(base, { withFileTypes: true })
+        .filter((x) => x.isDirectory())
+        .map((x) => x.name);
+    } catch {
+      continue;
+    }
+    for (const p of projects) {
+      try {
+        if (statSync(join(base, p, `${id}.jsonl`)).isFile()) return true;
+      } catch {
+        /* 该目录没有这一代会话：继续找 */
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * 生成一条全局唯一的会话 id：v4 UUID。
+ *
+ * 会话 id 统一用 UUID，兼容 Claude Code（`--session-id` 强制 UUID）与 CodeBuddy（接受
+ * 字母数字连字符）。UUID 128 位撞名概率趋近于零，仍做双查兜底：既查 `.capitalist/sessions`
+ * 映射表，也查宿主配置目录下的残留会话文件；撞了重新生成，超过上限抛错而非静默复用。
+ */
+function uniqueLaneId(root: string, base: string): string {
+  for (let i = 0; i < ID_RETRY_MAX; i += 1) {
+    const cand = randomUUID();
+    if (!usedLaneIds(root).has(cand) && !hostSessionExists(cand)) return cand;
+  }
+  throw new Error(`生成唯一会话 id 失败（base=${base}）：连续 ${ID_RETRY_MAX} 次 UUID 冲突`);
 }
 
 /** 读会话记录；没有或损坏时返回 null（按首次处理）。 */
@@ -174,18 +252,19 @@ export function pickLane(
   const sig = fingerprintOf(String(dispatch.action ?? ""));
   const st = readLane(root, base);
 
-  // 首次：用基名新开，不续接。
+  // 首次：新开一条会话，id 带唯一后缀，不续接。
   if (!st) {
+    const current = uniqueLaneId(root, base);
     writeLane(root, {
       base,
-      current: base,
+      current,
       gen: 0,
       sig,
       ctx_used: null,
       ctx_window: null,
       at: new Date().toISOString(),
     });
-    return { id: base, resume: false };
+    return { id: current, resume: false };
   }
 
   /* 占用未满、未知续接次数未达上限、未闲置过久、无进程占用四道闸门全通过才续接，否则换代；与 action 指纹无关。sig 更新为最新指纹供回查。 */
@@ -205,7 +284,7 @@ export function pickLane(
     return { id: st.current, resume: true };
   }
   const gen = st.gen + 1;
-  const current = `${base}-g${gen}`;
+  const current = uniqueLaneId(root, `${base}-g${gen}`);
   const why = tooFull ? "ctx_full" : unknownSpent ? "ctx_unknown" : stale ? "ctx_stale" : "occupied";
   recordEvent(root, "lane_rotated", {
     base,
@@ -241,7 +320,7 @@ export function recordLaneUsage(
   figures: { context_used: number | null; context_window: number | null; context_model?: string },
 ): void {
   if (!laneId) return;
-  const base = laneId.replace(/-g\d+$/, "");
+  const base = laneBaseOf(root, laneId);
   const st = readLane(root, base);
   if (!st) return;
   // 老代的退出回调晚到，不覆盖新代读数。
@@ -258,6 +337,35 @@ export function recordLaneUsage(
 /** 会话文件是否存在（调试/看板用）。 */
 export function laneExists(root: string, base: string): boolean {
   return existsSync(basePath(root, base));
+}
+
+/**
+ * 由会话 id 反推其 base。
+ *
+ * 会话 id 是 v4 UUID，与 base 无字符串上的包含关系，无法用正则剥离。这里遍历
+ * `.capitalist/sessions` 下的映射记录匹配 `current`，返回记录的 `base`：映射表是唯一事实
+ * 来源。找不到映射时返回空串（不猜）。
+ */
+export function laneBaseOf(root: string, laneId: string): string {
+  const id = String(laneId ?? "").trim();
+  if (!id) return "";
+  const dir = sessionsDir(root);
+  let names: string[] = [];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return "";
+  }
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const st = JSON.parse(readFileSync(join(dir, name), "utf8")) as LaneState;
+      if (st && st.current === id && typeof st.base === "string") return st.base;
+    } catch {
+      /* 损坏记录跳过 */
+    }
+  }
+  return "";
 }
 
 /** 从工作进程记录取会话 id；老记录没有该字段时返回空串。 */

@@ -6,7 +6,7 @@
 
 import { isLoopback, sendJson, type BoardCtx } from "../types";
 import { appendJsonl, readJsonl } from "../../../core/record/json";
-import { supervisorDir } from "../../../core/record/paths";
+import { attachments as attachmentsLoc } from "../../../core/record/locations";
 import { BOARD_WEB_TYPES } from "../assets";
 import { rootFromUrl } from "../snapshot";
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -63,7 +63,7 @@ ctx.req.on("end", () => {
     return;
   }
   try {
-    const dir = join(supervisorDir(ctx.opts.root), "attachments");
+    const dir = attachmentsLoc.dir(ctx.opts.root);
     mkdirSync(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
     const rand = Math.random().toString(36).slice(2, 8);
@@ -79,7 +79,7 @@ ctx.req.on("end", () => {
       tag: String(payload.tag ?? "").slice(0, 40),
       name: String(payload.name ?? "").slice(0, 120),
     };
-    appendJsonl(join(dir, "index.jsonl"), attMeta);
+    appendJsonl(attachmentsLoc.index(ctx.opts.root), attMeta);
     sendJson(ctx, { ok: true, path: rel, bytes: buf.length, mime, thread: attMeta.thread, tag: attMeta.tag });
   } catch (err) {
     sendJson(ctx, { error: `保存失败：${String(err instanceof Error ? err.message : err)}` }, 500);
@@ -93,7 +93,7 @@ export function handleAttachment(ctx: BoardCtx): void {
 const q = new URLSearchParams(ctx.url.slice(ctx.url.indexOf("?") + 1));
 const want = String(q.get("path") || "").trim();
 const root = rootFromUrl(ctx.url, ctx.opts.root);
-const dir = resolve(supervisorDir(root), "attachments");
+const dir = resolve(attachmentsLoc.dir(root));
 const full = resolve(root, want.replace(/^[\\/]+/, ""));
 if (!want || (full !== dir && !full.startsWith(dir + sep))) {
   ctx.res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
@@ -124,7 +124,7 @@ return;
 export function handleAttachments(ctx: BoardCtx): void {
 try {
   const rows = readJsonl<{ path?: string; thread?: string; tag?: string; at?: string; name?: string }>(
-    join(supervisorDir(ctx.opts.root), "attachments", "index.jsonl"),
+    attachmentsLoc.index(ctx.opts.root),
   );
   const map: Record<string, { thread: string; tag: string; at: string; name: string }> = {};
   for (const r of rows) {

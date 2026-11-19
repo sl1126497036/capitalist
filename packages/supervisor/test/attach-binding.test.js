@@ -23,6 +23,9 @@ function scratch() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-attach-"));
   mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
   mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   return root;
 }
 
@@ -30,7 +33,7 @@ test("连发两条消息：第二条只有文字，读回来的消息不带附�
   const root = scratch();
   try {
     writeFileSync(
-      join(root, ".capitalist", "direct.jsonl"),
+      join(root, ".capitalist", "ledger", "direct.jsonl"),
       [
         {
           at: "2026-11-01T10:00:00.000Z",
@@ -70,7 +73,7 @@ test("老记录没有 atts 字段时，只从自己正文里解，不跨条借",
   const root = scratch();
   try {
     writeFileSync(
-      join(root, ".capitalist", "direct.jsonl"),
+      join(root, ".capitalist", "ledger", "direct.jsonl"),
       [
         { at: "2026-11-01T10:00:00.000Z", at_ts: 1, type: "direct", text: `图\n\n[附件] ${IMG}`, shard: "legacy" },
         { at: "2026-11-01T10:01:00.000Z", at_ts: 2, type: "direct", text: "纯文字", shard: "legacy" },

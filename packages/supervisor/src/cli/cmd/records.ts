@@ -29,6 +29,7 @@ import {
 import { appendMq, wakeSupervisor } from "../../core/dispatch/mq";
 import { answerAsk } from "../../core/dispatch/inbox";
 import { findRoot, supervisorDir } from "../../core/record/paths";
+import { inbox as inboxLoc, config as configLoc, ledger as ledgerLoc, meta as metaLoc } from "../../core/record/locations";
 import { sleepSync } from "../../core/record/process";
 import { loadWorker } from "../../core/record/supervisor";
 import { parseWorkerLog } from "../../supervisor/worker/workerLog";
@@ -50,14 +51,14 @@ function ctxOrDie(p: Parsed): CmdCtx {
   const root = flagString(p, "root") ?? findRoot();
   if (!root) throw new Error("当前不在任何受监督任务内。开工：capitalist start <目标> --contract <任务列表名>");
   const state = loadState(root);
-  if (!state) throw new Error(`${root} 下没有可用的 .capitalist/state.json`);
+  if (!state) throw new Error(`${root} 下没有可用的 .capitalist/runtime/state.json`);
   const contract = loadContract(state.contract_path) ?? loadContract(state.contract, skillDirs());
   if (!contract) throw new Error(`任务列表文件丢失：${state.contract_path}`);
   return { root, state, contract };
 }
 
 function qaPath(root: string): string {
-  return join(supervisorDir(root), "inbox", "qa.jsonl");
+  return inboxLoc.qa(root);
 }
 
 function envSession(): string {
@@ -153,7 +154,7 @@ export function cmdWorker(p: Parsed): number {
 
   const lane = String((w as unknown as { ai_session?: string }).ai_session ?? "");
   const label = w.dispatch ? readJsonl<{ id: string; title?: string; status?: string }>(
-    join(supervisorDir(root), "inbox", "dispatch.jsonl"),
+    inboxLoc.dispatch(root),
   ).find((d) => String(d.id) === String(w.dispatch)) : null;
   process.stdout.write(
     `进程 ${w.id} · ${w.status}${w.exit_code !== null && w.exit_code !== undefined ? `（exit ${w.exit_code}）` : ""}\n`,
@@ -282,7 +283,7 @@ export function cmdScope(p: Parsed): number {
   if (pairs.length === 0) throw new Error("用法：capitalist scope assets=1 rules=1 grading=1");
 
   const { root, state, contract } = ctxOrDie(p);
-  const file = join(supervisorDir(root), "scope.json");
+  const file = configLoc.scope(root);
   const cur = readJsonlSafe(file);
 
   for (const pair of pairs) {
@@ -381,7 +382,7 @@ export function cmdUpdate(p: Parsed): number {
  */
 export function cmdLedger(p: Parsed): number {
   const { root, state } = ctxOrDie(p);
-  const file = join(supervisorDir(root), "ledger.jsonl");
+  const file = ledgerLoc.ledger(root);
   const action = p.positional[0] ?? "list";
 
   if (action === "add") {
@@ -615,7 +616,7 @@ export function cmdFire(p: Parsed): number {
       return 2;
     }
 
-    appendJsonl(join(supervisorDir(root), "authz.jsonl"), {
+    appendJsonl(ledgerLoc.authz(root), {
       at: new Date().toISOString(),
       at_ts: Date.now() / 1000,
       req: basename(reqFile),
@@ -640,7 +641,7 @@ export function cmdFire(p: Parsed): number {
 
   // 限速：连续请求之间留间隔，避免目标服务过载。需等待就等待，不发无效请求。
   const gap = Number(flagString(p, "gap") ?? 0) || 0;
-  const lastFile = join(supervisorDir(root), "last_fire.txt");
+  const lastFile = metaLoc.lastFire(root);
   if (gap > 0 && existsSync(lastFile)) {
     const last = Number(readFileSync(lastFile, "utf8").trim());
     if (Number.isFinite(last) && last > 0) {

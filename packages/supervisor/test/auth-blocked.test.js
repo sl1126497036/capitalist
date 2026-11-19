@@ -18,8 +18,11 @@ const { AUTH_REQUIRED_TEXT, QUOTA_EXHAUSTED_TEXT, looksLikeAuth } = require(
 
 function scratch() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-authblocked-"));
-  mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   return root;
 }
 
@@ -43,8 +46,9 @@ test("登录态文案命中识别，额度文案不误判", () => {
 
 test("worker 日志含登录态文案时给出结论，不含时仍按退出码描述", () => {
   const root = scratch();
+  mkdirSync(join(root, ".capitalist", "workers", "1"), { recursive: true });
   writeFileSync(
-    join(root, ".capitalist", "workers", "1.log"),
+    join(root, ".capitalist", "workers", "1", "output.log"),
     [
       "[launch] host=codebuddy dispatch=D-1",
       '{"type":"assistant","message":{"content":[{"text":"Authentication required. Please use /login command to sign in to your account"}]}}',
@@ -53,7 +57,8 @@ test("worker 日志含登录态文案时给出结论，不含时仍按退出码�
   );
   assert.equal(loop.__testing.workerExitReason(root, "1", 0), AUTH_REQUIRED_TEXT);
 
-  writeFileSync(join(root, ".capitalist", "workers", "2.log"), "[launch] host=codebuddy\n正常结束");
+  mkdirSync(join(root, ".capitalist", "workers", "2"), { recursive: true });
+  writeFileSync(join(root, ".capitalist", "workers", "2", "output.log"), "[launch] host=codebuddy\n正常结束");
   assert.equal(loop.__testing.workerExitReason(root, "2", 0), "worker 进程退出（code 0）");
 });
 

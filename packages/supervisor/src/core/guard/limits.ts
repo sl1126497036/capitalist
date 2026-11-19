@@ -3,9 +3,7 @@
 import { writeFileSync } from "node:fs";
 
 import { readJson } from "../record/json";
-import { join } from "node:path";
-
-import { supervisorDir } from "../record/paths";
+import { config as configLoc } from "../record/locations";
 
 /** 一条待裁决问题（ask）最多能让阶段停多久。 */
 export const ASK_BLOCK_MS = 15 * 60 * 1000;
@@ -84,7 +82,7 @@ function readConfigFile(root: string): CtxWindowConfig {
   try {
     /* 一轮构建里会被每行读数各查一次，走 readJson 的进程内缓存。 */
     const d = readJson<{ window?: number; default?: number; supervisor?: number; threads?: Record<string, number> }>(
-      join(supervisorDir(root), "ctx-window.json"),
+      configLoc.ctxWindow(root),
       {},
     );
     const pick = (v: unknown): number | null => {
@@ -107,7 +105,7 @@ function readConfigFile(root: string): CtxWindowConfig {
 
 function writeConfigFile(root: string, c: CtxWindowConfig): boolean {
   try {
-    writeFileSync(join(supervisorDir(root), "ctx-window.json"), JSON.stringify(c, null, 1));
+    writeFileSync(configLoc.ctxWindow(root), JSON.stringify(c, null, 1));
     return true;
   } catch {
     return false;

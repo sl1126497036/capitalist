@@ -1,7 +1,7 @@
 /**
  * 模型决策：把调用方指定的模型规范化为传给宿主的 `--model`。
  *
- * 默认档与禁用名单声明在各平台 impl，可由 `.capitalist/supervisor.json` 的 `default_model` / `model_denylist` 覆盖；禁用名单取平台与配置的并集，配置只能追加。
+ * 默认档与禁用名单声明在各平台 impl，可由 `.capitalist/runtime/supervisor.json` 的 `default_model` / `model_denylist` 覆盖；禁用名单取平台与配置的并集，配置只能追加。
  */
 
 import { readJson } from "../../core/record/json";
@@ -52,7 +52,7 @@ export function modelRulesOf(
 /**
  * @param opts.host 宿主 id；没有模型策略的宿主原样返回。
  * @param opts.wanted 调用方指定的模型，来自命令行、契约分片或看板换模型。
- * @param opts.root 任务根，用于读取 `.capitalist/supervisor.json` 覆盖配置；缺省时不读。
+ * @param opts.root 任务根，用于读取 `.capitalist/runtime/supervisor.json` 覆盖配置；缺省时不读。
  */
 export function resolveModel(opts: {
   root?: string | undefined;

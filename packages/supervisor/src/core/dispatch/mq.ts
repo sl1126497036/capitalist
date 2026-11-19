@@ -2,10 +2,9 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
-import { join } from "node:path";
 
 import { appendJsonl } from "../record/json";
-import { supervisorDir } from "../record/paths";
+import { mq as mqLoc, runtime as runtimeLoc } from "../record/locations";
 import { msgId } from "../message/msgId";
 import { taskNoOfDispatchId } from "../record/tasks";
 
@@ -39,15 +38,15 @@ export interface MqMessage {
 }
 
 export function mqDir(root: string): string {
-  return join(supervisorDir(root), "mq");
+  return mqLoc.dir(root);
 }
 
 export function mqPath(root: string): string {
-  return join(mqDir(root), "reports.jsonl");
+  return mqLoc.reports(root);
 }
 
 function cursorPath(root: string): string {
-  return join(mqDir(root), "cursor.json");
+  return mqLoc.cursor(root);
 }
 
 function newId(dispatch: string): string {
@@ -164,7 +163,7 @@ export function wakeSupervisor(root: string, timeoutMs = 1200): Promise<boolean>
   return new Promise((resolve) => {
     let base = "";
     try {
-      const capitalist = JSON.parse(readFileSync(join(supervisorDir(root), "supervisor.json"), "utf8")) as {
+      const capitalist = JSON.parse(readFileSync(runtimeLoc.supervisor(root), "utf8")) as {
         board_url?: string;
       };
       base = String(capitalist.board_url ?? "").trim();

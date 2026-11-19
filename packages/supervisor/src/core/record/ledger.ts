@@ -14,26 +14,26 @@
 import { join } from "node:path";
 
 import { appendJsonl, readJson, readJsonl, writeJson, writeJsonl } from "./json";
-import { supervisorDir } from "./paths";
+import { ledger as ledgerLoc } from "./locations";
 
-/** 事件台账的绝对路径：`<root>/.capitalist/events.jsonl`。 */
+/** 事件台账的绝对路径：`<root>/.capitalist/ledger/events.jsonl`。 */
 export function eventsPath(root: string): string {
-  return join(supervisorDir(root), "events.jsonl");
+  return ledgerLoc.events(root);
 }
 
-/** 违规台账的绝对路径：`<root>/.capitalist/violations.jsonl`。 */
+/** 违规台账的绝对路径：`<root>/.capitalist/ledger/violations.jsonl`。 */
 export function violationsPath(root: string): string {
-  return join(supervisorDir(root), "violations.jsonl");
+  return ledgerLoc.violations(root);
 }
 
-/** 待复核队列的绝对路径：`<root>/.capitalist/review.jsonl`。 */
+/** 待复核队列的绝对路径：`<root>/.capitalist/ledger/review.jsonl`。 */
 export function reviewPath(root: string): string {
-  return join(supervisorDir(root), "review.jsonl");
+  return ledgerLoc.review(root);
 }
 
-/** 会话台账的绝对路径：`<root>/.capitalist/sessions.json`。 */
+/** 会话台账的绝对路径：`<root>/.capitalist/ledger/sessions.json`。 */
 export function sessionsPath(root: string): string {
-  return join(supervisorDir(root), "sessions.json");
+  return ledgerLoc.sessions(root);
 }
 
 /**

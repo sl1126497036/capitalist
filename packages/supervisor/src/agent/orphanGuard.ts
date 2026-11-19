@@ -1,16 +1,13 @@
 
-import { appendFileSync, existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { loadWorker, workerLogPath } from "../core/record/supervisor";
-import { supervisorDir } from "../core/record/paths";
+import { workers as workersLoc } from "../core/record/locations";
 
 /** 连续多少次检测不到监工才判定为孤儿。 */
 export const MISS_LIMIT = 2;
-
-/** 漏检记账文件的扩展名，落在 `.capitalist/workers/` 里，与 worker 记录同目录。 */
-const GUARD_SUFFIX = ".guard.json";
 
 /**
  * pid 是否还活着。
@@ -38,12 +35,13 @@ function workerEnv(): { root: string; id: string } | null {
  * 漏检记账文件路径。
  *
  * 计数必须跨 hook 进程保留：每次 hook 都是新的短命进程，内存计数永远是 1，永远不会
- * 触发。worker 环境齐全时记在 `.capitalist/workers/<id>.guard.json`（同目录，随任务根一起清）；
- * 环境不全时改用系统临时目录，按监工 pid 命名，使同一监工下的钩子共用一份计数。
+ * 触发。worker 环境齐全时记在 `.capitalist/workers/<id>/guard.json`（per-worker 目录内，
+ * 随任务根与 worker 目录一起回收）；环境不全时改用系统临时目录，按监工 pid 命名，
+ * 使同一监工下的钩子共用一份计数。
  */
 function guardStatePath(supervisorPid: number): string {
   const w = workerEnv();
-  if (w) return join(supervisorDir(w.root), "workers", `${w.id}${GUARD_SUFFIX}`);
+  if (w) return workersLoc.guard(w.root, w.id);
   return join(tmpdir(), `capitalist-guard-${supervisorPid}.json`);
 }
 
@@ -120,6 +118,8 @@ export function guardSupervisor(): void {
 
   const misses = readMisses(state) + 1;
   try {
+    /* per-worker 目录可能尚未建立（worker 记录晚于首次 hook 落盘），写前补齐。 */
+    mkdirSync(dirname(state), { recursive: true });
     writeFileSync(
       state,
       JSON.stringify({ misses, supervisor_pid: supervisorPid, at: new Date().toISOString() }),

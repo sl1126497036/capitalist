@@ -5,6 +5,7 @@ import { isAbsolute, join } from "node:path";
 
 import { readJson, readJsonl } from "../record/json";
 import { supervisorDir } from "../record/paths";
+import { runtime as runtimeLoc } from "../record/locations";
 
 /** 一次检查的结果。`missing` 列出未满足的条件，供写入简报。 */
 export interface CheckResult {
@@ -395,7 +396,7 @@ const CHECKS: Record<string, Checker> = {
     const rel = String(spec.path ?? "");
     const p = join(root, rel);
     if (!existsSync(p)) return fail(spec, `缺文件：${rel}`);
-    const state = readJson<Record<string, unknown> | null>(join(supervisorDir(root), "state.json"), null);
+    const state = readJson<Record<string, unknown> | null>(runtimeLoc.state(root), null);
 
     // 时间基准由具体到宽泛：优先本阶段进入时刻，其次 `created_at`。早于该字段出现的
     // 任务根（或手写的）没有前两者，退到 `created_at` 仍可判定；这种口径偏宽，但比让

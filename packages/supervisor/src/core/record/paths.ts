@@ -55,10 +55,10 @@ export function toNativePath(p: string): string {
 }
 
 /**
- * 向上查找任务根：返回最近一个含 `.capitalist/state.json` 的祖先目录。
+ * 向上查找任务根：返回最近一个含 `.capitalist/.root` 标记的祖先目录。
  *
- * 判定依据是祖先目录下存在 `state.json`，不只看 `.capitalist/` 目录。只剩该目录的残留
- * 不构成任务根：此时命令会因读不到状态而失败，报错位置远离根因。
+ * 判定依据是祖先目录下存在 `.root` 标记文件，不只看 `.capitalist/` 目录。标记文件
+ * 由 `createRoot` 建立；只剩 `.capitalist` 目录残留、没有标记，不构成任务根。
  *
  * @param start 起始目录，默认取当前工作目录。
  * @returns 任务根路径；找不到时返回 null。
@@ -71,7 +71,7 @@ export function findRoot(start?: string): string | null {
     return null;
   }
   for (;;) {
-    if (existsSync(join(cur, CAPITALIST_DIR, "state.json"))) return cur;
+    if (existsSync(join(cur, CAPITALIST_DIR, ".root"))) return cur;
     const parent = join(cur, "..");
     const next = resolve(parent);
     if (next === cur) return null;

@@ -45,11 +45,11 @@ test("读数解析：没有读数时一律 null，不用 0 代替", () => {
 
 test("超限判定：有真实读数、占比达标、已达下限，三者齐备才触发", () => {
   const root = mkdtempSync(join(tmpdir(), "capitalist-ctxreload-"));
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   /* 生效上限 = min(配置, 模型窗口)。这里只配 200k，模型窗口未上报。
      heartbeat_ts 是 loadSupervisor 的存活判据，缺了整份记录会被当成不存在。 */
   writeFileSync(
-    join(root, ".capitalist", "supervisor.json"),
+    join(root, ".capitalist", "runtime", "supervisor.json"),
     JSON.stringify({ heartbeat_ts: Date.now() / 1000, supervisor_context_limit: 200_000 }),
     "utf8",
   );
@@ -98,7 +98,7 @@ test("超限判定：已有重载在进行中时不重复触发", () => {
 function makeOrderRoot() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-order-"));
   const capitalist = join(root, ".capitalist");
-  mkdirSync(join(capitalist, "inbox"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(capitalist, _d), { recursive: true });
   mkdirSync(join(root, "out"), { recursive: true });
   writeFileSync(join(root, "out", "b.txt"), "done\n", "utf8");
 
@@ -126,7 +126,7 @@ function makeOrderRoot() {
     "utf8",
   );
   writeFileSync(
-    join(capitalist, "state.json"),
+    join(capitalist, "runtime", "state.json"),
     JSON.stringify({
       version: 2,
       target: "顺序演示",
@@ -150,7 +150,7 @@ function makeOrderRoot() {
 
   // shard-b 已结束且台账四项证据齐全 -> done_verified，不占恢复次序、不进复验清单
   writeFileSync(
-    join(capitalist, "ledger.jsonl"),
+    join(capitalist, "ledger", "ledger.jsonl"),
     JSON.stringify({
       id: "L1",
       claim: "shard-b 已实测核对",
@@ -161,7 +161,7 @@ function makeOrderRoot() {
     "utf8",
   );
 
-  writeFileSync(join(capitalist, "thread-no.json"), JSON.stringify({ next: 3, ids: { "S1/shard-a": 1, "S1/shard-c": 2, "S1/shard-b": 3 } }), "utf8");
+  writeFileSync(join(capitalist, "ledger", "thread-no.json"), JSON.stringify({ next: 3, ids: { "S1/shard-a": 1, "S1/shard-c": 2, "S1/shard-b": 3 } }), "utf8");
 
   return { root, contract: loadContract(contractPath) };
 }
@@ -215,11 +215,11 @@ test("applyResumePlan 按原始下发顺序建复验单（台账里 c 的复验�
 test("重载标记带触发来源；自动重载记 context_overflow，结束后清掉", async () => {
   const root = mkdtempSync(join(tmpdir(), "capitalist-trigger-"));
   const capitalist = join(root, ".capitalist");
-  mkdirSync(join(capitalist, "inbox"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(capitalist, _d), { recursive: true });
   mkdirSync(join(root, "out"), { recursive: true });
   writeFileSync(join(root, "out", "b.txt"), "done\n", "utf8");
   /* 配置 200k：180k 已用才够 85% 阈值。 */
-  writeFileSync(join(capitalist, "supervisor.json"), JSON.stringify({ supervisor_context_limit: 200_000 }), "utf8");
+  writeFileSync(join(capitalist, "runtime", "supervisor.json"), JSON.stringify({ supervisor_context_limit: 200_000 }), "utf8");
   const contractPath = join(root, "demo.contract.json");
   writeFileSync(
     contractPath,
@@ -232,7 +232,7 @@ test("重载标记带触发来源；自动重载记 context_overflow，结束后
     "utf8",
   );
   writeFileSync(
-    join(capitalist, "state.json"),
+    join(capitalist, "runtime", "state.json"),
     JSON.stringify({
       version: 2,
       target: "触发来源演示",
@@ -251,7 +251,7 @@ test("重载标记带触发来源；自动重载记 context_overflow，结束后
   await beginReload(root, contract, { holdSec: 0 });
   assert.equal(reloadStatus(root).active, false);
   assert.ok(existsSync(join(root, ".capitalist", "reload", "snapshot.json")));
-  const events = readFileSync(join(capitalist, "events.jsonl"), "utf8")
+  const events = readFileSync(join(capitalist, "ledger", "events.jsonl"), "utf8")
     .trim()
     .split("\n")
     .map((l) => JSON.parse(l));
@@ -262,7 +262,7 @@ test("重载标记带触发来源；自动重载记 context_overflow，结束后
   recordSupervisorContext(root, 180_000, 200_000);
   assert.equal(shouldAutoReload(root).hit, true);
   await beginReload(root, contract, { holdSec: 0, trigger: "context_overflow" });
-  const events2 = readFileSync(join(capitalist, "events.jsonl"), "utf8")
+  const events2 = readFileSync(join(capitalist, "ledger", "events.jsonl"), "utf8")
     .trim()
     .split("\n")
     .map((l) => JSON.parse(l));

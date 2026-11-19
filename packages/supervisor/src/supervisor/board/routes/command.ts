@@ -8,7 +8,7 @@ import { BoardCtx, isLoopback, sendJson } from "../types";
 import { hostOverrideOf } from "../../../agent/registry";
 import { writeJson } from "../../../core/record/json";
 import { recordEvent } from "../../../core/record/ledger";
-import { supervisorDir } from "../../../core/record/paths";
+import { model as modelLoc } from "../../../core/record/locations";
 import { loadSupervisor, requestSupervisorStop, saveSupervisor, finishDispatch, readDispatches } from "../../../core/record/supervisor";
 import { appendSupervisorDirective } from "../../channel/direct";
 import { listTaskRoots, clearSourceCache } from "../sources";
@@ -17,7 +17,7 @@ import { messageContextCache } from "../messages";
 import { clearSupervisorLogCache } from "../supervisorLog";
 import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { runCommand } from "../commands";
 
 /** /api/capitalist-command */
@@ -219,7 +219,7 @@ ctx.req.on("end", () => {
 
   if (input.action === "next-model") {
     const model = String(input.arg ?? "").trim();
-    const p = join(supervisorDir(targetRoot), "next_model.json");
+    const p = modelLoc.next(targetRoot);
     try {
       if (!model) rmSync(p, { force: true });
       else writeJson(p, { model, at: new Date().toISOString(), by: "user" });

@@ -31,7 +31,7 @@ export function rootOrDie(p: Parsed): string {
  */
 export function loadOrDie(root: string): { state: TaskState; contract: Contract } {
   const state = loadState(root);
-  if (!state) die(`${root} 下没有可用的 .capitalist/state.json`);
+  if (!state) die(`${root} 下没有可用的 .capitalist/runtime/state.json`);
 
   let contract = loadContract(state.contract_path) ?? loadContract(state.contract, skillDirs());
   if (!contract) die(`任务列表文件丢失：${state.contract_path}`);

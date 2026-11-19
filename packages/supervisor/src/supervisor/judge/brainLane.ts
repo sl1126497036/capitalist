@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import { hhmmOf } from "../../core/clock";
 import { recordEvent } from "../../core/record/ledger";
-import { supervisorDir } from "../../core/record/paths";
+import { brain as brainLoc, ledger as ledgerLoc } from "../../core/record/locations";
 import { estimateSessionContextTokens } from "../context/reload";
 
 /** 一条会话（判定脑）。 */
@@ -32,7 +32,7 @@ function capOf(): number {
 }
 
 function laneDir(root: string): string {
-  return join(supervisorDir(root), "brain");
+  return brainLoc.dir(root);
 }
 
 function lanePath(root: string, base: string): string {
@@ -121,7 +121,7 @@ const VERDICT_TAIL_BYTES = 256_000;
  * 只取结论与简要理由，不带完整事实，避免换代后上下文重新膨胀。
  */
 export function recentVerdicts(root: string, max = 6): string[] {
-  const file = join(supervisorDir(root), "events.jsonl");
+  const file = ledgerLoc.events(root);
   if (!existsSync(file)) return [];
   let buf = "";
   try {

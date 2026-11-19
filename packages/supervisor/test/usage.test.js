@@ -27,17 +27,21 @@ const board = require("../dist/supervisor/board");
 function makeRoot(workers) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-usage-"));
   mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
   writeFileSync(
-    join(root, ".capitalist", "state.json"),
+    join(root, ".capitalist", "runtime", "state.json"),
     JSON.stringify({ version: 2, target: "测试", stage: "U1", contract: "", counters: {} }),
   );
   const index = [];
   for (const w of workers) {
     const id = w.id;
     index.push({ id });
-    writeFileSync(
-      join(root, ".capitalist", "workers", `${id}.json`),
+    mkdirSync(join(root, ".capitalist", "workers", id), { recursive: true });
+  writeFileSync(
+      join(root, ".capitalist", "workers", id, "record.json"),
       JSON.stringify({
         id,
         host: "codebuddy",
@@ -50,12 +54,14 @@ function makeRoot(workers) {
         heartbeat_at: "2026-11-01T00:01:00.000Z",
         heartbeat_ts: 1793491260,
         status: w.status ?? "done",
-        log: join(root, ".capitalist", "workers", `${id}.log`),
+        log: join(root, ".capitalist", "workers", id, "output.log"),
       }),
     );
-    writeFileSync(join(root, ".capitalist", "workers", `${id}.log`), w.log ?? "");
+    mkdirSync(join(root, ".capitalist", "workers", id), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "workers", id), { recursive: true });
+  writeFileSync(join(root, ".capitalist", "workers", id, "output.log"), w.log ?? "");
   }
-  writeFileSync(join(root, ".capitalist", "workers", "index.jsonl"), index.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  writeFileSync(join(root, ".capitalist", ".root", "index.jsonl"), index.map((r) => JSON.stringify(r)).join("\n") + "\n");
   const dispatches = workers
     .filter((w) => w.dispatch)
     .map((w) => ({ id: w.dispatch, at: "2026-11-01T00:00:00.000Z", stage: w.stage, action: "做点事", status: "done", shard: w.shard ?? "", model: "deepseek-v4.1-flash", done_at: "2026-11-01T00:01:00.000Z" }));
@@ -198,7 +204,7 @@ test("追写日志：增量解析只读新增的整行，数继续上涨且不�
       log: assistant("m1", 100, 10, 0, { __timestamp: "2026-11-01T00:00:01.000Z" }) + "\n",
     },
   ]);
-  const file = join(root, ".capitalist", "workers", "W-d.log");
+  const file = join(root, ".capitalist", "workers", "W-d", "output.log");
   assert.equal(usage.collectWorkerUsage(root)[0].input_tokens, 100);
   appendFileSync(file, assistant("m2", 400, 40, 0, { __timestamp: "2026-11-01T00:00:05.000Z" }) + "\n");
   assert.equal(usage.collectWorkerUsage(root)[0].input_tokens, 500);

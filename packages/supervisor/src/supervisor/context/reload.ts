@@ -36,7 +36,7 @@ import { openInboxAsks } from "../../core/dispatch/inbox";
 import { readJson, readJsonl, writeJson } from "../../core/record/json";
 import { DEFAULT_SUPERVISOR_CONTEXT_LIMIT, readCtxWindow, readCtxWindowChosen, resolveContextWindow } from "../../core/guard/limits";
 import { recordEvent } from "../../core/record/ledger";
-import { supervisorDir } from "../../core/record/paths";
+import { reload as reloadLoc, ledger as ledgerLoc, inbox as inboxLoc } from "../../core/record/locations";
 import { loadState } from "../../core/record/state";
 import { EVENT_ZH } from "./terms";
 import {
@@ -57,7 +57,7 @@ import type { Stage, TaskState } from "../../core/types";
 
 /** 重载目录：`.capitalist/reload`。所有产物都在这里，归档时不与业务台账混在一起。 */
 function reloadDir(root: string): string {
-  return join(supervisorDir(root), "reload");
+  return reloadLoc.dir(root);
 }
 
 function activePath(root: string): string {
@@ -158,7 +158,7 @@ export interface ReloadGateItem {
   missing: string[];
 }
 
-/** 用户插话（`.capitalist/direct.jsonl` 里未消费的那些）。 */
+/** 用户插话（`.capitalist/ledger/direct.jsonl` 里未消费的那些）。 */
 export interface ReloadDirective {
   at: string;
   text: string;
@@ -425,11 +425,11 @@ const DETAIL_EVENT = /^dispatch_(open|claim|start)$/i;
 const EVIDENCE_FIELDS = ["baseline", "probe", "diff", "repro"] as const;
 
 function readEvents(root: string): Array<Record<string, unknown>> {
-  return readJsonl<Record<string, unknown>>(join(supervisorDir(root), "events.jsonl"));
+  return readJsonl<Record<string, unknown>>(ledgerLoc.events(root));
 }
 
 function readLedger(root: string): LedgerEntry[] {
-  return readJsonl<LedgerEntry>(join(supervisorDir(root), "ledger.jsonl"));
+  return readJsonl<LedgerEntry>(ledgerLoc.ledger(root));
 }
 
 /** 证据是否齐全；缺项不算确认，与台账降级口径一致。 */
@@ -535,7 +535,7 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
   const ledger = readLedger(root);
   const events = readEvents(root);
   const directives = listDirectives(root);
-  const qa = readJsonl<Record<string, unknown>>(join(supervisorDir(root), "inbox", "qa.jsonl"));
+  const qa = readJsonl<Record<string, unknown>>(inboxLoc.qa(root));
 
   /*
    * 需求原文：契约 context（判据与禁止事项的大本营）+ 当前阶段的 next + 每个分片的 action。
@@ -675,10 +675,10 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
 
   const dropped = events.filter((e) => isNoiseEvent(e, items)).length;
   const beforeChars =
-    fileChars(join(supervisorDir(root), "events.jsonl")) +
-    fileChars(join(supervisorDir(root), "inbox", "dispatch.jsonl")) +
-    fileChars(join(supervisorDir(root), "direct.jsonl")) +
-    fileChars(join(supervisorDir(root), "inbox", "qa.jsonl"));
+    fileChars(ledgerLoc.events(root)) +
+    fileChars(inboxLoc.dispatch(root)) +
+    fileChars(ledgerLoc.direct(root)) +
+    fileChars(inboxLoc.qa(root));
 
   const doneVerified = items.filter((i) => i.state === "done_verified").length;
   const doneUnverified = items.filter((i) => i.state === "done_unverified").length;
@@ -1782,7 +1782,7 @@ function tailJsonRows(file: string, maxBytes: number): Array<Record<string, unkn
 
 /** 从台账尾部取最近的严重异常，一行一条（时间正序，最多 {@link max} 条）；无严重异常时返回空数组。 */
 export function severeSupervisorEventLines(root: string, max = 8): string[] {
-  const rows = tailJsonRows(join(supervisorDir(root), "events.jsonl"), SEVERE_EVENT_TAIL_BYTES);
+  const rows = tailJsonRows(ledgerLoc.events(root), SEVERE_EVENT_TAIL_BYTES);
   const out: string[] = [];
   /* 事件名与说明完全相同的只留最近一条，兼容老台账里未节流的成堆重复；不同原因各占一行。 */
   const seen = new Set<string>();
@@ -1811,7 +1811,7 @@ export function severeSupervisorEventLines(root: string, max = 8): string[] {
  * 只取 `supervisor_chat_ask` 且 from=user 的指令，压成一行、截断，最多 {@link max} 条；附件行不进本段，路径由截图段单独给出。
  */
 export function recentUserLines(root: string, max = 6): string[] {
-  const rows = tailJsonRows(join(supervisorDir(root), "events.jsonl"), 262_144);
+  const rows = tailJsonRows(ledgerLoc.events(root), 262_144);
   const out: string[] = [];
   for (let i = rows.length - 1; i >= 0 && out.length < max; i -= 1) {
     const e = rows[i]!;

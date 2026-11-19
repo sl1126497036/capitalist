@@ -4,7 +4,7 @@ import { listWorkers, readDispatches } from "../../core/record/supervisor";
 import { readTasks } from "../../core/record/tasks";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { taskNoLabel, dispatchNoLabel } from "../../core/record/idMap";
-import { laneContextWindow, readLane } from "../judge/sessionLane";
+import { laneBaseOf, laneContextWindow, readLane } from "../judge/sessionLane";
 import { dispatchNoTable } from "../usage/threadNo";
 import { parseWorkerLog } from "../worker/workerLog";
 import { ThreadSummary, dispatchTitle } from "./snapshot";
@@ -48,7 +48,7 @@ export function workerRuntimeLines(root: string, max = 5): string[] {
     const noNum = w.dispatch ? taskNoOfDispatchId(String(w.dispatch)) : 0;
     const no = noNum > 0 ? taskNoLabel(noNum) : "";
     const laneId = String((w as unknown as { ai_session?: string }).ai_session ?? "");
-    const base = laneId.replace(/-g\d+$/, "");
+    const base = laneBaseOf(root, laneId);
     const st = base ? readLane(root, base) : null;
     const short = base.replace(/^capitalist-[a-z0-9]+-/, "") || "?";
     const win = st ? laneContextWindow(st) : 0;

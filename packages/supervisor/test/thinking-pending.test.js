@@ -51,7 +51,11 @@ function scenario({ thinking = [], sayOffsets = [], status = "running" } = {}) {
   });
 
   const log = capitalist.workerLogPath(root, WORKER);
-  mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "workers", WORKER), { recursive: true });
   writeFileSync(log, thinking.map((t) => think(t)).join("\n") + "\n");
   const t1 = statSync(log).mtimeMs / 1000;
   const t0 = t1 - 60;

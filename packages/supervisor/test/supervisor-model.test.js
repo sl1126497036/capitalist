@@ -14,8 +14,8 @@ const { supervisorModelOf, supervisorModelEffective } = require("../dist/supervi
 
 function root(cfg) {
   const dir = mkdtempSync(join(tmpdir(), "capitalist-supmodel-"));
-  mkdirSync(join(dir, ".capitalist"), { recursive: true });
-  if (cfg) writeFileSync(join(dir, ".capitalist", "supervisor.json"), JSON.stringify(cfg));
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(dir, ".capitalist", _d), { recursive: true });
+  if (cfg) writeFileSync(join(dir, ".capitalist", "runtime", "supervisor.json"), JSON.stringify(cfg));
   return dir;
 }
 

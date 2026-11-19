@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { runtime as runtimeLoc } from "../../core/record/locations";
 import { supervisorDir } from "../../core/record/paths";
 import { pidAlive } from "../../core/record/supervisor";
 import { reapOrphans } from "./reapOrphans";
@@ -27,12 +28,12 @@ const TICK_MS = 2000;
 const MISS_LIMIT = 2;
 
 export function guardPath(root: string): string {
-  return join(supervisorDir(root), "guard.json");
+  return runtimeLoc.guard(root);
 }
 
 /** 监视进程单独写 `guard.log`，不依赖监工的 `supervisor.log`。 */
 function guardLog(root: string): string {
-  return join(supervisorDir(root), "guard.log");
+  return runtimeLoc.guardLog(root);
 }
 
 export function readGuard(root: string): GuardRecord | null {

@@ -67,10 +67,10 @@ test("autoAdopt 建根，重复调用不报错", () => {
   const proj = join(base, "cases", "targets", "alpha");
   const first = autoAdopt(proj, RULES);
   assert.ok(first, "应当建根");
-  assert.ok(existsSync(join(proj, ".capitalist", "state.json")), "state.json 应存在");
+  assert.ok(existsSync(join(proj, ".capitalist", "runtime", "state.json")), "state.json 应存在");
 
   const state = JSON.parse(
-    require("node:fs").readFileSync(join(proj, ".capitalist", "state.json"), "utf8"),
+    require("node:fs").readFileSync(join(proj, ".capitalist", "runtime", "state.json"), "utf8"),
   );
   assert.equal(state.target, "alpha");
   assert.equal(state.contract, "dev");

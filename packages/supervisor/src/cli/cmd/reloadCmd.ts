@@ -41,7 +41,7 @@ export async function cmdReload(p: Parsed): Promise<number> {
   }
 
   const state = loadState(root);
-  if (!state) throw new Error(`${root} 下没有可用的 .capitalist/state.json`);
+  if (!state) throw new Error(`${root} 下没有可用的 .capitalist/runtime/state.json`);
   const contract = loadContract(state.contract_path) ?? loadContract(state.contract, skillDirs());
   if (!contract) throw new Error(`任务列表文件丢失：${state.contract_path}`);
 

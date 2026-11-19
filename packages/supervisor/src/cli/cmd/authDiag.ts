@@ -9,9 +9,7 @@
  * 哪一层。读取失败的提示只出现在 stdout。
  */
 
-import { join } from "node:path";
-
-import { supervisorDir } from "../../core/record/paths";
+import { config as configLoc } from "../../core/record/locations";
 import { writeJson } from "../../core/record/json";
 import { t } from "../lang";
 import { write } from "../output";
@@ -22,7 +20,7 @@ import { write } from "../output";
  */
 export async function runAuthDiag(root: string, verbose = false): Promise<void> {
   const tok = await import("../../supervisor/channel/officialToken");
-  const diagFile = join(supervisorDir(root), "auth-diag.json");
+  const diagFile = configLoc.authDiag(root);
   const saveDiag = (value: unknown): void => {
     try {
       writeJson(diagFile, value);

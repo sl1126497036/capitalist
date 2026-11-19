@@ -19,12 +19,13 @@ import { join, resolve } from "node:path";
 
 import type { Contract } from "../contract/contract";
 import { readJsonl } from "../record/json";
-import { isInside, normalizeForCompare, supervisorDir } from "../record/paths";
+import { isInside, normalizeForCompare } from "../record/paths";
+import { ledger as ledgerLoc } from "../record/locations";
 import type { ActionKind, LocalDecision, LocalHit } from "../types";
 
-/** 理由登记文件的绝对路径：`<root>/.capitalist/justify.jsonl`。 */
+/** 理由登记文件的绝对路径：`<root>/.capitalist/ledger/justify.jsonl`。 */
 export function justifyPath(root: string): string {
-  return join(supervisorDir(root), "justify.jsonl");
+  return ledgerLoc.justify(root);
 }
 
 /**

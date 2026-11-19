@@ -8,9 +8,9 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname } from "node:path";
 
-import { supervisorDir } from "../../core/record/paths";
+import { board as boardLoc } from "../../core/record/locations";
 
 let boardKey = "";
 /**
@@ -23,7 +23,7 @@ let boardSecure = false;
 export const BOARD_KEY_COOKIE = "supervisor_board_key";
 
 export function boardKeyPath(root: string): string {
-  return join(supervisorDir(root), "board.key");
+  return boardLoc.key(root);
 }
 
 export function loadOrCreateBoardKey(root: string, forceNew: boolean): string {
@@ -37,7 +37,7 @@ export function loadOrCreateBoardKey(root: string, forceNew: boolean): string {
   }
   const key = randomBytes(18).toString("base64url");
   try {
-    mkdirSync(supervisorDir(root), { recursive: true });
+    mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, `${key}\n`, "utf8");
   } catch {
   }

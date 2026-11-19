@@ -14,8 +14,11 @@ const THREAD = "u6/s1";
 
 function scratch() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-amenddedup-"));
-  mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   return root;
 }
 
@@ -26,7 +29,7 @@ function seed(root, { reply }) {
     JSON.stringify({ id: "D-test1", at, stage: "u6", shard: "s1", action: "改一版界面", status: "claimed", worker: "W-test1" }) + "\n",
   );
   writeFileSync(
-    join(root, ".capitalist", "supervisor-direct.jsonl"),
+    join(root, ".capitalist", "ledger", "supervisor-direct.jsonl"),
     JSON.stringify({
       id: "SD-test1",
       at,
@@ -61,7 +64,7 @@ function seed(root, { reply }) {
 }
 
 async function supervisorSays(served, root) {
-  const key = readFileSync(join(root, ".capitalist", "board.key"), "utf8").trim();
+  const key = readFileSync(join(root, ".capitalist", "board", "key"), "utf8").trim();
   const base = new URL(served.url);
   const res = await fetch(`${base.origin}/api/thread?id=${encodeURIComponent(THREAD)}&limit=300`, {
     headers: { cookie: `supervisor_board_key=${key}`, "x-capitalist-client": "board", origin: base.origin },
@@ -154,7 +157,7 @@ test("dispatch 叙述并进派单卡，不再单独成泡", async () => {
   try {
     seedDispatch(root, { reply: `${DISPATCH_BODY}。另外把输入区的变量名统一成 paneHint` });
     await withBoard(root, async (served, root2) => {
-      const key = readFileSync(join(root2, ".capitalist", "board.key"), "utf8").trim();
+      const key = readFileSync(join(root2, ".capitalist", "board", "key"), "utf8").trim();
       const base = new URL(served.url);
       const res = await fetch(`${base.origin}/api/thread?id=${encodeURIComponent(THREAD)}&limit=300`, {
         headers: { cookie: `supervisor_board_key=${key}`, "x-capitalist-client": "board", origin: base.origin },

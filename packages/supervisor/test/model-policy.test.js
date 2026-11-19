@@ -11,8 +11,8 @@ const DEFAULT = "deepseek-v4.1-flash";
 
 function rootWith(supervisor) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-model-"));
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
-  if (supervisor) writeFileSync(join(root, ".capitalist", "supervisor.json"), JSON.stringify(supervisor), "utf8");
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
+  if (supervisor) writeFileSync(join(root, ".capitalist", "runtime", "supervisor.json"), JSON.stringify(supervisor), "utf8");
   return root;
 }
 

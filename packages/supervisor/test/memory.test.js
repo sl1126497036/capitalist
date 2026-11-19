@@ -28,7 +28,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 function sandbox(name = "capitalist-mem-") {
   const root = mkdtempSync(join(tmpdir(), name));
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   return root;
 }
 
@@ -186,12 +186,12 @@ test("与任务台账解耦：清空任务后记忆文件与条目数不变", ()
   const snapshotBefore = memorySnapshot(root);
   assert.equal(snapshotBefore.stats.count, 2);
 
-  writeFileSync(join(root, ".capitalist", "tasks.jsonl"), '{"id":"D-1"}\n', "utf8");
-  writeFileSync(join(root, ".capitalist", "events.jsonl"), '{"kind":"tick"}\n', "utf8");
+  writeFileSync(join(root, ".capitalist", "ledger", "tasks.jsonl"), '{"id":"D-1"}\n', "utf8");
+  writeFileSync(join(root, ".capitalist", "ledger", "events.jsonl"), '{"kind":"tick"}\n', "utf8");
 
   const res = clearRuntimeLedger(root);
   assert.ok(res.moved >= 1, "任务与事件记录应被清走");
-  assert.equal(existsSync(join(root, ".capitalist", "tasks.jsonl")), false);
+  assert.equal(existsSync(join(root, ".capitalist", "ledger", "tasks.jsonl")), false);
   assert.equal(existsSync(memoryPath(root)), true, "记忆文件必须保留");
   assert.equal(readFileSync(memoryPath(root), "utf8"), before, "清空任务不许改写记忆");
   assert.equal(memorySnapshot(root).stats.count, 2, "条目数不变");

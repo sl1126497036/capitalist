@@ -8,7 +8,7 @@
 import { join, resolve } from "node:path";
 
 import { attachmentsIn } from "../../core/message/attachments";
-import { supervisorDir } from "../../core/record/paths";
+import { ledger as ledgerLoc } from "../../core/record/locations";
 import { listWorkers, readDispatches, type Dispatch, type WorkerRecord } from "../../core/record/supervisor";
 
 export const BOARD_READ_TTL_MS = 800;
@@ -30,7 +30,7 @@ export function listWorkersBoard(root: string): WorkerRecord[] {
   return rows;
 }
 export function eventsFile(root: string): string {
-  return join(supervisorDir(root), "events.jsonl");
+  return ledgerLoc.events(root);
 }
 
 export function atTs(s: unknown): number {

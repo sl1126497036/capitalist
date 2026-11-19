@@ -11,7 +11,7 @@ import { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 
 import { readJson, writeJson } from "../../core/record/json";
-import { supervisorDir } from "../../core/record/paths";
+import { model as modelLoc } from "../../core/record/locations";
 import { loadSupervisor } from "../../core/record/supervisor";
 
 export function etagOf(body: string): string {
@@ -50,7 +50,7 @@ export function sendAsset(
  * 与上下文上限，别的字段会被抹掉。`supervisor_model` 为空时面板靠这份记录标出具体模型。
  */
 export function supervisorModelUsedFile(root: string): string {
-  return join(supervisorDir(root), "capitalist-model-used.json");
+  return modelLoc.modelUsed(root);
 }
 
 export function noteSupervisorModelUsed(root: string, model: string): void {

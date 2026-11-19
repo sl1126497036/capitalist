@@ -21,9 +21,9 @@ const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-compact-"));
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   writeFileSync(
-    join(root, ".capitalist", "supervisor.json"),
+    join(root, ".capitalist", "runtime", "supervisor.json"),
     JSON.stringify({ heartbeat_ts: Date.now() / 1000, supervisor_context_limit: 1_000_000 }),
     "utf8",
   );
@@ -31,7 +31,7 @@ function sandbox() {
 }
 
 function eventsOf(root) {
-  const file = join(root, ".capitalist", "events.jsonl");
+  const file = join(root, ".capitalist", "ledger", "events.jsonl");
   if (!existsSync(file)) return [];
   return readFileSync(file, "utf8")
     .split("\n")
@@ -119,7 +119,7 @@ function reloadSandbox() {
     "utf8",
   );
   writeFileSync(
-    join(root, ".capitalist", "state.json"),
+    join(root, ".capitalist", "runtime", "state.json"),
     JSON.stringify({
       version: 2,
       target: "演示任务",

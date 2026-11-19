@@ -5,15 +5,12 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { laneKeyOf } from "../../core/dispatch/commands";
 import { padBareNo } from "../../core/record/idMap";
-import { supervisorDir } from "../../core/record/paths";
+import { ledger as ledgerLoc } from "../../core/record/locations";
 import { readDispatches } from "../../core/record/supervisor";
 import type { Dispatch } from "../../core/record/supervisor";
-
-/** 编号表文件名（在 `.capitalist/` 下）。 */
-const FILE = "thread-no.json";
 
 interface ThreadNoFile {
   /** 下一个待分配的号。缺省时按已有最大值 +1 推出。 */
@@ -23,7 +20,7 @@ interface ThreadNoFile {
 }
 
 function pathOf(root: string): string {
-  return join(supervisorDir(root), FILE);
+  return ledgerLoc.threadNo(root);
 }
 
 function read(root: string): ThreadNoFile {

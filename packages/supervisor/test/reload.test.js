@@ -37,7 +37,7 @@ const CONTRACT_CONTEXT = "工作根 D:/demo。禁止 git 写操作。只改 src/
 function makeRoot() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-reload-"));
   const capitalist = join(root, ".capitalist");
-  mkdirSync(join(capitalist, "inbox"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(capitalist, _d), { recursive: true });
   mkdirSync(join(root, "out"), { recursive: true });
   writeFileSync(join(root, "out", "b.txt"), "done\n", "utf8");
 
@@ -83,7 +83,7 @@ function makeRoot() {
   );
 
   writeFileSync(
-    join(capitalist, "state.json"),
+    join(capitalist, "runtime", "state.json"),
     JSON.stringify({
       version: 2,
       target: "演示任务",
@@ -113,7 +113,7 @@ function makeRoot() {
   writeFileSync(join(capitalist, "inbox", "dispatch.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
 
   writeFileSync(
-    join(capitalist, "ledger.jsonl"),
+    join(capitalist, "ledger", "ledger.jsonl"),
     JSON.stringify({
       id: "L1",
       claim: "shard-b 已实测核对",
@@ -125,7 +125,7 @@ function makeRoot() {
   );
 
   writeFileSync(
-    join(capitalist, "direct.jsonl"),
+    join(capitalist, "ledger", "direct.jsonl"),
     [
       JSON.stringify({ at: "2026-01-01T00:06:00.000Z", at_ts: 1, type: "direct", text: "把按钮放到框内", shard: "shard-a", stage: "S1", consumed: false }),
       JSON.stringify({ at: "2026-01-01T00:07:00.000Z", at_ts: 2, type: "direct", text: "这条已经做过了", shard: null, stage: "S1", consumed: true, consumed_by: "D-a1" }),
@@ -147,7 +147,7 @@ function makeRoot() {
   events.push({ at: "2026-01-01T00:00:00.000Z", event: "supervisor_advance", from: "S0", to: "S1" });
   events.push({ at: "2026-01-01T00:10:00.000Z", event: "heartbeat", pid: 1 });
   events.push({ at: "2026-01-01T00:11:00.000Z", event: "dispatch_open", dispatch: "D-b1", stage: "S1", shard: "shard-b", action: "改 src/b.ts" });
-  writeFileSync(join(capitalist, "events.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf8");
+  writeFileSync(join(capitalist, "ledger", "events.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf8");
 
   return { root, contract: loadContract(contractPath), contractPath };
 }
@@ -213,7 +213,7 @@ test("恢复计划：已验证跳过，未验证必派复验，且不重复派",
   assert.deepEqual(plan.skip.map((s) => s.key), ["S1/shard-b"]);
   assert.deepEqual(plan.reverify.map((r) => r.key).sort(), ["S1/shard-a", "S1/shard-c"]);
 
-  mkdirSync(join(root, ".capitalist", "reload"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   writeFileSync(join(root, ".capitalist", "reload", "resume.json"), JSON.stringify(plan), "utf8");
   const first = applyResumePlan(root, "S1", () => {});
   assert.equal(first, 2, "两片未验证 -> 两张复验单");

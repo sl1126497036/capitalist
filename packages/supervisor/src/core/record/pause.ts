@@ -9,21 +9,19 @@
  * `writePauseFile` / `clearPauseFile`。
  */
 
-import { join } from "node:path";
-
 import { readJson } from "./json";
-import { supervisorDir } from "./paths";
+import { runtime } from "./locations";
 
-/** `.capitalist/pause.json` 的内容。 */
+/** `.capitalist/runtime/pause.json` 的内容。 */
 export interface PauseFile {
   at: string;
   reason: string;
   by?: string;
 }
 
-/** 暂停文件的绝对路径：`<root>/.capitalist/pause.json`。 */
+/** 暂停文件的绝对路径：`<root>/.capitalist/runtime/pause.json`。 */
 export function pausePath(root: string): string {
-  return join(supervisorDir(root), "pause.json");
+  return runtime.pause(root);
 }
 
 /**

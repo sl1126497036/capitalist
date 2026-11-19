@@ -250,8 +250,8 @@ process.stdin.on("end", () => {
   const settled = new Promise((resolve) => child.once("exit", resolve));
 
   const rootDeadline = Date.now() + 10_000;
-  while (!existsSync(join(base, ".capitalist", "state.json")) && Date.now() < rootDeadline) await sleep(50);
-  assert.ok(existsSync(join(base, ".capitalist", "state.json")), "监工应当自己建任务根");
+  while (!existsSync(join(base, ".capitalist", "runtime", "state.json")) && Date.now() < rootDeadline) await sleep(50);
+  assert.ok(existsSync(join(base, ".capitalist", "runtime", "state.json")), "监工应当自己建任务根");
 
   /* 建根与服务启动之间隔着一拍调度：等 worker 记录出现再断言，避免过早判定。 */
   const bootDeadline = Date.now() + 10_000;
@@ -264,7 +264,7 @@ process.stdin.on("end", () => {
   assert.equal(
     workers.length,
     1,
-    `应当拉起一个 worker（文件：${existsSync(join(base, ".capitalist", "workers", "index.jsonl")) ? "index 在" : "index 不在"} base=${base}）`,
+    `应当拉起一个 worker（文件：${existsSync(join(base, ".capitalist", ".root", "index.jsonl")) ? "index 在" : "index 不在"} base=${base}）`,
   );
   assert.ok(workers[0].pid > 0, "worker 必须有独立 pid");
   assert.notEqual(workers[0].pid, process.pid, "worker 不能是本进程");
@@ -539,7 +539,7 @@ test("立即执行：一个 tick 内腾槽拉起，运行中的单挂起并标�
       heartbeat_at: at,
       heartbeat_ts: Date.now() / 1000,
       status: "running",
-      log: join(base, ".capitalist", "workers", "W-run.log"),
+      log: join(base, ".capitalist", "workers", "W-run", "output.log"),
     });
 
     /* 会话记录：先按正常派单算一次，记下它将来该续接的会话 id。 */

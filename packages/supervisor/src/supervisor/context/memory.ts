@@ -1,14 +1,13 @@
 /**
- * 项目记忆：把用户习惯、运行环境与项目卡点持久化到 `.capitalist/memory.json`，
+ * 项目记忆：把用户习惯、运行环境与项目卡点持久化到 `.capitalist/config/memory.json`，
  * 监工重启后仍生效。只读写该文件，与任务台账解耦；写入失败不影响调度。
  * 条目受条数、单条字数、总字数与时效四道上限裁剪；面板删除留痕，自动记录不再写入同文条目。
  */
 
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
 
 import { readJson, writeJson } from "../../core/record/json";
-import { supervisorDir } from "../../core/record/paths";
+import { config as configLoc } from "../../core/record/locations";
 
 /**
  * 两类记忆：`habit` 收用户习惯与运行环境等既有事实，`blocker` 收项目卡点。
@@ -61,7 +60,7 @@ export const MEMORY_DISMISSED_MAX = 40;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function memoryPath(root: string): string {
-  return join(supervisorDir(root), "memory.json");
+  return configLoc.memory(root);
 }
 
 /**

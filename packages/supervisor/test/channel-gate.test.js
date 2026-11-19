@@ -16,7 +16,7 @@ const { channelFile, markChannelDown, markChannelUp, readChannelDown } = require
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-channel-"));
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   return root;
 }
 

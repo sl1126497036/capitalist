@@ -13,16 +13,15 @@
  */
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
-import { CAPITALIST_DIR } from "../record/paths";
+import { runtime as runtimeLoc } from "../record/locations";
 
 /** down 记录的有效期。超过后按未知处理，允许再次尝试。 */
 const DOWN_TTL_MS = 5 * 60_000;
 
-/** 通道状态文件。 */
+/** 通道状态文件。运行时热状态，落在 `runtime/` 下，随任务根一起清。 */
 export function channelFile(root: string): string {
-  return join(root, CAPITALIST_DIR, "channel.json");
+  return runtimeLoc.channel(root);
 }
 
 export interface ChannelDown {

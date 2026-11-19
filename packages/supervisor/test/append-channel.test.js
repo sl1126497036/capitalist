@@ -146,7 +146,7 @@ test("送达留痕进台账：direct_deliver 事件带派单与进程归属", ()
   withWorkerEnv(root, () => {
     dispatch(hook, workerEvent(root));
   });
-  const events = require("../dist/core/record/json").readJsonl(join(root, ".capitalist", "events.jsonl"));
+  const events = require("../dist/core/record/json").readJsonl(join(root, ".capitalist", "ledger", "events.jsonl"));
   const hit = events.filter((e) => String(e.event ?? e.kind) === "direct_deliver");
   assert.equal(hit.length, 1, "一次送达只记一条事件");
   assert.equal(hit[0].dispatch, "D-append1");

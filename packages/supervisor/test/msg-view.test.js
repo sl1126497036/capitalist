@@ -37,6 +37,9 @@ function scratch() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-msgview-"));
   mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
   mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   return root;
 }
 

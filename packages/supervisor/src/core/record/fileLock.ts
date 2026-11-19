@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 
 import { pidAlive, sleepSync } from "./process";
-import { supervisorDir } from "./paths";
+import { locks, ledger } from "./locations";
 
 export type LockMode = "read" | "write";
 
@@ -91,17 +91,17 @@ const DEFAULT_TTL = 600;
 
 /** 锁表路径。 */
 export function lockTablePath(root: string): string {
-  return join(supervisorDir(root), "locks", "files.json");
+  return locks.table(root);
 }
 
 /** 元锁路径：保护锁表本身的读改写。 */
 function metaLockPath(root: string): string {
-  return join(supervisorDir(root), "locks", "files.lock");
+  return locks.metaLock(root);
 }
 
 /** 读版本台账。 */
 export function readLedgerPath(root: string): string {
-  return join(supervisorDir(root), "locks", "reads.jsonl");
+  return locks.reads(root);
 }
 
 /**
@@ -121,7 +121,7 @@ function emptyTable(): LockTable {
 
 /** 元锁：跨进程互斥地读改写锁表。 */
 function withTableLock<T>(root: string, fn: () => T): T {
-  const dir = join(supervisorDir(root), "locks");
+  const dir = locks.dir(root);
   try {
     mkdirSync(dir, { recursive: true });
   } catch {
@@ -537,7 +537,7 @@ export function checkStale(root: string, holder: string, path: string): StaleRes
 function recentWriter(root: string, path: string, holder: string): string {
   const key = lockKey(path);
   try {
-    const p = join(supervisorDir(root), "events.jsonl");
+    const p = ledger.events(root);
     if (!existsSync(p)) return "";
     const lines = readFileSync(p, "utf8").split("\n");
     for (let i = lines.length - 1; i >= Math.max(0, lines.length - 400); i -= 1) {

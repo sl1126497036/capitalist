@@ -18,7 +18,7 @@ import { join } from "node:path";
 
 import { byId, detect, normalize } from "./registry";
 import { dispatch } from "./dispatch";
-import { supervisorDir } from "../core/record/paths";
+import { workers as workersLoc } from "../core/record/locations";
 import { guardSupervisor } from "./orphanGuard";
 import type { HostImpl, NativePayload } from "./contract";
 
@@ -38,7 +38,7 @@ function touchWorkerHeartbeat(): void {
   const id = process.env.CAPITALIST_WORKER_ID;
   const root = process.env.CAPITALIST_ROOT;
   if (!id || !root) return;
-  const file = join(supervisorDir(root), "workers", `${id}.json`);
+  const file = workersLoc.record(root, id);
   try {
     if (!existsSync(file)) return;
     if (Date.now() - statSync(file).mtimeMs < HEARTBEAT_MIN_GAP_MS) return;

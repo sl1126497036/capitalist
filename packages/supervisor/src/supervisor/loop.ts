@@ -55,7 +55,6 @@ import {
 import {
   appendAsk as raiseAsk,
   ignoredSignature,
-  inboxDir,
   openInboxAsks,
   readInbox,
 } from "../core/dispatch/inbox";
@@ -107,7 +106,14 @@ import {
   yieldedDispatches,
 } from "../core/dispatch/preempt";
 import { autoRebuild } from "../core/dispatch/rebuildTree";
-import { supervisorDir } from "../core/record/paths";
+import {
+  allDirs,
+  workers as workersLoc,
+  model as modelLoc,
+  ledger as ledgerLoc,
+  inbox as inboxLoc,
+  runtime as runtimeLoc,
+} from "../core/record/locations";
 import { markQuotaExhausted } from "../core/guard/quota";
 import { loadState, updateState } from "../core/record/state";
 import {
@@ -487,7 +493,7 @@ function failDispatchAndJudge(
   if (!ok) return false;
   patchDispatch(root, d.id, { retry_verdict: "pending", retry_count: attempts } as Partial<Dispatch>);
   /*
-   * 同一类卡点第二次出现时沉淀为持久记忆，落在 `.capitalist/memory.json`，重启仍生效，
+   * 同一类卡点第二次出现时沉淀为持久记忆，落在 `.capitalist/config/memory.json`，重启仍生效，
    * 后续派单与判定时作为硬约束注入。
    */
   if (attempts >= 2) rememberLesson(root, note, d.id);
@@ -640,7 +646,7 @@ const FAILURE_RULES: Array<{ cause: FailureCause; re: RegExp; fixable: boolean; 
 function workerLogTail(root: string, worker: string, lines = 200): string {
   if (!worker) return "";
   try {
-    const raw = readFileSync(join(supervisorDir(root), "workers", `${worker}.log`), "utf8");
+    const raw = readFileSync(workersLoc.output(root, worker), "utf8");
     /* 先剥纯思考行再截窗口：思考 JSON 单行很长，不过滤会占满窗口把 429 说明切掉。 */
     const clean = withoutThinking(raw.split(/\r?\n/).filter((l) => l.trim()));
     return clean.lines.slice(-lines).join("\n").slice(-24000);
@@ -962,7 +968,7 @@ async function judgeRetry(
   const wid = String(d.worker ?? "");
   if (wid) {
     try {
-      const raw = readFileSync(join(supervisorDir(root), "workers", `${wid}.log`), "utf8");
+      const raw = readFileSync(workersLoc.output(root, wid), "utf8");
       /* 须先过滤全量思考 JSON 再取尾部：思考行单行很长，先取尾部会把真正的报错挤出字符预算。 */
       const clean = withoutThinking(raw.split(/\r?\n/).filter((l) => l.trim()));
       const tail = tailWithinChars(clean.lines, 1800);
@@ -1425,7 +1431,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   }
 
   detail(`[监工] 已接管 ${opts.root}`);
-  /* 记忆按任务根存于 `.capitalist/memory.json`，启动时加载一次并裁掉过期 / 超限条目，不清空、不重置。 */
+  /* 记忆按任务根存于 `.capitalist/config/memory.json`，启动时加载一次并裁掉过期 / 超限条目，不清空、不重置。 */
   const mem = primeMemory(opts.root);
   if (mem.length) {
     const habits = mem.filter((e) => e.kind === "habit").length;
@@ -1664,7 +1670,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   // 清理原子写残留的 `*.tmp`（mtime 超过 10 分钟），不误删正在写的文件。
   // 清理按批封顶，未清完的留到下次启动。
   try {
-    const pruned = pruneTempFiles([supervisorDir(opts.root), inboxDir(opts.root), join(supervisorDir(opts.root), "workers")]);
+    const pruned = pruneTempFiles(allDirs(opts.root));
     if (pruned.removed > 0) {
       detail(`[监工] 已清理 ${pruned.removed} 个原子写残留的临时文件`);
       if (pruned.truncated) {
@@ -1763,7 +1769,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
        * 轮次开头先判断用户是否已经关掉。这一轮后面要写心跳与状态，
        * 放在写入之后检查会把删掉的目录重新建出来。
        */
-      if (!existsSync(join(supervisorDir(opts.root), "supervisor.json"))) {
+      if (!existsSync(runtimeLoc.supervisor(opts.root))) {
         out(t("[supervisor] task root deleted, exiting", "[监工] 任务根已删除，退出"));
         break;
       }
@@ -2417,7 +2423,7 @@ export async function handleStuckWorker(
     logStallSec: opts.stuckSec,
     nowMs,
   });
-  const logFile = w.log || join(supervisorDir(root), "workers", `${w.id}.log`);
+  const logFile = w.log || workersLoc.output(root, w.id);
   /* 心跳与日志正常的原地重复进程无法靠静默判据发现，故日志新鲜时仍按节流探测重复度。 */
   const looped = opts.looped ?? (live.alive ? probeLooping(w, logFile, nowMs) : { looping: false, sample: "", times: 0, tail: [] });
 
@@ -2592,7 +2598,7 @@ export function refreshLaneUsage(root: string, dispatches: readonly Dispatch[]):
     const lane = laneOfWorker(w);
     if (!lane) continue;
     alive.add(w.id);
-    const log = w.log || join(supervisorDir(root), "workers", `${w.id}.log`);
+    const log = w.log || workersLoc.output(root, w.id);
     const size = logBytes(log);
     if (size <= 0) continue;
     if (laneUsageSeen.get(w.id) === size) continue;
@@ -2649,7 +2655,7 @@ async function reap(
      */
     if (!gone) {
       /* 同步预判跳过健康且无卡点记录的进程，避免对每个健康进程 await 使 reap 提前让出执行权。 */
-      const logFile = w.log || join(supervisorDir(root), "workers", `${w.id}.log`);
+      const logFile = w.log || workersLoc.output(root, w.id);
       const looped = stale || w.stuck ? undefined : probeLooping(w, logFile, Date.now());
       if (!stale && !w.stuck && !looped?.looping) continue;
 
@@ -4350,7 +4356,7 @@ function advanceStage(
    * 改名后未重新登记。
    */
   if (!stageById(contract, state.stage)) {
-    detail(`[监工] 状态阶段 ${state.stage} 不在契约阶段中，已停止推进。核对 .capitalist/state.json 的 stage 与契约文件的阶段 id。`);
+    detail(`[监工] 状态阶段 ${state.stage} 不在契约阶段中，已停止推进。核对 .capitalist/runtime/state.json 的 stage 与契约文件的阶段 id。`);
     recordEvent(root, "stage_missing", { stage: state.stage, target: state.target });
     return "continue";
   }
@@ -4743,7 +4749,7 @@ function requeueAdhoc(root: string, state: TaskState, out: (s: string) => void):
  * 空文件、坏文件或空 model 返回空串，调用方回落契约与默认模型。
  */
 export function readNextModel(root: string): string {
-  const p = join(supervisorDir(root), "next_model.json");
+  const p = modelLoc.next(root);
   try {
     if (!existsSync(p)) return "";
     const j = readJson<{ model?: string }>(p, {});
@@ -5835,12 +5841,12 @@ function askText(q: Record<string, unknown>): string {
 /* 同一分片五分钟内只记一次重派上限事件。 */
 const cappedNoted = new Map<string, number>();
 
-/** 判据：.capitalist/direct.jsonl 中 30 分钟内、分片匹配的记录，用于区分自动重派与人工介入。 */
+/** 判据：.capitalist/ledger/direct.jsonl 中 30 分钟内、分片匹配的记录，用于区分自动重派与人工介入。 */
 function userAskedRecently(root: string, shardId: string): boolean {
   if (!shardId) return false;
   try {
     const rows = readJsonl<{ at?: string; shard?: string; text?: string }>(
-      join(supervisorDir(root), "direct.jsonl"),
+      ledgerLoc.direct(root),
     );
     const since = Date.now() - 30 * 60_000;
     return rows.some((r) => {
@@ -6318,7 +6324,7 @@ export function applyVerdict(args: {
     const w = d.worker ? loadWorker(root, d.worker) : null;
     const aliveNow = Boolean(w && w.pid > 0 && pidAlive(w.pid));
     if (aliveNow) {
-      writeJson(join(supervisorDir(root), "inbox", `reject-${d.id}.json`), {
+      writeJson(inboxLoc.reject(root, d.id), {
         at: new Date().toISOString(),
         why: String(verdict.why ?? ""),
         by: "supervisor",
@@ -6648,7 +6654,7 @@ function involvesUserVisibleCopy(action: string): boolean {
 }
 
 /**
- * 文案规范措辞存于 .capitalist/memory.json（识别词见 memory.ts 的 COPY_STANDARD_MARKER），记忆里有才追加。
+ * 文案规范措辞存于 .capitalist/config/memory.json（识别词见 memory.ts 的 COPY_STANDARD_MARKER），记忆里有才追加。
  * 仅当正文涉及用户可见文案时追加；先剥离已有规范行，避免重派与二次拼装叠加。
  */
 function withCopyStandard(root: string, action: string): string {

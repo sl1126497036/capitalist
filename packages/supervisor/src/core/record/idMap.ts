@@ -21,11 +21,11 @@
 import { join } from "node:path";
 
 import { readJson, writeJson } from "./json";
-import { supervisorDir } from "./paths";
+import { config as configLoc } from "./locations";
 
-/** 关系表文件路径：`<root>/.capitalist/id-map.json`。 */
+/** 关系表文件路径：`<root>/.capitalist/config/id-map.json`。 */
 export function idMapPath(root: string): string {
-  return join(supervisorDir(root), "id-map.json");
+  return configLoc.idMap(root);
 }
 
 /** 任务号段补零到两位；超过 99 原样（不截断）。只用于显示，落盘不变。 */

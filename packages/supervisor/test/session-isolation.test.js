@@ -33,7 +33,10 @@ const HEARTBEAT = [
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-iso-"));
   createTaskRoot({ target: "会话隔离", contractSpec: "minimal", root: base });
-  mkdirSync(join(base, ".capitalist", "workers"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
+  mkdirSync(join(base, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(base, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(base, ".capitalist", ".root"), { recursive: true });
   return base;
 }
 
@@ -48,7 +51,8 @@ function threeWorkers(root) {
   ]) {
     const id = `W-iso-${shard}`;
     const dispatch = `D-iso-${shard}`;
-    const log = join(root, ".capitalist", "workers", `${id}.log`);
+    const log = join(root, ".capitalist", "workers", id, "output.log");
+    mkdirSync(join(root, ".capitalist", "workers", id), { recursive: true });
     writeFileSync(log, `${mark}：这一片只做 ${shard}\n${mark}：第二行\n`, "utf8");
     capitalist.appendDispatch(root, {
       id: dispatch,

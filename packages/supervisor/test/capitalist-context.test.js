@@ -16,11 +16,11 @@ const {
 
 function sandbox(capitalist) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-ctxlimit-"));
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   /* loadSupervisor 只认带 heartbeat_ts 的记录，缺了整份配置会被当成不存在。 */
   if (capitalist) {
     writeFileSync(
-      join(root, ".capitalist", "supervisor.json"),
+      join(root, ".capitalist", "runtime", "supervisor.json"),
       JSON.stringify({ heartbeat_ts: Date.now() / 1000, ...capitalist }),
       "utf8",
     );

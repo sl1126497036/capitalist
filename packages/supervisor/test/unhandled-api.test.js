@@ -13,8 +13,11 @@ const { listSupervisorDirectives } = require(join(PKG, "dist/supervisor/channel/
 
 function sandbox(name = "capitalist-unhandled-api-") {
   const root = mkdtempSync(join(tmpdir(), name));
-  mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   return root;
 }
 
@@ -29,7 +32,7 @@ async function withBoard(root, fn) {
   const base = `http://127.0.0.1:${served.port}`;
   try {
     /* 先按 ?key= 取得 cookie；数据接口同时校验该 key。 */
-    const key = readFileSync(join(root, ".capitalist", "board.key"), "utf8").trim();
+    const key = readFileSync(join(root, ".capitalist", "board", "key"), "utf8").trim();
     const bounce = await fetch(`${base}/?key=${encodeURIComponent(key)}`, { redirect: "manual" });
     const cookie = String(bounce.headers.get("set-cookie") || "").split(";")[0];
     const call = (path, init = {}) =>

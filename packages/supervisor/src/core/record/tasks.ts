@@ -1,9 +1,7 @@
-/** 任务池台账（`.capitalist/tasks.jsonl`）：一项“要做的任务”而不是“一次执行尝试”。 */
-
-import { join } from "node:path";
+/** 任务池台账（`.capitalist/ledger/tasks.jsonl`）：一项“要做的任务”而不是“一次执行尝试”。 */
 
 import { appendJsonl, readJsonl, writeJsonl } from "./json";
-import { supervisorDir } from "./paths";
+import { ledger as ledgerLoc } from "./locations";
 import { registerDispatch, registerTask } from "./idMap";
 import type { Dispatch } from "./supervisor";
 
@@ -39,7 +37,7 @@ export interface TaskItem {
 
 /** 任务池文件路径。 */
 export function tasksPath(root: string): string {
-  return join(supervisorDir(root), "tasks.jsonl");
+  return ledgerLoc.tasks(root);
 }
 
 function nowIso(): string {

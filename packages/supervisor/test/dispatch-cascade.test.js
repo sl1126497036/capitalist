@@ -21,7 +21,10 @@ process.env.CAPITALIST_WORKER_BIN = join(tmpdir(), "no-such-worker-bin-for-casca
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-cascade-"));
   createTaskRoot({ target: "失败沿树传导", contractSpec: "minimal", root: base });
-  mkdirSync(join(base, ".capitalist", "workers"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
+  mkdirSync(join(base, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(base, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(base, ".capitalist", ".root"), { recursive: true });
   return base;
 }
 
@@ -65,18 +68,19 @@ function fakeWorker(root, wid, dispatchId) {
     heartbeat_at: now,
     heartbeat_ts: Date.now() / 1000,
     status: "running",
-    log: join(root, ".capitalist", "workers", `${wid}.log`),
+    log: join(root, ".capitalist", "workers", wid, "output.log"),
     mode: "background",
   });
   return { id: wid, pid: child.pid, child };
 }
 
 function writeLog(root, workerId, text) {
-  writeFileSync(join(root, ".capitalist", "workers", `${workerId}.log`), text, "utf8");
+  mkdirSync(join(root, ".capitalist", "workers", workerId), { recursive: true });
+  writeFileSync(join(root, ".capitalist", "workers", workerId, "output.log"), text, "utf8");
 }
 
 function events(root, name) {
-  return readJsonl(join(root, ".capitalist", "events.jsonl")).filter((e) => e.event === name);
+  return readJsonl(join(root, ".capitalist", "ledger", "events.jsonl")).filter((e) => e.event === name);
 }
 
 function alive(pid) {

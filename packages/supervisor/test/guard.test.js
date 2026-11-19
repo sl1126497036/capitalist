@@ -16,7 +16,7 @@ const minimal = loadContract("minimal");
 
 function tmpRoot() {
   const dir = mkdtempSync(join(tmpdir(), "capitalist-guard-"));
-  mkdirSync(join(dir, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(dir, ".capitalist", _d), { recursive: true });
   return dir;
 }
 
@@ -133,14 +133,14 @@ test("mtime_after_stage：缺时间字段时改用 created_at，而不是判定�
    * 判定结果不稳定。断言本身不变。
    */
   // 只有 created_at（老任务根 / 手工建根）
-  writeJson(join(root, ".capitalist", "state.json"), {
+  writeJson(join(root, ".capitalist", "runtime", "state.json"), {
     stage: "S5",
     created_at: new Date(Date.now() - 60_000).toISOString(),
   });
   assert.equal(runCheck({ type: "mtime_after_stage", path: "memory.md" }, root).ok, true);
 
   // 阶段在本文件上次修改之后才进入 -> 没更新过
-  writeJson(join(root, ".capitalist", "state.json"), {
+  writeJson(join(root, ".capitalist", "runtime", "state.json"), {
     stage: "S5",
     stage_entered_at_ts: Math.floor(Date.now() / 1000) + 60,
   });
@@ -150,7 +150,7 @@ test("mtime_after_stage：缺时间字段时改用 created_at，而不是判定�
 test("mtime_after_stage：完全没有时间字段时说明原因，不视为已满足", () => {
   const root = tmpRoot();
   writeFileSync(join(root, "memory.md"), "x", "utf8");
-  writeFileSync(join(root, ".capitalist", "state.json"), JSON.stringify({ stage: "S5" }));
+  writeFileSync(join(root, ".capitalist", "runtime", "state.json"), JSON.stringify({ stage: "S5" }));
   const r = runCheck({ type: "mtime_after_stage", path: "memory.md" }, root);
   assert.equal(r.ok, false);
   assert.match(r.missing[0], /读不到阶段进入时间/);

@@ -1,5 +1,5 @@
 /**
- * 监工调度指令通道（`.capitalist/supervisor-direct.jsonl`）。与 `direct.jsonl` 是两条独立通道：
+ * 监工调度指令通道（`.capitalist/ledger/supervisor-direct.jsonl`）。与 `direct.jsonl` 是两条独立通道：
  * 后者承载派单内容，前者承载调度动作，合并会导致动作与内容互相误判。
  * 只接受允许的动作，未知动作落已消费的拒绝记录；本模块只写不执行，状态变更由 `loop.ts` 的调度轮次完成，写入来源由调用方校验。
  */
@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { withFileLock } from "../../core/dispatch/commands";
 import { appendJsonl, readJsonl, writeJsonl } from "../../core/record/json";
 import { recordEvent } from "../../core/record/ledger";
-import { supervisorDir } from "../../core/record/paths";
+import { ledger as ledgerLoc } from "../../core/record/locations";
 import { msgId } from "../../core/message/msgId";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 
@@ -107,7 +107,7 @@ export interface SupervisorDirective {
 
 /** 通道文件的绝对路径。 */
 export function supervisorDirectPath(root: string): string {
-  return join(supervisorDir(root), "supervisor-direct.jsonl");
+  return ledgerLoc.supervisorDirect(root);
 }
 
 function newId(target: string): string {

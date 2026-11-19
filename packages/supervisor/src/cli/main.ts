@@ -34,6 +34,7 @@ import { appendJsonl, readJsonl, writeJson } from "../core/record/json";
 import { type PauseFile, pausePath, readPause } from "../core/record/pause";
 import { recordEvent, recordViolation } from "../core/record/ledger";
 import { findRoot, isInside, supervisorDir } from "../core/record/paths";
+import { rootDir, inbox as inboxLoc } from "../core/record/locations";
 import { skillDirs } from "../agent/locations";
 import { describeMode, modeNames, normalizeMode } from "../core/guard/permission";
 import { generateContract, describeGenerated } from "../supervisor/genContract";
@@ -100,7 +101,7 @@ function cmdRestart(p: Parsed): number {
   const root = flagString(p, "root") ?? process.cwd();
   const dir = supervisorDir(root);
 
-  if (existsSync(join(dir, "state.json"))) {
+  if (existsSync(rootDir(root))) {
     if (isSupervisorAlive(root)) die(t("Supervisor is running. Run capitalist supervise-stop first, then restart", "监工运行中：先执行 capitalist supervise-stop，退出后再执行 restart"));
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     renameSync(dir, `${dir}.closed.${stamp}`);
@@ -111,7 +112,8 @@ function cmdRestart(p: Parsed): number {
   const contract = loadContract(spec ?? "minimal", skillDirs());
   if (!contract) die(t(`Task list not found: ${spec ?? "minimal"}`, `找不到任务列表：${spec ?? "minimal"}`));
 
-  mkdirSync(join(dir, "inbox"), { recursive: true });
+  mkdirSync(rootDir(root), { recursive: true });
+  mkdirSync(inboxLoc.dir(root), { recursive: true });
   saveState(root, newState(target, contract, !spec));
   write(t(`Task root: ${root}\nTask list: ${contract.name} (${contract.domain || "domain not set"})\nTarget: ${target}\n`, `任务根：${root}\n任务列表：${contract.name}（${contract.domain || "未标注领域"}）\n目标：${target}\n`));
   return 0;
@@ -124,13 +126,14 @@ function createRoot(target: string, spec: string, fallback: boolean, rootArg?: s
     die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `找不到任务列表：${spec}\n可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}`));
   }
   const root = rootArg ?? process.cwd();
-  if (existsSync(statePath(root))) die(t(`A supervised task already exists: ${root} (see capitalist status)`, `已存在受监督任务：${root}（用 capitalist status 查看）`));
+  if (existsSync(rootDir(root))) die(t(`A supervised task already exists: ${root} (see capitalist status)`, `已存在受监督任务：${root}（用 capitalist status 查看）`));
 
   const stage = contract.stages[0];
   if (!stage) die(t(`Task list ${contract.name} defines no stages`, `任务列表 ${contract.name} 没有定义任何阶段`));
 
   const state = newState(target, contract, fallback);
-  mkdirSync(join(supervisorDir(root), "inbox"), { recursive: true });
+  mkdirSync(rootDir(root), { recursive: true });
+  mkdirSync(inboxLoc.dir(root), { recursive: true });
   saveState(root, state);
 
   write(
@@ -288,7 +291,7 @@ function cmdAsk(p: Parsed): number {
     if (wid) shard = String(loadWorker(root, wid)?.shard ?? "");
   }
 
-  appendJsonl(join(supervisorDir(root), "inbox", "qa.jsonl"), {
+  appendJsonl(inboxLoc.qa(root), {
     at: new Date().toISOString(),
     at_ts: Date.now() / 1000,
     type: "ask",
@@ -601,7 +604,7 @@ function cmdSay(p: Parsed): number {
     ...(target ? { target } : {}),
     ...(msgId ? { msgId } : {}),
   });
-  if (!rec) die(t("Write failed: .capitalist/direct.jsonl", "写入失败：.capitalist/direct.jsonl"));
+  if (!rec) die(t("Write failed: .capitalist/ledger/direct.jsonl", "写入失败：.capitalist/ledger/direct.jsonl"));
 
   const scope = target
     ? t(`dispatch ${target}`, `目标单 ${target}`)

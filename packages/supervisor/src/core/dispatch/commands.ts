@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { attachmentsIn, stripAttachments } from "../message/attachments";
 import { appendJsonl, readJson, readJsonl, writeJson, writeJsonl } from "../record/json";
 import { recordEvent } from "../record/ledger";
-import { supervisorDir } from "../record/paths";
+import { ledger as ledgerLoc, meta as metaLoc } from "../record/locations";
 import { sleepSync } from "../record/process";
 import { closeDispatch, compareQueueOrder, finishDispatch, loadWorker, pidAlive, promoteDispatch, readDispatches, requeueDispatch, saveWorker } from "../record/supervisor";
 import { leaseEnded, readPreemptLease } from "./preempt";
@@ -203,9 +203,9 @@ export function directiveByRef(root: string, ref: string): Directive | undefined
   return listDirectives(root).find((r) => directiveRef(r) === key);
 }
 
-/** 插话队列的绝对路径：`<root>/.capitalist/direct.jsonl`。 */
+/** 插话队列的绝对路径：`<root>/.capitalist/ledger/direct.jsonl`。 */
 export function directPath(root: string): string {
-  return join(supervisorDir(root), "direct.jsonl");
+  return ledgerLoc.direct(root);
 }
 
 /**
@@ -675,9 +675,9 @@ export interface TakeoverFile {
   items: TakeoverItem[];
 }
 
-/** 接管文件的绝对路径：`<root>/.capitalist/takeover.json`。 */
+/** 接管文件的绝对路径：`<root>/.capitalist/meta/takeover.json`。 */
 export function takeoverPath(root: string): string {
-  return join(supervisorDir(root), "takeover.json");
+  return metaLoc.takeover(root);
 }
 
 function normalizeItems(raw: unknown): TakeoverItem[] {

@@ -4,11 +4,9 @@
  * 线程列表、消息流、命令执行三处都要用，所以放在最底层，不引用任何看板上层模块。
  */
 
-import { join } from "node:path";
-
 import { laneKeyOf } from "../../core/dispatch/commands";
 import { readJson, writeJson } from "../../core/record/json";
-import { supervisorDir } from "../../core/record/paths";
+import { board as boardLoc } from "../../core/record/locations";
 export function taskKeyOf(stage: string, shardName: string | null | undefined, lineage?: string): string {
   return laneKeyOf({ stage, shard: shardName, lineage });
 }
@@ -19,7 +17,7 @@ export interface ClearedMark {
 }
 
 export function clearedMarksPath(root: string): string {
-  return join(supervisorDir(root), "board-cleared.json");
+  return boardLoc.cleared(root);
 }
 
 export function readClearedMarks(root: string): Record<string, ClearedMark> {

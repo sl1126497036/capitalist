@@ -4,7 +4,7 @@ import { isWorkerRef, promoteTask, stopWorker } from "../../core/dispatch/comman
 import { loadState, updateState } from "../../core/record/state";
 import { readJson } from "../../core/record/json";
 import { recordEvent } from "../../core/record/ledger";
-import { supervisorDir } from "../../core/record/paths";
+import { archive, ledger as ledgerLoc, inbox as inboxLoc, rootIndex as rootIndexLoc } from "../../core/record/locations";
 import type { ShotRef } from "../../core/message/messages";
 import { unlinkSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -57,17 +57,17 @@ export function workerSessionId(stage: string, shard: string, dispatchId = ""): 
 
 export function clearRuntimeLedger(root: string): { dir: string; moved: number; stage: string } {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const dir = join(supervisorDir(root), "archive", `clear-${stamp}`);
+  const dir = archive.clear(root, stamp);
   let moved = 0;
   try {
     mkdirSync(dir, { recursive: true });
     const targets = [
-      join(supervisorDir(root), "tasks.jsonl"),
-      join(supervisorDir(root), "inbox", "dispatch.jsonl"),
-      join(supervisorDir(root), "workers", "index.jsonl"),
-      join(supervisorDir(root), "direct.jsonl"),
-      join(supervisorDir(root), "supervisor-direct.jsonl"),
-      join(supervisorDir(root), "events.jsonl"),
+      ledgerLoc.tasks(root),
+      inboxLoc.dispatch(root),
+      rootIndexLoc.worker(root),
+      ledgerLoc.direct(root),
+      ledgerLoc.supervisorDirect(root),
+      ledgerLoc.events(root),
     ];
     for (const f of targets) {
       try {
@@ -213,9 +213,9 @@ export function supervisorPolicy(opts: {
     "  · 调度本身也是任务：任务树怎么长、哪几单并行、哪单等哪单、并行度设几，由对话层判定。",
     "",
     "【能读到什么、能答什么】cwd 为任务根，可读取全部文件：",
-    "  · `.capitalist/tasks.jsonl` 每单的 detail（要求原文）与 note（裁决结论）；",
+    "  · `.capitalist/ledger/tasks.jsonl` 每单的 detail（要求原文）与 note（裁决结论）；",
     "  · `.capitalist/inbox/dispatch.jsonl` 派单正文、附件、状态、时间；",
-    "  · `.capitalist/workers/*.log` 进程输出；`.capitalist/events.jsonl` 事件流水；",
+    "  · `.capitalist/workers/*/output.log` 进程输出；`.capitalist/ledger/events.jsonl` 事件流水；",
     "  · 现成命令：`capitalist tasks`（每单要求与状态）、`capitalist worker <进程号>`（某个进程执行过什么）、",
     "    `capitalist status`（全局运行中/排队/异常）。查“为什么没动”时先执行这三条命令。",
     "  · 任务根下的内容不只代码：也可能是资产清单、数据集、报告、笔记或脚本。判断作用对象前不预设项目类型，",

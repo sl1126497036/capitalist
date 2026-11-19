@@ -1,9 +1,8 @@
 /** 模型额度耗尽的状态。 */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
-import { supervisorDir } from "../record/paths";
+import { model as modelLoc } from "../record/locations";
 
 export interface QuotaState {
   /** 是否处于“额度耗尽”判定中 */
@@ -16,7 +15,7 @@ export interface QuotaState {
 const EMPTY: QuotaState = { exhausted: false, at: "", text: "" };
 
 function statePath(root: string): string {
-  return join(supervisorDir(root), "quota.json");
+  return modelLoc.quota(root);
 }
 
 /**

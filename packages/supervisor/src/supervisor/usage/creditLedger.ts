@@ -1,16 +1,15 @@
 /**
  * 积分台账：账号级已用积分的增量按时间窗分摊给当时活跃的工作进程。
  * 无快照时 `credit` 为 null，界面回落到 token；已用积分变小不摊负数，只更新基线。
- * 只写 `.capitalist/credits.json`，读写失败静默降级。
+ * 只写 `.capitalist/ledger/credits.json`，读写失败静默降级。
  */
 
-import { join } from "node:path";
 import { statSync } from "node:fs";
 
 import { listWorkers } from "../../core/record/supervisor";
 import { statCached } from "../../core/record/fsCache";
 import { readJson, writeJson } from "../../core/record/json";
-import { supervisorDir } from "../../core/record/paths";
+import { ledger as ledgerLoc } from "../../core/record/locations";
 
 interface CreditFile {
   at: string;
@@ -38,7 +37,7 @@ export const CAPITALIST_BUCKET = "capitalist";
 const MAX_SPAN_MS = 10 * 60_000;
 
 export function creditLedgerPath(root: string): string {
-  return join(supervisorDir(root), "credits.json");
+  return ledgerLoc.credits(root);
 }
 
 /**

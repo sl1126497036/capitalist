@@ -26,7 +26,7 @@ import { join } from "node:path";
 import { attachmentsIn, withAttachmentLines } from "../message/attachments";
 import { readJson, readJsonl, writeJson, writeJsonl } from "./json";
 import { statCached } from "./fsCache";
-import { supervisorDir } from "./paths";
+import { runtime, meta, workers, inbox, model, rootIndex, archive } from "./locations";
 import { pidAlive } from "./process";
 import { resolveDispatchNo, syncTaskForDispatch, taskNoOfDispatchId } from "./tasks";
 import { registerWorker as registerIdMapWorker } from "./idMap";
@@ -34,7 +34,7 @@ import { registerWorker as registerIdMapWorker } from "./idMap";
 /** 监工进程状态。`done` 表示末阶段门槛已达标，监工据此退出。 */
 export type SupervisorStatus = "running" | "stopped" | "done";
 
-/** 监工记录。写入 `.capitalist/supervisor.json`，供监工判活与看板展示。 */
+/** 监工记录。写入 `.capitalist/runtime/supervisor.json`，供监工判活与看板展示。 */
 export interface SupervisorRecord {
   pid: number;
   status: SupervisorStatus;
@@ -309,9 +309,9 @@ export interface WorkerRecord {
 }
 
 
-/** 监工记录文件的绝对路径：`<root>/.capitalist/supervisor.json`。 */
+/** 监工记录文件的绝对路径：`<root>/.capitalist/runtime/supervisor.json`。 */
 export function supervisorPath(root: string): string {
-  return join(supervisorDir(root), "supervisor.json");
+  return runtime.supervisor(root);
 }
 
 /**
@@ -350,7 +350,7 @@ export function supervisorStaleSec(rec: SupervisorRecord): number {
  * 监工是否在线：状态为 `running`、记录的 pid 仍在、且心跳在判活窗口内。
  *
  * 被强杀（`taskkill /F`、后台任务管理器结束进程）的监工不写收尾，
- * `.capitalist/supervisor.json` 停在最后一次心跳，此后 30 秒内心跳仍显示新鲜。
+ * `.capitalist/runtime/supervisor.json` 停在最后一次心跳，此后 30 秒内心跳仍显示新鲜。
  * pid 判活覆盖该窗口：pid 消失时按离线处理。
  *
  * @param nowSec 当前 epoch 秒，默认取系统时间。传入固定值可让判定可重现。
@@ -370,7 +370,7 @@ export function isSupervisorAlive(root: string, nowSec = Date.now() / 1000): boo
  * 请求后退出。
  */
 export function stopFlagPath(root: string): string {
-  return join(supervisorDir(root), "supervisor.stop");
+  return runtime.stopFlag(root);
 }
 
 /**
@@ -427,7 +427,7 @@ export function clearStopFlag(root: string): void {
 
 /** worker 目录的绝对路径：`<root>/.capitalist/workers`。 */
 export function workersDir(root: string): string {
-  return join(supervisorDir(root), "workers");
+  return workers.dir(root);
 }
 
 /**
@@ -442,21 +442,21 @@ function isSafeWorkerId(id: string): boolean {
 }
 
 /**
- * worker 记录文件的绝对路径。
+ * worker 记录文件的绝对路径（per-worker 目录下的 `record.json`）。
  *
  * @param id worker id，须为单段名字（字母、数字、`-` `_` `.`），且不含 `..`。
- * @throws id 不合法时抛出。id 会被直接拼进文件名，放行非法值会把读写引到
+ * @throws id 不合法时抛出。id 会被直接拼进目录名，放行非法值会把读写引到
  *   `.capitalist/workers` 之外。
  */
 export function workerPath(root: string, id: string): string {
   if (!isSafeWorkerId(id)) {
     throw new Error(`worker id 非法：${JSON.stringify(id)}；只允许字母、数字与 - _ . ，且不得含 ..`);
   }
-  return join(workersDir(root), `${id}.json`);
+  return workers.record(root, id);
 }
 
 /**
- * worker 日志文件的绝对路径。
+ * worker 日志文件的绝对路径（per-worker 目录下的 `output.log`）。
  *
  * @param id worker id，约束同 {@link workerPath}。
  * @throws id 不合法时抛出。
@@ -465,7 +465,7 @@ export function workerLogPath(root: string, id: string): string {
   if (!isSafeWorkerId(id)) {
     throw new Error(`worker id 非法：${JSON.stringify(id)}；只允许字母、数字与 - _ . ，且不得含 ..`);
   }
-  return join(workersDir(root), `${id}.log`);
+  return workers.output(root, id);
 }
 
 /**
@@ -485,7 +485,7 @@ export function newWorkerId(root: string, dispatchId: string): string {
     return `${taskNo}-P${maxSeq + 1}`;
   }
   /* 拿不到任务号（旧 `D-` 单）时退回旧的自增 id，仅兜底。 */
-  const file = join(supervisorDir(root), "worker-no.json");
+  const file = meta.workerNo(root);
   const data = readJson<{ next?: number }>(file, {});
   let n = Math.max(1, Number(data?.next ?? 1) || 1);
   for (let i = 0; i < 200; i += 1) {
@@ -527,7 +527,7 @@ export function listWorkers(root: string): WorkerRecord[] {
   if (workersCache && workersCache.root === root && now - workersCache.at < WORKERS_CACHE_MS) {
     return workersCache.rows.slice();
   }
-  const ids = readJsonl<{ id?: string }>(join(workersDir(root), "index.jsonl"))
+  const ids = readJsonl<{ id?: string }>(rootIndex.worker(root))
     .map((r) => String(r.id ?? ""))
     .filter(Boolean);
   const out: WorkerRecord[] = [];
@@ -551,7 +551,7 @@ let workersCache: { root: string; at: number; rows: WorkerRecord[] } | null = nu
  */
 export function registerWorker(root: string, rec: WorkerRecord): void {
   saveWorker(root, rec);
-  const index = join(workersDir(root), "index.jsonl");
+  const index = rootIndex.worker(root);
   const rows = readJsonl<{ id?: string }>(index);
   if (!rows.some((r) => r.id === rec.id)) writeJsonl(index, [...rows, { id: rec.id }]);
   /* 登记编号关系表：进程号 -> 派单号、系统 pid。 */
@@ -597,53 +597,33 @@ export function pruneWorkers(
   const now = opts.now ?? Date.now();
   const dir = workersDir(root);
 
-  let names: string[];
+  let entries: { id: string; startedTs: number; alive: boolean }[] = [];
   try {
-    names = readdirSync(dir);
+    const names = readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+    for (const id of names) {
+      if (!isSafeWorkerId(id)) continue;
+      const rec = loadWorker(root, id);
+      let startedTs = 0;
+      if (rec) {
+        const parsed = Date.parse(rec.started_at);
+        startedTs = Number.isFinite(parsed) ? parsed : rec.heartbeat_ts * 1000;
+      } else {
+        // 记录缺失或损坏：退回目录时间。这种条目留着也没内容，一律按最老处理。
+        try {
+          startedTs = statSync(workers.of(root, id)).mtimeMs;
+        } catch {
+          startedTs = 0;
+        }
+      }
+      const alive = rec?.status === "starting" || rec?.status === "running";
+      entries.push({ id, startedTs, alive });
+    }
   } catch {
     return { removed: 0, kept: 0 };
   }
-
-  // 按 id 归并 json 与 log。`index.jsonl` 不匹配 `\.(json|log)$`，天然被排除。
-  const files = new Map<string, { json: string | null; log: string | null }>();
-  for (const name of names) {
-    const m = /^(.+)\.(json|log)$/.exec(name);
-    if (!m) continue;
-    const id = m[1] ?? "";
-    if (!isSafeWorkerId(id)) continue;
-    const cur = files.get(id) ?? { json: null, log: null };
-    if (m[2] === "json") cur.json = name;
-    else cur.log = name;
-    files.set(id, cur);
-  }
-  if (files.size === 0) return { removed: 0, kept: 0 };
-
-  /** 候选条目：启动时刻、是否还运行中、对应文件名。 */
-  const entries: {
-    id: string;
-    startedTs: number;
-    alive: boolean;
-    json: string | null;
-    log: string | null;
-  }[] = [];
-
-  for (const [id, f] of files) {
-    const rec = f.json ? loadWorker(root, id) : null;
-    let startedTs = 0;
-    if (rec) {
-      const parsed = Date.parse(rec.started_at);
-      startedTs = Number.isFinite(parsed) ? parsed : rec.heartbeat_ts * 1000;
-    } else {
-      // 记录缺失或损坏：退回文件时间。这种条目留着也没内容，一律按最老处理。
-      try {
-        startedTs = statSync(join(dir, (f.json ?? f.log) as string)).mtimeMs;
-      } catch {
-        startedTs = 0;
-      }
-    }
-    const alive = rec?.status === "starting" || rec?.status === "running";
-    entries.push({ id, startedTs, alive, json: f.json, log: f.log });
-  }
+  if (entries.length === 0) return { removed: 0, kept: 0 };
 
   // 新的在前：只按启动时间排序，保留窗口取前 keepRecent 个。
   entries.sort((a, b) => b.startedTs - a.startedTs);
@@ -658,20 +638,15 @@ export function pruneWorkers(
   if (drop.size === 0) return { removed: 0, kept: entries.length };
 
   for (const id of drop) {
-    const f = files.get(id);
-    if (!f) continue;
-    for (const name of [f.json, f.log]) {
-      if (!name) continue;
-      try {
-        unlinkSync(join(dir, name));
-      } catch {
-        /* 删不掉的留给下一次回收，不影响主流程 */
-      }
+    try {
+      rmSync(workers.of(root, id), { recursive: true, force: true });
+    } catch {
+      /* 删不掉的留给下一次回收，不影响主流程 */
     }
   }
 
   // 索引同步：只摘掉真正删掉的 id，其余原样保留。
-  const index = join(dir, "index.jsonl");
+  const index = rootIndex.worker(root);
   try {
     const rows = readJsonl<{ id?: string }>(index);
     const kept = rows.filter((r) => !drop.has(String(r.id ?? "")));
@@ -688,7 +663,7 @@ export function archiveFinished(
   bucket: "all" | "done" | "bad" | "run" | "queue" = "all",
 ): { dir: string; workers: number; dispatches: number } {
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-  const dir = join(supervisorDir(root), "archive", `cleared-${stamp}`);
+  const dir = archive.cleared(root, stamp);
   mkdirSync(join(dir, "workers"), { recursive: true });
 
   const ALIVE = new Set(["running", "starting", "claimed"]);
@@ -732,28 +707,22 @@ export function archiveFinished(
     if (!wantWorker(w)) continue;
     const id = String(w.id || "");
     if (!id || !isSafeWorkerId(id)) continue;
-    for (const ext of [".json", ".log"]) {
-      const from = join(wdir, `${id}${ext}`);
-      if (!existsSync(from)) continue;
-      try {
-        renameSync(from, join(dir, "workers", `${id}${ext}`));
-      } catch {
-        /* 移不动的留着，下次再清 */
-      }
+    /* per-worker 目录整体归档：record/output/brief 一并移走。 */
+    const from = workers.of(root, id);
+    if (!existsSync(from)) {
+      drop.add(id);
+      continue;
     }
-    if (!existsSync(join(wdir, `${id}.json`))) drop.add(id);
-    const briefFrom = join(supervisorDir(root), "brief", `${id}.md`);
-    if (existsSync(briefFrom)) {
-      try {
-        mkdirSync(join(dir, "brief"), { recursive: true });
-        renameSync(briefFrom, join(dir, "brief", `${id}.md`));
-      } catch {
-      }
+    try {
+      renameSync(from, join(dir, "workers", id));
+    } catch {
+      /* 移不动的留着，下次再清 */
     }
+    if (!existsSync(workers.record(root, id))) drop.add(id);
   }
 
   if (drop.size) {
-    const index = join(wdir, "index.jsonl");
+    const index = rootIndex.worker(root);
     try {
       const rows = readJsonl<{ id?: string }>(index);
       const kept = rows.filter((r) => !drop.has(String(r.id ?? "")));
@@ -892,7 +861,7 @@ export function isWorkerAlive(
 
 /** 派单队列文件的绝对路径：`<root>/.capitalist/inbox/dispatch.jsonl`。 */
 export function dispatchPath(root: string): string {
-  return join(supervisorDir(root), "inbox", "dispatch.jsonl");
+  return inbox.dispatch(root);
 }
 
 /**
@@ -1607,7 +1576,7 @@ export interface WorkerModelRequest {
 }
 
 export function workerModelPath(root: string): string {
-  return join(supervisorDir(root), "worker_model.json");
+  return model.workerModel(root);
 }
 
 /** 登记一次换模型请求（覆盖上一条：只保留最近一次意图）。 */
@@ -1640,7 +1609,7 @@ export function takeWorkerModel(root: string, shard: string): string {
 export const DEFAULT_MODEL_ROTATION: readonly string[] = ["deepseek-v4.1-flash", "glm-5.3-flash"];
 
 function rotatePath(root: string): string {
-  return join(supervisorDir(root), "model_rotate.json");
+  return model.rotate(root);
 }
 
 /** 取下一个轮换默认模型，并把计数推进一位。 */

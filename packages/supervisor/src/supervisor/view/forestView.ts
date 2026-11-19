@@ -8,7 +8,7 @@
 import { join } from "node:path";
 
 import { readJson } from "../../core/record/json";
-import { supervisorDir } from "../../core/record/paths";
+import { board as boardLoc } from "../../core/record/locations";
 import { clipLine } from "../../core/text";
 import { dispatchForest, listWorkers, parentOf, pendingPrerequisites, readDispatches, type Dispatch } from "../../core/record/supervisor";
 import { workerUsage } from "../usage/usage";
@@ -16,7 +16,7 @@ import { shardTitle, summarizeTitle } from "../usage/taskTitle";
 
 /** 看板上被用户清除掉的派单 id。标记按线程键存，值里带派单 id。 */
 function clearedDispatches(root: string): Set<string> {
-  const marks = readJson<Record<string, { dispatch?: string }>>(join(supervisorDir(root), "board-cleared.json"), {});
+  const marks = readJson<Record<string, { dispatch?: string }>>(boardLoc.cleared(root), {});
   const out = new Set<string>();
   for (const m of Object.values(marks ?? {})) {
     const id = String(m?.dispatch ?? "").trim();

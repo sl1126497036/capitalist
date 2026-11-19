@@ -55,7 +55,7 @@ test("术语表：每条事件 / 指令 / 状态都有中文，dispatch_retry �
 test("进程/单号消息：正文没有英文内部词，且每一条都是中文", () => {
   const root = mkdtempSync(join(tmpdir(), "terms-"));
   try {
-    mkdirSync(join(root, ".capitalist"), { recursive: true });
+    for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
     const at = new Date().toISOString();
     const events = [
       { event: "dispatch_open", dispatch: "D-aaaa1111", stage: "U6", shard: "msg-refs", action: "改消息文案" },
@@ -86,7 +86,7 @@ test("进程/单号消息：正文没有英文内部词，且每一条都是中�
       { event: "contract_refused", kind: "requirement_violation" },
       { event: "redispatch_capped", shard: "msg-refs", limit: 3 },
     ].map((e) => ({ at, ...e }));
-    writeFileSync(join(root, ".capitalist/events.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n");
+    writeFileSync(join(root, ".capitalist", "ledger", "events.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n");
 
     const texts = [
       ...board.buildFeed(root, 200).map((x) => x.text),
@@ -107,7 +107,7 @@ test("进程/单号消息：正文没有英文内部词，且每一条都是中�
 test("监工自己落的指令：英文动作名翻成中文，用户原话不动", () => {
   const root = mkdtempSync(join(tmpdir(), "terms-direct-"));
   try {
-    mkdirSync(join(root, ".capitalist"), { recursive: true });
+    for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
     const at = new Date().toISOString();
     const rows = [
       {
@@ -131,7 +131,7 @@ test("监工自己落的指令：英文动作名翻成中文，用户原话不�
         consumed: true,
       },
     ];
-    writeFileSync(join(root, ".capitalist/supervisor-direct.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+    writeFileSync(join(root, ".capitalist", "ledger", "supervisor-direct.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
 
     const msgs = board.buildSupervisorLog(root, { limit: 50, hours: 0 }).messages;
     const capitalist = msgs.find((m) => m.id === "SC-SD-1");

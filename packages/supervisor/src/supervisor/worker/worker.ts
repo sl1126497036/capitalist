@@ -34,7 +34,7 @@ import {
   touchWorker,
   workerLogPath,
 } from "../../core/record/supervisor";
-import { supervisorDir } from "../../core/record/paths";
+import { workers as workersLoc } from "../../core/record/locations";
 import type { HostImpl, WorkerSession } from "../../agent/contract";
 import { byId, currentHost, siblings, workerByKey, workerHosts } from "../../agent/registry";
 import { laneOfWorker, pickLane } from "../judge/sessionLane";
@@ -48,7 +48,7 @@ import { bindAttachments } from "../../core/message/attachments";
 /**
  * 工作进程宿主的取值集合，由各 impl 的 `WorkerFacet.key` 决定。
  *
- * 取值写入 `.capitalist/workers/*.json` 与监工记录，属历史兼容面：只增不改，旧任务根里
+ * 取值写入 `.capitalist/workers/<id>/record.json` 与监工记录，属历史兼容面：只增不改，旧任务根里
  * 的取值要能被读回。命令行不暴露该取值，由宿主环境判定。
  */
 export type WorkerHost = string;
@@ -430,7 +430,7 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
     "     接口怎么调的、界面现在什么样；不把派单正文当独立任务执行，先了解上下文。",
     "  2. 派单要求的事情若已经实现，不要重做：在报告里指出实现位置（文件 + 行号）与差异；",
     "     只做了一半的只补缺，不整体重做。",
-    "  3. 本单要求若与已验收的做法相反（要恢复一个已被撤掉的东西），先读 `.capitalist/tasks.jsonl` 里",
+    "  3. 本单要求若与已验收的做法相反（要恢复一个已被撤掉的东西），先读 `.capitalist/ledger/tasks.jsonl` 里",
     "     同一线程已结束任务的 `note`（裁决结论写着当时定的口径），按本单最新要求做，",
     "     并在报告里写明推翻了哪一条，不留两套实现。",
     at
@@ -447,7 +447,7 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
 function buildBoundaryBlock(id: string): string[] {
   return [
     "【三、边界】",
-    `  1. 只认这一单：需要复查要求时读 .capitalist/brief/${id}.md；不读 .capitalist/tasks.jsonl、`,
+    `  1. 只认这一单：需要复查要求时读 .capitalist/workers/${id}/brief.md；不读 .capitalist/ledger/tasks.jsonl、`,
     "     .capitalist/inbox/*.jsonl、别的 .capitalist/workers/* 或别的 brief。这些属于其他派单。",
     "     别人的日志、别人的报告都不算证据；不把“上一轮同口径的单已经实现过”当作本单产出，",
     "     本单未做即未完成。",
@@ -526,7 +526,7 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
     "本提示词自包含：会话上下文丢失或压缩后，仍可凭以下正文与约束继续执行。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
-    `本单说明：.capitalist/brief/${opts.id}.md（只有这一份属于你；不要读别的单的说明与台账）`,
+    `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；不要读别的单的说明与台账）`,
     "",
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
@@ -595,9 +595,9 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     ...(readonly ? [] : [...buildGroundingBlock(d, "【三、动手前先核对现状】"), ``]),
     `【${readonly ? "三" : "四"}、怎么查】`,
     /* 修复单只读本单的说明与日志，全局文件按本单 id 取相关行，避免读到别人的单而带偏结论。 */
-    `  1. 先看事实，不推断。派单说明：.capitalist/brief/${opts.id}.md；工作进程日志：.capitalist/workers/${opts.id}.log。`,
-    `     全局文件（.capitalist/state.json、.capitalist/supervisor.json、.capitalist/events.jsonl）只按本单 id（${d.id}）取相关行；`,
-    `     不要读 .capitalist/tasks.jsonl、.capitalist/inbox/*.jsonl 里别人的单，也不要读别的工作进程的日志与会话。`,
+    `  1. 先看事实，不推断。派单说明：.capitalist/workers/${opts.id}/brief.md；工作进程日志：.capitalist/workers/${opts.id}/output.log。`,
+    `     全局文件（.capitalist/runtime/state.json、.capitalist/runtime/supervisor.json、.capitalist/ledger/events.jsonl）只按本单 id（${d.id}）取相关行；`,
+    `     不要读 .capitalist/ledger/tasks.jsonl、.capitalist/inbox/*.jsonl 里别人的单，也不要读别的工作进程的日志与会话。`,
     `  2. 再看代码：走真正执行的那条调用链，不依据注释中的设计（注释可能已过期）。`,
     `  3. 能复现的必须复现一次（跑那条命令或脚本），把真实输出留下。`,
     `  4. 根因须能解释问题的必然性；只描述现象不算根因。`,
@@ -713,7 +713,7 @@ export function buildPrompt(opts: {
     "你是独立的工作进程，不是监工。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
-    `本单说明：.capitalist/brief/${opts.id}.md（只有这一份属于你；内容与下面正文一致，需要复查时读它）`,
+    `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；内容与下面正文一致，需要复查时读它）`,
     ``,
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
@@ -745,13 +745,13 @@ export function quoteShellArg(a: string): string {
 }
 
 /**
- * 把本单说明写成独立文件 `.capitalist/brief/<workerId>.md`，按工作进程分份、互不覆盖；工作进程复查要求只读自己这份，不查共用流水。
+ * 把本单说明写成独立文件 `.capitalist/workers/<workerId>/brief.md`，按工作进程分份、互不覆盖；工作进程复查要求只读自己这份，不查共用流水。
  */
 function writeWorkerBrief(root: string, workerId: string, text: string): void {
   try {
-    const dir = join(supervisorDir(root), "brief");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, `${workerId}.md`), text, "utf8");
+    const p = workersLoc.brief(root, workerId);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, text, "utf8");
   } catch {
     /* 写不出来不影响启动：正文已经内联在提示词里 */
   }
@@ -780,7 +780,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
       });
 
   /*
-   * 每单一份说明，落成 `.capitalist/brief/<workerId>.md`；提示词指向它，工作进程复查只读这一份，不查共用流水。
+   * 每单一份说明，落成 `.capitalist/workers/<workerId>/brief.md`；提示词指向它，工作进程复查只读这一份，不查共用流水。
    * 写不出来不影响启动，正文已内联在 prompt 里。
    */
   writeWorkerBrief(opts.root, id, prompt);
@@ -820,7 +820,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
     CAPITALIST_WORKER_ID: id,
     CAPITALIST_DISPATCH_ID: opts.dispatch.id,
     CAPITALIST_SESSION_ID: id,
-    // 任务根：hook 靠它定位 .capitalist/workers/<id>.json 续写心跳。
+    // 任务根：hook 靠它定位 .capitalist/workers/<id>/record.json 续写心跳。
     CAPITALIST_ROOT: opts.root,
     // 监工 pid：父进程被强杀后 hook 靠它自查是否已成孤儿（见 host/orphanGuard.ts）；注入的是监工进程号。
     CAPITALIST_SUPERVISOR_PID: String(process.pid),
@@ -1053,14 +1053,14 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
   } catch (err) {
     throw new Error(`派单说明写入失败：${String((err as Error).message ?? err)}`);
   }
-  /* 提示词指向 `.capitalist/brief/<id>.md`，此入口也要写入，否则该路径无内容。 */
+  /* 提示词指向 `.capitalist/workers/<id>/brief.md`，此入口也要写入，否则该路径无内容。 */
   writeWorkerBrief(opts.root, id, prompt);
 
   const extraEnv: Record<string, string> = {
     CAPITALIST_WORKER_ID: id,
     CAPITALIST_DISPATCH_ID: opts.dispatch.id,
     CAPITALIST_SESSION_ID: id,
-    // 任务根：hook 靠它定位 .capitalist/workers/<id>.json 续写心跳。
+    // 任务根：hook 靠它定位 .capitalist/workers/<id>/record.json 续写心跳。
     CAPITALIST_ROOT: opts.root,
     // 监工 pid：窗口模式下工作进程同样是独立进程，父进程被强杀后的自保走同一套。
     CAPITALIST_SUPERVISOR_PID: String(process.pid),

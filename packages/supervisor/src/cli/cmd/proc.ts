@@ -6,9 +6,8 @@
  */
 
 import { closeSync, existsSync, openSync, readSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { readJson } from "../../core/record/json";
-import { supervisorDir } from "../../core/record/paths";
+import { inbox as inboxLoc, runtime as runtimeLoc } from "../../core/record/locations";
 
 import { supervisorDisplayState, SUPERVISOR_STATE_LABEL } from "../../core/record/state";
 import { closeTask, promoteTask, stopWorker, listDirectives, directiveMatches, directiveShortRef, isDirectiveOpen, markDirectiveOutcome, dropDirectivesFor, DIRECTIVE_OUTCOMES, type DirectiveOutcome } from "../../core/dispatch/commands";
@@ -167,7 +166,7 @@ async function awaitVerdict(
   maxMs: number,
 ): Promise<"accepted" | "rejected" | "escalated" | "error" | "timeout"> {
   const t0 = Date.now();
-  const rejectFile = join(supervisorDir(root), "inbox", `reject-${id}.json`);
+  const rejectFile = inboxLoc.reject(root, id);
   for (;;) {
     if (Date.now() - t0 >= maxMs) return "timeout";
     /* 3 秒一次：监工调度周期为 5 秒，更密的轮询没有收益。 */
@@ -562,8 +561,8 @@ export function cmdWake(p: Parsed): number {
   }
   write(t(`${lines.length} dispatch(es) woken; they join the queue from the next round.\n`, `已唤醒 ${lines.length} 张派单，下一轮调度起按队列顺序参与。\n`));
   for (const line of lines) write(`  ${line}\n`);
-  if (existsSync(join(supervisorDir(root), "pause.json"))) {
-    write(t("Global pause is still in effect (.capitalist/pause.json); run capitalist resume before dispatching.\n", "全局暂停仍有效（.capitalist/pause.json），执行 capitalist resume 后才会派单。\n"));
+  if (existsSync(runtimeLoc.pause(root))) {
+    write(t("Global pause is still in effect (.capitalist/runtime/pause.json); run capitalist resume before dispatching.\n", "全局暂停仍有效（.capitalist/runtime/pause.json），执行 capitalist resume 后才会派单。\n"));
   }
   return 0;
 }
@@ -681,7 +680,7 @@ export function cmdClose(p: Parsed): number {
       (r.worker
         ? t(`Worker ${r.worker} (pid ${r.pid}) ${r.killed ? "SIGTERM sent" : "already terminal or gone"}.\n`, `工作进程 ${r.worker}（pid ${r.pid}）${r.killed ? "已发送 SIGTERM" : "已处于终态或已不在"}。\n`)
         : t("It was still queued with no process and has been removed from the queue.\n", "这一单还在排队，没有运行中的进程，已从队列撤下。\n")) +
-      t("Record: .capitalist/inbox/dispatch.jsonl now has it closed (closed_at / closed_by / note); event dispatch_closed written to .capitalist/events.jsonl.\n", "记录：.capitalist/inbox/dispatch.jsonl 该单状态 closed（closed_at / closed_by / note），事件 dispatch_closed 已写入 .capitalist/events.jsonl。\n") +
+      t("Record: .capitalist/inbox/dispatch.jsonl now has it closed (closed_at / closed_by / note); event dispatch_closed written to .capitalist/ledger/events.jsonl.\n", "记录：.capitalist/inbox/dispatch.jsonl 该单状态 closed（closed_at / closed_by / note），事件 dispatch_closed 已写入 .capitalist/ledger/events.jsonl。\n") +
       (dropped.length
         ? t(`${dropped.length} directive(s) aimed at it were marked no longer delivered (otherwise it would be set back to open).\n`, `${dropped.length} 条指向它的追加内容已标记不再投递（否则该单会被重新置为 open）。\n`)
         : "") +

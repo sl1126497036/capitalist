@@ -66,6 +66,9 @@ function sandbox() {
 
 function putWorker(root, rec) {
   mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   const full = {
     host: "custom",
     session: rec.id,
@@ -75,7 +78,7 @@ function putWorker(root, rec) {
     started_at: new Date().toISOString(),
     heartbeat_at: new Date().toISOString(),
     heartbeat_ts: Date.now() / 1000,
-    log: join(root, ".capitalist", "workers", `${rec.id}.log`),
+    log: join(root, ".capitalist", "workers", rec.id, "output.log"),
     mode: "background",
     ...rec,
   };
@@ -109,13 +112,13 @@ test("worker 自保：连续两次看不到监工才退出，并留下日志说�
     const first = runHook(env);
     assert.equal(first.status, 0, `第一次检测不到只记账，不应拦会话\n${first.stderr}`);
     assert.ok(alive(worker.pid), "第一次不应结束 worker");
-    const guard = join(root, ".capitalist", "workers", "W-guard.guard.json");
+    const guard = join(root, ".capitalist", "workers", "W-guard", "guard.json");
     assert.equal(JSON.parse(readFileSync(guard, "utf8")).misses, 1, "漏检次数应落盘");
 
     const second = runHook(env);
     assert.equal(second.status, 1, "连续两次检测不到应退出 1");
     assert.ok(waitGone(worker.pid), "worker 进程应被结束");
-    const log = readFileSync(join(root, ".capitalist", "workers", "W-guard.log"), "utf8");
+    const log = readFileSync(join(root, ".capitalist", "workers", "W-guard", "output.log"), "utf8");
     assert.match(log, /capitalist-guard/);
     assert.match(log, /连续 2 次检测不到/);
   } finally {
@@ -139,7 +142,7 @@ test("worker 自保：监工还活着时一次都不查文件，也不结束进�
     }
     assert.ok(alive(worker.pid), "监工活着时不得结束 worker");
     assert.equal(
-      existsSync(join(root, ".capitalist", "workers", "W-alive.guard.json")),
+      existsSync(join(root, ".capitalist", "workers", "W-alive", "guard.json")),
       false,
       "监工活着时不应留下记账文件",
     );
@@ -164,7 +167,7 @@ test("启动清孤儿：命令行带任务根的遗留 worker 会被清理并记
     assert.equal(reaped[0].via, "cmdline");
     assert.ok(waitGone(worker.pid), "孤儿进程应被结束");
 
-    const events = readFileSync(join(root, ".capitalist", "events.jsonl"), "utf8")
+    const events = readFileSync(join(root, ".capitalist", "ledger", "events.jsonl"), "utf8")
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l))

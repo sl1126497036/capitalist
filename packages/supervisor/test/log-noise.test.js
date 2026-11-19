@@ -47,15 +47,19 @@ test("消息流里真诊断走折叠块：整块只有噪声时不发，混了�
   const run = (lines) => {
     const root = mkdtempSync(join(tmpdir(), "capitalist-noise-"));
     try {
-      mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
+      for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
       mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
       const now = Date.now();
       const id = "W-noise";
-      const log = join(root, ".capitalist", "workers", `${id}.log`);
+      const log = join(root, ".capitalist", "workers", id, "output.log");
+      mkdirSync(join(root, ".capitalist", "workers", id), { recursive: true });
       writeFileSync(log, lines.join("\n") + "\n");
       const iso = new Date(now - 60_000).toISOString();
-      writeFileSync(
-        join(root, ".capitalist", "workers", `${id}.json`),
+  writeFileSync(
+        join(root, ".capitalist", "workers", id, "record.json"),
         JSON.stringify({
           id,
           dispatch: "D-noise",
@@ -69,7 +73,7 @@ test("消息流里真诊断走折叠块：整块只有噪声时不发，混了�
           log,
         }),
       );
-      writeFileSync(join(root, ".capitalist", "workers", "index.jsonl"), JSON.stringify({ id }) + "\n");
+      writeFileSync(join(root, ".capitalist", ".root", "index.jsonl"), JSON.stringify({ id }) + "\n");
       writeFileSync(
         join(root, ".capitalist", "inbox", "dispatch.jsonl"),
         JSON.stringify({

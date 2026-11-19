@@ -343,7 +343,7 @@ test("送达失败：direct.jsonl 写不进去时卡点记录标 failed，任务
   openClaimed(root);
   const rec = workerWithLog(root, ["读取 src/index.ts"], 600);
   /* 把 direct.jsonl 变成目录，append 必然失败；不改 .capitalist 下其他文件。 */
-  const direct = join(root, ".capitalist", "direct.jsonl");
+  const direct = join(root, ".capitalist", "ledger", "direct.jsonl");
   if (existsSync(direct)) throw new Error("测试前置不符：direct.jsonl 已存在");
   mkdirSync(direct, { recursive: true });
 

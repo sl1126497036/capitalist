@@ -341,7 +341,7 @@ const HELP_GROUPS: HelpGroup[] = [
     items: [
       {
         cmd: 'say "<文本>"',
-        brief: ["给派单追加一条消息，写入 .capitalist/direct.jsonl。", "未开工的派单在启动时并入原派单；执行中的派单由 hook 在", "下一次工具调用前送达，不中断进程，送达后标记已用"],
+        brief: ["给派单追加一条消息，写入 .capitalist/ledger/direct.jsonl。", "未开工的派单在启动时并入原派单；执行中的派单由 hook 在", "下一次工具调用前送达，不中断进程，送达后标记已用"],
         opts: [
           { f: "--shard <分片>", d: ["只对目标分片的派单生效"] },
           { f: "--thread <线程>", d: ["用于界面回显归属，不改变生效范围"] },
@@ -534,7 +534,7 @@ export const HELP =
 export const COMMAND_HELP: Record<string, string> = {
   say: `capitalist say "<文本>" [--target <派单id>] [--lineage <派生链>] [--shard <分片>] [--thread <线程>]
 给派单追加一条消息。
-  - 写入 .capitalist/direct.jsonl，字段 at / text / target / lineage / shard / thread / consumed
+  - 写入 .capitalist/ledger/direct.jsonl，字段 at / text / target / lineage / shard / thread / consumed
   - 未开工的派单：监工派单时读取未消费消息拼进 action，追加内容并入原派单，消费后标记 consumed
   - 执行中的派单：hook 在工作进程下一次工具调用前把消息随拒绝理由送达模型，不中断进程；
     送达后标记已用（consumed_via=hook），不重复注入
@@ -545,7 +545,7 @@ export const COMMAND_HELP: Record<string, string> = {
   - --thread 用于界面回显归属，不改变生效范围`,
   direct: `capitalist direct "<文本>" [--shard <分片>] [--thread <线程>]
 与 capitalist say 等价（同一实现、同一文件、同一生效时机）。
-  - 写入 .capitalist/direct.jsonl；未开工的派单并入原派单，执行中的派单由 hook 送达`,
+  - 写入 .capitalist/ledger/direct.jsonl；未开工的派单并入原派单，执行中的派单由 hook 送达`,
   takeover: `capitalist takeover [<分片>] [--reason "<原因>"]
 接管指定分片。省略分片时为整个任务根。
   - 写入 .capitalist/takeover.json，记 root / shard / at / reason / active
@@ -566,7 +566,7 @@ export const COMMAND_HELP: Record<string, string> = {
   - 派单状态置为终态 closed，写 done_at / closed_at / closed_by / note
   - 存在运行中的进程时，先写 closed 结束再发送 SIGTERM；顺序颠倒会让进程退出回调
     按失败结束，下一轮调度重派
-  - 写 dispatch_closed 事件到 .capitalist/events.jsonl（含原状态、是否发送过 SIGTERM）
+  - 写 dispatch_closed 事件到 .capitalist/ledger/events.jsonl（含原状态、是否发送过 SIGTERM）
   - 监工不再为已关闭分片补单；关闭的分片计入完成数，不阻塞阶段推进
   - stop-worker 中断进程并触发重派；close 关闭派单且不再补单
   - 目标写法：派单 id（D-…）、worker id（W-…）、分片名或 shard:xxx（排队行）`,

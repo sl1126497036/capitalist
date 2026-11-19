@@ -21,9 +21,9 @@ const { loadState, updateState } = require("../dist/core/record/state");
 
 function tmpRoot(extra = {}) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-ledger-"));
-  mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   writeFileSync(
-    join(root, ".capitalist", "state.json"),
+    join(root, ".capitalist", "runtime", "state.json"),
     JSON.stringify({
       version: 2,
       target: "t",

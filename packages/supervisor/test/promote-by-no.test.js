@@ -87,7 +87,7 @@ test("监工发出“立即执行 #N”：指令落实后置顶生效", async ()
       out: () => {},
     });
 
-    const rec = readJsonl(join(root, ".capitalist", "supervisor-direct.jsonl")).pop();
+    const rec = readJsonl(join(root, ".capitalist", "ledger", "supervisor-direct.jsonl")).pop();
     assert.equal(rec?.result?.ok, true, `指令应成功，实际：${JSON.stringify(rec?.result)}`);
 
     const d = readDispatches(root).find((x) => x.id === id);
@@ -111,7 +111,7 @@ test("监工发出“立即执行 #N”而编号不存在：给出明确的拒�
       out: () => {},
     });
 
-    const rec = readJsonl(join(root, ".capitalist", "supervisor-direct.jsonl")).pop();
+    const rec = readJsonl(join(root, ".capitalist", "ledger", "supervisor-direct.jsonl")).pop();
     assert.equal(rec?.result?.ok, false);
     assert.match(String(rec?.result?.reason ?? ""), /#999/, "要把那个号原话说回来");
   } finally {

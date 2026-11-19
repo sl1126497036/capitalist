@@ -16,10 +16,13 @@ const MODEL = "deepseek-v4.1-flash";
 
 function emptyRoot() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-ctxwin-"));
-  mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
   writeFileSync(
-    join(root, ".capitalist", "state.json"),
+    join(root, ".capitalist", "runtime", "state.json"),
     JSON.stringify({ version: 2, target: "测试", stage: "U1", contract: "", counters: {} }),
   );
   return root;
@@ -27,10 +30,11 @@ function emptyRoot() {
 
 /** 一个 worker 记录 + 它自己的日志。 */
 function withWorker(root, id, log, extra = {}) {
-  const file = join(root, ".capitalist", "workers", `${id}.log`);
+  const file = join(root, ".capitalist", "workers", id, "output.log");
+  mkdirSync(join(root, ".capitalist", "workers", id), { recursive: true });
   writeFileSync(file, log);
   writeFileSync(
-    join(root, ".capitalist", "workers", `${id}.json`),
+    join(root, ".capitalist", "workers", id, "record.json"),
     JSON.stringify({
       id,
       host: "codebuddy",
@@ -47,7 +51,7 @@ function withWorker(root, id, log, extra = {}) {
       ...extra,
     }),
   );
-  const indexFile = join(root, ".capitalist", "workers", "index.jsonl");
+  const indexFile = join(root, ".capitalist", ".root", "index.jsonl");
   writeFileSync(indexFile, JSON.stringify({ id }) + "\n");
   return root;
 }
@@ -143,7 +147,7 @@ test("宿主没写窗口（只有 assistant 行）时按模型默认表补", () 
 function supervisorRoot(configLimit) {
   const root = emptyRoot();
   writeFileSync(
-    join(root, ".capitalist", "supervisor.json"),
+    join(root, ".capitalist", "runtime", "supervisor.json"),
     JSON.stringify({ heartbeat_ts: Date.now() / 1000, supervisor_context_limit: configLimit }),
     "utf8",
   );
@@ -200,5 +204,11 @@ test("会话判定按 1M 的 60% 判断，不再在 180k 就换代", () => {
   assert.equal(lane.laneTooFull(lane.readLane(root, laneBase)), true, "700k ≥ 600k");
   const next = lane.pickLane(root, dispatch);
   assert.equal(next.resume, false, "满了就换代");
-  assert.equal(next.id, `${laneBase}-g1`);
+  /* 会话 id 是 v4 UUID（宿主 --session-id 要求 UUID）；换代必须换一个新 id。 */
+  assert.match(
+    next.id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    "换代后的会话 id 是 v4 UUID",
+  );
+  assert.notEqual(next.id, first.id, "换代必须换新会话");
 });

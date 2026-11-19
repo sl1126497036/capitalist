@@ -1,7 +1,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const { mkdtempSync } = require("node:fs");
+const { mkdtempSync, mkdirSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
@@ -11,6 +11,7 @@ const { createTaskRoot } = require("../dist/core/contract/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-outcome-"));
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
   createTaskRoot({ target: "插话落实测试", contractSpec: "minimal", root: base });
   return base;
 }

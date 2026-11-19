@@ -14,7 +14,7 @@
 import { join } from "node:path";
 
 import { appendJsonl, readJsonl } from "../record/json";
-import { supervisorDir } from "../record/paths";
+import { guard as guardLoc } from "../record/locations";
 import type { ActionKind } from "../types";
 import { normLocal } from "./localGuard";
 
@@ -58,7 +58,7 @@ export interface GuardRequest {
 
 /** 台账路径。 */
 export function guardLedgerPath(root: string): string {
-  return join(supervisorDir(root), "guard", "requests.jsonl");
+  return guardLoc.requests(root);
 }
 
 /** 生成申请号。 */

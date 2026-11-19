@@ -34,9 +34,9 @@ function scenario(status) {
     lineage: LINEAGE,
   });
   /* 线程键 = 阶段/x + lineage 尾 6 位，与 laneKeyOf 的派生一致。 */
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   writeFileSync(
-    join(root, ".capitalist", "thread-no.json"),
+    join(root, ".capitalist", "ledger", "thread-no.json"),
     JSON.stringify({ next: 2, ids: { "s0/xabc123": 1 } }),
   );
   return root;

@@ -29,10 +29,13 @@ const isoAgo = (ms) => new Date(now - ms).toISOString();
  */
 function makeRoot(workers, opts = {}) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-credit-"));
-  mkdirSync(join(root, ".capitalist", "workers"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "runtime"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", "ledger"), { recursive: true });
+  mkdirSync(join(root, ".capitalist", ".root"), { recursive: true });
   const lastAt = opts.firstSnapshot ? "" : isoAgo(opts.windowMs ?? 60e3);
   writeFileSync(
-    join(root, ".capitalist", "credits.json"),
+    join(root, ".capitalist", "ledger", "credits.json"),
     JSON.stringify({
       at: lastAt,
       last_used: opts.firstSnapshot ? null : 100,
@@ -44,13 +47,14 @@ function makeRoot(workers, opts = {}) {
   );
   const index = [];
   for (const w of workers) {
-    const log = join(root, ".capitalist", "workers", `${w.id}.log`);
+    const log = join(root, ".capitalist", "workers", w.id, "output.log");
+    mkdirSync(join(root, ".capitalist", "workers", w.id), { recursive: true });
     writeFileSync(log, "line\n");
     const mt = new Date(now - w.logAgoMs);
     utimesSync(log, mt, mt);
     index.push({ id: w.id });
     writeFileSync(
-      join(root, ".capitalist", "workers", `${w.id}.json`),
+      join(root, ".capitalist", "workers", w.id, "record.json"),
       JSON.stringify({
         id: w.id,
         host: "codebuddy",
@@ -67,14 +71,14 @@ function makeRoot(workers, opts = {}) {
       }),
     );
   }
-  writeFileSync(join(root, ".capitalist", "workers", "index.jsonl"), index.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  writeFileSync(join(root, ".capitalist", ".root", "index.jsonl"), index.map((r) => JSON.stringify(r)).join("\n") + "\n");
   ledger.__resetCreditLedger();
   clearFsCache();
   return root;
 }
 
 function readLedger(root) {
-  return JSON.parse(require("node:fs").readFileSync(join(root, ".capitalist", "credits.json"), "utf8"));
+  return JSON.parse(require("node:fs").readFileSync(join(root, ".capitalist", "ledger", "credits.json"), "utf8"));
 }
 
 test("首次快照只立基线，不摊账号历史累计", () => {

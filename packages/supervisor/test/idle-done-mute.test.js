@@ -128,7 +128,7 @@ test("台账仍保留记录：静默只发生在投影层", () => {
   const root = sandbox(singleStage);
   try {
     seedIdleTicks(root);
-    const events = join(root, ".capitalist", "events.jsonl");
+    const events = join(root, ".capitalist", "ledger", "events.jsonl");
     assert.ok(existsSync(events), "事件台账还在");
     const raw = require("node:fs").readFileSync(events, "utf8");
     assert.ok(raw.includes('"supervisor_done"'), "台账里的收工记录不许被删");

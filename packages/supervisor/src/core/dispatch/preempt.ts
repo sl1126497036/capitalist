@@ -1,9 +1,7 @@
-/** “立即执行”的插队租约（`.capitalist/preempt.json`）。 */
-
-import { join } from "node:path";
+/** “立即执行”的插队租约（`.capitalist/meta/preempt.json`）。 */
 
 import { readJson, writeJson, writeJsonl } from "../record/json";
-import { supervisorDir } from "../record/paths";
+import { meta as metaLoc } from "../record/locations";
 import { compareQueueOrder, dispatchPath, readDispatches, type Dispatch } from "../record/supervisor";
 
 /** 一份插队租约：谁在立即执行、谁为它让了位。 */
@@ -24,7 +22,7 @@ export interface PreemptLease {
 
 /** 租约文件路径。 */
 export function preemptPath(root: string): string {
-  return join(supervisorDir(root), "preempt.json");
+  return metaLoc.preempt(root);
 }
 
 /**

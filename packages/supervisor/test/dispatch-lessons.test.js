@@ -18,7 +18,7 @@ const { workerUsage } = require("../dist/supervisor/usage/usage");
 
 function scratch(name = "capitalist-lessons-") {
   const root = mkdtempSync(join(tmpdir(), name));
-  mkdirSync(join(root, ".capitalist"), { recursive: true });
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   return root;
 }
 
@@ -34,7 +34,7 @@ test("卡点记忆：两次同类卡点归并为一条，次数累加且重启�
     assert.equal(entries[0].last_dispatch, "D-2");
 
     /* 重启 = 重新从盘上读：文件在、条目在。 */
-    assert.ok(existsSync(join(root, ".capitalist", "memory.json")));
+    assert.ok(existsSync(join(root, ".capitalist", "config", "memory.json")));
     assert.equal(loadMemories(root)[0].count, 2);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -91,7 +91,7 @@ test("默认模型轮换：两个 flash 模型交替，计数落盘重启后继�
     assert.equal(first, "deepseek-v4.1-flash");
     assert.equal(second, "glm-5.3-flash");
     assert.equal(third, "deepseek-v4.1-flash", "第三次应轮回第一个");
-    assert.ok(existsSync(join(root, ".capitalist", "model_rotate.json")));
+    assert.ok(existsSync(join(root, ".capitalist", "model", "rotate.json")));
     /* 重启（新调用、同一任务根）从落盘的计数继续，不归零。 */
     assert.equal(nextRotatingDefaultModel(root), "glm-5.3-flash");
   } finally {

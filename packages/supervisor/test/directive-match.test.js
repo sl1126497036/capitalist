@@ -1,7 +1,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const { mkdtempSync } = require("node:fs");
+const { mkdtempSync, mkdirSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
@@ -11,6 +11,7 @@ const { createTaskRoot } = require("../dist/core/contract/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-dirmatch-"));
+  for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
   createTaskRoot({ target: "插话匹配测试", contractSpec: "minimal", root: base });
   return base;
 }
@@ -250,7 +251,7 @@ test("悬空追加回收：超过追诉期的老追加不再回收", () => {
     stage: "S0",
     consumed: false,
   };
-  appendFileSync(join(root, ".capitalist", "direct.jsonl"), `${JSON.stringify(stale)}\n`, "utf8");
+  appendFileSync(join(root, ".capitalist", "ledger", "direct.jsonl"), `${JSON.stringify(stale)}\n`, "utf8");
 
   loop.__testing.rescueOrphanDirectives(root, noop);
 
