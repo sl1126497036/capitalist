@@ -5,6 +5,7 @@
  */
 import { t } from "../../lib/i18n.js";
 import { hhmm, dur } from "../../lib/fmt.js";
+import { noLabel } from "../../lib/no.js";
 
 defineProps({
   /** { node, kids }：node 为后端下发的节点视图，kids 为同形状子项。 */
@@ -14,7 +15,8 @@ defineProps({
 /** 标题加后端下发的任务编号 `#NN ` 前缀，与左栏任务行、监工对话同源；无编号时保留原标题。 */
 function ntitle(node) {
   const t = node.title || node.id;
-  return node.no ? `#${node.no} ${t}` : t;
+  const no = noLabel(node.no);
+  return no ? `${no} ${t}` : t;
 }
 
 /**

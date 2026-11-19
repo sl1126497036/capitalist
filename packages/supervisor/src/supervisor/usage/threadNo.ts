@@ -107,7 +107,10 @@ export function threadIdByNo(root: string, no: number | string): string {
 }
 
 /**
- * 任务号 -> 该线程上的单：先按号取线程键，派生线程按 `lineage` 尾号匹配，分片线程按分片名匹配；不按队列顺序近似。
+ * 任务号 -> 该任务名下的一张单。
+ *
+ * 新编号体系里派单号是 `任务号-派发序`（落盘无 `#`，如 `2-2`），任务号直接编码在派单号里，
+ * 不再靠 `thread-no.json` 反查线程键。按派单 id 前缀 `2-` 匹配，取派发序最大的在途单。
  *
  * 默认只认在途状态，用于“该编号当前执行到哪一步”。重开（redo）要的恰恰是已经结束的那张单，
  * 该场合把 `includeDone` 打开，否则会被 live 过滤掉，表现为“没有编号 #01”。
@@ -122,12 +125,7 @@ export function dispatchOfThreadNo(
   rows: Dispatch[] = readDispatches(root),
   opts: { includeDone?: boolean } = {},
 ): Dispatch | undefined {
-  const key = threadIdByNo(root, no);
-  if (!key) return undefined;
-  const [st, tailRaw] = key.split("/");
-  const stage = String(st ?? "").trim().toLowerCase();
-  const tail = String(tailRaw ?? "").trim().toLowerCase();
-  const linTail = tail.startsWith("x") ? tail.slice(1) : "";
+  const prefix = `${Math.trunc(no)}-`;
   const live = (s: string): boolean => {
     if (["open", "claimed", "reported", "review"].includes(s)) return true;
     /*
@@ -136,14 +134,17 @@ export function dispatchOfThreadNo(
      */
     return opts.includeDone === true && ["done", "closed", "failed"].includes(s);
   };
-  return [...rows].reverse().find((x) => {
-    if (!live(String(x.status ?? ""))) return false;
-    if (stage && String(x.stage ?? "").toLowerCase() !== stage) return false;
-    const lin = String((x as Dispatch & { lineage?: string }).lineage ?? x.id);
-    if (linTail) return lin.slice(-6).toLowerCase() === linTail;
-    if (!tail || tail === "main") return !String(x.shard ?? "").trim();
-    return String(x.shard ?? "").toLowerCase() === tail;
-  });
+  /* 取派发序最大（最近）的一张；新编号 id 形如 `2-2`，按 `-` 后的序比较。 */
+  return [...rows]
+    .filter((x) => String(x.id ?? "").startsWith(prefix))
+    .filter((x) => live(String(x.status ?? "")))
+    .sort((a, b) => dispatchSeq(b.id) - dispatchSeq(a.id))[0];
+}
+
+/** 派单 id 里的派发序（`2-2` -> 2）；非新格式返回 0。 */
+function dispatchSeq(id: string): number {
+  const m = /^(\d+)-(\d+)$/.exec(String(id ?? ""));
+  return m ? Number(m[2]) : 0;
 }
 
 /** 整表只读导出，供 /api/forest 一次取号；缺表时返回空对象。 */
@@ -152,23 +153,32 @@ export function threadNoTable(root: string): Record<string, number> {
 }
 
 /**
- * 派单 id -> 任务编号：派单先按 {@link laneKeyOf} 折到线程键再查 `thread-no.json`，同一任务重派过的派单共用同一个号。
+ * 派单 id -> 任务号（带 `#`，如 `#02`）。
  *
- * 只查不建，表里没有时返回空串；整表一次读完返回 Map。
+ * 新编号体系里任务号直接编码在派单号里（`2-2` -> `#02`），不再查 `thread-no.json`。
+ *
+ * 只查不建，取不到时返回空串；整表一次读完返回 Map。
  */
 export function dispatchNoTable(root: string): Map<string, string> {
   const out = new Map<string, string>();
   try {
     const table = threadNoTable(root);
     for (const d of readDispatches(root)) {
+      const id = String(d.id ?? "");
+      const m = /^(\d+)-(\d+)$/.exec(id);
+      if (m) {
+        out.set(id, `#${m[1]}`);
+        continue;
+      }
+      /* 非新格式的派单 id：按线程键查旧编号表，仅兜底。 */
       const key = laneKeyOf({
         stage: String(d.stage ?? ""),
         shard: d.shard,
         lineage: String((d as Dispatch & { lineage?: string }).lineage ?? ""),
-        id: String(d.id ?? ""),
+        id,
       });
       const no = threadNoLabel(table[key]);
-      if (no) out.set(String(d.id), no);
+      if (no) out.set(id, no);
     }
   } catch {
     /* 台账或编号表读不到只影响显示前缀，不能让消息回执整体失败。 */

@@ -3,17 +3,24 @@
 import { adoptAttachmentsForMessage, attachmentsIn, numberAttachmentLines } from "./attachments";
 import { readJsonl } from "../record/json";
 import { eventsPath, recordEvent } from "../record/ledger";
+import { msgId, type MsgDirection } from "./msgId";
 
 /** 一条用户消息的身份与它自己的附件。 */
 export interface UserMessage {
-  /** 消息标识（`M-…`），随事件与指令一路带到派单上。 */
+  /** 消息标识（`2-U2W-<毫秒>`），随事件与指令一路带到派单上。 */
   id: string;
   /** 这条消息自己带的附件路径（去重，保持出现顺序）。 */
   atts: string[];
 }
 
-export function newMessageId(now = Date.now()): string {
-  return `M-${now.toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+/**
+ * 生成用户消息编号（落盘形式，不带 `#`）。
+ *
+ * @param taskNo 归属任务号；无单号上下文（监工面板全局）传 `S0`。
+ * @param direction 方向（`U2W` 用户发给 Worker，`U2S` 用户发给监工）。
+ */
+export function newMessageId(taskNo: string | number, direction: MsgDirection, now = Date.now()): string {
+  return msgId(taskNo, direction, now);
 }
 
 /**
@@ -37,11 +44,15 @@ export function recordUserMessage(
     quoteText?: string;
     /** 界面选中的技能名：记进消息流，气泡据此显示随带的技能。 */
     skills?: string[];
+    /** 归属任务号；缺省 `S0`（监工面板全局）。 */
+    taskNo?: string | number;
+    /** 方向：`U2W` 用户发给 Worker，`U2S` 用户发给监工。缺省 `U2W`。 */
+    direction?: MsgDirection;
   },
 ): UserMessage {
   /** 图在这里编一次号（`[附件] x.png` -> `[图1] x.png`），之后所有环节照抄这一套。 */
   let text = numberAttachmentLines(String(input.text ?? ""));
-  const id = newMessageId();
+  const id = newMessageId(input.taskNo ?? "S0", input.direction ?? "U2W");
   /*
    * 附件按“消息 id + 序号”另存一份（`<msgId>-1.png`）：这张图属于哪条消息、是第几张，
    * 写进文件名，往下任何环节想拿错都能当场看出来。原文里的路径同步换成新路径。
@@ -94,7 +105,7 @@ export interface ShotRef {
   /** 从 1 起的编号，提示词里的 `ATT:` 行用它指代。 */
   index: number;
   path: string;
-  /** 来源消息标识（`M-…`）。 */
+  /** 来源消息标识（`2-U2W-<毫秒>` 等）。 */
   msg_id: string;
   /** 它属于哪个会话（空串 = 监工会话）。 */
   thread: string;

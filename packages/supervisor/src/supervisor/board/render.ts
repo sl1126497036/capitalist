@@ -9,6 +9,7 @@ import { zh } from "./zh";
 import { isShellTool, summarizeCommand } from "../worker/workerLog";
 import { dispatchOfThreadNo } from "../usage/threadNo";
 import { splitDirectiveTag } from "../../core/dispatch/commands";
+import { dispatchNoLabel } from "../../core/record/idMap";
 export const MQ_KIND_LABEL: Record<string, string> = {
   stuck: "卡住",
   question: "要方向",
@@ -60,10 +61,12 @@ export function toolSummary(e: Record<string, unknown>): { text: string; cmd: st
   return { text: short ? `${verb} ${short}` : verb, cmd };
 }
 
-/** 纯数字 id 是宿主直接拿进程号当 worker 标识，显示加 `p` 前缀；`#` 只留给任务编号。 */
+/** worker id 显示加 `#` 前缀（`2-P1` -> `#2-P1`）；`#` 只属于任务/派单/进程编号体系。 */
 export function workerLabel(id: string): string {
   const s = String(id ?? "").trim();
-  return /^\d+$/.test(s) ? `p${s}` : s;
+  if (!s) return s;
+  if (/^\d+-P\d+$/.test(s)) return `#${s}`;
+  return s;
 }
 
 export function targetFromText(root: string, text: string): string {
@@ -124,10 +127,15 @@ export function verdictText(
 
 export function maskDispatchIds(text: string, nos?: Map<string, string>): string {
   if (!text || !nos || nos.size === 0) return text;
-  return text.replace(/\bD-[A-Za-z0-9][A-Za-z0-9-]{1,}/g, (id) => {
-    const no = nos.get(id);
-    return no ? `#${no}` : id;
-  });
+  let out = text;
+  /* 新派单号（`2-2`）按派单号显示（`#2-2`），经统一入口补 `#`。 */
+  for (const [id] of nos) {
+    if (!id) continue;
+    const label = /^\d+-\d+$/.test(id) ? dispatchNoLabel(id) : nos.get(id);
+    if (!label) continue;
+    out = out.split(id).join(label);
+  }
+  return out;
 }
 
 export function fingerprint(e: object): string {

@@ -1081,7 +1081,7 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
       continue;
     }
 
-    const id = newDispatchId();
+    const id = newDispatchId(root, item.stage, item.shard ?? undefined);
     /* title 是派单上的扩展字段（见 loop.ts 的 DispatchEx）：核心 Dispatch 不带它，
        但界面按它显示任务名，所以这里一并写进去。 */
     const d: Dispatch & { title?: string } = {

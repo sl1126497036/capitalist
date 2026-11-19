@@ -10,6 +10,8 @@ import { withFileLock } from "../../core/dispatch/commands";
 import { appendJsonl, readJsonl, writeJsonl } from "../../core/record/json";
 import { recordEvent } from "../../core/record/ledger";
 import { supervisorDir } from "../../core/record/paths";
+import { msgId } from "../../core/message/msgId";
+import { taskNoOfDispatchId } from "../../core/record/tasks";
 
 /**
  * 白名单动作，顺序即界面快捷清单顺序。`dispatch` 当场建单并插到队首；
@@ -108,8 +110,10 @@ export function supervisorDirectPath(root: string): string {
   return join(supervisorDir(root), "supervisor-direct.jsonl");
 }
 
-function newId(): string {
-  return `SD-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+function newId(target: string): string {
+  /* 监工指令由监工发出，方向 `S`；归属任务号从目标派单号反解。 */
+  const no = taskNoOfDispatchId(String(target ?? "")) || "S0";
+  return msgId(no, "S");
 }
 
 /**
@@ -248,7 +252,7 @@ export function appendSupervisorDirective(
   if (text.length > 500) return { ok: false, error: "指令过长（上限 500 字）" };
 
   const rec: SupervisorDirective = {
-    id: newId(),
+    id: newId(String(input.target ?? "")),
     at: new Date().toISOString(),
     at_ts: Date.now() / 1000,
     text: text || [action, arg].filter(Boolean).join(" "),

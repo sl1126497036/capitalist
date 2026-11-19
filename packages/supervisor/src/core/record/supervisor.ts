@@ -28,7 +28,8 @@ import { readJson, readJsonl, writeJson, writeJsonl } from "./json";
 import { statCached } from "./fsCache";
 import { supervisorDir } from "./paths";
 import { pidAlive } from "./process";
-import { syncTaskForDispatch } from "./tasks";
+import { resolveDispatchNo, syncTaskForDispatch, taskNoOfDispatchId } from "./tasks";
+import { registerWorker as registerIdMapWorker } from "./idMap";
 
 /** 监工进程状态。`done` 表示末阶段门槛已达标，监工据此退出。 */
 export type SupervisorStatus = "running" | "stopped" | "done";
@@ -189,7 +190,7 @@ export interface Dispatch {
   atts_inherited?: string[];
   atts?: string[];
   /**
-   * 这一单是从哪条用户消息派出来的（消息标识 `M-…`）。
+   * 这一单是从哪条用户消息派出来的（消息标识 `2-U2W-<毫秒>`）。
    *
    * 附件归属的权威键：发车前按它回查那条消息自己的 `atts`，正文里别处抄来的路径
    * 会被摘掉。老记录没有这个字段时退回 `atts`，再没有才从正文解析。
@@ -297,7 +298,7 @@ export interface WorkerRecord {
   /**
    * 这个 worker 实际续接/新开的 AI 会话 id（例如 `capitalist-u6-main-g2`）。
    *
-   * 与 `session` 字段必须分开看：`session` 是 worker 自己的记录 id（`W-xxxx`），
+   * 与 `session` 字段必须分开看：`session` 是 worker 自己的记录 id（进程号 `2-P1`），
    * 由它自己续写心跳；`ai_session` 才是宿主那边的对话上下文标识，一个 ai_session
    * 可以被多个 worker 先后复用。看板“与这个进程说话”要送到 ai_session，
    * 调度层判断“这条会话是否仍被占用”也只认它。
@@ -467,7 +468,23 @@ export function workerLogPath(root: string, id: string): string {
   return join(workersDir(root), `${id}.log`);
 }
 
-export function newWorkerId(root: string): string {
+/**
+ * 生成进程号：从派单号派生任务号，再按该任务已拉起的进程数递增，落盘形式 `2-P1`（不带 `#`）。
+ *
+ * @param dispatchId 该 worker 领的那张派单号（`2-2`）。
+ */
+export function newWorkerId(root: string, dispatchId: string): string {
+  const taskNo = taskNoOfDispatchId(String(dispatchId ?? ""));
+  if (taskNo > 0) {
+    /* 该任务已拉起的进程数（`2-P1`、`2-P2`…），按 P 后序号取最大值。 */
+    let maxSeq = 0;
+    for (const w of listWorkers(root)) {
+      const m = new RegExp(`^${taskNo}-P(\\d+)$`).exec(String(w.id ?? ""));
+      if (m) maxSeq = Math.max(maxSeq, Number(m[1]));
+    }
+    return `${taskNo}-P${maxSeq + 1}`;
+  }
+  /* 拿不到任务号（旧 `D-` 单）时退回旧的自增 id，仅兜底。 */
   const file = join(supervisorDir(root), "worker-no.json");
   const data = readJson<{ next?: number }>(file, {});
   let n = Math.max(1, Number(data?.next ?? 1) || 1);
@@ -479,7 +496,7 @@ export function newWorkerId(root: string): string {
     }
     n += 1;
   }
-  return `W-${Date.now().toString(36)}`;
+  return `${Date.now().toString(36)}`;
 }
 
 /** 读 worker 记录；id 非法或记录缺失都返回 null，调用方按“没有这个 worker”处理。 */
@@ -537,6 +554,18 @@ export function registerWorker(root: string, rec: WorkerRecord): void {
   const index = join(workersDir(root), "index.jsonl");
   const rows = readJsonl<{ id?: string }>(index);
   if (!rows.some((r) => r.id === rec.id)) writeJsonl(index, [...rows, { id: rec.id }]);
+  /* 登记编号关系表：进程号 -> 派单号、系统 pid。 */
+  const no = taskNoOfDispatchId(String(rec.dispatch ?? ""));
+  const seq = workerSeqOf(String(rec.id ?? ""));
+  if (no > 0 && seq > 0) {
+    registerIdMapWorker(root, no, String(rec.dispatch ?? ""), seq, Number(rec.pid ?? 0));
+  }
+}
+
+/** 进程号里的进程序（`2-P1` -> 1）；非新格式返回 0。 */
+function workerSeqOf(id: string): number {
+  const m = /^\d+-P(\d+)$/.exec(String(id ?? ""));
+  return m ? Number(m[1]) : 0;
 }
 
 /**
@@ -904,12 +933,12 @@ export function readDispatches(root: string): Dispatch[] {
 let dispatchCache: { root: string; key: string; rows: Dispatch[] } | null = null;
 
 /**
- * 生成派单 id：`D-` 加时间戳与随机后缀的 base36。
+ * 生成派单号：任务号 + 派发序，落盘形式 `2-3`（不带 `#`）。
  *
- * @param now 时间戳，默认取系统时间。传入固定值可让 id 可重现。
+ * 任务号与派发序由 {@link resolveDispatchNo} 统一发行，派单号编码任务号。
  */
-export function newDispatchId(now = Date.now()): string {
-  return `D-${now.toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+export function newDispatchId(root: string, stage: string, shard?: string): string {
+  return resolveDispatchNo(root, stage, shard).dispatchId;
 }
 
 /** 追加一张派单。 */

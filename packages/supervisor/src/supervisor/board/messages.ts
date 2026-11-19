@@ -194,7 +194,7 @@ export function threadMessages(
     const dAtts = attachmentsOf({ atts: d.atts, text: d.action });
     const dNo = ctx.nos.get(d.id) ?? "";
     msgs.push({
-      id: `D-${d.id}`,
+      id: String(d.id),
       at: d.at,
       role: "supervisor",
       kind: "dispatch",
@@ -405,7 +405,7 @@ export function threadMessages(
     if (name === "tool") {
       const t = toolSummary(e);
       msgs.push({
-        id: `T-${fingerprint(e)}`,
+        id: String(fingerprint(e)),
         at: String(e.at ?? ""),
         role: "worker",
         kind: "tool",
@@ -420,8 +420,9 @@ export function threadMessages(
     if (name === "dispatch_open") continue;
     const text = verdictText(e, ctx.mqById, ctx.nos);
     if (!text.trim()) continue;
+    const evMsgId = String((e as { msg_id?: unknown }).msg_id ?? "").trim();
     msgs.push({
-      id: `E-${fingerprint(e)}`,
+      id: evMsgId || String(fingerprint(e)),
       at: String(e.at ?? ""),
       role: "supervisor",
       kind: "verdict",
@@ -476,8 +477,10 @@ export function threadMessages(
     if (!keys.has(threadId) && !keys.has(wantKey) && !keys.has(tid)) continue;
     const took = r.consumed === true ? String((r as { consumed_by?: unknown }).consumed_by ?? "").trim() : "";
     const tookNo = took ? ctx.nos.get(took) ?? "" : "";
+    /* 插话 id 优先用落盘的 msg_id；老记录没有时回落到指纹。 */
+    const dirMsgId = String((r as { msg_id?: unknown }).msg_id ?? "").trim();
     msgs.push({
-      id: `S-${fingerprint(r)}`,
+      id: dirMsgId || String(fingerprint(r)),
       at: String(r.at ?? ""),
       role: (r as { via?: unknown }).via === "capitalist" ? "supervisor" : "user",
       kind: "say",

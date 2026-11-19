@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { splitMessageRefs } from "../../lib/msgRefs.js";
 import { parseMarkdown } from "../../lib/markdown.js";
 import { t } from "../../lib/i18n.js";
+import { noLabel } from "../../lib/no.js";
 import MdBlocks from "./MdBlocks.js";
 
 const props = defineProps({

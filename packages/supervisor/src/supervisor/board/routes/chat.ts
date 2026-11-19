@@ -11,9 +11,11 @@ import { bindAttachments } from "../../../core/message/attachments";
 import { recordEvent } from "../../../core/record/ledger";
 import { MAX_SAY_CHARS } from "../../../core/guard/limits";
 import { recentShots, recordUserMessage } from "../../../core/message/messages";
+import { msgId, msgTaskNo } from "../../../core/message/msgId";
 import { clearQuotaExhausted, markQuotaExhausted } from "../../../core/guard/quota";
 import { loadState } from "../../../core/record/state";
 import { listWorkers, loadSupervisor, loadWorker, readDispatches, Dispatch } from "../../../core/record/supervisor";
+import { taskNoOfDispatchId } from "../../../core/record/tasks";
 import { enterSupervisorAction } from "../../worker/activity";
 import { chatVerdictOf, settleChat, ChatVerdict } from "../../view/chatSettle";
 import { appendSupervisorDirective } from "../../channel/direct";
@@ -194,6 +196,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           ...(skills.length ? { skills } : {}),
           ...(quote ? { quote } : {}),
           ...(quote ? { quoteText: resolveQuoteText(ctx.opts.root, thread, quote, quoteFallback) } : {}),
+          ...(talkDispatch ? { taskNo: taskNoOfDispatchId(talkDispatch) || "S0" } : {}),
+          direction: "U2W",
         });
         const targetDispatch =
           String(me?.dispatch ?? threadDispatch?.id ?? "") || targetFromText(ctx.opts.root, text);
@@ -241,6 +245,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             applied: args.applied,
             thread,
             from: "worker",
+            msg_id: msgId(msgTaskNo(userMsg.id) || "S0", "S"),
           });
           sse({ kind: "done", reply: args.reply, display: args.reply, want: "", applied: args.applied });
           ctx.res.end();
@@ -400,6 +405,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ...(skills.length ? { skills } : {}),
         ...(quote ? { quote } : {}),
         ...(quote ? { quoteText: resolveQuoteText(ctx.opts.root, thread, quote, quoteFallback) } : {}),
+        ...(talkDispatch ? { taskNo: taskNoOfDispatchId(talkDispatch) || "S0" } : {}),
+        direction: via === "capitalist" ? "U2S" : "U2W",
       });
       const past = recentShots(ctx.opts.root, { thread });
       const ownShots = past.filter((s) => s.msg_id === userMsg.id);
@@ -622,6 +629,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           applied: "",
           thread,
           from: "supervisor",
+          msg_id: msgId(msgTaskNo(userMsg.id) || "S0", "S"),
         });
         sse({ kind: "error", text: hurt });
         ctx.res.end();
@@ -788,6 +796,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ...(multiDirectiveIds.length ? { directives: multiDirectiveIds } : {}),
         thread,
         from: "supervisor",
+        msg_id: msgId(msgTaskNo(userMsg.id) || "S0", "S"),
       });
       /** 实时帧与重建走同一个视图函数（msgView.ts），刷新前后逐字一致。 */
       const display = supervisorReplyView({ reply, want, applied, acted, dispatch_text: dispatchText });

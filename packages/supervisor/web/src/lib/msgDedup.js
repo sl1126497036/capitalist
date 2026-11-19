@@ -1,23 +1,23 @@
 /**
  * 重复在展示层判定：前端增量追加，服务端合并不移除已上屏条目。
- * 判同按说话人、归一正文与时间窗；同台账 5 秒，跨 `S-` / `CH-` 台账 2 分钟。
+ * 判同按说话人、归一正文与时间窗；同台账 5 秒，跨台账（插话 vs 对话）2 分钟。
  * 只对用户与监工消息去重；工作进程的重复输出可能是两次真实调用。
  */
 
 export const DUP_WINDOW_MS = 5_000;
 
 /**
- * 跨台账判同窗口。同一句指令由 `S-`（direct.jsonl 待办登记）与 `CH-`（events.jsonl
- * 对话记录）各记一次，两次落盘间隔一轮监工循环或一次模型往返，故放宽到 2 分钟。
+ * 跨台账判同窗口。同一句指令由插话（direct.jsonl 待办登记）与对话（events.jsonl
+ * 记录）各记一次，两次落盘间隔一轮监工循环或一次模型往返，故放宽到 2 分钟。
  */
 export const CROSS_SOURCE_WINDOW_MS = 120_000;
 
-/** 台账来源：`S-` 为待办登记，`CH-` 为对话记录；其余返回空。 */
+/** 台账来源：带 `event` 为监工事件，带 `status` 为插话登记，其余为对话记录。 */
 function sourceOf(m) {
-  const id = String(m?.id || "");
-  if (id.startsWith("S-")) return "S";
-  if (id.startsWith("CH-")) return "CH";
-  return "";
+  if (!m) return "";
+  if (String(m.event || "")) return "EV";
+  if (String(m.status || "")) return "S";
+  return "CH";
 }
 
 function windowOf(a, b) {

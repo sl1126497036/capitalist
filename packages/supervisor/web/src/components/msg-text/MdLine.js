@@ -11,6 +11,7 @@
 import { defineComponent, h } from "vue";
 import { splitMessageRefs } from "../../lib/msgRefs.js";
 import { t } from "../../lib/i18n.js";
+import { noLabel } from "../../lib/no.js";
 
 /** 单号与技能路径的色块，与纯文本模式下的 .mref / .mskill 同一套样式。 */
 function refNode(seg, ctx, key) {
@@ -19,6 +20,7 @@ function refNode(seg, ctx, key) {
   }
   const e = ctx.entry ? ctx.entry(seg.raw) : null;
   if (!e) return seg.raw;
+  const label = noLabel(e.no);
   return h(
     "button",
     {
@@ -33,7 +35,7 @@ function refNode(seg, ctx, key) {
         if (ctx.onRef) ctx.onRef(ev, seg.raw);
       },
     },
-    `#${e.no}`,
+    label,
   );
 }
 

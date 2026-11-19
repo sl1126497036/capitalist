@@ -8,6 +8,7 @@
 
 import { recordEvent } from "../../core/record/ledger";
 import { settleChat } from "../view/chatSettle";
+import { msgId, msgTaskNo } from "../../core/message/msgId";
 import type { BoardCtx } from "./types";
 
 /**
@@ -85,6 +86,7 @@ export function replyPreempted(
     thread: args.thread,
     from: args.from,
     preempted: true,
+    msg_id: msgId(msgTaskNo(args.msgId) || "S0", "S"),
   });
   args.sse({ kind: "preempted", text: reason, applied: reason });
   ctx.res.end();

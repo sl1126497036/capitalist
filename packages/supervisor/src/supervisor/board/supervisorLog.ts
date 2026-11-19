@@ -307,8 +307,10 @@ export function buildSupervisorLog(
     }
     const bad = CAPITALIST_BAD_EVENTS.has(name) || (name === "supervisor_cmd" && e.ok === false);
     const tier = supervisorTierOf(name, e);
+    /* 消息 id 优先用落盘的 msg_id（携带毫秒时间戳，天然顺序）；无 msg_id 的事件回落到指纹。 */
+    const msgIdOf = String((e as { msg_id?: unknown }).msg_id ?? "").trim();
     const item: ThreadMessage = {
-      id: `SE-${fingerprint(e)}`,
+      id: msgIdOf || String(fingerprint(e)),
       at: String(e.at ?? ""),
       role:
         ((e as { from?: unknown }).from as ThreadRole) || (name === "supervisor_chat_ask" ? "user" : "supervisor"),
@@ -399,7 +401,7 @@ export function buildSupervisorLog(
     const atts = attachmentsOf({ atts: d.atts, text });
     const no = nos.get(d.id) ?? "";
     msgs.push({
-      id: `D-${d.id}`,
+      id: String(d.id),
       at: String(d.at ?? ""),
       role: "supervisor",
       kind: "dispatch",
@@ -447,7 +449,7 @@ export function buildSupervisorLog(
     const scNo = scTarget ? nos.get(scTarget) ?? "" : "";
     const scExtra = narrationLeftover.get(String(r.id ?? "")) ?? "";
     msgs.push({
-      id: `SC-${r.id}`,
+      id: String(r.id),
       at: r.at,
       role: fromSupervisor ? "supervisor" : "user",
       kind: "say",

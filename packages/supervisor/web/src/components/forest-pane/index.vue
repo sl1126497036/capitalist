@@ -6,6 +6,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import ForestNode from "./ForestNode.vue";
 import { t } from "../../lib/i18n.js";
+import { noLabel } from "../../lib/no.js";
 /* t 为多处形参名，i18n 的 t 以 tr 导入，避免被遮蔽。 */
 const tr = t;
 
@@ -151,7 +152,7 @@ function rootTitle(t) {
  */
 function rootNo(t) {
   const head = (t.nodes || [])[0];
-  return head && head.no ? `#${head.no}` : "";
+  return noLabel(head && head.no);
 }
 
 const LEGEND = [

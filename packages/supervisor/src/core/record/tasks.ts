@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { appendJsonl, readJsonl, writeJsonl } from "./json";
 import { supervisorDir } from "./paths";
+import { registerDispatch, registerTask } from "./idMap";
 import type { Dispatch } from "./supervisor";
 
 /** 任务状态。 */
@@ -11,8 +12,10 @@ export type TaskState = "pending" | "dispatched" | "submitted" | "accepted" | "f
 
 /** 一个任务项。 */
 export interface TaskItem {
-  /** `T-xxxxx`。 */
+  /** 任务号字符串（如 `"2"`），与 `no` 同值。 */
   id: string;
+  /** 任务号（正整数，对外编号 `#01` 里的数字）。建任务时发行，重派复用，稳定不漂。 */
+  no?: number;
   title: string;
   detail?: string;
   /** AI 打的分类标签。 */
@@ -43,8 +46,21 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function newTaskId(): string {
-  return `T-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+/**
+ * 任务项唯一标识，即任务号（`"2"`）。
+ *
+ * 任务号自增、永不回收，是任务的唯一标识，不再有独立的内部键（原 `T-` 前缀已废弃）。
+ */
+function taskIdOf(no: number): string {
+  return String(no);
+}
+
+/** 下一个任务号：已有任务号最大值 +1，从未分配过则从 1 起。 */
+function nextTaskNo(rows: TaskItem[]): number {
+  const used = rows
+    .map((t) => Number(t.no))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return used.length ? Math.max(...used) + 1 : 1;
 }
 
 /** 读全部任务项。坏行跳过，一行脏数据不该让整份清单不可读。 */
@@ -58,16 +74,48 @@ function writeAll(root: string, rows: TaskItem[]): void {
   writeJsonl(tasksPath(root), rows);
 }
 
+/** 派单号里的任务号（`2-3` -> 2）；非新格式返回 0。 */
+export function taskNoOfDispatchId(dispatchId: string): number {
+  const m = /^(\d+)-(\d+)$/.exec(String(dispatchId ?? ""));
+  return m ? Number(m[1]) : 0;
+}
+
+/**
+ * 为一张派单确定任务号与派发序，返回派单号（落盘形式 `2-3`，不带 `#`）。
+ *
+ * 这是“任务号 + 派发序”的唯一发行点：同一分片复用原任务号、派发序加一；否则分配新任务号。
+ * 派单号本身编码任务号，`ensureTaskForDispatch` 据此对齐，不再靠 `thread-no.json` 事后映射。
+ */
+export function resolveDispatchNo(
+  root: string,
+  stage: string,
+  shard: string | undefined,
+): { no: number; attempt: number; dispatchId: string } {
+  const rows = readTasks(root);
+  const same = shard
+    ? rows.find((t) => t.stage === stage && t.shard === shard && t.state !== "void")
+    : undefined;
+  if (same) {
+    const no = Number(same.no) > 0 ? Number(same.no) : nextTaskNo(rows);
+    const attempt = (same.attempts ?? 0) + 1;
+    return { no, attempt, dispatchId: `${no}-${attempt}` };
+  }
+  const no = nextTaskNo(rows);
+  return { no, attempt: 1, dispatchId: `${no}-1` };
+}
+
 /**
  * 为一张派单确保有任务项（幂等）。
  *
  * 已存在（同一 `dispatch`）就原样返回，不重复建。新派单建一条 `dispatched`。
+ * 任务号从派单号（`2-3`）解析，与 {@link resolveDispatchNo} 对齐，不重算。
  */
 export function ensureTaskForDispatch(root: string, d: Dispatch): TaskItem {
   const rows = readTasks(root);
   const hit = rows.find((t) => t.dispatch === d.id);
   if (hit) return hit;
 
+  const no = taskNoOfDispatchId(String(d.id));
   /* 同一分片的重复派单（重派）挂到同一项上，而不是每次都新建一条。 */
   const sameShard = d.shard
     ? rows.find((t) => t.stage === d.stage && t.shard === d.shard && t.state !== "void")
@@ -75,18 +123,22 @@ export function ensureTaskForDispatch(root: string, d: Dispatch): TaskItem {
   if (sameShard) {
     const next: TaskItem = {
       ...sameShard,
+      ...(no > 0 && sameShard.no !== no ? { no } : {}),
       dispatch: d.id,
       state: "dispatched",
       attempts: (sameShard.attempts ?? 0) + 1,
       updated_at: nowIso(),
     };
     writeAll(root, rows.map((t) => (t.id === sameShard.id ? next : t)));
+    registerDispatch(root, Number(next.no) || no || nextTaskNo(rows), next.attempts);
     return next;
   }
 
   const raw = String((d as unknown as { title?: string }).title ?? "").trim() || d.action;
+  const no2 = no > 0 ? no : nextTaskNo(rows);
   const item: TaskItem = {
-    id: newTaskId(),
+    id: taskIdOf(no2),
+    no: no2,
     title: raw.length > 80 ? `${raw.slice(0, 78)}…` : raw,
     detail: String(d.action ?? ""),
     tags: Array.isArray(d.tags) ? d.tags : [],
@@ -99,6 +151,8 @@ export function ensureTaskForDispatch(root: string, d: Dispatch): TaskItem {
     updated_at: nowIso(),
   };
   appendJsonl(tasksPath(root), item);
+  registerTask(root, no2, item.title);
+  registerDispatch(root, no2, item.attempts);
   return item;
 }
 
@@ -189,8 +243,11 @@ export function createTask(
   root: string,
   input: { title: string; detail?: string; tags?: string[]; stage?: string },
 ): TaskItem {
+  const rows = readTasks(root);
+  const no = nextTaskNo(rows);
   const item: TaskItem = {
-    id: newTaskId(),
+    id: taskIdOf(no),
+    no,
     title: input.title.slice(0, 120),
     ...(input.detail ? { detail: input.detail } : {}),
     tags: input.tags ?? [],

@@ -166,8 +166,9 @@ export function handleThreadMessage(ctx: BoardCtx): void {
         return null;
       }
       if (!leftover) return null;
+      const chMsgId = String((e as { msg_id?: unknown }).msg_id ?? "").trim();
       return {
-        id: `CH-${fingerprint(e)}`,
+        id: chMsgId || String(fingerprint(e)),
         at: String(e.at ?? ""),
         role,
         kind: "say",
@@ -199,8 +200,9 @@ export function handleThreadMessage(ctx: BoardCtx): void {
           ? (from as ThreadRole)
           : ((isAsk ? "user" : "supervisor") as ThreadRole);
       if (!isAsk && (e as { acted?: unknown }).acted === true) return mergeActedEcho(e, role);
+      const chMsgId2 = String((e as { msg_id?: unknown }).msg_id ?? "").trim();
       return {
-        id: `CH-${fingerprint(e)}`,
+        id: chMsgId2 || String(fingerprint(e)),
         at: String(e.at ?? ""),
         role,
         kind: "say" as ThreadKind,

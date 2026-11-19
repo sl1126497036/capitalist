@@ -173,6 +173,7 @@ import { ensureGuard, stopGuard } from "./worker/guard";
 import { laneOfWorker, recordLaneUsage } from "./judge/sessionLane";
 import { shardTitle, taskTitle } from "./usage/taskTitle";
 import { dispatchNoTable, dispatchOfThreadNo, threadIdByNo } from "./usage/threadNo";
+import { msgId } from "../core/message/msgId";
 import { decide } from "./judge/brain";
 import { brainSessionOf } from "./judge/brainLane";
 import { deniedModelsUsed, resolveModel } from "./judge/modelPolicy";
@@ -731,7 +732,7 @@ function resetSubtree(
   out: (s: string) => void,
 ): void {
   const de = failed as DispatchEx;
-  const nextId = newDispatchId();
+  const nextId = newDispatchId(root, failed.stage, failed.shard ?? undefined);
   const next: Dispatch = {
     id: nextId,
     at: new Date().toISOString(),
@@ -2916,7 +2917,7 @@ function handleModelFallback(
     out(`[监工] 模型 ${ex.model ?? "（宿主默认）"} 启动即失败，回退到 ${ex.model_fallback} 重试一次（单 ${d.id}）`);
 
     const fb = ex.model_fallback;
-    const nid = newDispatchId();
+    const nid = newDispatchId(root, d.stage, d.shard ?? undefined);
     const taken = claimDirectives(root, {
       shard: d.shard ?? "",
       stage: d.stage,
@@ -3019,12 +3020,11 @@ function reject(reason: string): SupervisorResult {
 }
 
 /**
- * 回执里标识派单的编号（`#12`），取自 `thread-no.json`，与任务列表同源。
+ * 回执里标识派单的编号（`#2-2`），取自派单号表，与看板同源。
  * 表中无此单时返回空串，不退回内部 id，也不按队列顺序生成。
  */
 function dispatchNoLabel(root: string, id: string): string {
-  const no = dispatchNoTable(root).get(String(id ?? "").trim());
-  return no ? `#${no}` : "";
+  return dispatchNoTable(root).get(String(id ?? "").trim()) ?? "";
 }
 
 /**
@@ -3459,7 +3459,7 @@ async function applyOneDirective(
         };
       }
     }
-    const id = newDispatchId();
+    const id = newDispatchId(root, state.stage, undefined);
     const taken = claimDirectives(root, {
       shard: "",
       stage: state.stage,
@@ -3564,7 +3564,7 @@ async function applyOneDirective(
     if (arg.length > 4000) return reject(`${action} 内容过长（上限 4000 字）`);
     const bound = directiveAttachments(root, d, arg);
     const boundArg = bindAttachments(arg, bound.atts);
-    const id = newDispatchId();
+    const id = newDispatchId(root, state.stage, undefined);
     const tag = action === "fix" ? `fix-${id.slice(-6)}` : "diagnose";
     const rec = {
       id,
@@ -4678,7 +4678,7 @@ function requeueAdhoc(root: string, state: TaskState, out: (s: string) => void):
     const lastAt = Math.max(...failed.map((x) => Date.parse(String(x.done_at ?? x.at ?? "")) || 0));
     if (Date.now() - lastAt < retryDelayMs(failures)) continue;
 
-    const id = newDispatchId();
+    const id = newDispatchId(root, d.stage, undefined);
     const accept = retryAcceptOf(chain);
     /*
      * 卡点经 appendSection / BLOCKER_MARKER 写进 action 追加段：action 重启后必读，
@@ -5134,7 +5134,7 @@ function dispatch(
     for (const s of shards) {
       const model = defaultDispatchModel(root, resolveShardModel(s, contract, wopts.model));
       const fb = resolveShardModelFallback(s, contract, wopts.model);
-      const id = newDispatchId();
+      const id = newDispatchId(root, fresh.stage, s.id);
       // 用户插话在建单时拼进本次 action 并标记已用。
       const taken = claimDirectives(root, {
         shard: s.id,
@@ -5184,7 +5184,7 @@ function dispatch(
     return;
   }
 
-  const id = newDispatchId();
+  const id = newDispatchId(root, fresh.stage, undefined);
   const taken = claimDirectives(root, {
     shard: "",
     stage: fresh.stage,
@@ -5258,7 +5258,7 @@ function createOpenShardDispatch(
 ): void {
   const model = defaultDispatchModel(root, resolveShardModel(shard, contract, wopts.model));
   const fb = resolveShardModelFallback(shard, contract, wopts.model);
-  const id = newDispatchId();
+  const id = newDispatchId(root, state.stage, shard.id);
   const taken = claimDirectives(root, {
     shard: shard.id,
     stage: state.stage,
@@ -5389,7 +5389,7 @@ function launch(
 
 /* 文件冲突由会话规避（同类活共 lane、lane 单持有）。 */
 
-  const id = newWorkerId(root);
+  const id = newWorkerId(root, d.id);
   const claimed = claimDispatch(root, d.id, id, id);
   if (!claimed) return true;
 
@@ -5893,7 +5893,7 @@ function escalateStuckShard(
     .slice(-3)
     .map((d) => `${d.id}（${d.note ?? "无说明"}）`)
     .join("；");
-  const id = newDispatchId();
+  const id = newDispatchId(root, stage, undefined);
   const rec = {
     id,
     at: new Date().toISOString(),
@@ -6495,7 +6495,7 @@ async function summarizeRun(root: string, out: (s: string) => void): Promise<voi
   const f = runFacts(root);
   if (!f) return;
   const text = await summaryText(root, f.facts);
-  recordEvent(root, "supervisor_reply", { reply: text, thread: "" });
+  recordEvent(root, "supervisor_reply", { reply: text, thread: "", msg_id: msgId("S0", "S") });
   out(`[监工] 队列已清空，已写结束总结（${f.count} 张派单）`);
 }
 

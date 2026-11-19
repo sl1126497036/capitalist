@@ -63,7 +63,7 @@ export function chatVerdictOf(action: string, arg: string): ChatVerdict {
 }
 
 export interface ChatSettleInput {
-  /** 指令的消息标识（`M-…`）。 */
+  /** 指令的消息标识（`2-U2W-<毫秒>` 等）。 */
   msg_id: string;
   verdict: ChatVerdict;
   /** 指令原文：要求特征按它判定，不采用模型复述。 */
@@ -71,7 +71,7 @@ export interface ChatSettleInput {
   /** 指令所在会话（空串 = 监工会话）。 */
   thread?: string;
   /**
-   * 动作记录 id：调度指令记 `SD-…`，追加到既有单记目标派单 id。
+   * 动作记录 id：调度指令记消息编号（`2-S-<毫秒>`），追加到既有单记目标派单号。
    * 没有产生动作时留空。
    */
   dispatch?: string;

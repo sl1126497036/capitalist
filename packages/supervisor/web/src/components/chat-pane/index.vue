@@ -48,6 +48,7 @@ import { dedupeMessages, isBlankMessage } from "../../lib/msgDedup.js";
 import {toneOf} from "../../lib/msgTone.js";
 import {isLog, logRowsOf} from "../../lib/msgNoise.js";
 import {shortOf, numberQueue} from "../../lib/shortId.js";
+import { noLabel } from "../../lib/no.js";
 /* 结束态判定与左栏队列卡共用 lib/status.js。 */
 import {endedWord} from "../../lib/status.js";
 import {taskTitle} from "../../lib/taskTitle.js";
@@ -541,7 +542,7 @@ const view = computed(() => {
       const paired = Boolean(lk) && (linkCount.get(lk) || 0) >= 2;
       /* 归属标识优先用服务端下发的任务编号 no；历史消息查不到时才回落指令 id 尾段。 */
       const assocId = paired ? lk.slice(-6) : "";
-      const assoc = paired ? (String(m.no || "") ? `#${m.no}` : assocId) : "";
+      const assoc = paired ? (String(m.no || "") ? noLabel(m.no) : assocId) : "";
       const card = paired && String(m.action || "") !== "";
       /* 颜色取 toneOf 的三档：bad 红、warn 琥珀、空为中性。 */
       const {tone, note} = toneOf(m);
@@ -920,7 +921,7 @@ function stat(v) {
   if (v.c === "user" || v.c === "human" || v.c === "supervisorsay") {
     const s0 = sayStatus(v.m.status, v.m.no, v.m.reason, v.m.detail);
     /* 派单消息卡带 no 时显示 #NN，与执行回执的编号一致。 */
-    if (!s0 && v.m.no) return `#${v.m.no}`;
+    if (!s0 && v.m.no) return noLabel(v.m.no);
     return s0;
   }
   if (v.m.event === "supervisor_cmd") return evtReceipt(v.m);

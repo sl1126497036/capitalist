@@ -5,6 +5,7 @@
 import { CMD_ZH, EVENT_ZH, EVENT_ZH_FALLBACK } from "../../../src/supervisor/context/terms.ts";
 import { lang, t } from "./i18n.js";
 import { rejectTail } from "./rejectTail.js";
+import { noLabel } from "./no.js";
 
 /* 时间格式随界面语言：英文用 en-GB（24 小时制、日/月顺序），中文用 zh-CN。 */
 const locale = () => (lang.value === "en" ? "en-GB" : "zh-CN");
@@ -60,7 +61,7 @@ export function hash(s) {
  */
 export function msgRef(m) {
   if (m && m.id) return String(m.id);
-  return `M-${hash(`${m?.role}|${m?.at}|${String(m?.text || "").slice(0, 64)}`)}`;
+  return String(hash(`${m?.role}|${m?.at}|${String(m?.text || "").slice(0, 64)}`));
 }
 
 
@@ -89,8 +90,8 @@ export function evtReceipt(m) {
   if (m?.event !== "supervisor_cmd") return "";
   const base = m.ok ? t("已执行") : t("失败");
   /* `no` 由服务端按任务编号表下发；缺失时只显示结论。 */
-  const no = String(m?.no || "");
-  return no ? `${base} #${no}` : base;
+  const no = noLabel(m?.no);
+  return no ? `${base} ${no}` : base;
 }
 
 /** 消息判据：派单消息两处都算监工消息，其余按当前视图判。 */
@@ -107,8 +108,9 @@ export function isSupervisorSpeech(m, supervisorView) {
  */
 export function sayStatus(s, no, reason, detail) {
   const v = String(s || "");
-  const n = String(no || "");
-  const withNo = (base) => (n ? `${base} #${n}` : base);
+  const raw = String(no || "");
+  const n = noLabel(no);
+  const withNo = (base) => (n ? `${base} ${n}` : base);
   if (v === "executed") return withNo(t("已执行"));
   if (v === "rejected") {
     const tail = rejectTail(reason, detail);
@@ -116,10 +118,10 @@ export function sayStatus(s, no, reason, detail) {
   }
   if (v === "pending") return t("等待下一轮调度");
   if (v === "已并入派单") {
-    return n ? t("已并入派单 #{no} 随该单启动生效", { no: n }) : t("已并入派单 随该单启动生效");
+    return raw ? t("已并入派单 #{no} 随该单启动生效", { no: raw }) : t("已并入派单 随该单启动生效");
   }
   if (v === "已送达执行中的进程") {
-    return n ? t("已送达 #{no} 执行中的进程已收到", { no: n }) : t("已送达 执行中的进程已收到");
+    return raw ? t("已送达 #{no} 执行中的进程已收到", { no: raw }) : t("已送达 执行中的进程已收到");
   }
   if (v === "随派单启动带入") return t("随派单启动带入");
   if (v === "已登记，进程下一次动作间隙送达") return t("已登记，进程下一次动作间隙送达");

@@ -86,12 +86,12 @@ export interface Directive {
   /**
    * 在 `direct.jsonl` 中的行号（从 1 开始）。
    *
-   * 对外一律用 `#行号` 指代一条插话：`M-` 开头的消息号是内部标识，既长又无法口头复述，
-   * 让 worker 在派单正文里看到它、再原样抄进回报，只会制造对不上号的错误。行号在文件里
-   * 稳定（只追加不重排），注入正文与回报解析用它即可对上同一条记录。
+   * 对外一律用 `@行号` 指代一条插话：消息号既长又无法口头复述，让 worker 在派单正文里
+   * 看到它、再原样抄进回报，只会制造对不上号的错误。行号在文件里稳定（只追加不重排），
+   * 注入正文与回报解析用它即可对上同一条记录。
    */
   no?: number;
-  /** 发起这条话的进程（`W-…`）。 */
+  /** 发起这条话的进程（进程号 `2-P1`）。 */
   thread?: string;
   /**
    * 发起这条话的线程（`阶段/分片`，无分片是 `阶段/x派生链尾号`，见 {@link laneKeyOf}）。
@@ -104,7 +104,7 @@ export interface Directive {
   shard?: string | null;
   /** 目标派生链（派单链的首单 id）。 */
   lineage?: string;
-  /** 目标：这句话是说给哪一单的（派单 id `D-…` 或 worker id `W-…`）。 */
+  /** 目标：这句话是说给哪一单的（派单号 `2-2` 或进程号 `2-P1`）。 */
   target?: string;
   text: string;
   via?: "user" | "capitalist";
@@ -116,7 +116,7 @@ export interface Directive {
    */
   atts?: string[];
   /**
-   * 这句话来自哪条用户消息（`M-…`）。
+   * 这句话来自哪条用户消息（消息编号 `2-U2W-<毫秒>`）。
    *
    * 附件归属靠它回查：派单建单时按这个标识去 `supervisor_chat_ask` 事件里取那条消息自己的
    * `atts`，而不是从 action 正文里重新解析。老记录没有这个字段，读侧按“只认自己的
@@ -124,7 +124,7 @@ export interface Directive {
    */
   msg_id?: string;
   /**
-   * 被引消息的标识（线程消息 ref，`D-…` / `S-…` 等，与界面 `#编号` 同一份）。
+   * 被引消息的标识（消息编号，与界面 `#编号` 同一份）。
    *
    * 只做留痕与拼装素材：匹配规则不看它。落盘时同步取回的原文摘录落在
    * {@link Directive.quote_text}，消费端拼派单说明时直接用，不再回头查线程。
@@ -185,12 +185,13 @@ export function directiveRef(r: Directive): string {
 }
 
 /**
- * 对外的短号：`#行号`。老记录没有行号时回落到 {@link directiveRef}。
+ * 对外的短号：`@行号`。老记录没有行号时回落到 {@link directiveRef}。
  *
- * 派单正文与回报都用它，worker 不必抄一串 `M-…`。
+ * 前缀用 `@` 不用 `#`：`#` 已专属于任务号、派单号、进程号，插话行号与之区分，避免解析歧义。
+ * 派单正文与回报都用它，worker 不必抄一串消息号。
  */
 export function directiveShortRef(r: Directive): string {
-  return r.no ? `#${r.no}` : directiveRef(r);
+  return r.no ? `@${r.no}` : directiveRef(r);
 }
 
 /**
@@ -257,7 +258,8 @@ export function dropDirectivesFor(root: string, target: string, reason: string):
 
 export function isWorkerRef(v: string): boolean {
   const s = String(v ?? "").trim();
-  return /^W-/i.test(s) || /^\d+$/.test(s);
+  /* 进程号（`2-P1`）算 worker；纯数字不再是 worker，避免与任务号撞形状。 */
+  return /^\d+-P\d+$/.test(s);
 }
 
 /**
@@ -420,7 +422,7 @@ export function directiveMatches(r: Directive, scope: DirectiveScope): boolean {
     /*
      * 两种形状，两套判定。
      *
-     * `W-…` 是进程 id：这是一台进程的私话，只认它本人，进程退出即作废。
+     * 进程号（`2-P1`）是进程 id：这是一台进程的私话，只认它本人，进程退出即作废。
      * 其它形状（`s1/x00ns0z`、`u1/main`）是线程键：用户是在某条线程里说的话，
      * 该线程重派出的新进程需要读取该值。
      *
@@ -583,16 +585,16 @@ export function markDirectiveOutcome(
       ok: false,
       reason:
         outcome === "not_mine"
-          ? "not_mine 必须说明该归哪一单：--outcome \"<编号>=not_mine:该归 #30\""
+          ? "not_mine 必须说明该归哪一单：--outcome \"<编号>=not_mine:该归 #30-2\""
           : "blocked 必须说明卡在哪：--outcome \"<编号>=blocked:等接口权限\"",
     };
   }
   const got = withFileLock(file, () => {
     const rows = readJsonl<Directive>(file);
     let hit = -1;
-    const byNo = /^#(\d+)$/.exec(key);
+    const byNo = /^@(\d+)$/.exec(key);
     if (byNo) {
-      /* 短号：行号（从 1 开始）直接定位，与注入正文里的 [#N] 同一口径。 */
+      /* 短号：行号（从 1 开始）直接定位，与注入正文里的 [@N] 同一口径。 */
       const idx = Number(byNo[1]) - 1;
       const row = rows[idx];
       if (row && typeof row.text === "string") hit = idx;
@@ -884,8 +886,8 @@ export interface CloseTaskResult {
  * 找一张“还开着”的单：结束只对没结论的单有意义。
  *
  * 目标可能是三种写法，按顺序试：
- *   1. 派单 id（`D-…`）；
- *   2. worker id（`W-…`），取它手上的那张单；
+ *   1. 派单号（`2-2`）；
+ *   2. 进程号（`2-P1`），取它手上的那张单；
  *   3. 分片名或线程 id（`shard:xxx`），取该片最近一张还开着的单。
  *
  * 第三种是看板排队行的 id：排队中的单没有 worker，界面只能靠分片指认。

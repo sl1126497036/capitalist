@@ -404,7 +404,7 @@ function cmdTasks(p: Parsed): number {
     write(t(`\n[${label[st]}] ${list.length} item(s)\n`, `\n[${label[st]}] ${list.length} 项\n`));
     for (const t of list.slice(-40)) {
       const tag = t.tags.length > 0 ? `  #${t.tags.join(",")}` : "";
-      write(`  ${t.id}  ${t.title}${tag}\n`);
+      write(`  #${t.no}  ${t.title}${tag}\n`);
     }
     if (list.length > 40) write(t(`  …and ${list.length - 40} more\n`, `  …另有 ${list.length - 40} 项\n`));
   }
@@ -575,7 +575,7 @@ function cmdSay(p: Parsed): number {
   const shard = flagString(p, "shard") || null;
   const thread = flagString(p, "thread") || undefined;
   /*
-   * `--thread` 是进程（`W-…`），`--lane` 是线程（`阶段/分片`）。
+   * `--thread` 是进程（进程号 `2-P1`），`--lane` 是线程（`阶段/分片`）。
    *
    * 两个不是一回事：进程是一次性的，退出即作废；线程随任务走，重派出来的新进程照样
    * 认这条话。落错字段的后果是那句话永久领不到（见 core/commands 的 Directive.thread）。

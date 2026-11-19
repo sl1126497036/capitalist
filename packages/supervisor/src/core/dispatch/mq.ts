@@ -6,6 +6,8 @@ import { join } from "node:path";
 
 import { appendJsonl } from "../record/json";
 import { supervisorDir } from "../record/paths";
+import { msgId } from "../message/msgId";
+import { taskNoOfDispatchId } from "../record/tasks";
 
 export type MqKind = string;
 
@@ -20,7 +22,7 @@ export interface MqMessage {
   id: string;
   at: string;
   at_ts: number;
-  /** 发件的工作进程 id（`W-xxx`）。 */
+  /** 发件的工作进程号（`2-P1`）。 */
   from: string;
   dispatch: string;
   stage: string;
@@ -48,8 +50,10 @@ function cursorPath(root: string): string {
   return join(mqDir(root), "cursor.json");
 }
 
-function newId(): string {
-  return `M-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+function newId(dispatch: string): string {
+  /* 申报由 Worker 发出，方向 `W`；归属任务号从派单号反解。 */
+  const no = taskNoOfDispatchId(dispatch) || "S0";
+  return msgId(no, "W");
 }
 
 /** 追加一条申报。返回落库后的完整记录。 */
@@ -58,7 +62,7 @@ export function appendMq(
   input: Omit<MqMessage, "id" | "at" | "at_ts"> & { id?: string },
 ): MqMessage {
   const msg: MqMessage = {
-    id: input.id ?? newId(),
+    id: input.id ?? newId(String(input.dispatch ?? "")),
     at: new Date().toISOString(),
     at_ts: Date.now() / 1000,
     from: input.from,

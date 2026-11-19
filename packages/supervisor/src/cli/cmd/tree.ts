@@ -5,6 +5,15 @@ import { clipLine } from "../../core/text";
 import { buildForestView } from "../../supervisor/view/forestView";
 import { applyRebuild, planRebuild } from "../../core/dispatch/rebuildTree";
 import { flagBool, flagString, type Parsed } from "../args";
+import { dispatchNoLabel, workerNoLabel } from "../../core/record/idMap";
+
+/** 派单/进程号显示：新编号补 `#`，非编号原样。统一经 idMap 的 label 入口，不各自拼 `#`。 */
+function noOf(id: unknown): string {
+  const s = String(id ?? "").trim();
+  if (/^\d+-\d+$/.test(s)) return dispatchNoLabel(s);
+  if (/^\d+-P\d+$/.test(s)) return workerNoLabel(s);
+  return s;
+}
 
 /** 只要任务根：树相关命令不依赖 state / 契约，台账在就能看。 */
 function rootOf(p: Parsed): string {
@@ -49,14 +58,14 @@ function listTrees(root: string, all = false): number {
   const shown = all ? view.trees : live;
 
   for (const t of shown) {
-    const head = `${t.cycle ? "[脏] " : ""}${t.rootId}  深 ${t.maxDepth}  剩 ${t.stats.remaining}${t.alive ? "" : "（无活）"}`;
+    const head = `${t.cycle ? "[脏] " : ""}${noOf(t.rootId)}  深 ${t.maxDepth}  剩 ${t.stats.remaining}${t.alive ? "" : "（无活）"}`;
     process.stdout.write(`${head}\n`);
     for (const n of t.nodes) {
       const mark = STATE_MARK[n.state] ?? "?";
       const indent = "  ".repeat(n.depth + 1);
-      const stuck = n.stuckOn ? `  ← 等 ${n.stuckOn}` : "";
-      const block = n.blocked && n.blockedBy !== n.id ? `  [断在 ${n.blockedBy}]` : "";
-      process.stdout.write(`${indent}[${mark}] ${n.id} ${clipLine(n.title, 34)}${stuck}${block}\n`);
+      const stuck = n.stuckOn ? `  ← 等 ${noOf(n.stuckOn)}` : "";
+      const block = n.blocked && n.blockedBy !== n.id ? `  [断在 ${noOf(n.blockedBy)}]` : "";
+      process.stdout.write(`${indent}[${mark}] ${noOf(n.id)} ${clipLine(n.title, 34)}${stuck}${block}\n`);
     }
   }
   if (done > 0 && !all) {
@@ -77,7 +86,7 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
   );
 
   for (const g of plan.groups) {
-    const flag = g.settledBy ? `已完成于 ${g.settledBy}` : `未完成 -> 代表 ${g.representative}`;
+    const flag = g.settledBy ? `已完成于 ${noOf(g.settledBy)}` : `未完成 -> 代表 ${noOf(g.representative)}`;
     process.stdout.write(`· ${clipLine(g.label, 38)}  [${g.members.length} 条] ${flag}\n`);
   }
   process.stdout.write("\n");
@@ -86,8 +95,8 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
     /* 计划中不列出不改台账的处置。 */
     if (it.action === "keep" || !it.pending) continue;
     const verb = it.action === "close" ? "关" : "开";
-    const parent = it.parent ? `  -> 父 ${it.parent}` : "";
-    process.stdout.write(`  ${verb} ${it.id}  ${clipLine(it.title, 30)}  ${clipLine(it.reason, 44)}${parent}\n`);
+    const parent = it.parent ? `  -> 父 ${noOf(it.parent)}` : "";
+    process.stdout.write(`  ${verb} ${noOf(it.id)}  ${clipLine(it.title, 30)}  ${clipLine(it.reason, 44)}${parent}\n`);
   }
 
   if (plan.edges.length > 0) {
@@ -95,7 +104,7 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
     if (landed.length > 0) {
       process.stdout.write("\n树边：\n");
       for (const e of landed) {
-        process.stdout.write(`  ${e.child} ← ${e.parent}   ${clipLine(e.why, 60)}\n`);
+        process.stdout.write(`  ${noOf(e.child)} ← ${noOf(e.parent)}   ${clipLine(e.why, 60)}\n`);
       }
     }
   }

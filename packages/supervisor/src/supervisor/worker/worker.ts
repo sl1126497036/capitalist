@@ -762,7 +762,7 @@ function writeWorkerBrief(root: string, workerId: string, text: string): void {
  * 监工不解析工作进程的自然语言输出，只认写回 `.capitalist/` 的结构化结果（report / ask / block）；解析 stdout 会把判定绑到措辞上。
  */
 export function launchWorker(opts: LaunchOptions): Launched {
-  const id = opts.id ?? newWorkerId(opts.root);
+  const id = opts.id ?? newWorkerId(opts.root, opts.dispatch.id);
   const log = workerLogPath(opts.root, id);
   mkdirSync(dirname(log), { recursive: true });
   const fd = openSync(log, "a");
@@ -1030,7 +1030,7 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
   if (process.platform !== "win32") {
     throw new Error("可见窗口模式依赖 cmd.exe，仅 Windows 可用；其它平台用后台模式。");
   }
-  const id = opts.id ?? newWorkerId(opts.root);
+  const id = opts.id ?? newWorkerId(opts.root, opts.dispatch.id);
   const log = workerLogPath(opts.root, id);
   mkdirSync(dirname(log), { recursive: true });
 

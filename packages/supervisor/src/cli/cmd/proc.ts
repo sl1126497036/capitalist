@@ -26,6 +26,7 @@ import {
   loadSupervisor,
   loadWorker,
   markReported,
+  newWorkerId,
   pausedDispatches,
   pidAlive,
   readDispatches,
@@ -469,7 +470,7 @@ export function cmdNext(p: Parsed): number {
     return 0;
   }
 
-  const session = flagString(p, "session") ?? `W-manual-${process.pid}`;
+  const session = flagString(p, "session") ?? newWorkerId(root, d.id);
   const claimed = claimDispatch(root, d.id, session, session);
   if (!claimed) die(t("Another worker just claimed it. Run capitalist next again.", "这张单刚被别的 worker 领走，重新 capitalist next"));
 

@@ -7,6 +7,7 @@ import { t } from "../../lib/i18n.js";
 const tr = t;
 import { isAlive, queueCompare } from "../../lib/queueOrder.js";
 import { numberQueue, shortOf } from "../../lib/shortId.js";
+import { noLabel, stripHash } from "../../lib/no.js";
 /* 结束态判定与详情面板共用 lib/status.js。 */
 import { endedKind, settled } from "../../lib/status.js";
 import { taskTitle } from "../../lib/taskTitle.js";
@@ -263,13 +264,14 @@ const FILTERS = computed(() => {
 
 const curFilter = computed(() => FILTERS.value.find((f) => f.key === filter.value) || FILTERS.value[0]);
 
-/* 派单编号参与搜索：后端 no 字段，输入 46 或 #46 均命中；# 前缀剥掉后按子串匹配。 */
+/* 派单编号参与搜索：后端 no 字段，输入 46 或 #46 均命中；# 前缀经统一入口剥掉后按子串匹配。 */
 function searchMatch(t) {
   const raw = q.value.trim().toLowerCase();
   if (!raw) return true;
-  const key = raw.startsWith("#") ? raw.slice(1) : raw;
+  const key = stripHash(raw).toLowerCase();
   const no = String(t?.no || "").trim() || numbering.value.get(t.id) || "";
-  const hay = `${procTitle(t)} ${t.shard || ""} ${t.id || ""} ${t.worker || ""} ${no ? `${no} #${no}` : ""}`.toLowerCase();
+  const label = noLabel(no);
+  const hay = `${procTitle(t)} ${t.shard || ""} ${t.id || ""} ${t.worker || ""} ${no ? `${no} ${label}` : ""}`.toLowerCase();
   return hay.includes(key);
 }
 
