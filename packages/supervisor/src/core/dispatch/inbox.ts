@@ -222,7 +222,7 @@ export function answerAsk(root: string, id: string, guidance: string): { ok: boo
 /**
  * 畸形记录的稳定签名，用于“同一批坏行只报一次”。
  *
- * 每轮调度 都写一条 warn 会把真正的派单事件挤出窗口；签名变化（新坏行、坏行被清理）
+ * 每轮调度都写一条 warn 会把真正的派单事件挤出窗口；签名变化（新坏行、坏行被清理）
  * 才值得再记一条。
  */
 export function ignoredSignature(ignored: readonly IgnoredInboxRow[]): string {

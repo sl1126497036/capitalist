@@ -209,7 +209,7 @@ function verdictReason(root: string, id: string): string {
   if (lastRejectWhy) return lastRejectWhy;
   const d = readDispatches(root).find((x) => String(x.id) === id);
   const note = String((d as { note?: string } | undefined)?.note ?? "").trim();
-  return note || t("(supervisor left no reason)", "(监工没写原因)");
+  return note || t("(supervisor left no reason)", "（监工未写原因）");
 }
 
 export async function cmdReport(p: Parsed): Promise<number> {
@@ -311,7 +311,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       write(t("Report one outcome per directive, then run capitalist report:\n", "逐条回报结论后再 capitalist report：\n"));
       write(`  capitalist report ${id} --status ${status} --note "…" --outcome "${args.join(";")}"\n`);
       write(t("Use not_mine for directives owned elsewhere (state the owner); use blocked and name the blocker.\n", "本单不属于自己的写 not_mine 并说明归属；无法执行的写 blocked 并说明卡点；\n"));
-      write(t("If one is hard to judge, register it with capitalist ask; the gate lets registered questions pass.\n", "不确定怎么算的，用 capitalist ask 说明——收工闸对已登记的问题放行。\n"));
+      write(t("If one is hard to judge, register it with capitalist ask; the gate lets registered questions pass.\n", "不确定怎么算的，用 capitalist ask 说明；收工闸对已登记的问题放行。\n"));
       return 1;
     }
 
@@ -391,7 +391,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
         kind: "done",
         severity: "warn",
         needs: "none",
-        text: String(note ?? "").trim() || "(工作进程没有写说明)",
+        text: String(note ?? "").trim() || "（工作进程未写说明）",
         ...(evidence ? { evidence } : {}),
       });
       /* 等监工裁决：要等它发出去（不等的话 CLI 退出会把请求带走）。 */
@@ -423,7 +423,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       write(t("Once the blocker is clear, describe it with capitalist ask. Do not open a new dispatch.\n", "确认卡在哪之后用 capitalist ask 说明，不要自己重开一张。\n"));
       return 0;
     }
-    write(t("No verdict yet (the supervisor is busy). Do not re-report; keep working on what remains.\n", "裁决还没出（监工正忙）。不要重报同一份，接着做手上剩下的；\n"));
+    write(t("No verdict yet (the supervisor is busy). Do not re-report; keep working on what remains.\n", "裁决未出（监工正忙）。不要重报同一份，继续完成剩余部分；\n"));
     write(t("Blocked: capitalist ask \"<what blocks it>\" and stop. Finished: wait for the verdict; do not redo the same work.\n", "确实卡住：capitalist ask \"<卡在哪>\" 后停手；确实做完：等监工结论，不要重复改同一处。\n"));
     return 1;
   }

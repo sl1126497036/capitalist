@@ -205,6 +205,17 @@ import { currentHost, siblings, workerHosts } from "../agent/registry";
 import { supervisorModelOf } from "./judge/supervisorModel";
 
 /**
+ * 运行期细节。默认不上控制台：控制台只留状态行（running 及其后随的停派原因），
+ * 逐条追踪用 `--verbose` 或 `CAPITALIST_VERBOSE=1`。
+ *
+ * 事件本身照常落台账与日志文件，这里只负责终端。
+ */
+function detail(s: string): void {
+  if (process.env.CAPITALIST_VERBOSE !== "1") return;
+  process.stdout.write(`${s}\n`);
+}
+
+/**
  * 监工进程的启动参数。
  * 除 `root` 必填（指向任务根）外，其余字段可省，取本文件常量与 `detectWorkerHost` 的默认值。
  */
@@ -262,7 +273,7 @@ export interface SupervisorOptions {
   /**
    * 监工对话上下文的配置上限（CLI `--capitalist-context`，token）。
    *
-   * 生效值取 min(这个值, 当前模型实际上限)；不传时按
+   * 生效值取该值与当前模型实际上限中的较小者；不传时按
    * {@link DEFAULT_SUPERVISOR_CONTEXT_LIMIT}。超限自动重载的阈值按生效值算。
    */
   supervisorContextLimit?: number | undefined;
@@ -272,9 +283,9 @@ export interface SupervisorOptions {
    * 以独立控制台窗口启动工作进程（可见模式）。可见模式不写心跳，监工不按心跳判定失败。
    */
   workerVisible?: boolean;
-  /** 只跑一个 调度轮次，用于自检与 cron */
+  /** 只跑一个调度轮次，用于自检与 cron */
   once?: boolean;
-  /** 测试用：跑满 N 个 调度轮次 就退出 */
+  /** 测试用：跑满 N 个调度轮次就退出 */
   maxTicks?: number;
   /** 已有监工运行中时仍强制启动，取代旧实例。 */
   force?: boolean;
@@ -343,7 +354,7 @@ const DEFAULT_BOARD_RELOAD_QUIET_MS = 8000;
 const DEFAULT_BOARD_RELOAD_MIN_GAP_MS = 60000;
 
 /**
- * 阶段卡死判定窗口：连续多少个 调度轮次 无在途进展即报 stall。
+ * 阶段卡死判定窗口：连续多少个调度轮次无在途进展即报 stall。
  * 12 轮调度（默认每轮调度 5 秒，约一分钟）足以区分执行中的长任务与不会再返回的派单。
  */
 const STALL_TICKS = 12;
@@ -360,7 +371,7 @@ interface WorkerSpawnOpts {
   token?: string | undefined;
 }
 /**
- * 失败分片按指数退避间隔重派，避免每轮调度 拉起新进程；连续失败到 {@link REDISPATCH_LIMIT} 停止并转 ask。
+ * 失败分片按指数退避间隔重派，避免每轮调度都拉起新进程；连续失败到 {@link REDISPATCH_LIMIT} 停止并转 ask。
  * `CAPITALIST_RETRY_DELAYS_MS`（逗号分隔，毫秒）可整段替换阶梯，用于把间隔压到毫秒级做自动化验证；
  * 未给时按基数 × 倍数生成：`CAPITALIST_RETRY_BASE_MS`（缺省 60000）、
  * `CAPITALIST_RETRY_FACTOR`（缺省 2，须大于 1），单次封顶 `CAPITALIST_RETRY_MAX_MS`（缺省 240000）。
@@ -462,7 +473,7 @@ function failDispatchAndJudge(
       stage: d.stage,
       shard: d.shard ?? "",
     });
-    out(`[监工] 派单 ${d.id} 判定失败：${AUTH_REQUIRED_TEXT}，不重派`);
+    detail(`[监工] 派单 ${d.id} 判定失败：${AUTH_REQUIRED_TEXT}，不重派`);
     return true;
   }
 
@@ -479,9 +490,9 @@ function failDispatchAndJudge(
    * 后续派单与判定时作为硬约束注入。
    */
   if (attempts >= 2) rememberLesson(root, note, d.id);
-  enqueueRetryJudgement(root, { ...d, note }, chain, attempts, out);
+  enqueueRetryJudgement(root, { ...d, note }, chain, attempts, detail);
   /* `failDispatchAndJudge` 是所有判定失败路径的唯一出口，失败沿树传导只在此触发。 */
-  if (attempts >= REDISPATCH_LIMIT) cascadeFailure(root, { ...d, note }, attempts, out);
+  if (attempts >= REDISPATCH_LIMIT) cascadeFailure(root, { ...d, note }, attempts, detail);
   return true;
 }
 
@@ -520,7 +531,7 @@ function cascadeFailure(
     const w = loadWorker(root, wid);
     if (!w) continue;
     if (w.status !== "running" && w.status !== "starting") continue;
-    killJudgedWorker(root, w, true, out);
+    killJudgedWorker(root, w, true, detail);
     saveWorker(root, { ...w, status: "failed" });
     stopped.push(w.id);
   }
@@ -549,14 +560,14 @@ function cascadeFailure(
     nodes: victims,
     stopped_workers: stopped,
   });
-  out(
+  detail(
     `[监工] ${failed.id} 连续失败 ${attempts} 次（上限 ${REDISPATCH_LIMIT}）：` +
       `子树 ${victims.length} 个节点级联判为失败、不再重试` +
       `${stopped.length > 0 ? `；已停止运行中的进程 ${stopped.join("、")}` : ""}`,
   );
 
   /* 诊断父节点失败原因，见 handleBrokenParent。 */
-  handleBrokenParent(root, failed, attempts, victims, out);
+  handleBrokenParent(root, failed, attempts, victims, detail);
   return victims;
 }
 
@@ -580,7 +591,7 @@ interface Diagnosis {
 }
 
 /**
- * 判定失败原因的规则表。此步位于 `failDispatchAndJudge` 的同步路径上，调模型会拖住整个 调度轮次，
+ * 判定失败原因的规则表。此步位于 `failDispatchAndJudge` 的同步路径上，调模型会拖住整个调度轮次，
  * 故先按关键词匹配；无法识别的转模型或人工。
  */
 const FAILURE_RULES: Array<{ cause: FailureCause; re: RegExp; fixable: boolean; summary: string }> = [
@@ -594,7 +605,7 @@ const FAILURE_RULES: Array<{ cause: FailureCause; re: RegExp; fixable: boolean; 
     cause: "denied",
     re: /\b40[13]\b|unauthorized|forbidden|permission denied|not permitted|invalid api key|被拒|无权限|拒绝访问|认证失败/i,
     fixable: false,
-    summary: "被拒（权限或凭证）：监工改不了这件事，需要人确认账号、凭证或授权范围",
+    summary: "被拒（权限或凭证）：监工无法自行处理，需人工确认账号、凭证或授权范围",
   },
   {
     /*
@@ -698,7 +709,7 @@ function handleBrokenParent(
   });
 
   if (!dg.fixable) {
-    escalateCascade(root, failed, dg, dg.summary, out);
+    escalateCascade(root, failed, dg, dg.summary, detail);
     return;
   }
 
@@ -709,12 +720,12 @@ function handleBrokenParent(
       failed,
       dg,
       `${dg.summary}；但这棵子树已自动重置过 ${resets} 次仍然失败，说明原因判断不成立`,
-      out,
+      detail,
     );
     return;
   }
 
-  resetSubtree(root, failed, victims, dg, resets + 1, out);
+  resetSubtree(root, failed, victims, dg, resets + 1, detail);
 }
 
 /**
@@ -779,7 +790,7 @@ function resetSubtree(
     resets,
     nodes: victims,
   });
-  out(
+  detail(
     `[监工] ${failed.id} 的失败原因可修（${dg.cause}：${dg.summary}）：` +
       `重置子树重跑 -> ${nextId}（第 ${resets} 次自动重置），子树 ${victims.length} 个节点重开`,
   );
@@ -831,7 +842,7 @@ function escalateCascade(
     evidence: dg.evidence,
     why,
   });
-  out(`[监工] ${failed.id} 的失败原因无法处理（${dg.cause}：${why}）：已登记待裁决并标阻塞，等人工检查`);
+  detail(`[监工] ${failed.id} 的失败原因无法处理（${dg.cause}：${why}）：已登记待裁决并标阻塞，等人工检查`);
 }
 
 /** 重试判定的异步池（与 triage 分开：两个池子各自限流，不互相排队）。 */
@@ -878,8 +889,8 @@ function enqueueRetryJudgement(
         attempts,
         why: `${dg.summary}｜${dg.evidence}`,
       });
-      out(`[监工] 第 ${attempts} 次失败命中不可自愈原因（${dg.cause}）：${dg.summary}`);
-      out(`[监工] 暂不重派。原因消除后重开这一单：capitalist retry ${d.id}`);
+      detail(`[监工] 第 ${attempts} 次失败命中不可自愈原因（${dg.cause}）：${dg.summary}`);
+      detail(`[监工] 暂不重派。原因消除后重开这一单：capitalist retry ${d.id}`);
       return;
     }
     const verdict = await judgeRetry(root, d, chain, attempts);
@@ -894,7 +905,7 @@ function enqueueRetryJudgement(
         why: verdict.why,
         fallback: verdict.fallback === true,
       });
-      out(`[监工] 核对卡点未消除，暂不重派（第 ${attempts} 次失败后）：${verdict.why}`);
+      detail(`[监工] 核对卡点未消除，暂不重派（第 ${attempts} 次失败后）：${verdict.why}`);
       return;
     }
     if (verdict.decision === "give_up") {
@@ -907,7 +918,7 @@ function enqueueRetryJudgement(
         why: verdict.why,
         fallback: verdict.fallback === true,
       });
-      out(`[监工] 判定不再重试（第 ${attempts} 次失败后）：${verdict.why}`);
+      detail(`[监工] 判定不再重试（第 ${attempts} 次失败后）：${verdict.why}`);
       return;
     }
     patchDispatch(root, d.id, { retry_verdict: "retry", retry_why: verdict.why } as Partial<Dispatch>);
@@ -919,7 +930,7 @@ function enqueueRetryJudgement(
       why: verdict.why,
       fallback: verdict.fallback === true,
     });
-    out(`[监工] 判定可重试（第 ${attempts} 次失败）：${verdict.why}`);
+    detail(`[监工] 判定可重试（第 ${attempts} 次失败）：${verdict.why}`);
   });
   pumpRetry();
 }
@@ -999,7 +1010,7 @@ async function judgeRetry(
   }
   const give = r.actions.find((a) => a.name === "give_up");
   const hold = r.actions.find((a) => a.name === "hold");
-  const why = String(r.actions[0]?.why ?? "").slice(0, 200) || "(模型未给理由)";
+  const why = String(r.actions[0]?.why ?? "").slice(0, 200) || "（模型未给出理由）";
   /* hold 优先于 give_up：卡点解除后仍可重派，give_up 为终态。 */
   if (hold) return { decision: "hold", why };
   return give ? { decision: "give_up", why } : { decision: "retry", why };
@@ -1133,7 +1144,7 @@ export function coreContentHash(): string | null {
 /**
  * 启动监工进程。
  *
- * 建立任务根（`root` 下没有 `.capitalist` 时按契约新建），随后按 调度循环派单与验收。
+ * 建立任务根（`root` 下没有 `.capitalist` 时按契约新建），随后按调度循环派单与验收。
  * 返回值是进程退出码：0 表示正常结束（`once` 完成、达到 `maxTicks`、或收到停止请求），
  * 非 0 表示启动阶段失败。
  *
@@ -1169,7 +1180,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       .filter((impl) => impl.worker?.detectPriority !== undefined)
       .map((impl) => impl.worker?.key ?? impl.id);
     const curLabel = byId(cur)?.label ?? cur ?? t("unjudged", "未判定");
-    out(
+    detail(
       options.length
         ? t(`[supervisor] no worker entry found among the family of host ${curLabel}; one of these is required: ${options.join(" / ")}.`, `[监工] 当前宿主 ${curLabel} 的同族中未找到可用的工作进程入口：需要下列之一：${options.join(" / ")}。`)
         : t(`[supervisor] host ${curLabel} has no family worker entry and will not cross families: CLIs of other products do not share login state.`, `[监工] 当前宿主 ${curLabel} 没有同族的工作进程入口，且不跨族选用工作进程：其他产品族的 CLI 不共用登录态。`),
@@ -1194,8 +1205,8 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
 
   const effort = normalizeEffort(opts.workerEffort);
   if (effort.bad) {
-    out(
-      `[监工] --effort ${String(opts.workerEffort)} 不是合法档位（${EFFORT_LEVELS.join(" / ")}），按 ${effort.value} 跑。`,
+    detail(
+      `[监工] --effort ${String(opts.workerEffort)} 不是合法档位（${EFFORT_LEVELS.join(" / ")}），改用 ${effort.value} 档。`,
     );
   }
   const wopts: WorkerSpawnOpts = {
@@ -1213,7 +1224,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   if (spawnWorkers && !opts.token && tokenInjectionEnabled()) {
     const authVar = byId(chosenHost)?.worker?.authEnvVar;
     if (authVar && !officialAccessToken()) {
-      out(
+      detail(
         "[监工] 未取到宿主令牌：派单与对话会因登录状态失效中止。重新执行启动命令，在授权弹窗中选择“本次会话内始终允许”。",
       );
     }
@@ -1230,13 +1241,13 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
    * 需要强制接管时使用 --force。pid 已消失时按常规接管，并将旧租约标记为 superseded。
    */
   if (prevLease && prevLease.status === "running" && pidAlive(prevLease.pid) && !opts.force) {
-    out(
+    detail(
       t(
         `[supervisor] instance lease held: pid ${prevLease.pid}, started at ${prevLease.started_at} (.capitalist/locks/${leaseTask}.lock).`,
         `[监工] 实例租约被持有：pid ${prevLease.pid}，启动于 ${prevLease.started_at}（.capitalist/locks/${leaseTask}.lock）。`,
       ),
     );
-    out(
+    detail(
       t(
         "[supervisor] that process is still running; not taking over. To force a takeover: run capitalist supervise-stop first, or use --force.",
         "[监工] 该进程仍在运行，不接管。需要强制接管时：先执行 capitalist supervise-stop，或使用 --force。",
@@ -1255,7 +1266,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     pidAlive(existing.pid) &&
     !opts.force
   ) {
-    out(
+    detail(
       t(
         `[supervisor] already running (pid ${existing.pid}, tick ${existing.ticks}). Before taking over: capitalist supervise-stop, or --force.`,
         `[监工] 已有监工在运行（pid ${existing.pid}，第 ${existing.ticks} 轮）。接管前执行 capitalist supervise-stop，或加 --force。`,
@@ -1275,7 +1286,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     out(boot.message);
     return 1;
   }
-  if (boot.created) out(t(`[supervisor] task root created: ${opts.root}`, `[监工] 已建任务根：${opts.root}`));
+  if (boot.created) detail(t(`[supervisor] task root created: ${opts.root}`, `[监工] 已建任务根：${opts.root}`));
 
   const myLease = newInstanceLease(process.pid, Math.max(tickSec * 3, 30));
   if (prevLease && prevLease.status === "running" && pidAlive(prevLease.pid)) {
@@ -1293,7 +1304,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       superseded_by: myLease.instance_id,
       forced: opts.force === true,
     });
-    out(
+    detail(
       t(
         `[supervisor] previous instance ${prevLease.instance_id} (pid ${prevLease.pid}) heartbeat timed out; marked superseded and taking over`,
         `[监工] 旧实例 ${prevLease.instance_id}（pid ${prevLease.pid}）心跳已超时，标记 superseded 并接管`,
@@ -1310,7 +1321,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       const r = workspace.prepare(opts.root);
       if (r.added) out(t(`[supervisor] ${r.message}`, `[监工] ${r.message}`));
       else if (!r.ok)
-        out(
+        detail(
           t(
             `[supervisor] workspace not fully prepared (startup not affected, but the host may stop at a confirmation page): ${r.message}`,
             `[监工] 工作区准备未完成（不影响启动，但可能停在确认页）：${r.message}`,
@@ -1423,7 +1434,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   detail(
     `[监工] 工作进程：${spawnWorkers ? `${chosenHost}（自动拉起）` : "外部会话 capitalist next 领单"} ｜ 并行 ${capacity0} 个`,
   );
-  detail(`[监工] 每 ${tickSec} 秒检查一次；工作进程超过 ${workerTimeoutSec} 秒没有动静判为卡住。Ctrl-C 停止。`);
+  detail(`[监工] 每 ${tickSec} 秒检查一次；工作进程超过 ${workerTimeoutSec} 秒无进展即判为卡住。Ctrl-C 停止。`);
   if (spawnWorkers) {
     detail("[监工] 工作进程沿用宿主登录态，认证由宿主 CLI 完成");
     if (wopts.visible) detail("[监工] 启动方式：可见窗口（每个 worker 独占一个控制台，卡点直接可见）");
@@ -1524,7 +1535,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     } else {
       try {
         const served = await serveBoardNow(loaded.serve, true);
-        out(t(`[supervisor] board ${served.url}`, `[监工] 看板 ${served.url}`));
+        detail(t(`[supervisor] board ${served.url}`, `[监工] 看板 ${served.url}`));
         boardStamp = boardBuildStamp()?.stamp ?? null;
         /* 记下启动时的 core 指纹：热重载不换 core，core 变化须拦下热重载。 */
         coreHashAtBoot = coreContentHash();
@@ -1544,7 +1555,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     const nowCore = coreContentHash();
     if (nowCore && coreHashAtBoot && nowCore !== coreHashAtBoot) {
       boardStamp = next.stamp;
-      out(
+      detail(
         t(
           "[supervisor] board not hot-reloaded: this build changed core; hot reload would pair the new board with the old core (API would 500). " +
             "The board keeps the version from startup; restart the supervisor to load the new one.",
@@ -1552,7 +1563,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
             "看板继续用启动时那一版；重启监工后加载新版本。",
         ),
       );
-      /* 该判断每轮调度 命中，按 key 节流以免占满异常窗口；累计次数进 `repeat`。 */
+      /* 该判断每轮调度命中，按 key 节流以免占满异常窗口；累计次数进 `repeat`。 */
       recordEventThrottled(
         opts.root,
         "board_reload_blocked",
@@ -1565,7 +1576,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     if (!loaded.ok) {
       // 新产物加载失败：旧 server 未动，继续服务；同名构建不重复刷新。
       boardStamp = next.stamp;
-      out(
+      detail(
         t(
           `[supervisor] board not restarted on the new build; keeping the old version: ${loaded.message}`,
           `[监工] 看板未按新构建重启，继续用旧版：${loaded.message}`,
@@ -1579,7 +1590,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       boardRef.serving = null;
       const served = await serveBoardNow(loaded.serve, false);
       boardStamp = next.stamp;
-      out(
+      detail(
         t(
           `[supervisor] board restarted on the new build (port ${served.port})`,
           `[监工] 看板已按新构建重启（端口 ${served.port}）`,
@@ -1594,7 +1605,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       if (fallback) {
         try {
           await serveBoardNow(fallback, false);
-          out(
+          detail(
             t(
               `[supervisor] board not restarted on the new build; keeping the old version (port ${boardRef.serving?.port ?? oldPort}): ${message}`,
               `[监工] 看板未按新构建重启，继续用旧版（端口 ${boardRef.serving?.port ?? oldPort}）：${message}`,
@@ -1609,13 +1620,13 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     }
   };
 
-  // 热加载状态：跨 调度轮次 保留上一份契约，用于判变化与解析失败时回落。
+  // 热加载状态：跨调度轮次保留上一份契约，用于判变化与解析失败时回落。
   let hot: { file: string; mtimeMs: number; hash: string; contract: Contract } | null = null;
-  // 需求层违规的拒绝签名，避免每个 调度轮次 重复 ask。
+  // 需求层违规的拒绝签名，避免每个调度轮次重复 ask。
   let lastRefusalSig: string | null = null;
-  /* 同一段契约错误只报一次：按 调度轮次 重读会每几秒报一遍，台账和看板都受不了。 */
+  /* 同一段契约错误只报一次：随调度轮次重读会每几秒报一遍，台账与看板无法承受。 */
   let lastContractError: string | null = null;
-  // 最近几个 调度轮次 的变更计数，用于“契约本身不稳定”提示。
+  // 最近几个调度轮次的变更计数，用于“契约本身不稳定”提示。
   let recentChangeTicks: number[] = [];
   // 面板调度指令 `concurrency` 的运行时覆盖值只活在本进程，重启后回到 --workers，不作为长期配置。
   let concurrencyOverride: number | null = null;
@@ -1642,7 +1653,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   });
   registerDisposer("workers", () => {
     // `--once` 只跑一轮判定，工作进程须继续做完当前派单。
-    if (!opts.once) terminateWorkers(opts.root, out);
+    if (!opts.once) terminateWorkers(opts.root, detail);
   });
   registerDisposer("guard", () => {
     /* 正常退出时停掉守护：工作进程已回收，守护继续运行会重复回收并写冗余记录。 */
@@ -1674,10 +1685,10 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     out(t(`[supervisor] failed to prune worker records (startup not affected): ${errText(err)}`, `[监工] 回收 worker 记录失败（不影响启动）：${errText(err)}`));
   }
 
-  // 进 调度循环前回收上一轮遗留的工作进程：被强杀的监工不执行信号处理器，detached 工作进程
+  // 进入调度循环前回收上一轮遗留的工作进程：被强杀的监工不执行信号处理器，detached 工作进程
   // 不会随父进程退出，故派单前先清孤儿，避免新旧进程处理同一单。归属不明的不处理。
   try {
-    const reaped = reapOrphans(opts.root, out);
+    const reaped = reapOrphans(opts.root, detail);
     if (reaped.length > 0) {
       detail(`[监工] 启动清理：回收 ${reaped.length} 个上一轮遗留的 worker（事件 worker_reaped 已入台账）`);
     }
@@ -1685,7 +1696,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     out(t(`[supervisor] failed to reap orphan processes (startup not affected): ${errText(err)}`, `[监工] 清理孤儿进程失败（不影响启动）：${errText(err)}`));
   }
 
-  // 首 调度轮次 前修复存量台账结构：重派与重试会给同一件事留下多行，`parent` 只在建单时写一次，
+  // 首个调度轮次前修复存量台账结构：重派与重试会给同一件事留下多行，`parent` 只在建单时写一次，
   // 会形成互不相连的根。未完工单超过一张且全无父节点时按正文归组重建（判据见 `looksFlat`），只跑一次。
   try {
     const rebuilt = autoRebuild(opts.root);
@@ -1710,7 +1721,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
             : `[监工] 守护进程已运行中（pid ${g.pid}），沿用`,
         );
       } else {
-        out(
+        detail(
           t(
             "[supervisor] guard daemon not started (entry path unknown): if this process is force killed, workers can only be reaped on the next startup",
             "[监工] 守护进程未启动（取不到入口路径）：强制终止本进程后工作进程只能等下次启动清理孤儿",
@@ -1723,10 +1734,10 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   }
 
   const limit = opts.once ? 1 : (opts.maxTicks ?? Number.POSITIVE_INFINITY);
-  /** hook 自检的上次时间戳，节流用。声明在循环外，跨 调度轮次 保留。 */
+  /** hook 自检的上次时间戳，节流用。声明在循环外，跨调度轮次保留。 */
   let lastHookHeal = 0;
 
-  // 阶段卡死检测状态，跨 调度轮次 保留。
+  // 阶段卡死检测状态，跨调度轮次保留。
   /**
    * 在途签名含派单状态与工作进程日志字节数：长任务不换派单状态属正常，但日志在增长即视为推进，不判卡死；签名一变即重新计数。
    */
@@ -1772,7 +1783,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       rec = { ...rec, heartbeat_at: new Date().toISOString(), heartbeat_ts: Date.now() / 1000 };
       /*
        * `rec` 是启动时的内存快照，看板通过 /api/capitalist-command 改的是磁盘 supervisor.json。
-       * 每轮调度 用内存快照整份写回会覆盖外部改的 supervisor_model，故只从磁盘同步该字段与上下文上限，
+       * 每轮调度用内存快照整份写回会覆盖外部改的 supervisor_model，故只从磁盘同步该字段与上下文上限，
        * 其余字段以监工内存为准；仅在磁盘有新值时同步，避免旧记录覆盖。
        */
       const diskRec = loadSupervisor(opts.root);
@@ -1804,7 +1815,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       }
 
       if (stopRequested(opts.root)) {
-        /* 有在途任务时排空式停止：先停派单，等手里的活自然结束后再退；--force 立即退出。 */
+        /* 有在途任务时排空式停止：先停派单，等在途任务结束后再退；--force 立即退出。 */
         const live = listWorkers(opts.root).filter((w) => w.status === "running");
         if (live.length > 0 && !stopForced(opts.root)) {
           if (!readPause(opts.root)) {
@@ -1814,7 +1825,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
               by: "supervisor",
             });
             recordEvent(opts.root, "stop_pending", { running: live.map((w) => w.id) });
-            out(
+            detail(
               t(
                 `[supervisor] stop requested: ${live.length} dispatch(es) still running (#${live
                   .map((w) => w.id)
@@ -1843,7 +1854,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       }
 
       /*
-       * 待命：任务已完工，没有任何在途环节。不评估门槛、不重读契约、不派单、不记 调度轮次，
+       * 待命：任务已完工，没有任何在途环节。不评估门槛、不重读契约、不派单、不记调度轮次，
        * 只刷新心跳与看板服务；进程保持在线，等待用户派单，不自行退出。
        * 面板指令仍需消费：用户点击“派单”时无其他调度方处理该派单。
        */
@@ -1868,14 +1879,13 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
             contract: hot?.contract ?? contract0,
             state,
             wopts,
-            concurrency: concurrencyOverride,
-            out,
+            concurrency: concurrencyOverride, out: detail,
           });
         } finally {
           clearInterval(beat);
         }
         concurrencyOverride = standbyDirect.concurrency;
-        /* 指令可能刚派了单：这一轮转回正常调度，不在下一轮调度 才处理该派单。 */
+        /* 指令可能刚派了单：这一轮转回正常调度，不在下一轮调度才处理该派单。 */
         if (!hasPendingWork(opts.root, hot?.contract ?? contract0, loadState(opts.root) ?? state)) {
           /* 待命轮次使用 continue，该分支同样需要处理信号退出。 */
           if (stopping) break;
@@ -1888,17 +1898,17 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       }
       rec = { ...rec, ticks: rec.ticks + 1 };
 
-      // 调度轮次 记录进台账供面板统计“过去 1 分钟 N 个 调度轮次”；该数只能由逐 调度轮次 记录得出，
+      // 轮次记录进台账，供面板统计“过去 1 分钟 N 轮”；该数只能逐轮累加得出，
       // 心跳间隔在暂停与重载时不准。记录只含序号与阶段，不参与 FEED_EVENTS。
       recordEvent(opts.root, "supervisor_tick", { n: rec.ticks, stage: state.stage });
 
       /* 暂停时停掉运行中进程并把派单退回 open，恢复后按原样重派；排在 step 之前，step 负责不再派新单。 */
-      if (readPause(opts.root)) stopWorkersForPause(opts.root, out);
+      if (readPause(opts.root)) stopWorkersForPause(opts.root, detail);
 
       // 收件箱自检：畸形记录不参与调度但要可见（同一批只报一次）；须排在 step 之前，两者读同一份台账。
-      warnIgnoredInbox(opts.root, out);
+      warnIgnoredInbox(opts.root, detail);
 
-      // 契约热加载：每轮调度 重读，按 mtime 与哈希判变化。
+      // 契约热加载：每轮调度重读，按 mtime 与哈希判变化。
       let reloaded;
       try {
         reloaded = reloadContract(state.contract, skillDirs(), hot ?? undefined, state.contract_path);
@@ -1914,7 +1924,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         if (reloaded.error !== lastContractError) {
           lastContractError = reloaded.error;
           recordEvent(opts.root, "contract_error", { error: reloaded.error, kept: reloaded.contract.name });
-          out(
+          detail(
             t(
               `[supervisor] failed to parse the task list; keeping the last usable one: ${reloaded.error}`,
               `[监工] 任务列表解析失败，沿用上一份可用任务列表：${reloaded.error}`,
@@ -1942,7 +1952,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
                 "任务列表改动触及需求层（删除需求条目或降低验收标准），监工拒绝采用并转交裁决",
                 `违反项：${violations.map((v) => `${v.kind}:${v.stage ?? ""}:${v.detail}`).join("; ")}`,
               );
-              out(
+              detail(
                 t(
                   `[supervisor] requirement layer changed (${violations.map((v) => v.kind).join(", ")}); rejected and escalated to the operator`,
                   `[监工] 检测到需求层被改动（${violations.map((v) => v.kind).join("、")}），拒绝采用，转交操作者裁决`,
@@ -1992,15 +2002,15 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
             rec = { ...rec, contract: reloaded.contract.name };
             contract = reloaded.contract;
             lastRefusalSig = null;
-            // 连续三个 同一轮调度内变更超过三次时提示契约不稳定。
+            // 同一轮调度内变更超过三次时提示契约不稳定。
             recentChangeTicks.push(rec.ticks);
             recentChangeTicks = recentChangeTicks.filter((t) => rec.ticks - t <= 3);
             if (recentChangeTicks.length > 3) {
               recordEvent(opts.root, "contract_unstable", { changes_in_3_ticks: recentChangeTicks.length });
-              out(
+              detail(
                 t(
                   "[supervisor] more than 3 changes within 3 ticks; the task list may be unstable",
-                  "[监工] 连续 3 个 tick 内变更超过 3 次，任务列表可能不稳定",
+                  "[监工] 连续 3 轮调度内变更超过 3 次，任务列表可能不稳定",
                 ),
               );
             }
@@ -2034,24 +2044,23 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
           to: fb,
           reason: "阶段 id 在当前任务列表中不存在",
         });
-        out(
+        detail(
           t(
             `[supervisor] current stage ${state.stage} is not in the task list; falling back to the first unmet stage ${fb}`,
             `[监工] 当前阶段 ${state.stage} 不在任务列表中，改用首个未达标阶段 ${fb}`,
           ),
         );
         updateState(opts.root, (s) => enterStage(s, stageById(contract, fb)!));
-        supersedeStaleDispatches(opts.root, contract, fb, out);
+        supersedeStaleDispatches(opts.root, contract, fb, detail);
       }
 
-      // 面板调度指令每轮调度 开头读一次，须排在并行度与 pause 读取之前，使 concurrency 与 pause/resume 本 调度轮次 生效。
+      // 面板调度指令每轮调度开头读一次，须排在并行度与 pause 读取之前，使 concurrency 与 pause/resume 本轮生效。
       const direct = await applySupervisorDirectives({
         root: opts.root,
         contract,
         state: loadState(opts.root) ?? state,
         wopts,
-        concurrency: concurrencyOverride,
-        out,
+        concurrency: concurrencyOverride, out: detail,
       });
       concurrencyOverride = direct.concurrency;
 
@@ -2069,7 +2078,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
           const { ensureHooks } = await import("../install/install");
           const healed = ensureHooks([chosenHost], opts.root);
           if (healed.installed.length > 0) {
-            out(`[监工] 已补装 hook：${healed.installed.join("、")}（缺了 worker 就续不了心跳）`);
+            detail(`[监工] 已补装 hook：${healed.installed.join("、")}（hook 缺失时心跳无法续写）`);
           }
           for (const f of healed.failed) out(`[监工] hook 补装失败（${f.id}）：${f.message}`);
         } catch {
@@ -2080,14 +2089,13 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       /* 顺序：先刷新会话占用，再回收、再填槽；占用未落盘时闸门读不到实时读数。 */
       refreshLaneUsage(opts.root, readDispatches(opts.root));
 
-      await reap(opts.root, workerTimeoutSec, out, stuckSec);
+      await reap(opts.root, workerTimeoutSec, detail, stuckSec);
 
       /* 消费申报排在 reap 之后：先确认已判定失败进程，再处理存活进程的申报，避免依据过期局面裁决。 */
       await consumeMq({
         root: opts.root,
         contract,
-        state: loadState(opts.root) ?? state,
-        out,
+        state: loadState(opts.root) ?? state, out: detail,
       });
 
       /*
@@ -2099,8 +2107,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         await judgeGuardRequests({
           root: opts.root,
           contract,
-          state: loadState(opts.root) ?? state,
-          out,
+          state: loadState(opts.root) ?? state, out: detail,
         });
       }
 
@@ -2112,7 +2119,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
           shard: rd.shard ?? "",
           worker: rd.worker ?? "",
         });
-        out(
+        detail(
           `[监工] 派单 ${rd.id}（${rd.stage}/${rd.shard || "整阶段"}）等待确认超时，自动结束`,
         );
       }
@@ -2123,27 +2130,31 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
           stage: rd.stage,
           shard: rd.shard ?? "",
         });
-        out(`[监工] 派单 ${rd.id}（${rd.stage}/${rd.shard || "整阶段"}）上报后无裁决，退回重派`);
+        detail(`[监工] 派单 ${rd.id}（${rd.stage}/${rd.shard || "整阶段"}）上报后无裁决，退回重派`);
       }
 
       // 暂停时不派新单；心跳、判定失败回收与已完成派单的结算照常。停派原因由状态行说明。
       const pause = readPause(opts.root);
 
       // 模型启动失败回退会补开新派单，暂停期间一并停掉。
-      if (!pause) handleModelFallback(opts.root, contract, chosenHost, wopts, out);
-      /* 复验单须先入队，排在本 调度轮次 的 step 之前，使在途状态阻止阶段推进。 */
+      if (!pause) handleModelFallback(opts.root, contract, chosenHost, wopts, detail);
+      /* 复验单须先入队，排在本轮调度的 step 之前，使在途状态阻止阶段推进。 */
       /* 契约文件被外部改动时按 mtime 留痕并播报。 */
       if (!pause) {
         const cc = noteContractChange(opts.root);
         if (cc) {
-          out(
-            `[监工] 契约文件已更新（${cc.from.slice(0, 16).replace("T", " ")} -> ${cc.to.slice(0, 16).replace("T", " ")}` +
-              `${cc.gap_hours === null ? "" : `，间隔 ${cc.gap_hours} 小时`}），已按新内容重读`,
+          detail(
+            t(
+              `[supervisor] contract file changed (${cc.from.slice(0, 16).replace("T", " ")} -> ${cc.to.slice(0, 16).replace("T", " ")})` +
+                `${cc.gap_hours === null ? "" : `, ${cc.gap_hours}h apart`}; reloaded with the new content`,
+              `[监工] 契约文件已更新（${cc.from.slice(0, 16).replace("T", " ")} -> ${cc.to.slice(0, 16).replace("T", " ")}` +
+                `${cc.gap_hours === null ? "" : `，间隔 ${cc.gap_hours} 小时`}），已按新内容重读`,
+            ),
           );
           recordEvent(opts.root, "contract_changed", { from: cc.from, to: cc.to, gap_hours: cc.gap_hours });
         }
       }
-      if (!pause) applyResumePlan(opts.root, state.stage, out);
+      if (!pause) applyResumePlan(opts.root, state.stage, detail);
       /*
        * 上下文占比达阈值时自动重载，复用 capitalist reload 链路；暂停期间不触发。
        * 未完成条目按快照记录的原始下发顺序恢复，不按任务编号排序（编号表身份，不表次序）。
@@ -2151,12 +2162,11 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       if (!pause) {
         const ctxCheck = shouldAutoReload(opts.root);
         if (ctxCheck.hit) {
-          out(`[监工] 对话上下文超限，自动重载：${ctxCheck.reason}`);
+          detail(`[监工] 对话上下文超限，自动重载：${ctxCheck.reason}`);
           try {
             /* holdSec 须覆盖看板轮询周期与接口缓存时长，否则“重载中”状态不可见。 */
             const summary = await beginReload(opts.root, contract, {
-              holdSec: 3,
-              out,
+              holdSec: 3, out: detail,
               trigger: "context_overflow",
             });
             recordEvent(opts.root, "supervisor_reload_auto", {
@@ -2166,14 +2176,14 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
               reverify: summary.reverify,
               pending: summary.pending,
             });
-            out(
+            detail(
               t(
                 `[supervisor] auto reload finished (gen ${summary.gen}); scheduling continues in the original order`,
                 `[监工] 自动重载完成 gen ${summary.gen}：调度按原始下发顺序继续`,
               ),
             );
           } catch (err) {
-            out(
+            detail(
               t(
                 `[supervisor] auto reload failed (will retry next tick): ${String((err as Error).message ?? err)}`,
                 `[监工] 自动重载失败（下一轮重试）：${String((err as Error).message ?? err)}`,
@@ -2187,8 +2197,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         contract,
         chosenHost,
         capacity,
-        wopts,
-        out,
+        wopts, detail,
         pause !== null,
         opts.autoDispatch === true,
       );
@@ -2203,10 +2212,10 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       const inFlightNow = inFlightCount(opts.root);
       if (inFlightNow === 0 && prevInFlight > 0 && !summaryRunning) {
         summaryRunning = true;
-        void summarizeRun(opts.root, out)
+        void summarizeRun(opts.root, detail)
           .catch(
             (err) =>
-              out(
+              detail(
                 t(
                   `[supervisor] failed to write the run summary: ${String((err as Error).message ?? err)}`,
                   `[监工] 结束总结失败：${String((err as Error).message ?? err)}`,
@@ -2219,7 +2228,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       }
       prevInFlight = inFlightNow;
 
-      // 阶段卡死判据：在途签名（派单 id/状态 + 工作进程日志字节数）连续 {@link STALL_TICKS} 个 调度轮次 未变。
+      // 阶段卡死判据：在途签名（派单 id/状态 + 工作进程日志字节数）连续 {@link STALL_TICKS} 个调度轮次未变。
       // 签名含日志增量，运行时长不计入卡死判定。
       if (!pause) {
         const stall = stageProgress(opts.root, contract);
@@ -2235,7 +2244,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
               reportStageStalled(opts.root, stall, stallTicks, tickSec);
             }
             // 超过 2 倍工作进程超时仍未结束的单强制结束重派，不占退避窗口；先报告 stall 再处置。
-            forceFinishHung(opts.root, workerTimeoutSec * 2, out);
+            forceFinishHung(opts.root, workerTimeoutSec * 2, detail);
           }
         }
       }
@@ -2247,7 +2256,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
          */
         if (!doneAnnounced) {
           doneAnnounced = true;
-          out(
+          detail(
             t(
               "[supervisor] final stage met: task complete; supervisor standing by (no dispatching, no polling)",
               "[监工] 最后阶段已达标：任务完成，监工待命在线（不派单、不轮询）",
@@ -2320,7 +2329,7 @@ function stageParallel(contract: Contract, stageId: string): StageParallel[] {
 
 /**
  * 取分片在契约中的当前 action；分片不在契约里时返回 null。
- * 重派一律以它为准，不读派单快照或本 调度轮次 早先的 shard 对象：契约热加载后两者可能过期。
+ * 重派一律以它为准，不读派单快照或本调度轮次早先的 shard 对象：契约热加载后两者可能过期。
  */
 function contractShardAction(contract: Contract, stageId: string, shardId: string): string | null {
   if (!shardId) return null;
@@ -2350,7 +2359,7 @@ function killJudgedWorker(root: string, w: WorkerRecord, stale: boolean, out: (s
     confirmed,
     stale,
   });
-  out(
+  detail(
     `[监工] worker ${w.id}（pid ${w.pid}）已${how === "term" ? "软终止" : how === "kill" ? "强杀" : "终止但未确认退出"}${
       confirmed ? "" : "可能有残留进程，需人工核查"
     }`,
@@ -2420,7 +2429,7 @@ export async function handleStuckWorker(
         kind: w.stuck.kind,
         attempts: w.stuck.attempts,
       });
-      out(`[监工] worker ${w.id} 已恢复推进（${w.stuck.label}解除），卡点标记清除`);
+      detail(`[监工] worker ${w.id} 已恢复推进（${w.stuck.label}解除），卡点标记清除`);
     }
     return "kept";
   }
@@ -2451,7 +2460,7 @@ export async function handleStuckWorker(
         kind: prev.kind,
         attempts: prev.attempts,
       });
-      out(`[监工] 给 worker ${w.id} 的卡点指导已被领取（${prev.label}，第 ${prev.attempts} 次）`);
+      detail(`[监工] 给 worker ${w.id} 的卡点指导已被领取（${prev.label}，第 ${prev.attempts} 次）`);
     }
   }
 
@@ -2470,7 +2479,7 @@ export async function handleStuckWorker(
       });
       if (verdict.reviewed && !verdict.kill) {
         saveWorker(root, { ...w, stuck: { ...prev, last_at: new Date(nowMs).toISOString() } });
-        out(`[监工] worker ${w.id} 重复度高但模型判断仍在推进（${verdict.why}），暂不判定失败`);
+        detail(`[监工] worker ${w.id} 重复度高但模型判断仍在推进（${verdict.why}），暂不判定失败`);
         return "kept";
       }
     }
@@ -2483,9 +2492,9 @@ export async function handleStuckWorker(
             ? "hook 通道，工作进程未领取"
             : "写入失败"
       }）。`;
-    killJudgedWorker(root, w, true, out);
+    killJudgedWorker(root, w, true, detail);
     saveWorker(root, { ...w, status: "failed", stuck: prev });
-    failDispatchAndJudge(root, d, note, out);
+    failDispatchAndJudge(root, d, note, detail);
     recordEvent(root, "stuck_killed", {
       worker: w.id,
       dispatch: d.id,
@@ -2498,7 +2507,7 @@ export async function handleStuckWorker(
       heartbeat_age_sec: live.heartbeat_age_sec,
       log_idle_sec: live.log_idle_sec,
     });
-    out(`[监工] worker ${w.id} 判卡死（${ev.label}，指导 ${prev.attempts} 次未生效），停进程并重开派单 ${d.id}`);
+    detail(`[监工] worker ${w.id} 判卡死（${ev.label}，指导 ${prev.attempts} 次未生效），停进程并重开派单 ${d.id}`);
     return "killed";
   }
 
@@ -2557,13 +2566,13 @@ export async function handleStuckWorker(
     channel: state.channel,
     text: text.slice(0, 400),
   });
-  out(
+  detail(
     `[监工] worker ${w.id} 判为卡点（${ev.label}）：心跳 ${live.heartbeat_age_sec}s、` +
       `日志 ${live.log_idle_sec < 0 ? "无" : `${live.log_idle_sec}s`} 无更新；` +
       `已下发第 ${attempts} 次指导（${delivered ? "hook 通道，等待领取" : "写入失败，需人工介入"}）`,
   );
   if (!delivered) {
-    out(`[监工] 指导未送达 worker ${w.id}：看板任务卡已标注卡点与建议，需人工介入`);
+    detail(`[监工] 指导未送达 worker ${w.id}：看板任务卡已标注卡点与建议，需人工介入`);
   }
   return "kept";
 }
@@ -2623,7 +2632,7 @@ async function reap(
   const { reclaimed } = reapFileLocks(root);
   for (const r of reclaimed) {
     recordEvent(root, "lock_reclaimed", { path: r.path, holder: r.holder, why: r.why });
-    out(`[监工] 回收文件锁 ${r.path}（${r.holder}：${r.why}）`);
+    detail(`[监工] 回收文件锁 ${r.path}（${r.holder}：${r.why}）`);
   }
 
   for (const w of listWorkers(root)) {
@@ -2646,8 +2655,7 @@ async function reap(
       const act = await handleStuckWorker(root, w, {
         heartbeatSec: timeoutSec,
         stuckSec,
-        nowSec,
-        out,
+        nowSec, out: detail,
         ...(looped ? { looped } : {}),
       });
       if (act !== "reap") continue;
@@ -2656,7 +2664,7 @@ async function reap(
     }
 
     // 先结束进程并确认退出，再落终态。
-    killJudgedWorker(root, w, stale, out);
+    killJudgedWorker(root, w, stale, detail);
 
     const status = gone ? "exited" : "failed";
     saveWorker(root, { ...w, status, exit_code: gone ? 0 : undefined });
@@ -2672,12 +2680,12 @@ async function reap(
           used: bad,
           note: "宿主没有按 --model 执行，实际用到了禁用名单里的模型",
         });
-        out(`[监工] worker ${w.id} 实际使用了禁用模型：${bad.join("、")}`);
+        detail(`[监工] worker ${w.id} 实际使用了禁用模型：${bad.join("、")}`);
       }
     } catch {
       /* 核对失败不影响收尾。 */
     }
-    out(`[监工] worker ${w.id} ${gone ? "已退出" : "心跳超时"}，回收`);
+    detail(`[监工] worker ${w.id} ${gone ? "已退出" : "心跳超时"}，回收`);
   }
 
   for (const d of readDispatches(root)) {
@@ -2701,14 +2709,14 @@ async function reap(
       if (live.alive) {
         if (w.status === "starting") touchWorker(root, w.id, { status: "running" });
       } else if (!w.stuck) {
-        killJudgedWorker(root, w, true, out);
+        killJudgedWorker(root, w, true, detail);
         saveWorker(root, { ...w, status: "failed" });
         reason = "worker 心跳与日志均已停滞";
       }
     }
     if (!reason) continue;
 
-    failDispatchAndJudge(root, d, reason, out);
+    failDispatchAndJudge(root, d, reason, detail);
     recordEvent(root, "dispatch_orphan", {
       dispatch: d.id,
       stage: d.stage,
@@ -2717,7 +2725,7 @@ async function reap(
       worker_status: w?.status ?? "missing",
       reason,
     });
-    out(`[监工] 派单 ${d.id}（${d.stage}/${d.shard ?? "整阶段"}）无人认领：${reason}，结束并等待重派`);
+    detail(`[监工] 派单 ${d.id}（${d.stage}/${d.shard ?? "整阶段"}）无人认领：${reason}，结束并等待重派`);
   }
 }
 
@@ -2759,13 +2767,13 @@ interface StageProgress {
   inflight: InflightSnapshot[];
   /** 当前阶段最后一张派单（不论状态）。 */
   last: { id: string; status: string; shard: string; at: string; note: string } | null;
-  /** 跨 调度轮次 的比较签名。 */
+  /** 跨调度轮次的比较签名。 */
   sig: string;
 }
 
 /**
  * 采一份阶段进展快照。签名 `sig` 只含“有无前进”的信息：派单 id 与状态、工作进程日志字节数、心跳。
- * 不含时间戳与 `age_sec`，否则每轮调度 都变，签名永不相等，卡死检测不会触发。
+ * 不含时间戳与 `age_sec`，否则每轮调度都变，签名永不相等，卡死检测不会触发。
  */
 function stageProgress(root: string, contract: Contract): StageProgress {
   const state = loadState(root);
@@ -2823,7 +2831,7 @@ function stageProgress(root: string, contract: Contract): StageProgress {
 /**
  * 报一条 stage_stalled。
  *
- * 停滞细节（阶段、停了多久、最后一张单为什么没成）只进事件台账，用 `capitalist status` /
+ * 停滞细节（阶段、停滞时长、最后一张单未完成的原因）只进事件台账，用 `capitalist status` /
  * `capitalist log` 查。不向终端输出：阶段代号与“连续多少秒没有进展”对用户没有可操作信息。
  */
 function reportStageStalled(root: string, progress: StageProgress, ticks: number, tickSec: number): void {
@@ -2857,11 +2865,11 @@ function forceFinishHung(root: string, maxAgeSec: number, out: (s: string) => vo
 
     const w = d.worker ? loadWorker(root, d.worker) : null;
     if (w && w.mode !== "visible" && (w.status === "running" || w.status === "starting")) {
-      killJudgedWorker(root, w, true, out);
+      killJudgedWorker(root, w, true, detail);
       saveWorker(root, { ...w, status: "failed" });
     }
     const note = `阶段卡死强制结束（在途 ${Math.round(age)}s > 2×worker 超时 ${maxAgeSec}s）`;
-    if (!failDispatchAndJudge(root, d, note, out)) continue;
+    if (!failDispatchAndJudge(root, d, note, detail)) continue;
     patchDispatch(root, d.id, { forced: true } as Partial<DispatchEx>);
     recordEvent(root, "dispatch_forced_finished", {
       dispatch: d.id,
@@ -2872,7 +2880,7 @@ function forceFinishHung(root: string, maxAgeSec: number, out: (s: string) => vo
       limit_sec: maxAgeSec,
       reason: "stage_stalled",
     });
-    out(
+    detail(
       t(
         `[supervisor] dispatch ${d.id} (${d.stage}/${d.shard || "whole stage"}) in flight ${Math.round(age)}s; finished forcibly and queued for redispatch`,
         `[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）在途 ${Math.round(age)}s 未结束，强制结束并重派`,
@@ -2914,7 +2922,7 @@ function handleModelFallback(
       stage: d.stage,
       shard: d.shard ?? "",
     });
-    out(`[监工] 模型 ${ex.model ?? "（宿主默认）"} 启动即失败，回退到 ${ex.model_fallback} 重试一次（单 ${d.id}）`);
+    detail(`[监工] 模型 ${ex.model ?? "（宿主默认）"} 启动即失败，回退到 ${ex.model_fallback} 重试一次（单 ${d.id}）`);
 
     const fb = ex.model_fallback;
     const nid = newDispatchId(root, d.stage, d.shard ?? undefined);
@@ -2958,7 +2966,7 @@ function handleModelFallback(
 
 /**
  * 本进程内已执行过的指令 id。
- * 拿不到跨进程锁时记录仍为未消费状态，此集合避免下一轮调度 重复执行同一条指令。
+ * 拿不到跨进程锁时记录仍为未消费状态，此集合避免下一轮调度重复执行同一条指令。
  */
 const executedDirectiveIds = new Set<string>();
 
@@ -2985,7 +2993,7 @@ function clearPauseFile(root: string, by: string): { ok: boolean; error?: string
   for (let i = 0; i < 6; i += 1) {
     try {
       if (!existsSync(p)) {
-        /* 恢复派单同时取消停止请求，否则下一轮调度 会重新写回暂停。 */
+        /* 恢复派单同时取消停止请求，否则下一轮调度会重新写回暂停。 */
         clearStopFlag(root);
         recordEvent(root, "pause_cleared", { by });
         return { ok: true };
@@ -3071,16 +3079,16 @@ function answerSupervisorQuestion(root: string, contract: Contract, state: TaskS
     .sort((a, b) => b.n - a.n);
 
   const bits: string[] = [];
-  bits.push(`现在在 ${stageId || "(无阶段)"}${idx >= 0 ? `（第 ${idx + 1}/${total} 阶段）` : ""}，第 ${tick} 个 tick`);
+  bits.push(`现在在 ${stageId || "（无阶段）"}${idx >= 0 ? `（第 ${idx + 1}/${total} 阶段）` : ""}，第 ${tick} 轮调度`);
   bits.push(
-    `并行 ${parallel}，在途 ${inflight}，本阶段派单 ${rows.length} 单（完成 ${done}，失败 ${failed}）`,
+    `并行 ${parallel}，在途 ${inflight}，本阶段派单 ${rows.length} 张（完成 ${done}，失败 ${failed}）`,
   );
   bits.push(
     gate.ok
       ? `门槛已过${gate.missing.length ? `（${gate.missing.slice(0, 3).join("；")}）` : ""}`
       : `门槛未过：${gate.missing.slice(0, 4).join("；") || "未给出缺失项"}`,
   );
-  bits.push(pause ? `派单已暂停（${pause.reason || "手动暂停"}），手里的进程已停、等恢复后重派` : "派单未暂停");
+  bits.push(pause ? `派单已暂停（${pause.reason || "手动暂停"}），在途进程已停，恢复后重派` : "派单未暂停");
   if (asks) bits.push(`有 ${asks} 条待裁决问题（capitalist inbox）`);
   if (debt) bits.push(`待补项 ${debt} 条`);
   if (retries.length) bits.push(`重派最多的分片：${retries.slice(0, 3).map((x) => `${x.id} ×${x.n}`).join("，")}`);
@@ -3140,7 +3148,7 @@ async function applyOneDirective(
 
   if (action === "pause") {
     writePauseFile(root, `面板指令 ${d.id}`, "supervisor-direct");
-    return { ok: true, reason: "", detail: "已暂停派单；手里的进程下一轮被停掉，恢复后重派" };
+    return { ok: true, reason: "", detail: "已暂停派单；在途进程下一轮停止，恢复后重派" };
   }
 
   if (action === "resume") {
@@ -3155,7 +3163,7 @@ async function applyOneDirective(
     const cleared = clearPauseFile(root, "supervisor-direct");
     if (!cleared.ok) {
       return reject(
-        `暂停状态没清掉（${cleared.error ?? "文件被占用"}）：派单仍会被拒。稍后重试，或手动删除 .capitalist/pause.json。`,
+        `暂停状态未清除（${cleared.error ?? "文件被占用"}）：派单仍会被拒。稍后重试，或手动删除 .capitalist/pause.json。`,
       );
     }
     return { ok: true, reason: "", detail: had ? "已恢复派单" : "未处于暂停状态，已置为恢复态" };
@@ -3178,7 +3186,7 @@ async function applyOneDirective(
     const hit = dispatchOfThreadNo(root, no, readDispatches(root));
     if (!hit) return reject(`没有 #${no} 这一单（编号看【任务编号表】）`);
     const r = closeTask(root, String(hit.id), { reason: "监工作废", by: "supervisor" });
-    if (!r) return reject(`#${no} 已经结束（${String(hit.status)}），不用取消`);
+    if (!r) return reject(`#${no} 已经结束（${String(hit.status)}），无需取消`);
     return {
       ok: true,
       reason: "",
@@ -3235,7 +3243,7 @@ async function applyOneDirective(
       ...(bound.msgId ? { msgId: bound.msgId } : {}),
       ...(bound.atts.length ? { atts: bound.atts } : {}),
     });
-    if (!rec) return reject("追加内容写入失败（.capitalist 不可写？）");
+    if (!rec) return reject("追加内容写入失败：.capitalist 不可写");
     /*
      * 目标单已终结时翻回 open，由同一 prompt 带上追加重新拉起；
      * 须同时清除 `retry_verdict`、`done_at`、`review_until`，否则重派闸拦截或再次被回收。
@@ -3251,7 +3259,7 @@ async function applyOneDirective(
         from: String(settledPin.status),
         text: text.slice(0, 200),
       });
-      out(`[监工] 追加的目标单 ${settledPin.id} 已终结（${settledPin.status}），已翻回 open 让这条追加有进程执行`);
+      detail(`[监工] 追加的目标单 ${settledPin.id} 已终结（${settledPin.status}），已翻回 open 让这条追加有进程执行`);
     }
     recordEvent(root, "directive_amended", {
       dispatch: pick.id,
@@ -3272,8 +3280,8 @@ async function applyOneDirective(
       reason: "",
       detail: reopened
         ? `已追加到派单${pickLabel ? ` ${pickLabel}` : ""}（它已终结，已翻回 open，下一轮携带原上下文重新拉起）`
-        : `已追加到在途派单${pickLabel ? ` ${pickLabel}` : ""}（${pick.status === "open" ? "还没拉起，启动时带入" : "执行中的进程会在下一个动作间隙收到"}）` +
-          "；它收尾时用 --added 说明，复审按新口径验",
+        : `已追加到在途派单${pickLabel ? ` ${pickLabel}` : ""}（${pick.status === "open" ? "尚未拉起，启动时带入" : "执行中的进程会在下一个动作间隙收到"}）` +
+          "；它收尾时用 --added 说明，复审按新口径验收",
       /* dispatch 供回执卡片查任务编号（见 direct.ts 的 SupervisorResult.dispatch）。 */
       dispatch: pick.id,
     };
@@ -3308,7 +3316,7 @@ async function applyOneDirective(
     /* 暂停期间不派单，插入执行的单也在内；拒绝并说明原因。 */
     if (readPause(root) !== null) {
       return reject(
-        "监工处于暂停派单：这条不会执行。先恢复派单（看板指标条的“恢复调度”按钮，或 capitalist resume），再发一次。",
+        "监工处于暂停派单状态：该指令不执行。先恢复派单（看板指标条的“恢复调度”按钮，或 capitalist resume），再重新下发。",
       );
     }
     /*
@@ -3455,7 +3463,7 @@ async function applyOneDirective(
           reason: "",
           detail:
             `同类在途单${sameLabel ? ` ${sameLabel}` : ""}（批次 ${tag}）已经 ${String(same.action).length} 字，` +
-            `再加会超过 ${MERGE_MAX_CHARS} 字上限（上下文过长），所以另开一张。`,
+            `再加会超过 ${MERGE_MAX_CHARS} 字上限（上下文过长），另建一单。`,
         };
       }
     }
@@ -3513,7 +3521,7 @@ async function applyOneDirective(
     /* `--now` 建单当轮由 `promoteTask` 写 `promoted_at` 触发抢占；失败不阻断建单，降级为排队优先。 */
     const nowPrompted = wantNow ? promoteTask(root, id, { by: "supervisor" }) : null;
     if (wantNow && !nowPrompted?.ok) {
-      out(`[监工] 立即执行标记没生效：${nowPrompted?.reason ?? "未知原因"}（单已建好，按排队优先处理）`);
+      detail(`[监工] 立即执行标记未生效：${nowPrompted?.reason ?? "未知原因"}（单已创建，按排队优先处理）`);
     }
     recordEvent(root, "dispatch_open", {
       dispatch: id,
@@ -3542,7 +3550,7 @@ async function applyOneDirective(
       : afterIds.length
         ? `已登记依赖 ${afterIds.join("、")}：前置单全部完成前不会启动，不占并行槽位`
         : busy < cap
-          ? "当拍拉起进程"
+          ? "本轮拉起进程"
           : `当前 ${busy}/${cap} 个并行槽位已占用，待槽位释放后立即拉起（已置于队首）`;
     return {
       ok: true,
@@ -3626,7 +3634,7 @@ async function applyOneDirective(
 
   if (action === "concurrency") {
     const n = Number(arg);
-    if (!Number.isInteger(n) || n < 1) return reject(`concurrency 需要正整数，收到“${arg || "(空)"}”`);
+    if (!Number.isInteger(n) || n < 1) return reject(`concurrency 需要正整数，收到“${arg || "（空）"}”`);
     /* 并行度上限由用户设定，不按阶段分片数封顶。 */
     return { ok: true, reason: "", detail: `并行度：${n}` };
   }
@@ -3699,7 +3707,7 @@ async function applyOneDirective(
       return reject(`分片“${arg}”已有在途派单 ${inflight.id}（${inflight.status}），不重复派`);
     }
     const attempt = shardRetry(rows).failures + 1;
-    createOpenShardDispatch(root, contract, state, shard, wopts, out, attempt);
+    createOpenShardDispatch(root, contract, state, shard, wopts, detail, attempt);
     return { ok: true, reason: "", detail: `已重派 ${state.stage}/${arg}（第 ${attempt} 次）` };
   }
 
@@ -3781,7 +3789,7 @@ async function applyOneDirective(
       directive: d.id,
       confirmed: true,
     });
-    supersedeStaleDispatches(root, contract, next.id, out);
+    supersedeStaleDispatches(root, contract, next.id, detail);
     return { ok: true, reason: "", detail: `已跳过 ${state.stage}，进入 ${next.id}（记为待补项，不计达标）` };
   }
 
@@ -3865,7 +3873,7 @@ async function applyOneDirective(
     return { ok: true, reason: "", detail: "已回答，见监工流" };
   }
 
-  return reject(`未知动作“${action || d.text || "(空)"}”。白名单：${CAPITALIST_ACTIONS.join(" / ")}`);
+  return reject(`未知动作“${action || d.text || "（空）"}”。可用动作：${CAPITALIST_ACTIONS.join(" / ")}`);
 }
 
 /**
@@ -3892,7 +3900,7 @@ function resolveDispatchRef(root: string, rows: Dispatch[], tok: string): Dispat
 
 /**
  * 逐条执行通道指令并记 supervisor_cmd 事件。拒绝也标记已消费。
- * 标记失败由 executedDirectiveIds 保证下一轮调度 只补标记、不重复执行。
+ * 标记失败由 executedDirectiveIds 保证下一轮调度只补标记、不重复执行。
  */
 async function applySupervisorDirectives(args: {
   root: string;
@@ -3929,7 +3937,7 @@ async function applySupervisorDirectives(args: {
     if (executedDirectiveIds.size > 5000) executedDirectiveIds.clear();
 
     if (!markSupervisorDirective(args.root, d.id, res)) {
-      args.out(`[监工] 指令 ${d.id} 结果未能落盘（锁被占用），下一 tick 只补标记不重复执行`);
+      args.out(`[监工] 指令 ${d.id} 结果未能落盘（锁被占用），下一轮只补标记，不重复执行`);
     }
     recordEvent(args.root, "supervisor_cmd", {
       id: d.id,
@@ -3943,12 +3951,7 @@ async function applySupervisorDirectives(args: {
       text: String(d.text ?? "").slice(0, 120),
       tick: loadSupervisor(args.root)?.ticks ?? 0,
     });
-    /* 结论与原因用逗号连接：原因本身常带括号，再套一层就成了“（……（……））”。 */
-    const verdict = res.ok ? "已执行" : "失败";
-    const why = String((res.ok ? res.detail : res.reason) ?? "").trim();
-    args.out(
-      `[监工] 指令 ${d.action || "(未知)"}${d.arg ? ` ${d.arg}` : ""}：${verdict}${why ? `，${why}` : ""}`,
-    );
+    /* 指令正文与结论只入事件台账，不打印到控制台：控制台只留状态行。 */
   }
   return { concurrency: next };
 }
@@ -4017,7 +4020,7 @@ const CHANNEL_NOTICE_MS = 60_000;
 /** 任务根 -> 上次提示时刻。 */
 const channelNoticeAt = new Map<string, number>();
 
-/** 单 调度轮次 的派发与结算。paused 时只结算不开新单，门槛判定与阶段推进照常。 */
+/** 单个调度轮次的派发与结算。paused 时只结算不开新单，门槛判定与阶段推进照常。 */
 function step(
   root: string,
   contract: Contract,
@@ -4039,11 +4042,11 @@ function step(
    */
   const down = readChannelDown(root);
   if (down) {
-    /* 每轮调度 都会走到这里，提示按分钟节流，避免刷满日志与事件窗口。 */
+    /* 每轮调度都会走到这里，提示按分钟节流，避免刷满日志与事件窗口。 */
     const last = channelNoticeAt.get(root) ?? 0;
     if (Date.now() - last > CHANNEL_NOTICE_MS) {
       channelNoticeAt.set(root, Date.now());
-      out(
+      detail(
         `[监工] 通道不可用（${down.reason}），已待命：不派单、不推进阶段。` +
           "恢复登录态后五分钟内自动继续，或重新启动监工。",
       );
@@ -4051,20 +4054,20 @@ function step(
     return "continue";
   }
 
-  drainSettledDirectives(root, out, contract);
+  drainSettledDirectives(root, detail, contract);
 
   /* 待裁决 ask 超过 ASK_BLOCK_MS 后只提醒，不再阻塞派单。 */
   /*
    * 阶段一在任何“是否建新单”判定之前拉起已建单：ask、blocker 与暂停只影响新建单。
    */
-  supersedeStaleDispatches(root, contract, state.stage, out);
-  refreshOpenDispatchActions(root, contract, state.stage, out);
+  supersedeStaleDispatches(root, contract, state.stage, detail);
+  refreshOpenDispatchActions(root, contract, state.stage, detail);
   if (!paused) {
     /* 插队单不在契约里，先补重派再填槽。 */
-    requeueAdhoc(root, state, out);
+    requeueAdhoc(root, state, detail);
     /* 悬空追加先于 fillSlots 翻回 open，同一轮可被 claim 拉起。 */
-    rescueOrphanDirectives(root, out);
-    fillSlots(root, contract, state, host, capacity, wopts, out);
+    rescueOrphanDirectives(root, detail);
+    fillSlots(root, contract, state, host, capacity, wopts, detail);
   }
 
   /* 阶段二起，新建单才受待裁决问题与阻塞登记影响。 */
@@ -4125,7 +4128,7 @@ function step(
     });
     if (blockedByAsk) return null;
 
-    // 现读而不复用 调度轮次 开头快照：同一 调度轮次 补过的单也须算在途，否则会重复派单。
+    // 现读而不复用本轮调度开头的快照：同一调度轮次补过的单也须算在途，否则会重复派单。
     const mine = readDispatches(root).filter(
       (d) => d.stage === state.stage && (d.shard ?? "") === shardId,
     );
@@ -4141,7 +4144,7 @@ function step(
     )
       return null;
     /*
-     * 暂停单继续占住该片：该单还没做完，只是等用户唤醒。
+     * 暂停单继续占住该片：该单未完成，等待用户唤醒。
      * 不占位就会被当成“没派过”补一张新单，等于绕过暂停。
      */
     if (mine.some((d) => dispatchPaused(d) && d.status !== "done" && d.status !== "closed")) return null;
@@ -4164,8 +4167,8 @@ function step(
        * 硬停仅在 HARD_STOP_FAILURES 之后，且登记 ask 转人工裁决。
        */
       if (!userForced) {
-        raiseRedispatchCap(root, state.stage, shardId, mine, out);
-        escalateStuckShard(root, state.stage, shardId, retry.failures, mine, out);
+        raiseRedispatchCap(root, state.stage, shardId, mine, detail);
+        escalateStuckShard(root, state.stage, shardId, retry.failures, mine, detail);
         if (retry.failures >= HARD_STOP_FAILURES) {
           raiseAsk(
             root,
@@ -4180,12 +4183,12 @@ function step(
           );
           return null;
         }
-        out(
+        detail(
           `[监工] 分片 ${state.stage}/${shardId || "整阶段"} 已连续失败 ${retry.failures} 次：` +
             `继续按退避重派，并已转诊断查根因（硬停在 ${HARD_STOP_FAILURES} 次）`,
         );
       } else {
-        out(`[监工] 分片 ${state.stage}/${shardId || "整阶段"} 已达重派上限，但人工介入过，继续重派`);
+        detail(`[监工] 分片 ${state.stage}/${shardId || "整阶段"} 已达重派上限，但人工介入过，继续重派`);
       }
     }
     // forced 单不占退避窗口（已挂 2 倍工作进程超时）；失败计数照加，上限仍成立。
@@ -4212,12 +4215,12 @@ function step(
       for (const s of requiredShards) {
         if (held(s.id)) continue;
         const attempt = planDispatch(s.id, false);
-        if (attempt !== null) createOpenShardDispatch(root, contract, state, s, wopts, out, attempt);
+        if (attempt !== null) createOpenShardDispatch(root, contract, state, s, wopts, detail, attempt);
       }
     }
 
     // 尽量派发 open 派单，受并行度约束。
-    fillSlots(root, contract, state, host, capacity, wopts, out);
+    fillSlots(root, contract, state, host, capacity, wopts, detail);
   }
 
   // 有在途（claimed / open）就不推进；失效的 claimed 已在 reap 结束。
@@ -4226,7 +4229,7 @@ function step(
   const stage = stageById(contract, state.stage);
   const gate = runCheck(stage?.done as Record<string, unknown> | undefined, root);
   const gateOk = gate.ok;
-  // 门槛结果只记变化点，避免每轮调度 重复记录挤占事件窗口。
+  // 门槛结果只记变化点，避免每轮调度重复记录挤占事件窗口。
   const gateSig = `${state.stage}|${gateOk ? "ok" : "no"}|${gate.missing.join("§")}`;
   if (lastGateSig.get(root) !== gateSig) {
     lastGateSig.set(root, gateSig);
@@ -4241,7 +4244,7 @@ function step(
   // 整根接管时不重派、不自动验收。
   if (shards.length === 0) {
     if (hold.all) {
-      out(`[监工] ${holdNote()}，暂停自动重派与自动验收（capitalist release 后恢复）`);
+      detail(`[监工] ${holdNote()}，暂停自动重派与自动验收（capitalist release 后恢复）`);
       return "continue";
     }
     if (!gateOk) {
@@ -4254,12 +4257,12 @@ function step(
       if (!autoDispatch) return "continue";
       const attempt = planDispatch("", false);
       if (attempt !== null) {
-        dispatch(root, contract, state, "stage", wopts, out, attempt);
-        fillSlots(root, contract, state, host, capacity, wopts, out);
+        dispatch(root, contract, state, "stage", wopts, detail, attempt);
+        fillSlots(root, contract, state, host, capacity, wopts, detail);
       }
       return "continue";
     }
-    return advanceStage(root, contract, state, host, capacity, wopts, out, paused, autoDispatch);
+    return advanceStage(root, contract, state, host, capacity, wopts, detail, paused, autoDispatch);
   }
 
   // closed 与 done 同算：已结束的片不再让阶段停在“缺片”上。
@@ -4276,13 +4279,12 @@ function step(
       for (const s of requiredShards) {
         if (held(s.id)) continue;
         const attempt = planDispatch(s.id, false);
-        if (attempt !== null) createOpenShardDispatch(root, contract, state, s, wopts, out, attempt);
+        if (attempt !== null) createOpenShardDispatch(root, contract, state, s, wopts, detail, attempt);
       }
-      fillSlots(root, contract, state, host, capacity, wopts, out);
+      fillSlots(root, contract, state, host, capacity, wopts, detail);
       if (requiredDone && !gateOk) {
-        out(
-          `[监工] ${state.stage} 全部必需分片已完成，缺的是交付件：${gate.missing.join("；")}` +
-            "——不重跑，等补齐",
+        detail(
+          `[监工] ${state.stage} 全部必需分片已完成，缺的是交付件，不重跑，等补齐：${gate.missing.join("；")}`,
         );
       }
     }
@@ -4291,7 +4293,7 @@ function step(
 
   // 仍有分片处于人工接管时不代它验收。
   if (requiredShards.some((s) => held(s.id))) {
-    out(`[监工] ${holdNote()}，门槛已过但暂停自动验收（capitalist release 后恢复）`);
+    detail(`[监工] ${holdNote()}，门槛已过但暂停自动验收（capitalist release 后恢复）`);
     return "continue";
   }
 
@@ -4299,10 +4301,10 @@ function step(
   for (const s of shards.filter((sh) => sh.required === false)) {
     if (!stageDispatches.some((d) => d.shard === s.id && (d.status === "done" || d.status === "closed"))) {
       addDebt(root, state.stage, s.id);
-      out(`[监工] 可选项 ${state.stage}/${s.id} 未达标，记待补项（允许推进）`);
+      detail(`[监工] 可选项 ${state.stage}/${s.id} 未达标，记待补项（允许推进）`);
     }
   }
-  return advanceStage(root, contract, state, host, capacity, wopts, out, paused, autoDispatch);
+  return advanceStage(root, contract, state, host, capacity, wopts, detail, paused, autoDispatch);
 }
 
 /** 整任务完成只记一次：以 state.done_at 为判据，已有值则不重复写事件与日志。 */
@@ -4317,7 +4319,7 @@ function recordDoneOnce(root: string, state: TaskState): void {
   recordEvent(root, "supervisor_done", { stage: state.stage, target: state.target });
 }
 
-/** 无派单提示的节流记录：`root|stage` -> 上次提示时间。放在模块级，跨 调度轮次 省下重复打印。 */
+/** 无派单提示的节流记录：`root|stage` -> 上次提示时间。放在模块级，跨调度轮次省下重复打印。 */
 const noDispatchNoted = new Map<string, number>();
 
 /**
@@ -4346,13 +4348,13 @@ function advanceStage(
    * 改名后未重新登记。
    */
   if (!stageById(contract, state.stage)) {
-    out(`[监工] 状态阶段 ${state.stage} 不在契约阶段中，已停止推进。核对 .capitalist/state.json 的 stage 与契约文件的阶段 id。`);
+    detail(`[监工] 状态阶段 ${state.stage} 不在契约阶段中，已停止推进。核对 .capitalist/state.json 的 stage 与契约文件的阶段 id。`);
     recordEvent(root, "stage_missing", { stage: state.stage, target: state.target });
     return "continue";
   }
 
   if (isLastStage(contract, state.stage)) {
-    settleDebt(root, out);
+    settleDebt(root, detail);
     recordDoneOnce(root, state);
     return "done";
   }
@@ -4362,7 +4364,7 @@ function advanceStage(
    *
    * 门槛是“做了什么”的证据，不能当“该不该前进”的依据：S0 只要求登记一条需求，
    * 一条占位记录就能让状态机空走一格，而这一格背后没有任何派单。判据改成“本阶段有单”，
-   * 没单就停住并说明原因；提示节流到五分钟一次，避免每轮调度 刷屏。
+   * 没单就停住并说明原因；提示节流到五分钟一次，避免每轮调度刷屏。
    */
   const stageDispatches = readDispatches(root).filter(
     (d) => String((d as { stage?: string }).stage ?? "") === state.stage,
@@ -4373,14 +4375,14 @@ function advanceStage(
     if (Date.now() - last > 5 * 60_000) {
       noDispatchNoted.set(key, Date.now());
       /* 只写监工输出，不落事件：这不是异常，是正常的等待状态，看板不必多一条记录。 */
-      out(`[监工] 阶段 ${state.stage} 还没有派单，不推进。先派单，完成后按门槛自动前进。`);
+      detail(`[监工] 阶段 ${state.stage} 尚未派单，不推进。先派单，完成后按门槛自动前进。`);
     }
     return "continue";
   }
   const nid = nextStageId(contract, state.stage);
   const next = nid ? stageById(contract, nid) : undefined;
   if (!next) {
-    settleDebt(root, out);
+    settleDebt(root, detail);
     recordDoneOnce(root, state);
     return "done";
   }
@@ -4388,34 +4390,34 @@ function advanceStage(
   /* 起点先存下来：写入状态之后不能再从 state 上取，否则 from 会变成推进后的值，事件记成 X -> X。 */
   const fromStage = state.stage;
   if (next.id === fromStage) {
-    out(`[监工] 下一阶段与当前阶段同为 ${fromStage}，已停止推进。核对契约的阶段 id 是否重复。`);
+    detail(`[监工] 下一阶段与当前阶段同为 ${fromStage}，已停止推进。核对契约的阶段 id 是否重复。`);
     recordEvent(root, "stage_missing", { stage: fromStage, target: state.target, why: "阶段 id 重复" });
     return "continue";
   }
 
   const moved = updateState(root, (s) => enterStage(s, next));
   if (moved === null) {
-    out("[监工] 状态写入冲突，下一轮重试");
+    detail("[监工] 状态写入冲突，下一轮重试");
     return "continue";
   }
 
   recordEvent(root, "supervisor_advance", { from: fromStage, to: next.id, target: state.target });
-  out(t(`[supervisor] stage auto-advanced (R-15.10): ${fromStage} -> ${next.id} ${next.name}`, `[监工] 阶段自动推进（R-15.10）：${fromStage} 推进到 ${next.id} ${next.name}`));
+  detail(t(`[supervisor] stage auto-advanced (R-15.10): ${fromStage} -> ${next.id} ${next.name}`, `[监工] 阶段自动推进（R-15.10）：${fromStage} 推进到 ${next.id} ${next.name}`));
   const ns = loadState(root) ?? state;
   if (paused) {
-    out(t("[supervisor] paused: the new stage dispatches nothing for now; it resumes automatically after resume", "[监工] 已暂停：新阶段暂不派单，resume 后自动补上"));
+    detail(t("[supervisor] paused: the new stage dispatches nothing for now; it resumes automatically after resume", "[监工] 已暂停：新阶段暂不派单，resume 后自动补上"));
     return "continue";
   }
   // 顺序固定：先清算旧阶段、再开新阶段派单、最后填槽；否则旧进程占槽导致新单填不进去。
-  supersedeStaleDispatches(root, contract, next.id, out);
+  supersedeStaleDispatches(root, contract, next.id, detail);
   /*
    * 填槽只拉起已存在的单，不建新单：用户提前为下一阶段建的单在这一轮就能启动。
    * 未开自动派单时不建单，只报告已进入下一阶段。
    */
-  if (autoDispatch) dispatch(root, contract, ns, "stage", wopts, out);
-  fillSlots(root, contract, ns, host, capacity, wopts, out);
+  if (autoDispatch) dispatch(root, contract, ns, "stage", wopts, detail);
+  fillSlots(root, contract, ns, host, capacity, wopts, detail);
   if (!autoDispatch) {
-    out(
+    detail(
       `[监工] 阶段 ${state.stage} -> ${next.id} ${next.name}。本阶段未派单；` +
         "需要时执行 capitalist dispatch，或在看板派单",
     );
@@ -4444,16 +4446,16 @@ function supersedeStaleDispatches(
     /* 唤醒单在 WAKE_GRACE_MS 宽限期内不作废，期满仍是在途的再按阶段推进作废。 */
     const wakeAt = Date.parse(String((d as DispatchEx).wake_at ?? ""));
     if (Number.isFinite(wakeAt) && Date.now() - wakeAt < WAKE_GRACE_MS) {
-      out(`[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）是用户刚唤醒的单，宽限期内不作废`);
+      detail(`[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）是用户刚唤醒的单，宽限期内不作废`);
       return d;
     }
 
     if (d.status === "claimed") {
       const w = d.worker ? loadWorker(root, d.worker) : null;
       if (w && w.mode !== "visible" && (w.status === "running" || w.status === "starting")) {
-        killJudgedWorker(root, w, false, out);
+        killJudgedWorker(root, w, false, detail);
         saveWorker(root, { ...w, status: "done" });
-        out(`[监工] worker ${w.id} 的工作已随阶段推进作废，结束该进程并释放槽位`);
+        detail(`[监工] worker ${w.id} 的工作已随阶段推进作废，结束该进程并释放槽位`);
       }
     }
 
@@ -4466,7 +4468,7 @@ function supersedeStaleDispatches(
       was: d.status,
       reason: "阶段已推进，本单的验收口径不再适用",
     });
-    out(`[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）属于已推进的阶段，标记 superseded 并释放槽位`);
+    detail(`[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）属于已推进的阶段，标记 superseded 并释放槽位`);
     /* 作废原因写进台账，工作树与任务列表据此展示。 */
     const hadNote = String((d as { note?: unknown }).note ?? "").trim();
     return {
@@ -4510,7 +4512,7 @@ function refreshOpenDispatchActions(
       to: next,
       reason: "任务列表里的 action 已改，重派前按当前值刷新",
     });
-    out(`[监工] 派单 ${d.id}（${d.stage}/${d.shard ?? "整阶段"}）的 action 已按任务列表当前值刷新`);
+    detail(`[监工] 派单 ${d.id}（${d.stage}/${d.shard ?? "整阶段"}）的 action 已按任务列表当前值刷新`);
   }
 }
 
@@ -4522,7 +4524,7 @@ function firstUnmetStage(contract: Contract, root: string): string {
   return contract.stages[0]?.id ?? "S0";
 }
 
-/** 把空闲槽位填满：同一 调度轮次 刚生成的单也在本轮派发，避免有单无进程。 */
+/** 把空闲槽位填满：同一调度轮次刚生成的单也在本轮派发，避免有单无进程。 */
 /**
  * 插队单不在契约分片内，失败后由本函数补派单：只建单不拉起，启动交给 fillSlots。
  * 退避与次数沿用 retryDelayMs / HARD_STOP_FAILURES。
@@ -4589,7 +4591,7 @@ function rescueOrphanDirectives(root: string, out: (s: string) => void): void {
     if (last.status !== "done" && last.status !== "closed" && last.status !== "failed") continue;
     /*
      * 只有失败的能由监工重开。用户手动结束的单是明确意图，done 的单已经交付，
-     * 两者都不该因为“有追加没读”被悄悄拉回队列——要继续请用户明确重开。
+     * 两者都不应因“有追加未读”被静默放回队列；要继续，须由用户明确重开。
      */
     if (last.status !== "failed") {
       recordEvent(root, "directive_rescue_skipped", {
@@ -4598,7 +4600,7 @@ function rescueOrphanDirectives(root: string, out: (s: string) => void): void {
         status: last.status,
         count: want.count,
       });
-      out(
+      detail(
         `[监工] ${last.id} 已${last.status === "closed" ? "被用户结束" : "完成"}，` +
           `${want.count} 条追加未投递；如需继续执行，请明确重开该单`,
       );
@@ -4611,7 +4613,7 @@ function rescueOrphanDirectives(root: string, out: (s: string) => void): void {
     const endedAt = Date.parse(String((last as { done_at?: string }).done_at ?? last.at ?? "")) || 0;
     if (want.latest && endedAt && want.latest <= endedAt) continue;
 
-    const why = `挂着 ${want.count} 条没人读的用户追加`;
+    const why = `有 ${want.count} 条未读的用户追加`;
     reopenSettledDispatch(root, last.id, why);
     /* 写 rescued_at，防止重开后立即再次结束的循环。 */
     patchDispatch(root, last.id, { rescued_at: new Date().toISOString() } as Partial<Dispatch>);
@@ -4621,7 +4623,7 @@ function rescueOrphanDirectives(root: string, out: (s: string) => void): void {
       from: String(last.status),
       count: want.count,
     });
-    out(`[监工] 派单 ${last.id}（${last.stage}）${why}，已重新开出来`);
+    detail(`[监工] 派单 ${last.id}（${last.stage}）${why}，已重开`);
     return; // 每轮只处理一条链
   }
 }
@@ -4672,7 +4674,7 @@ function requeueAdhoc(root: string, state: TaskState, out: (s: string) => void):
 
     const failures = failed.length;
     if (failures >= HARD_STOP_FAILURES) {
-      out(`[监工] 插队单“${String(de.title ?? d.action).slice(0, 30)}”已失败 ${failures} 次，停止重派（换个说法或 capitalist fix）`);
+      detail(`[监工] 插队单“${String(de.title ?? d.action).slice(0, 30)}”已失败 ${failures} 次，停止重派（改写要求后重派，或执行 capitalist fix）`);
       continue;
     }
     const lastAt = Math.max(...failed.map((x) => Date.parse(String(x.done_at ?? x.at ?? "")) || 0));
@@ -4726,7 +4728,7 @@ function requeueAdhoc(root: string, state: TaskState, out: (s: string) => void):
       previous_failures: failures,
       source: "adhoc",
     });
-    out(
+    detail(
       `[监工] 重派插队单 ${id}（第 ${rec.attempt} 次，上次 ${d.note ?? "失败"}）：` +
         `${String(de.title ?? d.action).slice(0, 40)}`,
     );
@@ -4763,13 +4765,13 @@ const forestWarned = new Set<string>();
 function reportForestAnomalies(root: string, rows: Dispatch[], out: (s: string) => void): void {
   const f = dispatchForest(rows);
   const live = new Set<string>();
-  reportMultiPrereqOrphans(root, rows, f, live, out);
+  reportMultiPrereqOrphans(root, rows, f, live, detail);
   for (const cyc of f.cycles) {
     const key = `cycle:${cyc.join(">")}`;
     live.add(key);
     if (forestWarned.has(key)) continue;
     recordEvent(root, "dispatch_cycle", { nodes: cyc, size: cyc.length });
-    out(`[监工] 派单依赖成环（${cyc.join("、")}）：这几单互相等待，没有一张会启动，需人工改树边`);
+    detail(`[监工] 派单依赖成环（${cyc.join("、")}）：这几单互相等待，没有一张会启动，需人工改树边`);
   }
   for (const id of f.orphans) {
     const key = `orphan:${id}`;
@@ -4777,7 +4779,7 @@ function reportForestAnomalies(root: string, rows: Dispatch[], out: (s: string) 
     if (forestWarned.has(key)) continue;
     const row = rows.find((x) => String(x.id) === id);
     recordEvent(root, "dispatch_parent_missing", { dispatch: id, parent: String(row?.parent ?? ""), stage: String(row?.stage ?? "") });
-    out(`[监工] ${id} 的父节点不在台账里：按已满足处理并放行，顺序可能比原计划靠前`);
+    detail(`[监工] ${id} 的父节点不在台账里：按已满足处理并放行，顺序可能比原计划靠前`);
   }
   for (const key of [...forestWarned]) if (!live.has(key)) forestWarned.delete(key);
   for (const key of live) forestWarned.add(key);
@@ -4809,12 +4811,12 @@ function reportMultiPrereqOrphans(
       stage: String(r.stage ?? ""),
       missing,
     });
-    out(`[监工] ${r.id} 挂的前置 ${missing.join("、")} 不在台账里（可能已归档或台账被改）：依赖按已满足放行，顺序可能比原计划靠前`);
+    detail(`[监工] ${r.id} 挂的前置 ${missing.join("、")} 不在台账里（可能已归档或台账被改）：依赖按已满足放行，顺序可能比原计划靠前`);
   }
 }
 
 /**
- * 这一单会碰的文件：契约分片 files 声明优先，其次从 action 抽取任务根内路径。
+ * 这一单会读写的文件：契约分片 files 声明优先，其次从 action 抽取任务根内路径。
  * 都取不到返回空，不参与锁预检。
  */
 function targetFilesOf(root: string, contract: Contract, d: Dispatch): string[] {
@@ -4857,7 +4859,7 @@ function releasePreemptLease(root: string, out: (s: string) => void): void {
         restored: restored.map((d) => d.id),
         reason: "租约记录缺失，按让位标记收尾",
       });
-      out(`[监工] 立即执行单 ${by} 的租约已丢失，按台账标记恢复 ${restored.length} 张让位单`);
+      detail(`[监工] 立即执行单 ${by} 的租约已丢失，按台账标记恢复 ${restored.length} 张让位单`);
     }
     return;
   }
@@ -4873,7 +4875,7 @@ function releasePreemptLease(root: string, out: (s: string) => void): void {
     reason: "立即执行单已不运行中",
   });
   if (restored.length > 0) {
-    out(
+    detail(
       `[监工] 立即执行单 ${lease.dispatch} 已结束，按原顺序恢复 ${restored.length} 张让位单：` +
         restored.map((d) => d.id).join(" -> "),
     );
@@ -4945,7 +4947,7 @@ function preemptForImmediate(root: string, d: Dispatch, out: (s: string) => void
     locks,
     yielded: changed,
   });
-  out(
+  detail(
     `[监工] 立即执行 ${d.id}：挂起 ${victim.id}（pid ${victim.pid}，派单 ${victim.dispatch ?? "无"}）腾出槽位，` +
       `让位 ${changed.length} 张（${changed.join("、")}）；这一单结束后按原顺序恢复`,
   );
@@ -4978,7 +4980,7 @@ function fillSlots(
 ): void {
   const hold = activeTakeover(root);
   /* 填槽前清理上一轮租约，让位标记会带偏排序。 */
-  releasePreemptLease(root, out);
+  releasePreemptLease(root, detail);
   /* 森林异常每轮只检查一次：循环内重复检查会变成平方级开销。 */
   let forestChecked = false;
   for (;;) {
@@ -4989,7 +4991,7 @@ function fillSlots(
      */
     const allRows = readDispatches(root);
     if (!forestChecked) {
-      reportForestAnomalies(root, allRows, out);
+      reportForestAnomalies(root, allRows, detail);
       forestChecked = true;
     }
     const open = allRows.filter(
@@ -5035,7 +5037,7 @@ function fillSlots(
           holder: blocked.holder,
           waited_sec: Math.round(waited / 1000),
         });
-        out(
+        detail(
           `[监工] ${cand.id} 的目标文件 ${blocked.path} 被 ${blocked.holder} 占用已 ${Math.round(waited / 1000)}s，` +
             "不等待：照常派发，由工作进程自行竞争文件锁（拿不到锁会收到处理指引）",
         );
@@ -5050,7 +5052,7 @@ function fillSlots(
           file: blocked.path,
           holder: blocked.holder,
         });
-        out(`[监工] ${cand.id} 暂不派：${blocked.path} 正被 ${blocked.holder} 写，等它释放`);
+        detail(`[监工] ${cand.id} 暂不派：${blocked.path} 正被 ${blocked.holder} 写入，等待释放`);
       }
     }
     if (!d) return;
@@ -5059,10 +5061,10 @@ function fillSlots(
     /* 占槽按活进程数与待裁决单数之和计算；待裁决单最多占 VERDICT_HOLD_MS。 */
     const taken = () => liveWorkers(root).length + awaitingVerdict(allRows);
     if (taken() >= cap) {
-      if (!preemptForImmediate(root, d, out)) return;
+      if (!preemptForImmediate(root, d, detail)) return;
     }
     if (taken() >= cap) return;
-    if (!launch(root, contract, state, d, host, wopts, out)) break;
+    if (!launch(root, contract, state, d, host, wopts, detail)) break;
     lockDeferAt.delete(d.id);
   }
 }
@@ -5176,7 +5178,7 @@ function dispatch(
         model: model ?? "",
         directives: taken.length,
       });
-      out(
+      detail(
         `[监工] 派单 ${d.id}（${fresh.stage}/${s.id}）：${s.action}${model ? ` 模型=${model}` : ""}` +
           (taken.length > 0 ? `（含 ${taken.length} 条用户插话）` : ""),
       );
@@ -5240,7 +5242,7 @@ function dispatch(
       previous_failures: attempt - 1,
     });
   }
-  out(
+  detail(
     `[监工] ${attempt > 1 ? `重派第 ${attempt} 次 ` : "派单 "}${d.id}（${fresh.stage}）：${action}${model ? ` 模型=${model}` : ""}` +
       (taken.length > 0 ? `（含 ${taken.length} 条用户插话）` : ""),
   );
@@ -5266,7 +5268,7 @@ function createOpenShardDispatch(
     lane: laneKeyOf({ stage: state.stage, shard: shard.id }),
   });
   /*
-   * 基础文字取契约当前值，不用传入的 shard.action：调用方的 shard 可能在本 调度轮次 热加载前取得。
+   * 基础文字取契约当前值，不用传入的 shard.action：调用方的 shard 可能在本调度轮次热加载前取得。
    * 分片被删或改名时才回落传参。
    */
   const actionText = contractShardAction(contract, state.stage, shard.id) ?? shard.action;
@@ -5329,7 +5331,7 @@ function createOpenShardDispatch(
       previous_failures: attempt - 1,
     });
   }
-  out(
+  detail(
     `[监工] ${attempt > 1 ? `重派第 ${attempt} 次 ` : "补派单 "}${d.id}（${state.stage}/${shard.id}）：${actionText}${model ? ` 模型=${model}` : ""}` +
       (taken.length > 0 ? `（含 ${taken.length} 条用户插话）` : ""),
   );
@@ -5383,7 +5385,7 @@ function launch(
       },
       { key: d.id, windowMs: 5 * 60_000 },
     );
-    out(`[监工] 拒绝启动：${d.stage}/${d.shard ?? "整阶段"} 已有存活 worker ${dup.id}（pid ${dup.pid}）`);
+    detail(`[监工] 拒绝启动：${d.stage}/${d.shard ?? "整阶段"} 已有存活 worker ${dup.id}（pid ${dup.pid}）`);
     return false;
   }
 
@@ -5407,7 +5409,7 @@ function launch(
       used: modelPick.model ?? "",
       why: modelPick.why,
     });
-    out(`[监工] ${modelPick.why}`);
+    detail(`[监工] ${modelPick.why}`);
   }
 
   try {
@@ -5483,7 +5485,7 @@ function launch(
           shard: claimed.shard ?? "",
           from: prevBase,
           to: baseAction,
-          reason: "任务列表里的 action 已改，发车前按当前值重拼",
+          reason: "任务列表里的 action 已改，派发前按当前值重拼",
         });
       }
     }
@@ -5508,7 +5510,7 @@ function launch(
     // 可见窗口依赖 cmd.exe 与 .cmd，仅 Windows 可用；其它平台回落后台模式。
     const wantVisible = wopts.visible && process.platform === "win32";
     if (wopts.visible && !wantVisible) {
-      out(t("[supervisor] visible windows are Windows-only; starting in the background instead", "[监工] 可见窗口只在 Windows 可用，本次按后台模式启动。"));
+      detail(t("[supervisor] visible windows are Windows-only; starting in the background instead", "[监工] 可见窗口只在 Windows 可用，本次按后台模式启动。"));
     }
     const { record, child } = wantVisible ? openVisibleWorker(spawnOpts) : launchWorker(spawnOpts);
     // 模型写入工作进程记录，供 capitalist workers 与看板读取。
@@ -5528,7 +5530,7 @@ function launch(
       model: model ?? "",
       mode: record.mode ?? "background",
     });
-    out(
+    detail(
       `[监工] 拉起 worker ${record.id}（pid ${record.pid}，${host}${
         record.mode === "visible" ? "，可见窗口" : ""
       }）-> ${claimed.id}${model ? ` 模型=${model}` : ""}`,
@@ -5559,7 +5561,7 @@ function launch(
       if (cur?.status === "claimed") {
         const why = workerExitReason(root, id, code);
         if (isQuotaText(why)) markQuotaExhausted(root, why);
-        failDispatchAndJudge(root, claimed, why, out);
+        failDispatchAndJudge(root, claimed, why, detail);
         recordEvent(root, "dispatch_reaped", {
           dispatch: claimed.id,
           stage: claimed.stage,
@@ -5570,13 +5572,13 @@ function launch(
         });
         /* 登录态不可用时 failDispatchAndJudge 已判定失败，此处不提示等待重派。 */
         const tail = why === AUTH_REQUIRED_TEXT ? "已判定失败" : "已结束，等待重派";
-        out(`[监工] worker ${id} 退出（code ${code ?? "?"}），派单 ${claimed.id} ${tail}`);
+        detail(`[监工] worker ${id} 退出（code ${code ?? "?"}），派单 ${claimed.id} ${tail}`);
       }
     });
   } catch (err) {
-    failDispatchAndJudge(root, claimed, `worker 启动失败：${String((err as Error).message ?? err)}`, out);
+    failDispatchAndJudge(root, claimed, `worker 启动失败：${String((err as Error).message ?? err)}`, detail);
     recordEvent(root, "worker_launch_failed", { dispatch: claimed.id, error: String((err as Error).message ?? err) });
-    out(`[监工] 启动 worker 失败：${String((err as Error).message ?? err)}`);
+    detail(`[监工] 启动 worker 失败：${String((err as Error).message ?? err)}`);
   }
   return true;
 }
@@ -5593,9 +5595,9 @@ function patchDispatch(root: string, id: string, patch: Partial<Dispatch>): void
  * 把目标单已终结的未消费追加翻回 open：判据为插话未消费、明确指向某张单、该单不在途。
  * 无 target 的老记录不推断归属。
  *
- * 目标单所属阶段与当前阶段不一致时不再翻回。这类单翻回后会在同一个 同一轮调度内被
+ * 目标单所属阶段与当前阶段不一致时不再翻回。这类单翻回后会在同一轮调度内被
  * {@link supersedeStaleDispatches} 按阶段推进作废，追加内容不会被任何进程领走，
- * 于是每轮重复“翻回—作废”。此时把追加标记为不再投递并记录去向。
+ * 于是每轮重复“翻回、作废”。此时把追加标记为不再投递并记录去向。
  */
 export function drainSettledDirectives(
   root: string,
@@ -5646,7 +5648,7 @@ export function drainSettledDirectives(
           count: marked.length,
           reason: why,
         });
-        out(
+        detail(
           `[监工] 追加内容无法投递：目标单 ${target} 属 ${String(d.stage ?? "")}，当前阶段 ${cur}，` +
             `${marked.length} 条已标记不再重投`,
         );
@@ -5671,7 +5673,7 @@ export function drainSettledDirectives(
       from: st,
       text: String(r.text ?? "").slice(0, 200),
     });
-    out(`[监工] 追加的目标单 ${target} 已终结（${st}），已翻回 open 补投递`);
+    detail(`[监工] 追加的目标单 ${target} 已终结（${st}），已翻回 open 补投递`);
     reopened.push(target);
   }
   return reopened;
@@ -5730,16 +5732,16 @@ function terminateWorkers(root: string, out: (s: string) => void): void {
     if (w.status !== "running" && w.status !== "starting") continue;
     // 可见窗口属用户会话，监工退出时不关闭。
     if (w.mode === "visible") {
-      out(`[监工] 可见窗口 worker ${w.id} 保留运行（pid ${w.pid}），需要时手动关闭`);
+      detail(`[监工] 可见窗口 worker ${w.id} 保留运行（pid ${w.pid}），需要时手动关闭`);
       continue;
     }
     // 先软后强并确认退出，避免残留进程。
     const how = killWorkerPid(w.pid);
     if (how === "unconfirmed") {
-      out(`[监工] worker ${w.id}（pid ${w.pid}）终止后仍未确认退出，可能有残留进程`);
+      detail(`[监工] worker ${w.id}（pid ${w.pid}）终止后仍未确认退出，可能有残留进程`);
     }
     saveWorker(root, { ...w, status: "exited" });
-    out(`[监工] 已停 worker ${w.id}（pid ${w.pid}）`);
+    detail(`[监工] 已停 worker ${w.id}（pid ${w.pid}）`);
   }
 }
 
@@ -5753,7 +5755,7 @@ function stopWorkersForPause(root: string, out: (s: string) => void): void {
   const dispatches = readDispatches(root);
   for (const w of live) {
     if (w.mode === "visible") {
-      out(`[监工] 暂停：可见窗口工作进程 ${w.id}（pid ${w.pid}）保留，窗口由人工管理`);
+      detail(`[监工] 暂停：可见窗口工作进程 ${w.id}（pid ${w.pid}）保留，窗口由人工管理`);
       continue;
     }
     const how = killWorkerPid(w.pid);
@@ -5769,7 +5771,7 @@ function stopWorkersForPause(root: string, out: (s: string) => void): void {
       pid: w.pid,
       how,
     });
-    out(`[监工] 已暂停 worker ${w.id}（pid ${w.pid}）${how === "unconfirmed" ? "，终止后未确认退出，可能有残留" : ""}`);
+    detail(`[监工] 已暂停 worker ${w.id}（pid ${w.pid}）${how === "unconfirmed" ? "，终止后未确认退出，可能有残留" : ""}`);
   }
 }
 
@@ -5807,7 +5809,7 @@ function warnIgnoredInbox(root: string, out: (s: string) => void): number {
     samples: ignored.slice(0, 5).map((i) => ({ line: i.line, reason: i.reason })),
     skipped_files: skipped,
   });
-  out(
+  detail(
     `[监工] inbox 有 ${ignored.length} 条畸形记录已忽略（不参与调度）：` +
       `${ignored
         .slice(0, 3)
@@ -5863,7 +5865,7 @@ function raiseRedispatchCap(
     .map((d) => `${d.id}#第${d.attempt ?? "?"}次${d.note ? `（${d.note}）` : ""}@${d.done_at ?? d.at}`)
     .join("；");
   recordEvent(root, "redispatch_capped", { stage, shard: shardId, limit: REDISPATCH_LIMIT, history, blocked: false });
-  out(`[监工] 分片 ${label} 连续失败 ${REDISPATCH_LIMIT} 次：不停派，转诊断查根因`);
+  detail(`[监工] 分片 ${label} 连续失败 ${REDISPATCH_LIMIT} 次：不停派，转诊断查根因`);
 }
 
 /**
@@ -5916,7 +5918,7 @@ function escalateStuckShard(
   recordEvent(root, "stuck_escalated", { dispatch: id, stage, shard: shardId, failures, history });
   /* 连续失败作为反复出现的卡点记入记忆。 */
   rememberLesson(root, `分片 ${stage}/${shardId} 连续失败 ${failures} 次：${history || "无失败说明"}`, id);
-  out(`[监工] 分片 ${stage}/${shardId} 连续失败 ${failures} 次，已开诊断单 ${id}（只查不改）`);
+  detail(`[监工] 分片 ${stage}/${shardId} 连续失败 ${failures} 次，已开诊断单 ${id}（只查不改）`);
 }
 
 
@@ -5938,7 +5940,7 @@ const triageRedo = new Map<string, number>();
 /** 已转人工裁决的派生链：同一件事只登记一次。 */
 const triageEscalated = new Set<string>();
 
-/** 判定池并发上限 2；判定在 调度轮次 外异步执行，池子只决定后台消化速度。 */
+/** 判定池并发上限 2；判定在调度轮次外异步执行，池子只决定后台消化速度。 */
 const TRIAGE_POOL_MAX = 2;
 /** 排队上限：超过则丢弃最早一条并记事件。 */
 const TRIAGE_QUEUE_MAX = 50;
@@ -6026,7 +6028,7 @@ async function consumeMq(args: {
   const { root, contract, state, out } = args;
   const { messages, nextOffset, skipped } = readPendingMq(root);
   if (skipped > 0) {
-    out(`[监工] 申报队列有 ${skipped} 行读不出来，已跳过（不影响它后面的消息）`);
+    detail(`[监工] 申报队列有 ${skipped} 行无法解析，已跳过（不影响后续消息）`);
   }
   if (messages.length === 0) {
     commitCursor(root, nextOffset);
@@ -6046,7 +6048,7 @@ async function consumeMq(args: {
       text: String(msg.text ?? "").slice(0, 400),
       evidence: msg.evidence ? String(msg.evidence).slice(0, 600) : "",
     });
-    out(
+    detail(
       `[监工] 申报 ${msg.from || "?"} · ${msg.kind}（${msg.severity}）：` +
         `${String(msg.text ?? "").slice(0, 70)}`,
     );
@@ -6058,7 +6060,7 @@ async function consumeMq(args: {
      */
     if (msg.id) {
       if (triagedIds.has(msg.id)) {
-        out(`[监工] 这条申报已经判过（${msg.id}），只记录不重复判`);
+        detail(`[监工] 这条申报已经判过（${msg.id}），只记录不重复判`);
         continue;
       }
       triagedIds.set(msg.id, Date.now());
@@ -6075,7 +6077,7 @@ async function consumeMq(args: {
     if (String(msg.kind) !== "done") {
       const key = `${msg.from}|${msg.kind}`;
       if (Date.now() - (triagedAt.get(key) ?? 0) < TRIAGE_DEDUPE_MS) {
-        out(`[监工] 同类申报刚判过（${key}），这条只记录不重复判`);
+        detail(`[监工] 同类申报刚判过（${key}），这条只记录不重复判`);
         continue;
       }
       triagedAt.set(key, Date.now());
@@ -6098,7 +6100,7 @@ async function consumeMq(args: {
       /* 判定层同时接收 added_reqs 与定向到该单（或该链）的插话，避免按旧口径审新增要求。 */
       const addedReqs = d && Array.isArray(d.added_reqs) ? d.added_reqs.map(String) : [];
       /*
-       * 工作区变动在异步池内采集：git 调用走外部进程，放进 轮调度会拖住调度。
+       * 工作区变动在异步池内采集：git 调用走外部进程，放在调度轮次内会拖住调度。
        * 非版本控制目录返回空数组。
        */
       const workspace = await workspaceFacts(root);
@@ -6135,7 +6137,7 @@ async function consumeMq(args: {
         had_evidence: Boolean(msg.evidence || (d as { report_evidence?: string } | undefined)?.report_evidence),
         workspace_lines: workspace.length,
       });
-      out(`[监工] 判定 ${msg.kind}：${verdict.decision}。${verdict.why.slice(0, 90)}`);
+      detail(`[监工] 判定 ${msg.kind}：${verdict.decision}。${verdict.why.slice(0, 90)}`);
       applyVerdict({ root, state, msg, verdict, out });
     });
   }
@@ -6172,11 +6174,11 @@ export function applyVerdict(args: {
           msg: msg.id,
           error: verdict.error ?? "",
         });
-        out(`[监工] 判定通道异常，${target.id} 按现状结束（注明未经复核）：${String(verdict.error ?? "").slice(0, 90)}`);
+        detail(`[监工] 判定通道异常，${target.id} 按现状结束（注明未经复核）：${String(verdict.error ?? "").slice(0, 90)}`);
         return;
       }
     }
-    out("[监工] 判定通道异常，本条不执行任何动作（只记录）");
+    detail("[监工] 判定通道异常，本条不执行任何动作（只记录）");
     return;
   }
 
@@ -6201,7 +6203,7 @@ export function applyVerdict(args: {
         reason: `同一件事已被判定重做 ${done - 1} 次，仍未见效`,
         why: verdict.why,
       });
-      out(
+      detail(
         t(
           `[supervisor] verdict ${verdict.decision} repeated ${done - 1} times (chain ${chainKey}); downgraded to a user decision; redoing it would repeat the same failure`,
           `[监工] 判定 ${verdict.decision} 已重复 ${done - 1} 次（链 ${chainKey}），降级为人工裁决。继续重做只会重复同一个失败`,
@@ -6222,14 +6224,14 @@ export function applyVerdict(args: {
   }
 
   if (verdict.decision === "escalate" && triageEscalated.has(chainKey)) {
-    out(`[监工] 这条链（${chainKey}）已经转人工裁决过，不重复登记 ask`);
+    detail(`[监工] 这条链（${chainKey}）已经转人工裁决过，不重复登记 ask`);
     return;
   }
 
   if (verdict.decision === "nudge") {
     const text = String(verdict.say ?? "").trim();
     if (!text) {
-      out("[监工] 判定 nudge 但没给出要说的话，跳过（不推断其意图）");
+      detail("[监工] 判定 nudge 未附说明文字，跳过（不推断意图）");
       return;
     }
     /* nudge 定向写入 target 与 lineage：重派后的同派生链新单仍能领取，其它单领不到。 */
@@ -6249,19 +6251,19 @@ export function applyVerdict(args: {
     const d = readDispatches(root).find((x) => x.id === msg.dispatch);
     if (d && (d.status === "claimed" || d.status === "open")) {
       finishDispatch(root, d.id, "failed", `监工判定重开：${verdict.why}`.slice(0, 200));
-      out(t(`[supervisor] closed ${d.id} as failed per the verdict; re-dispatched with the new wording after backoff`, `[监工] 按判定把 ${d.id} 结为 failed，等退避后按新口径重派`));
+      detail(t(`[supervisor] closed ${d.id} as failed per the verdict; re-dispatched with the new wording after backoff`, `[监工] 按判定把 ${d.id} 结为 failed，等退避后按新口径重派`));
     }
     return;
   }
 
   if (verdict.decision === "pause_shard") {
     if (!msg.shard) {
-      out(t("[supervisor] pause verdict has no shard to stop; handled as escalate", "[监工] 判定暂停但这条申报没有分片归属，无法只停一片，按 escalate 处理"));
+      detail(t("[supervisor] pause verdict has no shard to stop; handled as escalate", "[监工] 判定暂停但这条申报没有分片归属，无法只停一片，按 escalate 处理"));
       raiseAsk(root, `【${msg.kind}】${String(msg.text).slice(0, 300)}`, verdict.why, msg.stage, "");
       return;
     }
     takeoverShard(root, { shard: msg.shard, reason: `监工判定暂停：${verdict.why}`, by: "supervisor" });
-    out(t(`[supervisor] shard ${msg.shard} paused (manual takeover); reason: ${verdict.why}`, `[监工] 分片 ${msg.shard} 已暂停（人工接管态），原因：${verdict.why}`));
+    detail(t(`[supervisor] shard ${msg.shard} paused (manual takeover); reason: ${verdict.why}`, `[监工] 分片 ${msg.shard} 已暂停（人工接管态），原因：${verdict.why}`));
     return;
   }
 
@@ -6288,9 +6290,9 @@ export function applyVerdict(args: {
         paused_reason: reason,
         note: reason,
       } as Partial<Dispatch>);
-      out(t(`[supervisor] escalated to the user: ${d.id}; ${verdict.why.slice(0, 120)}`, `[监工] ${d.id} 已转用户决策：${verdict.why.slice(0, 120)}`));
+      detail(t(`[supervisor] escalated to the user: ${d.id}; ${verdict.why.slice(0, 120)}`, `[监工] ${d.id} 已转用户决策：${verdict.why.slice(0, 120)}`));
     }
-    out(`[监工] 已转人工裁决（${msg.kind}）`);
+    detail(`[监工] 已转人工裁决（${msg.kind}）`);
     return;
   }
 
@@ -6315,7 +6317,7 @@ export function applyVerdict(args: {
         worker: d.worker ?? "",
         why: String(verdict.why ?? "").slice(0, 200),
       });
-      out(`[监工] 报告打回 ${d.id}：原进程还在，就地退回继续改（不重派）`);
+      detail(`[监工] 报告打回 ${d.id}：原进程仍在，报告就地退回继续修改（不重派）`);
       return;
     }
     /*
@@ -6325,7 +6327,7 @@ export function applyVerdict(args: {
     const why = `报告未通过审查：${verdict.why}`.slice(0, 200);
     const reopened = reopenSettledDispatch(root, d.id, why);
     if (!reopened) {
-      out(`[监工] 报告打回 ${d.id}，但重开失败：该单已被其它动作结束`);
+      detail(`[监工] 报告打回 ${d.id}，但重开失败：该单已被其它动作结束`);
       return;
     }
     /* 打回结论写进卡点段：重开的同一单据此知道上一轮哪一处没通过。 */
@@ -6340,18 +6342,18 @@ export function applyVerdict(args: {
       worker: d.worker ?? "",
       why: String(verdict.why ?? "").slice(0, 200),
     });
-    out(`[监工] 报告打回 ${d.id}：已重开同一单，下一轮继续做未通过的部分`);
+    detail(`[监工] 报告打回 ${d.id}：已重开同一单，下一轮继续做未通过的部分`);
     return;
   }
 
   if (verdict.decision === "accept") {
     const d = readDispatches(root).find((x) => x.id === msg.dispatch);
     if (!d) {
-      out(t("[supervisor] verdict accepted, but the dispatch no longer exists (it may have been closed manually)", "[监工] 裁决通过，但该派单已不存在（可能已被手动结束）"));
+      detail(t("[supervisor] verdict accepted, but the dispatch no longer exists (it may have been closed manually)", "[监工] 裁决通过，但该派单已不存在（可能已被手动结束）"));
       return;
     }
     const done = finishDispatch(root, d.id, "done", `监工裁决通过：${verdict.why}`.slice(0, 200));
-    out(done ? t(`[supervisor] verdict accepted; ${d.id} closed`, `[监工] 裁决通过，${d.id} 已结束`) : t(`[supervisor] verdict accepted, but ${d.id} is already terminal; nothing changed`, `[监工] 裁决通过，但 ${d.id} 已是终态，未改动`));
+    detail(done ? t(`[supervisor] verdict accepted; ${d.id} closed`, `[监工] 裁决通过，${d.id} 已结束`) : t(`[supervisor] verdict accepted, but ${d.id} is already terminal; nothing changed`, `[监工] 裁决通过，但 ${d.id} 已是终态，未改动`));
   }
 }
 
@@ -6380,7 +6382,7 @@ function settleDebt(root: string, out: (s: string) => void): void {
   const debt = st && Array.isArray(st.debt) ? (st.debt as Array<{ key: string }>) : [];
   if (debt.length > 0) {
     recordEvent(root, "debt_settled", { items: debt, count: debt.length });
-    out(`[监工] 终审阶段：补清待补项 ${debt.length} 条：${debt.map((d) => d.key).join("、")}`);
+    detail(`[监工] 终审阶段：补清待补项 ${debt.length} 条：${debt.map((d) => d.key).join("、")}`);
     updateState(root, (s) => {
       s.debt = [];
     });
@@ -6496,7 +6498,7 @@ async function summarizeRun(root: string, out: (s: string) => void): Promise<voi
   if (!f) return;
   const text = await summaryText(root, f.facts);
   recordEvent(root, "supervisor_reply", { reply: text, thread: "", msg_id: msgId("S0", "S") });
-  out(`[监工] 队列已清空，已写结束总结（${f.count} 张派单）`);
+  detail(`[监工] 队列已清空，已写结束总结（${f.count} 张派单）`);
 }
 
 /**
@@ -6509,7 +6511,7 @@ function looksLooping(file: string): { looping: boolean; sample: string; times: 
     if (!existsSync(file)) return none;
     const size = statSync(file).size;
     if (size < 4096) return none;
-    // 只读末尾 256KB：日志可能数百 MB，全量读取会拖住 调度轮次。
+    // 只读末尾 256KB：日志可能数百 MB，全量读取会拖住调度轮次。
     const want = Math.min(size, 256 * 1024);
     const fd = openSync(file, "r");
     const buf = Buffer.alloc(want);
@@ -6569,7 +6571,7 @@ async function reviewLooping(args: {
     "你在判断一个工作进程是否原地循环。",
     "",
     "【它这一单要做什么】",
-    String(args.action || "(未记录)").slice(0, 400),
+    String(args.action || "（未记录）").slice(0, 400),
     "",
     `【它日志的最后 ${args.tail.length} 行${clean.dropped ? `（其中 ${clean.dropped} 行思考过程已略去）` : ""}】`,
     shown,
@@ -6594,7 +6596,7 @@ async function reviewLooping(args: {
   const saysLoop = /循环|loop/i.test(t);
   const saysProgress = /推进|progress|正常/i.test(t);
   if (saysLoop && !saysProgress) return { kill: true, why: t.slice(0, 120), reviewed: true };
-  return { kill: false, why: t.slice(0, 120) || "(模型没说清楚)", reviewed: true };
+  return { kill: false, why: t.slice(0, 120) || "（模型未说明理由）", reviewed: true };
 }
 
 /**
@@ -6616,9 +6618,9 @@ function withAcceptance(root: string, action: string): string {
       return `- [${id}] ${title}${how ? `\n  怎么验：${how}` : ""}`;
     });
     return (
-      `${action}\n\n【验收清单 · 还没打勾的 ${todo.length} 条】\n${lines.join("\n")}\n` +
-      `（做完一条就把 ${LEGACY_ACCEPTANCE_DIR}/reports/vue-acceptance.jsonl 里那条的 done 改成 true，` +
-      "并在 evidence 写明核对方式。已经打勾的不要再做一遍。）"
+      `${action}\n\n【验收清单 · 未勾选 ${todo.length} 条】\n${lines.join("\n")}\n` +
+      `（每完成一条，把 ${LEGACY_ACCEPTANCE_DIR}/reports/vue-acceptance.jsonl 中该条目的 done 改为 true，` +
+      "并在 evidence 写明核对方式；已完成条目不重复执行。）"
     );
   } catch {
     return action;

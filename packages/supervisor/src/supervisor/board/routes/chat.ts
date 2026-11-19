@@ -137,12 +137,12 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             "",
             "【你现在对话的对象】",
             taskShard || taskStage || taskTitle
-              ? `任务：${taskTitle || "(未命名)"}`
-              : "任务：(未能定位，按全局状态回答)",
+              ? `任务：${taskTitle || "（未命名）"}`
+              : "任务：（未能定位，按全局状态回答）",
             me
               ? `当前状态：${me.status} ｜ 已运行 ${Math.round((me.duration_sec ?? 0) / 60)} 分钟`
               : "该单的执行进程已退出 ｜ 任务仍在，可以重开",
-            `最近输出：${String(me?.last || "").slice(0, 300) || "(还没有输出)"}`,
+            `最近输出：${String(me?.last || "").slice(0, 300) || "（尚无输出）"}`,
             ...(() => {
               if (!me?.worker) return [];
               const rec = loadWorker(ctx.opts.root, String(me.worker));
@@ -327,9 +327,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           "该线程对应的任务已结束，用户在此会话发来消息时直接回答。",
           "",
           "【该单情况】",
-          `任务：${taskTitle || "(未命名)"}`,
+          `任务：${taskTitle || "（未命名）"}`,
           `状态：${me ? me.status : "已结束"}${me?.settled ? "（已结束）" : ""}`,
-          `最近输出：${String(me?.last ?? "").slice(0, 300) || "(还没有输出)"}`,
+          `最近输出：${String(me?.last ?? "").slice(0, 300) || "（尚无输出）"}`,
           ...(readPause(ctx.opts.root) !== null
             ? ["", "【监工当前处于“暂停派单”】任何派单 / 插队 / 立即执行指令都不会执行。"]
             : []),
@@ -438,7 +438,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             : ""
         } ｜ 排队 ${queued} ｜ 异常 ${failed}`,
         ...(idleQueue ? ["队列状态：空（待命，没有派单在执行，也没有排队项）"] : []),
-        `下一步：${state?.next_action ? String(state.next_action).slice(0, 300) : "(空)"}`,
+        `下一步：${state?.next_action ? String(state.next_action).slice(0, 300) : "（空）"}`,
         `线程总数：${threads.length} ｜ 已完成 ${threads.filter((t) => t.status === "done" || t.status === "exited").length}`,
         ...(brief && via !== "capitalist"
           ? ["", "【重载后继承的上下文（压缩过，已完成且证据齐全的不要重做）】", brief]
@@ -698,7 +698,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             );
             if (r.ok) okIds.push(String(r.rec?.id ?? ""));
             else {
-              const head = String(r.error || "重开失败").split("白名单")[0] ?? "";
+              const head = String(r.error || "重开失败").split("可用动作")[0] ?? "";
               failNotes.push(`redo：${head.replace(/[：:，,]\s*$/, "")}`);
               continue;
             }
@@ -718,8 +718,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             via: "capitalist",
           });
           if (!w.ok) {
-            /* 白名单清单属于内部信息，不进入用户可见文案。 */
-            const head = String(w.error || "动作未执行").split("白名单")[0] ?? "";
+            /* 可用动作清单属于内部信息，不进入用户可见文案。 */
+            const head = String(w.error || "动作未执行").split("可用动作")[0] ?? "";
             const why = head.replace(/[：:，,]\s*$/, "");
             failNotes.push(`${actionName}：${why}`);
             continue;

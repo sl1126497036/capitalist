@@ -130,7 +130,7 @@ export function dispatchOfThreadNo(
     if (["open", "claimed", "reported", "review"].includes(s)) return true;
     /*
      * 重开要的是已经结束的单，而“结束”有三种终态：done、closed（用户结束）、failed。
-     * 只认 done 会让用户点“重开”时拿到“没有编号 #NN”——那张单明明就在看板上。
+     * 只认 done 会让用户点“重开”时拿到“没有编号 #NN”，而那张单就在看板上。
      */
     return opts.includeDone === true && ["done", "closed", "failed"].includes(s);
   };

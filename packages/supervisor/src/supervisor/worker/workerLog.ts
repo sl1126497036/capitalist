@@ -40,7 +40,7 @@ export interface WorkerLogParts {
 }
 
 /**
- * 宿主运维噪声，仅用于非 stream 模式；stream 模式按事件白名单判定，不依赖本表。
+ * 宿主运维噪声，仅用于非 stream 模式；stream 模式按允许的事件清单判定，不依赖本表。
  *
  * `fetch config failed` 与缩进堆栈行保留；`[launch error]` 归入 `LOG_KEEP`；被过滤行由调用方计数挂到同一次输出。
  */
@@ -123,7 +123,7 @@ export function tailWithinChars(lines: readonly string[], maxChars: number): str
   return picked.reverse().join("\n");
 }
 
-/** 日志中出现任一可解析且带 `type` 的 JSON 对象即判为 stream-json 模式，不限定事件类型白名单。 */
+/** 日志中出现任一可解析且带 `type` 的 JSON 对象即判为 stream-json 模式，不限定事件类型。 */
 function detectStream(lines: readonly string[]): boolean {
   let inspected = 0;
   for (const line of lines) {

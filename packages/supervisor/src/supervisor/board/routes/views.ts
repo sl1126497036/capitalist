@@ -257,7 +257,7 @@ ctx.req.on("end", () => {
       });
       return;
     }
-    sendJson(ctx, { error: `未知操作：${op || "(空)"}（dispatch / dismiss）` }, 400);
+    sendJson(ctx, { error: `未知操作：${op || "（空）"}（dispatch / dismiss）` }, 400);
   } catch (err) {
     sendJson(ctx, { error: String(err instanceof Error ? err.message : err) }, 500);
   }
@@ -344,7 +344,7 @@ ctx.req.on("end", () => {
       sendJson(ctx, { ok: gone, root, id, ...memorySnapshot(root), ...(gone ? {} : { error: "条目不存在" }) }, gone ? 200 : 404);
       return;
     }
-    sendJson(ctx, { error: `未知操作：${op || "(空)"}（add / update / delete）` }, 400);
+    sendJson(ctx, { error: `未知操作：${op || "（空）"}（add / update / delete）` }, 400);
   } catch (err) {
     sendJson(ctx, { error: String(err instanceof Error ? err.message : err) }, 500);
   }

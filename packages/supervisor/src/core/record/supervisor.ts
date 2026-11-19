@@ -337,9 +337,9 @@ export function saveSupervisor(root: string, rec: SupervisorRecord): void {
 }
 
 /**
- * 判活窗口，单位秒。取 3 轮调度 且不低于 30 秒。
+ * 判活窗口，单位秒。取 3 轮调度且不低于 30 秒。
  *
- * 下限用于吸收 调度抖动：调度轮次 设得小时（调试常用 1 秒）窗口会短到把正常抖动读成死亡，
+ * 下限用于吸收调度抖动：调度轮次设得小时（调试常用 1 秒）窗口会短到把正常抖动读成死亡，
  * 于是 hook 在监工仍存活时误报“监工已停”。
  */
 export function supervisorStaleSec(rec: SupervisorRecord): number {
@@ -365,7 +365,7 @@ export function isSupervisorAlive(root: string, nowSec = Date.now() / 1000): boo
 /**
  * 停止请求哨兵文件的绝对路径：`<root>/.capitalist/supervisor.stop`。
  *
- * 停止请求与心跳分文件存放。监工每轮调度 写心跳，写在同一文件里会被下一次心跳覆盖回
+ * 停止请求与心跳分文件存放。监工每轮调度写心跳，写在同一文件里会被下一次心跳覆盖回
  * `running`，停止请求就丢了。哨兵只写不删，由下一次启动清除，这样多个监工都能在同一次
  * 请求后退出。
  */
@@ -377,7 +377,7 @@ export function stopFlagPath(root: string): string {
  * 请求监工停止：写哨兵文件，并把监工记录的状态置为 `stopped`。
  *
  * @param note 停止原因，写进哨兵文件与监工记录的 `note`。
- * @returns 恒为 true。哨兵写入失败时不会抛错，下一次 调度轮次 的 `stopRequested` 读不到哨兵，
+ * @returns 恒为 true。哨兵写入失败时不会抛错，下一次调度轮次的 `stopRequested` 读不到哨兵，
  *   停止请求不生效。
  */
 export function requestSupervisorStop(root: string, note = "stopped by user", force = false): boolean {
@@ -400,7 +400,7 @@ export function requestSupervisorStop(root: string, note = "stopped by user", fo
   return true;
 }
 
-/** 是否存在停止请求哨兵。监工每轮调度 读一次，为真则退出。 */
+/** 是否存在停止请求哨兵。监工每轮调度读一次，为真则退出。 */
 export function stopRequested(root: string): boolean {
   return existsSync(stopFlagPath(root));
 }
@@ -1736,7 +1736,7 @@ export function openReviewDispatch(
   return next;
 }
 
-/** 扫一遍到点的待确认单，自动结束。每轮调度 调一次。 */
+/** 扫一遍到点的待确认单，自动结束。每轮调度调一次。 */
 export function sweepReviews(root: string): Dispatch[] {
   const rows = readDispatches(root);
   const now = Date.now();

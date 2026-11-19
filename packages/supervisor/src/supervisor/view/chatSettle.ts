@@ -79,7 +79,7 @@ export interface ChatSettleInput {
   dispatches?: string[];
   /** 动作名（dispatch / amend 等），便于追溯。 */
   action?: string;
-  /** 未产生动作时的原因（通道失败、字数超限、白名单拒绝等）。 */
+  /** 未产生动作时的原因（通道失败、字数超限、动作不被允许等）。 */
   error?: string;
 }
 

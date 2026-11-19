@@ -65,7 +65,7 @@ export async function cmdFeed(p: Parsed): Promise<number> {
   }
 
   if (feed.length === 0) {
-    write("还没有回报流水。\n");
+    write("暂无回报流水。\n");
     return 0;
   }
   for (const e of feed) {

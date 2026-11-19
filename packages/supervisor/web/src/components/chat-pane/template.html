@@ -60,7 +60,7 @@
                 </div>
               </div>
               <div v-if="!memEntries.length && memEditing !== 'new'" class="pickempty">
-                {{ t("还没有记忆。清空任务不会删这里的条目。") }}
+                {{ t("暂无记忆。清空任务不会删这里的条目。") }}
               </div>
               <div v-for="e in memEntries" :key="e.id" class="memrow" :class="{ editing: memEditing === e.id }">
                 <template v-if="memEditing === e.id">

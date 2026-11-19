@@ -130,7 +130,7 @@ function pickPath(data: unknown, path: string): { found: boolean; value: unknown
 /** 断言里的期望值/实际值的可读形式：字符串加引号，避免 `"88"` 与 `88` 看起来一样。 */
 function show(v: unknown): string {
   if (typeof v === "string") return JSON.stringify(v);
-  if (v === undefined) return "(缺失)";
+  if (v === undefined) return "（缺失）";
   if (typeof v === "object" && v !== null) return JSON.stringify(v);
   return String(v);
 }
@@ -157,14 +157,14 @@ function assertionsOf(spec: Spec): Assertion[] | null {
  * 等于让门槛静默失效，方向性错误。
  */
 function checkAssertion(data: unknown, a: Assertion, rel: string): string | null {
-  const head = `${rel} ${a.path || "(空路径)"}`;
+  const head = `${rel} ${a.path || "（空路径）"}`;
   const got = pickPath(data, a.path);
   if (!got.found) {
     return a.op === "truthy"
       ? `${head}：期望 truthy，实际 缺失`
       : a.op === "falsy"
         ? null // 缺字段按“没有这个元素”处理
-        : `${head}：期望 ${a.op || "(空)"} ${show(a.value)}，实际 缺失`;
+        : `${head}：期望 ${a.op || "（空）"} ${show(a.value)}，实际 缺失`;
   }
 
   const actual = got.value;
@@ -211,7 +211,7 @@ function checkAssertion(data: unknown, a: Assertion, rel: string): string | null
     case "falsy":
       return actual ? `${head}：期望 falsy，实际 ${show(actual)}` : null;
     default:
-      return `${head}：未知断言类型 ${a.op || "(空)"}（无法判定，不等于已满足）`;
+      return `${head}：未知断言类型 ${a.op || "（空）"}（无法判定，不等于已满足）`;
   }
 }
 
@@ -485,5 +485,5 @@ export function runCheck(spec: Spec | undefined, root: string): CheckResult {
   const type = String(spec.type ?? "");
   const checker = CHECKS[type];
   if (checker) return checker(spec, root);
-  return { ok: false, missing: [`未知检查类型：${type || "(空)"}（无法判定，不等于已满足）`] };
+  return { ok: false, missing: [`未知检查类型：${type || "（空）"}（无法判定，不等于已满足）`] };
 }

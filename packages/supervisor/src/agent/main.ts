@@ -148,7 +148,7 @@ function selftest(impl: HostImpl): number {
     `host: ${impl.id} (${impl.label})`,
     `config: ~/${impl.configDir}/${impl.settingsFile}`,
     "event map:",
-    ...points.map((p) => `  ${p} -> ${impl.hook.pointFor(p) ?? "(不处理)"}`),
+    ...points.map((p) => `  ${p} -> ${impl.hook.pointFor(p) ?? "（不处理）"}`),
   ];
   process.stdout.write(`${lines.join("\n")}\n`);
   return 0;
@@ -164,7 +164,7 @@ async function main(): Promise<number> {
 
   if (!impl) {
     // 未知宿主不阻断宿主进程（放行），但要在 stderr 说明。
-    process.stderr.write(`未知宿主：${args.hostArg ?? "(无可用默认 impl)"}。用 capitalist hosts 查看可用 id。\n`);
+    process.stderr.write(`未知宿主：${args.hostArg ?? "（无可用默认实现）"}。用 capitalist hosts 查看可用 id。\n`);
     return 0;
   }
 

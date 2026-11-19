@@ -106,7 +106,7 @@ export let lastCpuTimes: { idle: number; total: number } | null = null;
 /**
  * 整机内存压力百分比（0-100，越高越紧张），与活动监视器同一口径：
  * macOS 取 memory_pressure 的“System-wide memory free percentage”取反；
- * Linux 用 /proc/meminfo 的 MemAvailable 折算；Windows 用 (总量 − 空闲) / 总量。
+ * Linux 用 /proc/meminfo 的 MemAvailable 折算；Windows 用（总量 − 空闲）/ 总量。
  * 读不到时返回 null，不以其它值代入。
  */
 /**

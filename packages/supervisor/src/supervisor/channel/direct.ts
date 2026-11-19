@@ -1,7 +1,7 @@
 /**
  * 监工调度指令通道（`.capitalist/supervisor-direct.jsonl`）。与 `direct.jsonl` 是两条独立通道：
  * 后者承载派单内容，前者承载调度动作，合并会导致动作与内容互相误判。
- * 只接受白名单动作，未知动作落已消费的拒绝记录；本模块只写不执行，状态变更由 `loop.ts` 的 调度轮次完成，写入来源由调用方校验。
+ * 只接受允许的动作，未知动作落已消费的拒绝记录；本模块只写不执行，状态变更由 `loop.ts` 的调度轮次完成，写入来源由调用方校验。
  */
 
 import { join } from "node:path";
@@ -14,7 +14,7 @@ import { msgId } from "../../core/message/msgId";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 
 /**
- * 白名单动作，顺序即界面快捷清单顺序。`dispatch` 当场建单并插到队首；
+ * 允许的动作，顺序即界面快捷清单顺序。`dispatch` 当场建单并插到队首；
  * `instruct` 已废弃，因看板与 `loop.ts` 仍引用而保留。
  */
 export const CAPITALIST_ACTIONS = [
@@ -117,7 +117,7 @@ function newId(target: string): string {
 }
 
 /**
- * 把自然语言解析成白名单动作。仅按首词与参数切分，不推断意图；
+ * 把自然语言解析成允许的动作。仅按首词与参数切分，不推断意图；
  * 认不出即返回未知动作，避免误解析触发动作。
  */
 export function parseSupervisorCommand(text: string): { action: SupervisorAction; arg: string; confirm: boolean } | { error: string } {
@@ -169,7 +169,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     const looksChinese = /[\u4e00-\u9fa5]/.test(raw) && raw.length >= 6;
     if (looksChinese) return { action: "instruct" as SupervisorAction, arg: raw, confirm: false };
     return {
-      error: `未知动作“${head || raw}”。白名单：${CAPITALIST_ACTIONS.join(" / ")}（中文同义词同样可用；整句自然语言会按 instruct 解析）`,
+      error: `未知动作“${head || raw}”。可用动作：${CAPITALIST_ACTIONS.join(" / ")}（中文同义词同样可用；整句自然语言会按 instruct 解析）`,
     };
   }
 
@@ -203,7 +203,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
 }
 
 /**
- * 追加一条调度指令。显式 `action` 先校验白名单，未知动作报错且不落盘；
+ * 追加一条调度指令。显式 `action` 先校验是否为允许的动作，未知动作报错且不落盘；
  * 仅给 `text` 时按自然语言解析，未知动作落已消费的拒绝记录供界面回显。
  */
 export function appendSupervisorDirective(
@@ -235,7 +235,7 @@ export function appendSupervisorDirective(
 
   if (explicit) {
     if (!(CAPITALIST_ACTIONS as readonly string[]).includes(explicit)) {
-      return { ok: false, error: `未知动作“${explicit}”。白名单：${CAPITALIST_ACTIONS.join(" / ")}` };
+      return { ok: false, error: `未知动作“${explicit}”。可用动作：${CAPITALIST_ACTIONS.join(" / ")}` };
     }
     action = explicit as SupervisorAction;
   } else {

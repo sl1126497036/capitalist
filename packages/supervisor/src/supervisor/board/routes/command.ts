@@ -64,7 +64,7 @@ ctx.req.on("end", () => {
       : ctx.opts.root;
 
   if (input.action === "stop") {
-    /** 先写停止哨兵再结束进程；结束失败时监工下一轮调度 仍会自行退出。 */
+    /** 先写停止哨兵再结束进程；结束失败时监工下一轮调度仍会自行退出。 */
     const rec = loadSupervisor(targetRoot);
     requestSupervisorStop(targetRoot, "看板指标条：用户关停");
     let killedPid = 0;
@@ -86,7 +86,7 @@ ctx.req.on("end", () => {
         killed: killedPid,
         effective: killedPid
           ? `已关停（结束进程 ${killedPid}）；进度已保存，重新执行 capitalist supervise 后按恢复计划继续`
-          : "停止请求已写入，监工在下一 tick 退出",
+          : "停止请求已写入，监工在下一轮调度退出",
       }),
     );
     return;
@@ -282,7 +282,7 @@ ctx.req.on("end", () => {
       action: r.rec.action,
       arg: r.rec.arg,
       text: r.rec.text,
-      ...(rejected ? { rejected: true, reason: rejected } : { effective: "下一个 tick 生效" }),
+      ...(rejected ? { rejected: true, reason: rejected } : { effective: "下一轮调度生效" }),
       detail: r.rec.result?.detail ?? "",
     }),
   );

@@ -171,8 +171,8 @@ export function reapOrphans(
     reaped.push({ id: w.id, pid: w.pid, dispatch: w.dispatch, reason, via });
 
     out(
-      `[监工] 收掉上一轮遗留 worker ${w.id}（pid ${w.pid}，派单 ${w.dispatch}）：${reason}` +
-        `${how === "unconfirmed" ? "——终止后仍未确认退出，需人工核查" : ""}`,
+      `[监工] 回收上一轮遗留 worker ${w.id}（pid ${w.pid}，派单 ${w.dispatch}）：${reason}` +
+        `${how === "unconfirmed" ? "；终止后仍未确认退出，需人工核查" : ""}`,
     );
   }
 

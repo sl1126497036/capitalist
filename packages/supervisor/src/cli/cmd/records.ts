@@ -163,14 +163,14 @@ export function cmdWorker(p: Parsed): number {
 
   const log = String(w.log ?? "");
   if (!log || !existsSync(log)) {
-    process.stdout.write("没有日志，看不到动作\n");
+    process.stdout.write("没有日志，无法查看动作\n");
     return 0;
   }
   let parts: ReturnType<typeof parseWorkerLog>;
   try {
     parts = parseWorkerLog(readFileSync(log, "utf8").split(/\r?\n/), { stream: true });
   } catch (e) {
-    process.stdout.write(`日志读不出来：${(e as Error).message}\n`);
+    process.stdout.write(`日志无法读取：${(e as Error).message}\n`);
     return 0;
   }
 
@@ -210,7 +210,7 @@ export function cmdSessions(p: Parsed): number {
   const all = loadSessions(root);
   const ids = Object.keys(all);
   if (ids.length === 0) {
-    process.stdout.write("还没有登记任何会话（hook 跑过一次之后才会有）\n");
+    process.stdout.write("尚未登记任何会话（hook 运行一次后才有）\n");
     return 0;
   }
   for (const id of ids) {
@@ -627,7 +627,7 @@ export function cmdFire(p: Parsed): number {
       recordReview(root, {
         rule: h.id,
         label: `越界放行：${h.label}`,
-        why: "这条本来要报备，用户已授权。核授权范围和实际动作对不对得上——别出现“批了 A、做了 B”。",
+        why: "这条本来要报备，用户已授权。核对授权范围与实际动作是否一致，不能出现“批了 A、做了 B”。",
         evidence: `${text} ｜ 授权原话：${authorized}`,
         decision: "AUTHORIZED",
         session: envSession(),

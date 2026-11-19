@@ -561,7 +561,7 @@ export function spliceDirectives(action: string, directives: Directive[]): strin
  * 在这里回报。没有这一步，队列里只剩一个 consumed 布尔值，做没做永远无从查证。
  *
  * 只管一个编号，不做批量解析（调用方按 `capitalist report --outcome` 的格式拆好再逐条调）。
- * 写之前校验送达方：只有把这句话送到手的那张单能给它下结论，别的单改不了别人的账。
+ * 写之前校验送达方：只有送达目标单能给它下结论，其他单不能改它的结论。
  *
  * @returns 命中并写入返回记录；编号查不到 / 不是这一单送出的 / 拿不到锁返回原因。
  */
@@ -611,7 +611,7 @@ export function markDirectiveOutcome(
     const rec = rows[hit] as Directive;
     const owner = String(rec.delivered_by ?? rec.consumed_by ?? "");
     if (by && owner && owner !== by) {
-      return { ok: false as const, reason: `这条插话是送达给 ${owner} 的，不是这一单，改不了它的结论` };
+      return { ok: false as const, reason: `这条插话送达给 ${owner}，不是这一单，不能改它的结论` };
     }
     rec.outcome = outcome;
     rec.outcome_at = new Date().toISOString();
@@ -949,7 +949,7 @@ export function closeTask(
   /*
    * 结束后冻住这一片。
    *
-   * 只把这一张单改成 closed 不够：阶段门槛仍未达标，监工下一轮调度 会重新建一张单派出去，
+   * 只把这一张单改成 closed 不够：阶段门槛仍未达标，监工下一轮调度会重新建一张单派出去，
    * 用户看到的就是“说了停，它还在派”。接管态是现成的抑制开关，loop 的 held() 会跳过
    * 该片的派单与自动验收。要恢复自动调度，用户执行 `capitalist release <片>`。
    *

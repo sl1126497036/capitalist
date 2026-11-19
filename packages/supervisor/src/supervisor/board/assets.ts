@@ -46,7 +46,7 @@ export function sendAsset(
 /**
  * 监工对话层最近一次实际使用的模型，单独落一个文件。
  *
- * 不写 `supervisor.json`：监工每轮调度 用内存快照整份写回该文件，只同步 `supervisor_model`
+ * 不写 `supervisor.json`：监工每轮调度用内存快照整份写回该文件，只同步 `supervisor_model`
  * 与上下文上限，别的字段会被抹掉。`supervisor_model` 为空时面板靠这份记录标出具体模型。
  */
 export function supervisorModelUsedFile(root: string): string {

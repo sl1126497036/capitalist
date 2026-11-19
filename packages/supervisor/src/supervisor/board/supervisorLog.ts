@@ -199,7 +199,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
   }
 }
 
-/** 监工流与工作线程的 /api/thread 并列，调度轮次 不在这里合并。 */
+/** 监工流与工作线程的 /api/thread 并列，调度轮次不在这里合并。 */
 /** /api/capitalist-events 结果缓存键含文件指纹、参数与 root，避免多根切换串数据。 */
 let supervisorLogCache: { root: string; key: string; value: ReturnType<typeof buildSupervisorLog> } | null = null;
 
@@ -225,7 +225,7 @@ export function buildSupervisorLog(
   /**
    * 结果缓存键用 5 秒时间桶。
    *
-   * 不用文件 mtime/size：监工每 5 秒写一条 调度轮次，带了就等于永远不命中，
+   * 不用文件 mtime/size：监工每 5 秒写一条调度轮次，带了就等于永远不命中，
    * 每次轮询都要重读整份台账（几千行）。桶内复用，代价是最迟 2 秒看到新事件，
    * 与看板 2 秒轮询叠加仍在可接受范围；写接口进来时会直接置空，不必等桶过期。
    */
@@ -391,7 +391,7 @@ export function buildSupervisorLog(
   /*
    * 派单消息同时在监工进程出现。
    *
-   * 自动派单只写 `dispatch_open`，该事件不在消息白名单内，仅靠事件流时监工进程没有消息。
+   * 自动派单只写 `dispatch_open`，该事件不在允许的消息事件清单内，仅靠事件流时监工进程没有消息。
    * 派单自身带正文与编号，按派单消息渲染，与工作进程侧一致。
    */
   for (const d of dispatchRows) {

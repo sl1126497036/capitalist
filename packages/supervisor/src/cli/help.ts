@@ -267,7 +267,7 @@ const HELP_GROUPS: HelpGroup[] = [
           },
         ],
       },
-      { cmd: "supervise-stop", brief: ["请求监工退出（下一 tick 生效）"] },
+      { cmd: "supervise-stop", brief: ["请求监工退出（下一轮调度生效）"] },
       { cmd: "auth", brief: ["已移除；认证使用宿主自身登录态"] },
       {
         cmd: "auth-check",
@@ -278,10 +278,10 @@ const HELP_GROUPS: HelpGroup[] = [
           { f: "--json", d: ["输出 JSON"] },
         ],
       },
-      { cmd: 'pause ["<原因>"]', brief: ["写 .capitalist/pause.json：下一 tick 起不派新单，", "运行中的进程被停止，对应派单退回排队"] },
+      { cmd: 'pause ["<原因>"]', brief: ["写 .capitalist/pause.json：下一轮调度起不派新单，", "运行中的进程被停止，对应派单退回排队"] },
       {
         cmd: "resume",
-        brief: ["删除 .capitalist/pause.json：下一 tick 起恢复派单。", "暂停的旧派单由 capitalist wake --user 唤醒"],
+        brief: ["删除 .capitalist/pause.json：下一轮调度起恢复派单。", "暂停的旧派单由 capitalist wake --user 唤醒"],
         opts: [
           {
             f: "--user",
@@ -307,8 +307,8 @@ const HELP_GROUPS: HelpGroup[] = [
       {
         cmd: "reload",
         brief: [
-          "上下文重载：写入进度快照 -> 压缩心跳、tick 与已完成明细 ->",
-          "切换对话会话 -> 写出恢复计划。已做但未验证的条目由监工下一 tick",
+          "上下文重载：写入进度快照 -> 压缩心跳、调度轮次与已完成明细 ->",
+          "切换对话会话 -> 写出恢复计划。已做但未验证的条目由监工下一轮调度",
           "派复验单；已完成且证据齐全的条目不重派。",
         ],
         opts: [
@@ -363,7 +363,7 @@ const HELP_GROUPS: HelpGroup[] = [
       { cmd: "release [<分片>]", brief: ["交还被接管的分片，恢复监工自动重派与自动验收"] },
       {
         cmd: "stop-worker <id>",
-        brief: ["中断指定工作进程：结束其进程，并把它的派单按失败结束", "（下一 tick 重派，分片被接管或登记阻塞时除外）"],
+        brief: ["中断指定工作进程：结束其进程，并把它的派单按失败结束", "（下一轮调度重派，分片被接管或登记阻塞时除外）"],
       },
       {
         cmd: "close <派单id|worker-id|分片>",
@@ -549,23 +549,23 @@ export const COMMAND_HELP: Record<string, string> = {
   takeover: `capitalist takeover [<分片>] [--reason "<原因>"]
 接管指定分片。省略分片时为整个任务根。
   - 写入 .capitalist/takeover.json，记 root / shard / at / reason / active
-  - 生效时机：下一 tick 起监工不自动重派该分片，也不自动验收该分片
+  - 生效时机：下一轮调度起监工不自动重派该分片，也不自动验收该分片
   - 不终止运行中的进程；中断进程使用 capitalist stop-worker
   - 交还：capitalist release [<分片>]`,
   release: `capitalist release [<分片>]
 交还被接管的分片。省略分片时交还全部接管项。
   - 把 .capitalist/takeover.json 里对应条目的 active 置为 false，并记 released_at
-  - 生效时机：下一 tick 起监工恢复该分片的自动重派与自动验收`,
+  - 生效时机：下一轮调度起监工恢复该分片的自动重派与自动验收`,
   "stop-worker": `capitalist stop-worker <worker-id>
 中断指定工作进程。
   - 结束该进程（SIGTERM），并把它的派单按失败结束
-  - 下一 tick 重派该派单；分片被接管（capitalist takeover）或登记阻塞（capitalist block）时除外
+  - 下一轮调度重派该派单；分片被接管（capitalist takeover）或登记阻塞（capitalist block）时除外
   - worker-id 由 capitalist workers 输出`,
   close: `capitalist close <派单id|worker-id|分片> [--reason "原因"]
 手动结束：运行中与排队中的派单均可关闭。
   - 派单状态置为终态 closed，写 done_at / closed_at / closed_by / note
   - 存在运行中的进程时，先写 closed 结束再发送 SIGTERM；顺序颠倒会让进程退出回调
-    按失败结束，下一 tick 重派
+    按失败结束，下一轮调度重派
   - 写 dispatch_closed 事件到 .capitalist/events.jsonl（含原状态、是否发送过 SIGTERM）
   - 监工不再为已关闭分片补单；关闭的分片计入完成数，不阻塞阶段推进
   - stop-worker 中断进程并触发重派；close 关闭派单且不再补单
@@ -578,7 +578,7 @@ export const COMMAND_HELP: Record<string, string> = {
     保留需求原文、未完成项、决策结论、待复验清单
   - 切换监工对话会话，原会话中的工具输出不再读取
   - 写 .capitalist/reload/resume.json：done_verified 不重派；done_unverified（已做但未验证）
-    由监工下一 tick 派 source=reverify 的复验单，不按完成处理
+    由监工下一轮调度派 source=reverify 的复验单，不按完成处理
   - 重载期间看板监工面板显示“监工重载中”，结束后隐藏（.capitalist/reload/active.json）
-  - 生效时机：复验单在下一 tick 由监工补出；阶段推进与门槛判定不受影响`,
+  - 生效时机：复验单在下一轮调度由监工补出；阶段推进与门槛判定不受影响`,
 };

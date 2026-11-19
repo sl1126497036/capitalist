@@ -120,7 +120,7 @@ function cmdRestart(p: Parsed): number {
 function createRoot(target: string, spec: string, fallback: boolean, rootArg?: string): number {
   const contract = loadContract(spec);
   if (!contract) {
-    die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `找不到任务列表：${spec}\n可用任务列表：${contractNames(skillDirs()).join(", ") || "(无)"}`));
+    die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `找不到任务列表：${spec}\n可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}`));
   }
   const root = rootArg ?? process.cwd();
   if (existsSync(statePath(root))) die(t(`A supervised task already exists: ${root} (see capitalist status)`, `已存在受监督任务：${root}（用 capitalist status 查看）`));
@@ -159,7 +159,7 @@ function cmdAdopt(p: Parsed): number {
   const root = rootOrDie(p);
   const { state } = loadOrDie(root);
   const contract = loadContract(spec, skillDirs());
-  if (!contract) die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `找不到任务列表：${spec}\n可用任务列表：${contractNames(skillDirs()).join(", ") || "(无)"}`));
+  if (!contract) die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `找不到任务列表：${spec}\n可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}`));
 
   const prev = state.contract;
   const keepStage = flagBool(p, "keep-stage");
@@ -385,7 +385,7 @@ function cmdTasks(p: Parsed): number {
   }
   write(`${summaryLine(s)}\n`);
   if (rows.length === 0) {
-    write(t("(The task pool is empty: no dispatches yet. Each dispatch registers one entry.)\n", "（任务池是空的：还没有派过单。每建一张派单会自动登记一项。）\n"));
+    write(t("(The task pool is empty: no dispatches yet. Each dispatch registers one entry.)\n", "（任务池是空的：尚未派过单。每建一张派单会自动登记一项。）\n"));
     return 0;
   }
   /** 排序按“还欠着的”优先：失败 -> 待确认 -> 进行中 -> 待派 -> 已验收 -> 已关闭。 */
@@ -462,7 +462,7 @@ function cmdStatus(p: Parsed): number {
   write(`${buildBrief({ root, state, contract, mode, missing: check.missing })}\n`);
 
   const supervisorLabel = SUPERVISOR_STATE_LABEL[capitalist.state];
-  write(t(`\nSupervisor: ${supervisorLabel}${capitalist.state === "online" ? ` (pid ${capitalist.pid}, ${capitalist.detail})` : ` — ${capitalist.detail}`}\n`, `\n监工：${supervisorLabel}${capitalist.state === "online" ? `（pid ${capitalist.pid}，${capitalist.detail}）` : ` —— ${capitalist.detail}`}\n`));
+  write(t(`\nSupervisor: ${supervisorLabel}${capitalist.state === "online" ? ` (pid ${capitalist.pid}, ${capitalist.detail})` : ` — ${capitalist.detail}`}\n`, `\n监工：${supervisorLabel}${capitalist.state === "online" ? `（pid ${capitalist.pid}，${capitalist.detail}）` : `：${capitalist.detail}`}\n`));
   // 看板地址只在监工在线时给：已停的监工没有在监听的端口，印出来等于引导用户点一个空地址。
   if (boardUrl) write(t(`Board: ${boardUrl}\n`, `看板：${boardUrl}\n`));
 
@@ -637,7 +637,7 @@ function stageOfTarget(root: string, target: string): string {
  * 接管某分片。
  *
  * 接管只改变监工行为：落 `.capitalist/takeover.json`（记 root / shard / at / reason / active），
- * 调度层每轮调度 读它，被接管的片不自动重派、也不自动验收。不是只改界面文案。
+ * 调度层每轮调度读它，被接管的片不自动重派、也不自动验收。不是只改界面文案。
  * 接管不终止已运行中的进程，要中断进程用 `capitalist stop-worker`。
  */
 function cmdTakeover(p: Parsed): number {
@@ -700,7 +700,7 @@ function cmdPause(p: Parsed): number {
 }
 
 /**
- * 解除暂停：删除 .capitalist/pause.json，下一轮调度 起监工恢复派单（不自动认领契约分片）。
+ * 解除暂停：删除 .capitalist/pause.json，下一轮调度起监工恢复派单（不自动认领契约分片）。
  *
  * 恢复派单是用户动作。非交互环境（宿主会话里代执行命令）默认拒绝，避免将启动信号
  * 视为用户授权；用户明确要求时通过 `--user` 恢复，看板“恢复调度”按钮调用接口，不经过这里。
@@ -759,8 +759,8 @@ function cmdHosts(p: Parsed): number {
       caps.hookBlock ? "block" : null,
       caps.hookInject ? "inject" : null,
       caps.structuredDeny ? "json-deny" : "exit-deny",
-      caps.install ? (caps.installNeedsConfirm ? t("install(confirm)", "install(需确认)") : "install") : null,
-      caps.workerLaunch ? (caps.workerAutoDetect ? "worker(auto)" : t("worker(explicit)", "worker(显式)")) : null,
+      caps.install ? (caps.installNeedsConfirm ? t("install(confirm)", "install（需确认）") : "install") : null,
+      caps.workerLaunch ? (caps.workerAutoDetect ? "worker(auto)" : t("worker(explicit)", "worker（显式）")) : null,
       caps.workspacePrepare ? "workspace" : null,
     ].filter((x): x is string => x !== null);
     return {

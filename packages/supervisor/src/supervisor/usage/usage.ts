@@ -817,7 +817,7 @@ export function buildUsageLedger(root: string): UsageLedger {
 
   const byStage = new Map<string, UsageRow[]>();
   for (const r of workers) {
-    const key = r.stage || "(未知阶段)";
+    const key = r.stage || "（未知阶段）";
     const list = byStage.get(key);
     if (list) list.push(r);
     else byStage.set(key, [r]);

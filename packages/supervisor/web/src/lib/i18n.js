@@ -519,7 +519,7 @@ const EN = {
   "输入框中的内容会先登记，重派时携带。":
     "What is in the input is recorded first and carried into the redispatch.",
   "过程日志": "Process log",
-  "还没有记忆。清空任务不会删这里的条目。":
+  "暂无记忆。清空任务不会删这里的条目。":
     "No memory entries yet. Clearing tasks does not remove entries here.",
   "这一单的消息": "Messages for this task",
   "这一单的验收项": "Acceptance items for this task",

@@ -177,7 +177,7 @@ function isDropped(name: string): boolean {
 
 /**
  * 工作进程继承监工会话的整份环境，再剔除宿主会话标记；剔除规则由 impl 按语义声明。
- * 只透传系统变量白名单会削掉 CLI 自身的配置项，使进程无会话输出。
+ * 只透传一组固定的系统变量会削掉 CLI 自身的配置项，使进程无会话输出。
  */
 export function workerEnv(extra?: Record<string, string | undefined>): Record<string, string> {
   const env: Record<string, string> = {};
@@ -906,7 +906,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
   };
   /*
    * 每段输出后补一次心跳，不依赖宿主 hook（配置丢失或宿主升级时 hook 可能整段不触发，而输出正常）。
-   * 落盘间隔取 2 秒：每块输出都改写工作进程记录会拖慢 调度轮次，并与 hook 的写入互相覆盖；判活阈值是分钟级。首次输出把状态从 starting 置为 running。
+   * 落盘间隔取 2 秒：每块输出都改写工作进程记录会拖慢调度轮次，并与 hook 的写入互相覆盖；判活阈值是分钟级。首次输出把状态从 starting 置为 running。
    */
   let lastBeat = 0;
   const beatFromOutput = (): void => {

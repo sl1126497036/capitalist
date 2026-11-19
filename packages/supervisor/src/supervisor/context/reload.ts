@@ -128,7 +128,7 @@ export interface ReloadItem {
   /**
    * 这一片是否仍在当前阶段的契约里。
    *
-   * false 来自已删分片或上一阶段遗留的 review 单，只作记录、不进复验清单：阶段推进后 `supersedeStaleDispatches` 会把旧阶段的在途单作废，派复验单只会每轮调度 被作废一次。
+   * false 来自已删分片或上一阶段遗留的 review 单，只作记录、不进复验清单：阶段推进后 `supersedeStaleDispatches` 会把旧阶段的在途单作废，派复验单只会逐轮被作废。
    */
   in_contract: boolean;
   /** 需求原文，不压缩。 */
@@ -409,7 +409,6 @@ function fileChars(file: string): number {
   }
 }
 
-/** 截断到 n 字符，超出以省略号收尾。 */
 /** 单行化：快照里的 title / why 要能进表格，不携带换行。 */
 function oneLine(text: string): string {
   return String(text ?? "").replace(/\s+/g, " ").trim();
@@ -724,7 +723,7 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
 
 /**
  * 判定一片的状态。
- * 顺序即优先级：在途 > 失败 > 报完成待确认 > done(有证据) > done(无证据) > 未开始。
+ * 顺序即优先级：在途 > 失败 > 报完成待确认 > done（有证据）> done（无证据） > 未开始。
  * “done 但无证据”是复验的输入，不落成 done_verified。
  */
 function classifyItem(
@@ -849,7 +848,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   L.push(`# 监工重载简报（gen ${snap.gen}）`);
   L.push(`生成于 ${snap.at}｜目标：${snap.target}｜任务列表：${snap.contract}`);
   L.push(`当前阶段：${snap.stage} ${snap.stage_name}${snap.stage_index >= 0 ? `（第 ${snap.stage_index + 1} 段）` : ""}`);
-  L.push(`下一步：${oneLine(snap.next_action) || "(空)"}`);
+  L.push(`下一步：${oneLine(snap.next_action) || "（空）"}`);
   L.push("");
 
   /* 契约可能数日未更新。简报标明契约新鲜度，并声明冲突时以派单台账为准。 */
@@ -872,7 +871,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   L.push("> 它们不是“现在要立刻做的事”：当前要做的活以派单台账为准。与下面的“未完成”冲突时，以派单为准；");
   L.push("> 台账里 done / closed 的派单是历史，不要按它们恢复任何东西。");
   L.push("");
-  if (snap.requirements.length === 0) L.push("(无)");
+  if (snap.requirements.length === 0) L.push("（无）");
   for (const r of snap.requirements) {
     L.push(`【${r.source}】`);
     L.push(r.text.trim());
@@ -894,7 +893,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
 
   const unfinished = snap.items.filter((i) => i.state !== "done_verified" && i.state !== "done_unverified");
   L.push("## 未完成（重载后继续，不重复已完成的工作）");
-  if (unfinished.length === 0) L.push("(无)");
+  if (unfinished.length === 0) L.push("（无）");
   for (const i of unfinished) {
     const fail = i.failures > 0 ? `｜连续失败 ${i.failures} 次` : "";
     L.push(`- [${i.state}] ${i.stage}/${i.shard || "-"} ${i.title}：${clipText(i.why, 120)}${fail}｜阶段原要求（历史）：${clipText(oneLine(i.action), 300)}`);
@@ -903,7 +902,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
 
   const reverify = snap.items.filter((i) => i.state === "done_unverified");
   L.push("## 待复验（已做但未验证，重载后必须派复验，不得当完成）");
-  if (reverify.length === 0) L.push("(无)");
+  if (reverify.length === 0) L.push("（无）");
   for (const i of reverify) {
     const can = i.stage === snap.stage && i.in_contract;
     L.push(`- ${i.stage}/${i.shard || "-"} ${i.title}：${i.why}${can ? "" : "（只记录，不派复验：属于旧阶段或分片已删）"}`);
@@ -912,29 +911,29 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
 
   const done = snap.items.filter((i) => i.state === "done_verified");
   L.push("## 已完成（不重派；只留标题与依据）");
-  if (done.length === 0) L.push("(无)");
+  if (done.length === 0) L.push("（无）");
   for (const i of done) L.push(`- ${i.stage}/${i.shard || "-"} ${i.title}（${clipText(i.why, 100)}）`);
   L.push("");
 
   L.push("## 用户未处理的插话（原话，按它执行）");
-  if (snap.directives.length === 0) L.push("(无)");
+  if (snap.directives.length === 0) L.push("（无）");
   for (const d of snap.directives) L.push(`- ${d.shard ? `[${d.shard}] ` : ""}${d.text}`);
   L.push("");
 
   L.push("## 未裁决提问（等用户回填，不自行裁决）");
-  if (snap.asks.length === 0) L.push("(无)");
+  if (snap.asks.length === 0) L.push("（无）");
   /* 提问编号用“问N”：`#N` 保留给任务编号（`thread-no.json`），避免与任务号混淆。 */
   for (const a of snap.asks) L.push(`- 问${a.id} ${a.shard ? `[${a.shard}] ` : ""}${a.text}`);
   L.push("");
 
   L.push("## 决策结论");
-  if (snap.decisions.length === 0) L.push("(无)");
+  if (snap.decisions.length === 0) L.push("（无）");
   for (const d of snap.decisions) L.push(`- (${d.kind}) ${d.text}`);
   L.push("");
 
   const retried = Object.entries(snap.retries).filter(([, n]) => n > 0);
   L.push("## 重派计数");
-  if (retried.length === 0) L.push("(无)");
+  if (retried.length === 0) L.push("（无）");
   for (const [k, n] of retried) L.push(`- ${k}: 重派 ${n} 次`);
 
   const text = L.join("\n");
@@ -962,9 +961,9 @@ export function buildResumePlan(snap: ReloadSnapshot): ResumePlan {
       /*
        * 只有“本阶段 + 仍在契约里”的片能派复验单。
        *
-       * 其余两种派了也活不过一个 调度轮次：旧阶段的在途单会被 supersedeStaleDispatches
+       * 其余两种派了也活不过一个调度轮次：旧阶段的在途单会被 supersedeStaleDispatches
        * 作废，契约里删掉的分片不在本案集合里同样被作废。所以它们进 deferred，
-       * 留着信息、不制造一张每轮调度 生一次的假单。
+       * 留着信息、不制造一张每轮调度生一次的假单。
        */
       if (i.stage === snap.stage && i.in_contract) {
         reverify.push({ key: i.key, stage: i.stage, shard: i.shard, title: i.title, action: i.action, why: i.why });
@@ -1428,7 +1427,7 @@ export function buildSupervisorContextView(root: string): SupervisorContextView 
   const used = rawUsed !== null && limit > 0 ? Math.min(rawUsed, limit) : rawUsed;
   const ratio = used !== null && limit > 0 ? used / limit : null;
   let reason = "";
-  if (!rec) reason = "还没和监工对话过：没有会话上下文读数";
+  if (!rec) reason = "尚未与监工对话过：没有会话上下文读数";
   else if (!fresh) reason = "上下文刚优化过，等待新会话的读数";
   else if (!limit) reason = "没有可用的上下文上限（模型未上报窗口，也没有配置）";
   return {
@@ -1734,8 +1733,8 @@ export function supervisorChatTurnSessionId(root: string): string {
 }
 
 /**
- * 严重异常事件白名单：只有这一类进监工对话上下文，心跳与过程流水不进。
- * 采用白名单而非黑名单：新增过程事件默认不进，须在此显式登记，避免漏配后心跳流水挤占上下文。
+ * 严重异常事件允许清单：只有这一类进监工对话上下文，心跳与过程流水不进。
+ * 采用显式登记而非默认放行：新增过程事件默认不进，须在此显式登记，避免漏配后心跳流水挤占上下文。
  */
 const SEVERE_SUPERVISOR_EVENT =
   /^(worker_killed|worker_looping_killed|worker_gone|worker_launch_failed|dispatch_failed|redispatch_capped|dispatch_forced_finished|contract_error|contract_refused|contract_unstable|stuck_detected|stuck_killed|stuck_escalated|stage_stalled|board_reload_blocked|duplicate_launch_refused|retry_refused)$/i;

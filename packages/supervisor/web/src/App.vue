@@ -1276,7 +1276,7 @@ function onPromoteTask({ id, shard, title }) {
   });
 }
 
-/* 唤醒同样使用页面级回执；暂停单可能已过时，回执说明“下一轮调度 起参与调度”。 */
+/* 唤醒同样使用页面级回执；暂停单可能已过时，回执说明“下一轮调度起参与调度”。 */
 function onWakeTask({ id, shard, title }) {
   if (!id) return null;
   return applyAction({

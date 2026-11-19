@@ -208,7 +208,7 @@ export function planRebuild(root: string): RebuildPlan {
             action: "reopen",
             title: labelOf(d),
             status,
-            reason: "这件事还没做完，作为代表重新排队",
+            reason: "这件事尚未完成，作为代表重新排队",
             parent: "",
             parentReason: "",
             pending: false,

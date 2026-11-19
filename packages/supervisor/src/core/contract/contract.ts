@@ -362,7 +362,7 @@ export function readContractFile(spec: string, searchDirs: readonly string[] = [
 }
 
 /**
- * 每轮调度 调用：重读契约，按 mtime 与内容哈希判变化。
+ * 每轮调度调用：重读契约，按 mtime 与内容哈希判变化。
  *
  * 解析失败且 `prev` 存在时，沿用上一份契约并回报 `error`，不中断调度；
  * 首读就失败（无 `prev`）则抛错，由调用方决定退出还是改用默认。
@@ -379,7 +379,7 @@ export function reloadContract(
 ): HotContract {
   let res = readContractFile(spec, searchDirs);
   /* 契约文件不一定在宿主 skills 目录下（比如 adopt 时给的是任务根外的路径），
-     按名搜不到就退回 adopt 记下的绝对路径，避免每个 tick 重复报解析失败。 */
+     按名搜不到就退回 adopt 记下的绝对路径，避免每轮调度重复报解析失败。 */
   if (!res.ok && fallbackFile) {
     const byPath = readContractFile(fallbackFile, []);
     if (byPath.ok) res = byPath;
@@ -721,7 +721,7 @@ export function redlineFix(contract: Contract, id: string): string {
  *
  * 监工单实例不能只靠 supervisor.json：它记录的是“最近一次写心跳的监工”，两个监工
  * 先后启动、先后写心跳时，文件只剩后写者，先写者毫无察觉。租约把“谁占着这个任务根”
- * 落成独立文件：启动时写入（实例 id、pid、启动时间、心跳），每轮调度 刷新心跳，退出时
+ * 落成独立文件：启动时写入（实例 id、pid、启动时间、心跳），每轮调度刷新心跳，退出时
  * 标记 released。后来者读到存活租约就拒绝启动，错误信息给出持有者 pid 与启动时间。
  *
  * 租约状态三种：`running`（在位）、`superseded`（被接管者标记下线）、`released`（正常退出）。
