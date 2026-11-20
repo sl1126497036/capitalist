@@ -225,11 +225,16 @@ test("滞留追加补投递：目标单已终结时翻回 open，下一拍带着
 
   const loop = require("../dist/supervisor/loop");
   const reopened = loop.drainSettledDirectives(root);
-  assert.deepEqual(reopened, ["D-append1"]);
-  const row = capitalist.readDispatches(root).find((d) => d.id === "D-append1");
-  assert.equal(row.status, "open", "已终结的单要翻回 open 才有进程去执行这条追加");
-  assert.equal(row.done_at, undefined, "旧的完成时间要清掉，否则下一拍又当它已结束");
-  assert.equal(cmds.listDirectives(root)[0].consumed, false, "翻单不等于消费，启动时才并入");
+  assert.equal(reopened.length, 1, "已终结的单要重开一张新单，才有进程去执行这条追加");
+  const newId = reopened[0];
+  assert.notEqual(newId, "D-append1", "重开是新的一次派单，不沿用旧号");
+  const row = capitalist.readDispatches(root).find((d) => d.id === newId);
+  assert.equal(row.status, "open", "新单要能被下一拍领走");
+  assert.equal(row.lineage, "D-append1", "派生链要继承原单，否则追加领不到");
+  assert.equal(row.done_at, undefined, "新单不能带旧的完成时间");
+  const old = capitalist.readDispatches(root).find((d) => d.id === "D-append1");
+  assert.equal(old.status, "failed", "旧单保持原终态，历史可查");
+  assert.equal(cmds.listDirectives(root)[0].consumed, false, "重开不等于消费，启动时才并入");
 
   /* 仍在途的单不动：运行中由 hook 下一个动作间隙送达。 */
   seedDispatch(root, { id: "D-run", lineage: "D-run", status: "claimed" });

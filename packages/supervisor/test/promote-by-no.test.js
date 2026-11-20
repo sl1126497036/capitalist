@@ -2,6 +2,15 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { mkdtempSync, rmSync } = require("node:fs");
+
+/* 临时目录清理失败（本机安全策略会拦删除）不该把已通过的断言判成失败。 */
+function cleanup(p) {
+  try {
+    rmSync(p, { recursive: true, force: true });
+  } catch {
+    /* 留给系统回收。 */
+  }
+}
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
@@ -49,7 +58,7 @@ test("按号定位：`#75` 能翻到它那条线程上的在途单", () => {
     assert.ok(hit, "按号找到了单");
     assert.equal(hit.id, id);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });
 
@@ -59,7 +68,7 @@ test("按号定位：单已终结时不返回（不用已终结的单置顶）",
     const { no } = seedWithNo(root, "D-done1", { status: "done" });
     assert.equal(dispatchOfThreadNo(root, no), undefined, "终结的单不该被翻出来");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });
 
@@ -69,7 +78,7 @@ test("按号定位：编号表里没有这个号 -> undefined，不按队列顺�
     seedWithNo(root, "D-any");
     assert.equal(dispatchOfThreadNo(root, 999), undefined, "猜一张最像的比报错更糟");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });
 
@@ -93,7 +102,7 @@ test("监工发出“立即执行 #N”：指令落实后置顶生效", async ()
     const d = readDispatches(root).find((x) => x.id === id);
     assert.ok(d?.promoted_at, "单上应留下置顶标记");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });
 
@@ -115,6 +124,6 @@ test("监工发出“立即执行 #N”而编号不存在：给出明确的拒�
     assert.equal(rec?.result?.ok, false);
     assert.match(String(rec?.result?.reason ?? ""), /#999/, "要把那个号原话说回来");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });

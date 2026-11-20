@@ -49,6 +49,10 @@ export const ledger = {
   direct: (root: string) => join(supervisorDir(root), "ledger", "direct.jsonl"),
   supervisorDirect: (root: string) => join(supervisorDir(root), "ledger", "supervisor-direct.jsonl"),
   threadNo: (root: string) => join(supervisorDir(root), "ledger", "thread-no.json"),
+  /** 派单号占位：号一旦发行就追加一行，作为「只增不复用」的权威依据。 */
+  dispatchReserve: (root: string) => join(supervisorDir(root), "ledger", "dispatch-reserve.jsonl"),
+  /** 进程号占位：领号时 held，拉起成功 committed，拉起失败 released（该号可再用）。 */
+  workerReserve: (root: string) => join(supervisorDir(root), "ledger", "worker-reserve.jsonl"),
   credits: (root: string) => join(supervisorDir(root), "ledger", "credits.json"),
   ledger: (root: string) => join(supervisorDir(root), "ledger", "ledger.jsonl"),
   authz: (root: string) => join(supervisorDir(root), "ledger", "authz.jsonl"),

@@ -2,6 +2,15 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { mkdtempSync, rmSync } = require("node:fs");
+
+/* 清理失败（安全策略会拦删除）不该把已通过的断言判成失败。 */
+function cleanup(p) {
+  try {
+    rmSync(p, { recursive: true, force: true });
+  } catch {
+    /* 留给系统回收。 */
+  }
+}
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
@@ -38,7 +47,7 @@ test("多个独立任务（同一阶段、无分片）各自发行新任务号",
     const rows = readTasks(root);
     assert.equal(rows.length, 7, "7 个独立任务应有 7 条任务项");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });
 
@@ -58,7 +67,7 @@ test("同一任务重派（显式传 origin）复用任务号，派发序递增"
     assert.equal(rows[0].no, 1);
     assert.equal(rows[0].attempts, 3);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });
 
@@ -75,6 +84,6 @@ test("不同任务各自独立，互不干扰", () => {
     assert.equal(b2, "2-2", "只重派任务 B，任务号 2、派发序 +1");
     assert.equal(c, "3-1", "任务 C 不受任务 B 重派影响");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });

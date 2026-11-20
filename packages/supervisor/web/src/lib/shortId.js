@@ -34,8 +34,10 @@ export function shortOf(id) {
 }
 
 /**
- * 按队列顺序编号，返回 Map<线程 id, 两位号>；后端 `no` 优先，缺失时回落 shortOf。
- * 左栏与右栏共用同一 Map，显示的号保持一致。
+ * 按队列顺序编号，返回 Map<线程 id, 两位号>。
+ *
+ * 后端 `no` 是唯一权威：它直接取自派单号前缀（任务号）。后端没有号时不本地补号——
+ * 本地流水会造出第三套编号，与派单号、进程号都对不上，正是历史上反复错乱的来源。
  */
 export function numberQueue(threads) {
   const map = new Map();
@@ -43,7 +45,7 @@ export function numberQueue(threads) {
     const id = String(t?.id || "");
     if (!id) continue;
     const fromServer = String(t?.no || "").trim();
-    map.set(id, fromServer || shortOf(id));
+    map.set(id, fromServer ? bareNoLabel(fromServer) : "");
   }
   return map;
 }

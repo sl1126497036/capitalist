@@ -31,7 +31,12 @@ export function reopenOneByRef(root: string, arg: string, directiveId: string): 
     return { ok: false, reason: `这一单仍在执行或等待裁决（${st}），无需重派；修改做法用 amend` };
   }
   const next = reopenSettledDispatch(root, String(hit.id), "用户要求重派");
-  if (!next) return { ok: false, reason: "重开失败：这一单的记录写入冲突" };
-  recordEvent(root, "dispatch_reopened", { dispatch: String(hit.id), by: "supervisor-direct", directive: directiveId });
-  return { ok: true, id: String(hit.id) };
+  if (!next) return { ok: false, reason: "重开失败：该单已在执行，或取号锁被占用，稍后重试即可" };
+  recordEvent(root, "dispatch_reopened", {
+    dispatch: next.id,
+    source: String(hit.id),
+    by: "supervisor-direct",
+    directive: directiveId,
+  });
+  return { ok: true, id: String(next.id) };
 }

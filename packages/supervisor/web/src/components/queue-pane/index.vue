@@ -6,7 +6,7 @@ import { t } from "../../lib/i18n.js";
 /* 局部形参 t 会遮蔽模块级文案函数，取文案统一走 tr。 */
 const tr = t;
 import { isAlive, queueCompare } from "../../lib/queueOrder.js";
-import { numberQueue, shortOf } from "../../lib/shortId.js";
+import { numberQueue } from "../../lib/shortId.js";
 import { noLabel, bareNoLabel, stripHash } from "../../lib/no.js";
 /* 结束态判定与详情面板共用 lib/status.js。 */
 import { endedKind, settled } from "../../lib/status.js";
@@ -122,7 +122,7 @@ function cell(t) {
     const no = String(t?.stuck_on_no || "").trim();
     if (no) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(no) }) };
     const id = String(t?.stuck_on || "").trim();
-    if (id) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(shortOf(id)) }) };
+    if (id) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(id) }) };
     return { tone: "warn", kind: "word", text: tr("排队") };
   }
   if (s === "suspended") return { tone: "warn", kind: "word", text: tr("已让位") };
@@ -368,7 +368,7 @@ function histRowOf(t) {
   const m = metaOf(t);
   return {
     t,
-    short: numbering.value.get(t.id) || shortOf(t.id),
+    short: numbering.value.get(t.id) || "",
     tone: c.tone,
     word: c.kind === "word" ? c.text : "",
     at: m.at ? `${m.at} ${tr("启动")}` : tr("启动：未记录"),
@@ -384,7 +384,7 @@ function rowOf(t, history) {
   return {
     t,
     title: shownName(t),
-    short: numbering.value.get(t.id) || shortOf(t.id),
+    short: numbering.value.get(t.id) || "",
     retry: history.length,
     history: history.map(histRowOf),
     ids: [t.id, ...history.map((h) => h.id)],

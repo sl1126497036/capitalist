@@ -15,7 +15,7 @@ import { costRowOf, spawnCountFor, fillContextWindow, costTotals, tokenTotals } 
 import { dispatchModel, atTs } from "./sources";
 import { noUsage } from "../usage/usage";
 import { oneLine } from "./render";
-import { assignThreadNos, threadNoLabel, threadNoOf } from "../usage/threadNo";
+import { taskNoOfRef, threadNoOf } from "../usage/threadNo";
 /**
  * 看板线程视图层：线程列表、消息流、任务分桶与已读水位。
  *
@@ -415,29 +415,21 @@ export function buildThreadsPageUncached(
         prev.started_at = d.at;
         prev.held = isHeld(d.shard);
       } else if (d.status === "open") {
-        threads.set(d.id, {
-          id: d.id,
-          no: "",
-          stuck_on: "",
-          stuck_on_no: "",
-          shard: d.shard ?? "",
-          stage: d.stage,
-          status: threadStatusOf(d),
-          model: dispatchModel(d),
-          worker: "",
-          last_at: "",
-          last_role: "",
-          last: "",
-          unread: 0,
-          held: isHeld(d.shard),
-          started_at: d.at,
-          dispatch: d.id,
-          title: dispatchTitle(d),
-          output_bytes: 0,
-          duration_sec: 0,
-          spawn_count: 0,
-          usage: noUsage(d.at, dispatchModel(d)),
-        });
+        /*
+         * 同一任务又派了一张单：更新既有行，不再另立一行。
+         * 一个任务一行、一个任务号；该任务派过几次由 `dispatches` 汇总，不靠行数体现。
+         * 已有进程在跑时保留运行态，避免把正在执行的任务显示成排队。
+         */
+        const running = prev.status === "running" || prev.status === "starting";
+        if (!running) {
+          prev.status = threadStatusOf(d);
+          prev.dispatch = d.id;
+          prev.title = dispatchTitle(d) || prev.title;
+          prev.model = dispatchModel(d);
+          prev.started_at = d.at;
+          prev.duration_sec = 0;
+        }
+        prev.held = isHeld(d.shard);
       }
       continue;
     }
@@ -588,12 +580,17 @@ export function buildThreadsPageUncached(
     all.push(t);
   }
   fillContextWindow(all, root, (t) => String(t.worker ?? ""));
-  const byAge = [...all].sort(
-    (a, b) =>
-      (atTs(a.started_at ?? "") || atTs(a.last_at)) - (atTs(b.started_at ?? "") || atTs(b.last_at)),
-  );
-  const nos = assignThreadNos(root, byAge.map((t) => t.id));
-  for (const t of all) t.no = threadNoLabel(nos.get(t.id));
+  /*
+   * 任务号只有一个发行方：任务台账。派单号前缀就是任务号，界面直接取前缀，
+   * 不再按列表顺序另发一套流水号。
+   * 旧格式单（`D-` 前缀）没有任务号，回查历史编号表只作展示兜底，且只读不发号。
+   */
+  for (const t of all) {
+    t.no =
+      taskNoOfRef(String(t.dispatch ?? "")) ||
+      taskNoOfRef(String(t.lineage ?? "")) ||
+      threadNoOf(root, t.id);
+  }
 
   for (const t of all) {
     const own = dispatchById.get(String(t.dispatch || ""));

@@ -24,12 +24,13 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, unlin
 import { join } from "node:path";
 
 import { attachmentsIn, withAttachmentLines } from "../message/attachments";
-import { readJson, readJsonl, writeJson, writeJsonl } from "./json";
+import { readJson, readJsonl, appendJsonl, writeJson, writeJsonl } from "./json";
 import { statCached } from "./fsCache";
-import { runtime, meta, workers, inbox, model, rootIndex, archive } from "./locations";
+import { runtime, meta, workers, inbox, model, rootIndex, archive, ledger } from "./locations";
 import { pidAlive } from "./process";
 import { resolveDispatchNo, syncTaskForDispatch, taskNoOfDispatchId } from "./tasks";
-import { registerWorker as registerIdMapWorker } from "./idMap";
+import { readIdMap, registerWorker as registerIdMapWorker } from "./idMap";
+import { withNoLock } from "./noLock";
 
 /** 监工进程状态。`done` 表示末阶段门槛已达标，监工据此退出。 */
 export type SupervisorStatus = "running" | "stopped" | "done";
@@ -469,20 +470,115 @@ export function workerLogPath(root: string, id: string): string {
 }
 
 /**
+ * 该任务已经占用的进程序集合（`1`、`2`…）。
+ *
+ * 同时收三处来源：worker 索引、编号关系表、已落盘的 worker 记录。索引可能因并发写丢条目，
+ * 关系表可能因旧档缺失，三者取并集才不至于把已用过的序号再发一次。
+ *
+ * 不走 `listWorkers`：那里有 1 秒缓存，取号必须在锁内看到最新落盘。
+ */
+/**
+ * 进程号占位状态。
+ *
+ * `held` 已领走但还没登记（进程可能正在启动），`committed` 已真正拉起，`released` 拉起失败。
+ * 只有 `held` 与 `committed` 算占用：拉起失败的那次不消耗进程号，下次仍可用同一个号。
+ */
+export type WorkerNoState = "held" | "committed" | "released";
+
+interface WorkerReserveRow {
+  worker?: string;
+  state?: WorkerNoState;
+  at?: string;
+}
+
+/** 读进程号占位：同一个号以最后一行为准。 */
+function workerReserveMap(root: string): Map<string, WorkerNoState> {
+  const out = new Map<string, WorkerNoState>();
+  try {
+    for (const r of readJsonl<WorkerReserveRow>(ledger.workerReserve(root))) {
+      const id = String(r?.worker ?? "");
+      const st = String(r?.state ?? "");
+      if (id && (st === "held" || st === "committed" || st === "released")) out.set(id, st as WorkerNoState);
+    }
+  } catch {
+    /* 没有占位文件：按一个都没占用处理。 */
+  }
+  return out;
+}
+
+/** 记录进程号占位状态。追加写，跨进程安全。 */
+export function markWorkerNo(root: string, workerNo: string, state: WorkerNoState): void {
+  const id = String(workerNo ?? "").trim();
+  if (!id) return;
+  try {
+    appendJsonl(ledger.workerReserve(root), { worker: id, state, at: new Date().toISOString() });
+  } catch {
+    /* 占位写不进只影响并发判重，不影响本次拉起。 */
+  }
+}
+
+/** 拉起失败：释放该号，下次仍可分配（派单失败时进程号不 +1）。 */
+export function releaseWorkerNo(root: string, workerNo: string): void {
+  markWorkerNo(root, workerNo, "released");
+}
+
+/**
+ * 该任务已经占用的进程序集合（`1`、`2`…）。
+ *
+ * 数据来源四处取并集：worker 索引、编号关系表、workers 目录、进程号占位表。
+ * 前索引可能因并发写丢条目，关系表可能因旧档缺失，占位表补齐「已领走但尚未登记」的窗口。
+ *
+ * 不扫派单的 `worker` 字段：那张单可能拉起失败，号不该被它永久占住。
+ *
+ * 不走 `listWorkers`：那里有 1 秒缓存，取号必须在锁内看到最新落盘。
+ */
+function usedWorkerSeqs(root: string, taskNo: number): Set<number> {
+  const used = new Set<number>();
+  const take = (id: unknown): void => {
+    const m = new RegExp(`^${taskNo}-P(\\d+)$`).exec(String(id ?? ""));
+    if (m) used.add(Number(m[1]));
+  };
+  try {
+    for (const row of readJsonl<{ id?: string }>(rootIndex.worker(root))) take(row?.id);
+  } catch {
+    /* 索引读不到时由关系表、目录与占位表兜底。 */
+  }
+  try {
+    for (const id of Object.keys(readIdMap(root).workers)) take(id);
+  } catch {
+    /* 关系表损坏时由索引与目录兜底。 */
+  }
+  for (const [id, state] of workerReserveMap(root)) {
+    if (state === "held" || state === "committed") take(id);
+  }
+  try {
+    for (const name of readdirSync(workersDir(root))) take(name);
+  } catch {
+    /* 还没有 workers 目录：视为一个都没占用。 */
+  }
+  return used;
+}
+
+/**
  * 生成进程号：从派单号派生任务号，再按该任务已拉起的进程数递增，落盘形式 `2-P1`（不带 `#`）。
+ *
+ * 锁键带任务号（`worker-2`）：同一任务串行取号，不同任务互不排队。锁内完成「算号」，
+ * 调用方紧接着用该号 `claimDispatch`，两者在同一临界区内看到的是同一份台账，
+ * 不会出现两个进程同时拿到 `2-P1`。
  *
  * @param dispatchId 该 worker 领的那张派单号（`2-2`）。
  */
 export function newWorkerId(root: string, dispatchId: string): string {
   const taskNo = taskNoOfDispatchId(String(dispatchId ?? ""));
   if (taskNo > 0) {
-    /* 该任务已拉起的进程数（`2-P1`、`2-P2`…），按 P 后序号取最大值。 */
-    let maxSeq = 0;
-    for (const w of listWorkers(root)) {
-      const m = new RegExp(`^${taskNo}-P(\\d+)$`).exec(String(w.id ?? ""));
-      if (m) maxSeq = Math.max(maxSeq, Number(m[1]));
-    }
-    return `${taskNo}-P${maxSeq + 1}`;
+    return withNoLock(root, `worker-${taskNo}`, () => {
+      const used = usedWorkerSeqs(root, taskNo);
+      const maxSeq = used.size > 0 ? Math.max(...used) : 0;
+      const id = `${taskNo}-P${maxSeq + 1}`;
+      /* 先占位再返回：号离开临界区就已被占住，并发取号拿不到同一个。 */
+      markWorkerNo(root, id, "held");
+      return id;
+    });
   }
   /* 拿不到任务号（旧 `D-` 单）时退回旧的自增 id，仅兜底。 */
   const file = meta.workerNo(root);
@@ -551,6 +647,8 @@ let workersCache: { root: string; at: number; rows: WorkerRecord[] } | null = nu
  */
 export function registerWorker(root: string, rec: WorkerRecord): void {
   saveWorker(root, rec);
+  /* 进程真正登记了：占位从 held 转 committed，该号从此算占用。 */
+  markWorkerNo(root, rec.id, "committed");
   const index = rootIndex.worker(root);
   const rows = readJsonl<{ id?: string }>(index);
   if (!rows.some((r) => r.id === rec.id)) writeJsonl(index, [...rows, { id: rec.id }]);

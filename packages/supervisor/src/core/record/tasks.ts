@@ -3,6 +3,7 @@
 import { appendJsonl, readJsonl, writeJsonl } from "./json";
 import { inbox, ledger as ledgerLoc } from "./locations";
 import { registerDispatch, registerTask } from "./idMap";
+import { withNoLock } from "./noLock";
 import type { Dispatch } from "./supervisor";
 
 /** 任务状态。 */
@@ -54,11 +55,54 @@ function taskIdOf(no: number): string {
 }
 
 /** 下一个任务号：已有任务号最大值 +1，从未分配过则从 1 起。 */
-function nextTaskNo(rows: TaskItem[]): number {
-  const used = rows
-    .map((t) => Number(t.no))
-    .filter((n) => Number.isFinite(n) && n > 0);
+function nextTaskNo(rows: TaskItem[], extra: readonly number[] = []): number {
+  const used = [
+    ...rows.map((t) => Number(t.no)),
+    ...extra.map((n) => Number(n)),
+  ].filter((n) => Number.isFinite(n) && n > 0);
   return used.length ? Math.max(...used) + 1 : 1;
+}
+
+/** 派单号占位记录：号发行时追加，之后无论派单是否落成，该号都不再发放。 */
+interface DispatchReserve {
+  id?: string;
+  taskNo?: number;
+  seq?: number;
+  at?: string;
+}
+
+/** 读全部占位记录。坏行跳过。 */
+function readReserve(root: string): DispatchReserve[] {
+  try {
+    return readJsonl<DispatchReserve>(ledgerLoc.dispatchReserve(root)).filter(
+      (r) => r && typeof r.id === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** 已经发行过的任务号（占位记录里的），供 `nextTaskNo` 避开。 */
+function reservedTaskNos(root: string): number[] {
+  return readReserve(root)
+    .map((r) => Number(r.taskNo))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
+
+/**
+ * 占住一个派单号。
+ *
+ * 写占位是一次追加，落在算号的同一临界区内：号离开临界区时已经被占用，后来者读到的最大值
+ * 必然包含它，因此不会出现「算出来又被别人算一遍」的撞号。派单最终没有落成也不回收该号，
+ * 与「任务号、派单号只增不复用」一致。
+ */
+function reserveDispatchNo(root: string, id: string, taskNo: number, seq: number): void {
+  appendJsonl(ledgerLoc.dispatchReserve(root), {
+    id,
+    taskNo,
+    seq,
+    at: nowIso(),
+  } satisfies DispatchReserve);
 }
 
 /** 读全部任务项。坏行跳过，一行脏数据不该让整份清单不可读。 */
@@ -91,16 +135,19 @@ export function taskNoOfDispatchId(dispatchId: string): number {
 function maxDispatchSeqOf(root: string, no: number): number {
   const prefix = `${Math.trunc(no)}-`;
   let maxSeq = 0;
+  const take = (id: unknown): void => {
+    const s = String(id ?? "");
+    if (!s.startsWith(prefix)) return;
+    const m = /^(\d+)-(\d+)$/.exec(s);
+    if (m) maxSeq = Math.max(maxSeq, Number(m[2]));
+  };
   try {
-    for (const d of readJsonl<{ id?: string }>(inbox.dispatch(root))) {
-      const id = String(d?.id ?? "");
-      if (!id.startsWith(prefix)) continue;
-      const m = /^(\d+)-(\d+)$/.exec(id);
-      if (m) maxSeq = Math.max(maxSeq, Number(m[2]));
-    }
+    for (const d of readJsonl<{ id?: string }>(inbox.dispatch(root))) take(d?.id);
   } catch {
     /* 台账读不到只影响派发序推断；此时回落到 0，由调用方决定是否降级。 */
   }
+  /* 占位记录同样是已发行的号：派单未落成也不能把那个序再发一次。 */
+  for (const r of readReserve(root)) take(r.id);
   return maxSeq;
 }
 
@@ -126,23 +173,41 @@ export function resolveDispatchNo(
   shard: string | undefined,
   originDispatchId?: string,
 ): { no: number; attempt: number; dispatchId: string } {
-  const rows = readTasks(root);
-  /* 重派：按原派单号反解任务号并复用，派发序按“已存在的最大派发序 +1”。 */
+  /*
+   * 重派：按原派单号反解任务号并复用，派发序按“已存在的最大派发序 +1”。
+   *
+   * 锁键带任务号（`dispatch-2`）：同一任务的重派串行，不同任务的重派互不排队。
+   * 锁内完成「算号 + 写占位」，号出临界区即被占用。
+   */
   const originNo = originDispatchId ? taskNoOfDispatchId(originDispatchId) : 0;
   if (originNo > 0) {
-    /*
-     * 派发序取「派单台账已落盘的最大序」与「任务项 attempts」两者的较大值：
-     *   - 台账是权威（派单一旦落盘就计入，不会因 attempts 未同步而回退或重复）；
-     *   - attempts 兜底（任务项已登记但台账尚未落盘的窗口内，仍能正确递增）。
-     * 两者取大，序列单调不回退、不撞号。
-     */
-    const task = rows.find((t) => Number(t.no) === originNo);
-    const attempt = Math.max(maxDispatchSeqOf(root, originNo), task?.attempts ?? 0) + 1;
-    return { no: originNo, attempt, dispatchId: `${originNo}-${attempt}` };
+    return withNoLock(root, `dispatch-${originNo}`, () => {
+      const rows = readTasks(root);
+      /*
+       * 派发序取「派单台账与占位记录的最大序」与「任务项 attempts」两者的较大值：
+       *   - 台账与占位是权威（号一旦发行就计入，不会因 attempts 未同步而回退或重复）；
+       *   - attempts 兜底（任务项已登记但号尚未落盘的窗口内，仍能正确递增）。
+       */
+      const task = rows.find((t) => Number(t.no) === originNo);
+      const attempt = Math.max(maxDispatchSeqOf(root, originNo), task?.attempts ?? 0) + 1;
+      const dispatchId = `${originNo}-${attempt}`;
+      reserveDispatchNo(root, dispatchId, originNo, attempt);
+      return { no: originNo, attempt, dispatchId };
+    });
   }
-  /* 新任务：发行新任务号，第一次派发。 */
-  const no = nextTaskNo(rows);
-  return { no, attempt: 1, dispatchId: `${no}-1` };
+  /*
+   * 新任务：发行新任务号，第一次派发。
+   *
+   * 任务号是全局主键，必须由全局锁 `task-no` 发行；临界区内同时读任务台账与占位记录取最大值，
+   * 并立刻占住该号，杜绝两个入口同时算出同一个任务号。
+   */
+  return withNoLock(root, "task-no", () => {
+    const rows = readTasks(root);
+    const no = nextTaskNo(rows, reservedTaskNos(root));
+    const dispatchId = `${no}-1`;
+    reserveDispatchNo(root, dispatchId, no, 1);
+    return { no, attempt: 1, dispatchId };
+  });
 }
 
 /**
@@ -286,22 +351,25 @@ export function createTask(
   root: string,
   input: { title: string; detail?: string; tags?: string[]; stage?: string },
 ): TaskItem {
-  const rows = readTasks(root);
-  const no = nextTaskNo(rows);
-  const item: TaskItem = {
-    id: taskIdOf(no),
-    no,
-    title: input.title.slice(0, 120),
-    ...(input.detail ? { detail: input.detail } : {}),
-    tags: input.tags ?? [],
-    state: "pending",
-    attempts: 0,
-    ...(input.stage ? { stage: input.stage } : {}),
-    created_at: nowIso(),
-    updated_at: nowIso(),
-  };
-  appendJsonl(tasksPath(root), item);
-  return item;
+  /* 手工建任务也要走同一把任务号锁：任务号是全局主键，不能与派单路径各自取号。 */
+  return withNoLock(root, "task-no", () => {
+    const rows = readTasks(root);
+    const no = nextTaskNo(rows, reservedTaskNos(root));
+    const item: TaskItem = {
+      id: taskIdOf(no),
+      no,
+      title: input.title.slice(0, 120),
+      ...(input.detail ? { detail: input.detail } : {}),
+      tags: input.tags ?? [],
+      state: "pending",
+      attempts: 0,
+      ...(input.stage ? { stage: input.stage } : {}),
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    };
+    appendJsonl(tasksPath(root), item);
+    return item;
+  });
 }
 
 /** 一行摘要，给 `capitalist status` / 看板直接贴。 */

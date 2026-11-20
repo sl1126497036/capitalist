@@ -47,7 +47,7 @@ import { rejectTail } from "../../lib/rejectTail.js";
 import { dedupeMessages, isBlankMessage } from "../../lib/msgDedup.js";
 import {toneOf} from "../../lib/msgTone.js";
 import {isLog, logRowsOf} from "../../lib/msgNoise.js";
-import {shortOf, numberQueue} from "../../lib/shortId.js";
+import {numberQueue} from "../../lib/shortId.js";
 import { noLabel, bareNoLabel, stripHash } from "../../lib/no.js";
 /* 结束态判定与左栏队列卡共用 lib/status.js。 */
 import {endedWord} from "../../lib/status.js";
@@ -2627,7 +2627,7 @@ const refIndex = computed(() => {
   };
   for (const t of threads) {
     const ent = {
-      no: numbers.get(t.id) || shortOf(t.id),
+      no: numbers.get(t.id) || "",
       threadId: t.id,
       title: taskTitle(t),
       status: endedWord(t) || (THREAD_WORD[String(t.status || "")] ? tr(THREAD_WORD[String(t.status || "")]) : ""),
