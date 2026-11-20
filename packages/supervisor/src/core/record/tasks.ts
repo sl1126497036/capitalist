@@ -1,7 +1,7 @@
 /** 任务池台账（`.capitalist/ledger/tasks.jsonl`）：一项“要做的任务”而不是“一次执行尝试”。 */
 
 import { appendJsonl, readJsonl, writeJsonl } from "./json";
-import { ledger as ledgerLoc } from "./locations";
+import { inbox, ledger as ledgerLoc } from "./locations";
 import { registerDispatch, registerTask } from "./idMap";
 import type { Dispatch } from "./supervisor";
 
@@ -79,6 +79,32 @@ export function taskNoOfDispatchId(dispatchId: string): number {
 }
 
 /**
+ * 该任务号在派单台账里已派出的最大派发序（`2-1`、`2-2`… 里 `-` 后的最大值）。
+ *
+ * 派发序的权威来源是派单台账（`inbox/dispatch.jsonl`）里真实落盘的单，而不是任务项的
+ * `attempts` 派生字段：`attempts` 只在 `ensureTaskForDispatch` 里 +1，若某次重派生成了号
+ * 却没走完 ensure（并发、异常、短路），`attempts` 会落后，下一次重派就会撞上同一个派单号。
+ * 直接数台账里的单，序列永不回退、不重复。
+ *
+ * @returns 已存在的最大派发序；该任务号还没有单时返回 0。
+ */
+function maxDispatchSeqOf(root: string, no: number): number {
+  const prefix = `${Math.trunc(no)}-`;
+  let maxSeq = 0;
+  try {
+    for (const d of readJsonl<{ id?: string }>(inbox.dispatch(root))) {
+      const id = String(d?.id ?? "");
+      if (!id.startsWith(prefix)) continue;
+      const m = /^(\d+)-(\d+)$/.exec(id);
+      if (m) maxSeq = Math.max(maxSeq, Number(m[2]));
+    }
+  } catch {
+    /* 台账读不到只影响派发序推断；此时回落到 0，由调用方决定是否降级。 */
+  }
+  return maxSeq;
+}
+
+/**
  * 为一张派单确定任务号与派发序，返回派单号（落盘形式 `2-3`，不带 `#`）。
  *
  * 这是“任务号 + 派发序”的唯一发行点，派单号本身编码任务号，`ensureTaskForDispatch`
@@ -87,7 +113,8 @@ export function taskNoOfDispatchId(dispatchId: string): number {
  * 新任务与重派的区分由 `originDispatchId` 显式表达，不靠 `stage + shard` 猜测：
  *   - `originDispatchId` 缺省：这是新任务，发行新任务号（`nextTaskNo`），派发序从 1 起；
  *   - `originDispatchId` 给定：这是对原派单（`originDispatchId`）的重派，沿用原任务号，
- *     派发序在原任务已派发次数上 +1。
+ *     派发序按派单台账里该任务号已落盘的最大派发序 +1（不依赖任务项的 `attempts`，
+ *     避免 attempts 未同步时派单号回退或重复）。
  *
  * `stage + shard` 相同不代表同一任务：一次不可分片阶段（`shard` 为空）里，用户可以
  * 连续派多个互不相干的任务（`dispatch` 命令逐个建的 adhoc 单），它们 `stage` 相同、
@@ -100,11 +127,17 @@ export function resolveDispatchNo(
   originDispatchId?: string,
 ): { no: number; attempt: number; dispatchId: string } {
   const rows = readTasks(root);
-  /* 重派：按原派单号反解任务号并复用，派发序在原任务累计次数上 +1。 */
+  /* 重派：按原派单号反解任务号并复用，派发序按“已存在的最大派发序 +1”。 */
   const originNo = originDispatchId ? taskNoOfDispatchId(originDispatchId) : 0;
   if (originNo > 0) {
+    /*
+     * 派发序取「派单台账已落盘的最大序」与「任务项 attempts」两者的较大值：
+     *   - 台账是权威（派单一旦落盘就计入，不会因 attempts 未同步而回退或重复）；
+     *   - attempts 兜底（任务项已登记但台账尚未落盘的窗口内，仍能正确递增）。
+     * 两者取大，序列单调不回退、不撞号。
+     */
     const task = rows.find((t) => Number(t.no) === originNo);
-    const attempt = (task?.attempts ?? 0) + 1;
+    const attempt = Math.max(maxDispatchSeqOf(root, originNo), task?.attempts ?? 0) + 1;
     return { no: originNo, attempt, dispatchId: `${originNo}-${attempt}` };
   }
   /* 新任务：发行新任务号，第一次派发。 */

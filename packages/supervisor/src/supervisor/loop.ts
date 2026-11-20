@@ -148,7 +148,6 @@ import {
   prerequisitesOf,
   pruneWorkers,
   readDispatches,
-  requeueDispatch,
   saveSupervisor,
   saveWorker,
   stopRequested,
@@ -3720,11 +3719,10 @@ async function applyOneDirective(
   }
 
   /*
-   * redo：把已经结束的一单重开，沿用原单 id、原编号与对应的会话。
+   * redo：把已经结束的一单重开。
    *
-   * 与 dispatch 的差别是“同一件事返工”还是“新开一单”：dispatch 会占一个新编号、任务链上多一条，
-   * redo 复用原单，编号与会话都不变。上下文接近会话上限时应当用 dispatch，
-   * 让新单以新会话起步；否则重开会让上下文继续增长。
+   * 每重开一次就是新派一次单：发一张新单、派单号 +1（内容沿用原单、会话按 lineage 续接），
+   * 不再原地翻回同一张单。派单号的意义就是“同一个任务累计派了几次”，与上一次单的状态无关。
    */
   if (action === "redo") {
     const m = /^\s*#?\s*(\d{1,4})\b/.exec(arg || "");
@@ -3743,8 +3741,8 @@ async function applyOneDirective(
     }
     const label = m ? `#${m[1]}` : String(hit.id).slice(-6);
     /*
-     * 用户要求重开不分状态：已结束的（done / closed / failed）直接翻回队列，
-     * 在途的先停掉当前进程再翻，否则两条执行流会写同一张单。
+     * 用户要求重开不分状态：已结束的（done / closed / failed）直接发新单；
+     * 在途的先停掉当前进程再发，否则两条执行流会写同一件事。
      */
     if (["claimed", "reported", "review"].includes(String(hit.status))) {
       const w = hit.worker ? loadWorker(root, hit.worker) : null;
@@ -3757,18 +3755,42 @@ async function applyOneDirective(
       }
       if (w) saveWorker(root, { ...w, status: "exited" });
     }
-    const next = requeueDispatch(root, String(hit.id), "用户要求重开原单");
-    if (!next) return reject("重开失败：该单的记录写入冲突");
+    /*
+     * 发一张新单：派单号在原任务累计派发序上 +1，内容沿用原单、lineage 继承原链保证会话续接。
+     * 旧格式单（D- 前缀）反解不出任务号时由 newDispatchId 发行新任务号，仅兜底历史档。
+     */
+    const de = hit as DispatchEx;
+    const nextId = newDispatchId(root, hit.stage, hit.shard ?? undefined, hit.id);
+    const next: Dispatch = {
+      id: nextId,
+      at: new Date().toISOString(),
+      stage: hit.stage,
+      shard: hit.shard ?? "",
+      action: stripAttachments(String(hit.action ?? "")),
+      status: "open",
+      source: "requeue",
+      attempt: Number(hit.attempt ?? 1) + 1,
+      lineage: String(de.lineage ?? hit.id),
+      atts: [],
+      ...(de.title ? { title: de.title } : {}),
+      ...(hit.tags ? { tags: hit.tags } : {}),
+      ...(hit.parent ? { parent: String(hit.parent) } : {}),
+      ...(de.model ? { model: de.model } : {}),
+      ...(de.model_fallback ? { model_fallback: de.model_fallback } : {}),
+    };
+    appendDispatch(root, next);
+    ensureTaskForDispatch(root, next);
     recordEvent(root, "dispatch_reopened", {
-      dispatch: String(hit.id),
+      dispatch: nextId,
+      from: String(hit.id),
       by: "supervisor-direct",
       directive: d.id,
     });
     return {
       ok: true,
       reason: "",
-      detail: `已重开 ${label}：沿用原单与原会话，下一轮调度拉起`,
-      dispatch: String(hit.id),
+      detail: `已重开 ${label}：新派单 ${nextId}，沿用原内容与会话，下一轮调度拉起`,
+      dispatch: nextId,
     };
   }
 

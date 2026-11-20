@@ -608,12 +608,17 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
      * 工作进程上下文只含“这一单”，不注入全局简报。全局阶段状态、门槛、下一步属于监工视角，
      * 灌进工作进程会与派单正文里的任务说明混在一起，形成“上面是监工、下面又是工作进程”的杂糅。
      * 派单正文由 worker 启动 argv 的 buildPrompt 生成，与本处注入互不相干。
+     *
+     * 身份标头只报派单号、不报进程号：进程号是实现细节，报给工作进程会让它在回复里复述，
+     * 用户看到的应是派单号。
      */
+    const dno = process.env.CAPITALIST_DISPATCH_ID ?? "";
+    const dlabel = dno ? `派单 ${dno}` : "";
     return hook.inject(
       `${
         lang === "zh"
-          ? `【capitalist · worker ${wid}】（监工已派单；只做这一单，结束时 capitalist report）`
-          : `【capitalist · worker ${wid}】(dispatched; do only this task, run \`capitalist report\` when done)`
+          ? `【capitalist${dlabel ? ` · ${dlabel}` : ""}】（监工已派单；只做这一单，结束时 capitalist report）`
+          : `【capitalist${dlabel ? ` · ${dlabel}` : ""}】(dispatched; do only this task, run \`capitalist report\` when done)`
       }\n${THINK_LANG[lang]}`,
       event.point,
       event.sessionId,

@@ -13,7 +13,6 @@ import {
   existsSync,
   mkdirSync,
   openSync,
-  readFileSync,
   readdirSync,
   statSync,
   writeFileSync,
@@ -622,13 +621,10 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
 
 /* 技能清单的扫描见 `./skills`：看板下拉与工作进程共用同一份，避免两处口径不一致。 */
 
-/** 单个技能正文注入上限：超出部分不注入，改由工作进程按路径读取。 */
-const SKILL_BODY_LIMIT = 20_000;
-
 /**
  * 派单正文是否点名该技能。
  *
- * 按整词匹配，避免正文里的常见短词与目录名冲突；名字过短的一律不注入，只列路径。
+ * 按整词匹配，避免正文里的常见短词与目录名冲突；名字过短的一律不认，防止短词误命中。
  */
 function mentionsSkill(text: string, name: string): boolean {
   if (name.length < 4) return false;
@@ -637,39 +633,22 @@ function mentionsSkill(text: string, name: string): boolean {
 }
 
 /**
- * 技能块：清单与点名技能的正文。
+ * 技能块：只附派单正文点名的技能（用户指定）的完整路径，供工作进程需要时自取。
  *
- * 派单正文出现技能名即视为监工判定该技能与本单相关，附全文；其余只给路径。
+ * 监工已把本单涉及的技能重点整理进派单描述；正文未点名的技能一律不出现，更不列全量清单。
+ * 这里只给路径：重点在描述里，工作进程觉得不够时按路径读完整 SKILL.md。
  */
 function buildSkillsBlock(root: string, actionText: string): string[] {
   const skills = listSkills(root);
   if (skills.length === 0) return [];
   const named = skills.filter((s) => mentionsSkill(actionText, s.name));
+  if (named.length === 0) return [];
   const lines = [
-    "【可用技能】",
-    "  相关技能读 <目录>/<名称>/SKILL.md；已注入正文的按正文执行。",
+    "【本单技能】",
+    "  需要的完整内容按下面路径自取（重点已在派单描述里）：",
   ];
-  const byDir = new Map<string, typeof skills>();
-  for (const s of skills) {
-    const list = byDir.get(s.dir) ?? [];
-    list.push(s);
-    byDir.set(s.dir, list);
-  }
-  for (const [dir, list] of byDir) {
-    lines.push(`  ${dir}`);
-    for (const s of list) lines.push(`    · ${s.name}${s.desc ? ` — ${s.desc}` : ""}`);
-  }
   for (const s of named) {
-    let body = "";
-    try {
-      body = readFileSync(s.path, "utf8");
-    } catch {
-      body = "";
-    }
-    if (!body) continue;
-    const cut = body.length > SKILL_BODY_LIMIT;
-    lines.push("", `【技能正文：${s.name}】`, cut ? body.slice(0, SKILL_BODY_LIMIT) : body);
-    if (cut) lines.push(`（正文已截断，余下读 ${s.path}）`);
+    lines.push(`  · ${s.name} — ${s.path}`);
   }
   lines.push("");
   return lines;

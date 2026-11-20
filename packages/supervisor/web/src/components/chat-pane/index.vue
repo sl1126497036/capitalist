@@ -1233,7 +1233,7 @@ const groups = computed(() => {
         id: t.id,
         name: nameOf(t),
         unread: Math.max(0, Number(t.unread) || 0),
-        tip: `${nameOf(t)} ${t.worker || t.id}${t.unread ? tr(" {n} 条未读", { n: t.unread }) : ""}`,
+        tip: `${nameOf(t)} ${t.dispatch ? bareNoLabel(t.dispatch) : t.id}${t.unread ? tr(" {n} 条未读", { n: t.unread }) : ""}`,
       })),
       rest: Math.max(0, all.length - 3),
     };
@@ -2576,8 +2576,8 @@ function openSupervisor() {
 const stopDetail = computed(() => {
   const t = props.thread;
   if (!t) return "";
-  /* 中断文案用中文任务名，标题字段缺失时由分片映射补齐，后附进程号。 */
-  return [taskTitle(t), t.worker ? tr("（进程 {w}）", { w: t.worker }) : ""].filter(Boolean).join(" ");
+  /* 中断文案用中文任务名，标题字段缺失时由分片映射补齐，后附派单号。 */
+  return [taskTitle(t), t.dispatch ? tr("（{d}）", { d: bareNoLabel(t.dispatch) }) : ""].filter(Boolean).join(" ");
 });
 
 const placeholder = computed(() => {
