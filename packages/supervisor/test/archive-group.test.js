@@ -173,7 +173,7 @@ test("归档：没加过成员的空组是合法中间态，不归档", () => {
     assert.deepStrictEqual(
       readGroups(root).map((x) => x.id),
       [empty.group.id],
-      "空组不是"成员走光"，用户可能正要加人",
+      "空组不等于成员走光，用户可能正要加人",
     );
   } finally {
     dropRoot(root);

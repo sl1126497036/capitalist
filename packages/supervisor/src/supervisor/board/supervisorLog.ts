@@ -11,6 +11,8 @@ import { MQ_KIND_LABEL, fingerprint, maskThreadMessage } from "./render";
 import { ThreadRole, ThreadMessage, describeEvent, ledgerOnlyRoot } from "./snapshot";
 import { atTs, attachmentsOf, eventsFile, readDispatchesBoard } from "./sources";
 import { taskKeyOf } from "./state";
+import { loadState } from "../../core/record/state";
+import { hasCustomContract } from "../../core/contract/customContract";
 
 import { zh } from "./zh";
 import { statSync } from "node:fs";
@@ -96,7 +98,12 @@ function ctxTokenText(n: unknown): string {
   return String(Math.round(v));
 }
 
-function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map<string, string>): string {
+function supervisorEventText(
+  name: string,
+  e: Record<string, unknown>,
+  nos: Map<string, string> | undefined,
+  customContract: boolean,
+): string {
   const d = String(e.dispatch ?? "");
   const w = String(e.worker ?? "");
   const st = String(e.stage ?? "");
@@ -173,7 +180,10 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       return supervisorReplyView(e);
     }
     case "stage_skipped":
-      return `跳过阶段 ${String(e.from ?? "")} -> ${String(e.to ?? "")}（记录待补项，不算达标）`;
+      /* 默认任务列表下不描述跳步：用户没有阶段这个概念，说了也只是“跳过某一步”的空话。 */
+      return customContract
+        ? `跳过阶段 ${String(e.from ?? "")} -> ${String(e.to ?? "")}（记录待补项，不算达标）`
+        : "";
     case "contract_reload":
       return `任务列表热加载：阶段 ${String(e.next_stages ?? "")}，分片 ${String(e.next_shards ?? "?")}`;
     case "contract_change":
@@ -197,7 +207,7 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
     case "gate_eval_placeholder":
       return "";
     default:
-      return describeEvent(e);
+      return describeEvent(e, { customContract });
   }
 }
 
@@ -246,6 +256,8 @@ export function buildSupervisorLog(
   const msgs: ThreadMessage[] = [];
   /** 单阶段契约没有结束时刻，supervisor_done 整类不上屏，台账照旧保留。 */
   const ledgerOnly = ledgerOnlyRoot(root);
+  /** 用户是否自己写了任务列表：默认任务列表下不描述阶段推进与跳步。 */
+  const customContract = hasCustomContract(loadState(root)?.contract);
   /** 回执正文里的内部派单 id 按编号表换成界面号。 */
   const nos = dispatchNoTable(root);
   /** 派单消息与 has_older 共用这一份读数。 */
@@ -318,7 +330,7 @@ export function buildSupervisorLog(
         ((e as { from?: unknown }).from as ThreadRole) || (name === "supervisor_chat_ask" ? "user" : "supervisor"),
       kind: name === "supervisor_reply" || name === "supervisor_chat_ask" ? "say" : "verdict",
       /* 脱敏不在本处执行：消息构造完成后统一经 maskThreadMessage 处理，规则集中一处。 */
-      text: supervisorEventText(name, e, nos),
+      text: supervisorEventText(name, e, nos, customContract),
       tool: "",
       cmd: "",
       /** 申报行带状态：待回执/已回执，判定依据是存在 mq_triage。 */

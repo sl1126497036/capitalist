@@ -122,12 +122,13 @@ export function verdictText(
   e: Record<string, unknown>,
   mq?: Map<string, Record<string, unknown>>,
   nos?: Map<string, string>,
+  opts: { customContract?: boolean } = {},
 ): string {
   const name = String(e.event ?? e.kind ?? "");
   if (name === "mq_message") return mqMessageText(e, mq?.get(String(e.id ?? "")));
   if (name === "mq_triage") return mqTriageText(e);
   if (name === "supervisor_cmd") return maskDispatchIds(cmdReceiptText(e), nos);
-  return maskDispatchIds(describeEvent(e), nos);
+  return maskDispatchIds(describeEvent(e, opts), nos);
 }
 
 /** 正则转义，供编号按字面量匹配。 */

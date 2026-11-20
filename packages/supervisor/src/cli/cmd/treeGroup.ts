@@ -12,6 +12,7 @@ import { readDispatches } from "../../core/record/supervisor";
 import { groupNoLabel, normalizeGroupId } from "../../core/record/idMap";
 import { parseRef } from "../../core/record/nodeRef";
 import { groupIndexOf, issueGroupNo, readGroups } from "../../core/record/groups";
+import { groupIndexFrom } from "../../core/dispatch/groupOps";
 import { groupStatusOf, groupStateWord, groupSettled } from "../../core/dispatch/groupGraph";
 import { assignGroup, closeGroup, reassignParent } from "../../core/dispatch/treeOps";
 import { dispatchOfRef } from "../../supervisor/usage/threadNo";
@@ -155,7 +156,7 @@ export function cmdTreeGroup(p: Parsed, root: string): number {
       return 2;
     }
     const rows = readDispatches(root);
-    const idx = groupIndexOf(rows, readGroups(root));
+    const idx = groupIndexFrom(root, rows);
     const members = idx.members.get(gid) ?? [];
     if (members.length === 0) {
       process.stdout.write(`${groupNoLabel(gid)} 没有成员，无需改挂。\n`);
@@ -219,7 +220,7 @@ export function cmdTreeMove(p: Parsed, root: string, detach: boolean): number {
 
   /* 组内成员单点改挂会拆散组：先拦下来，给出整组与移出两条出路。 */
   const rows = readDispatches(root);
-  const idx = groupIndexOf(rows, readGroups(root));
+  const idx = groupIndexFrom(root, rows);
   const split = ids
     .map((id) => ({ id, gid: idx.groupOf.get(id) ?? "" }))
     .filter((x) => x.gid !== "");

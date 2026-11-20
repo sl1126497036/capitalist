@@ -2,7 +2,11 @@ import { THREAD_PAGE_LIMIT, THREAD_PEEK_TAIL_BYTES, ThreadSummary, dispatchTitle
 import { join } from "node:path";
 import { board as boardLoc } from "../../core/record/locations";
 import { readJson, writeJson } from "../../core/record/json";
-import { Dispatch, WorkerRecord, loadSupervisor, dispatchPaused, workerLivenessOf, DEFAULT_LOG_STALL_SEC, parentOf, pendingPrerequisites } from "../../core/record/supervisor";
+import { Dispatch, WorkerRecord, loadSupervisor, dispatchPaused, workerLivenessOf, DEFAULT_LOG_STALL_SEC, parentOf } from "../../core/record/supervisor";
+import { isSettled } from "../../core/record/dispatchState";
+import { pendingOf } from "../../core/dispatch/deps";
+import { groupIndexFrom } from "../../core/dispatch/groupOps";
+import { isGroupRef, label } from "../../core/record/nodeRef";
 import { taskKeyOf, readClearedMarks, threadStatusTerminal, threadStatusAbnormal } from "./state";
 import { readTasks } from "../../core/record/tasks";
 import { WorkerAction, parseWorkerLog } from "../worker/workerLog";
@@ -285,6 +289,11 @@ export function buildThreadsPageUncached(
   const ctx = messageContext(root);
   const workers = ctx.workers;
   const dispatches = ctx.dispatches;
+  /*
+   * 前置判定要看组：组前置的满足条件是“整组了结”。缺索引时组号在台账里查不到，
+   * 会被永远判成未满足。组已解散或已全部完成，左栏仍显示“等待 #G1”。
+   */
+  const gidx = groupIndexFrom(root, dispatches);
   const capitalist = loadSupervisor(root);
   const capacity = capitalist?.max_workers ?? 0;
   const running = workers.filter((w) => w.status === "running" || w.status === "starting").length;
@@ -595,7 +604,7 @@ export function buildThreadsPageUncached(
   for (const t of all) {
     const own = dispatchById.get(String(t.dispatch || ""));
     const s = String(own?.status ?? "");
-    t.settled = s === "done" || s === "closed";
+    t.settled = isSettled(s);
   }
 
   const noOfDispatch = new Map<string, string>();
@@ -617,8 +626,9 @@ export function buildThreadsPageUncached(
      * 经散文本出口 {@link maskBoardText} 改写；消息正文由 maskThreadMessage 处理，两者规则同源。
      */
     if (why) t.parent_reason = maskBoardText(why, noOfDispatch);
-    const stuck = pendingPrerequisites(d, dispatches).filter((id) => id !== "*")[0] ?? "";
-    t.stuck_on = stuck;
+    const stuck = pendingOf(d, dispatches, gidx).filter((id) => id !== "*")[0] ?? "";
+    /* 卡点可能是组号（归一后的 `G1`），显示形态由 `nodeRef.label` 统一补 `#`。 */
+    t.stuck_on = stuck && isGroupRef(stuck) ? label(stuck) : stuck;
     t.stuck_on_no = stuck ? noOfDispatch.get(stuck) || threadNoOf(root, stuck) : "";
   }
 

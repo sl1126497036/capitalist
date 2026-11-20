@@ -5,7 +5,7 @@ import { clipLine } from "../../core/text";
 import { buildForestView } from "../../supervisor/view/forestView";
 import { applyRebuild, planRebuild } from "../../core/dispatch/rebuildTree";
 import { isReady } from "../../core/dispatch/deps";
-import { groupIndexOf, readGroups } from "../../core/record/groups";
+import { groupIndexFrom } from "../../core/dispatch/groupOps";
 import { flagBool, flagString, type Parsed } from "../args";
 import { label as nodeLabel } from "../../core/record/nodeRef";
 import { cmdTreeGroup, cmdTreeMove } from "./treeGroup";
@@ -148,7 +148,7 @@ export function cmdTree(p: Parsed): number {
   if (action === "next") {
     const rows = readDispatches(root);
     /* 组索引必须传：缺它时挂组的派单会被当成“等一个不存在的前置”，表现为持续等待。 */
-    const gidx = groupIndexOf(rows, readGroups(root));
+    const gidx = groupIndexFrom(root, rows);
     /* 暂停单不参与本轮调度，需用户唤醒后重新进入候选。 */
     const q = openQueue(root)
       .filter((d) => !dispatchPaused(d))

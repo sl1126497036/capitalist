@@ -108,8 +108,9 @@ import {
 } from "../core/dispatch/preempt";
 import { autoRebuild } from "../core/dispatch/rebuildTree";
 import { commitDispatch, composeDispatch, deriveDispatch } from "../core/dispatch/newDispatch";
-import { applyGroupDecl, groupIndexFrom, resolveParentNode } from "../core/dispatch/groupOps";
+import { applyGroupDecl, groupIndexFrom } from "../core/dispatch/groupOps";
 import { applyInsertNow } from "./loop/restructure";
+import { resolveDispatchRef, resolveParentTokens } from "./loop/refs";
 import { isReady } from "../core/dispatch/deps";
 import {
   allDirs,
@@ -125,7 +126,6 @@ import {
   activeDispatches,
   claimDispatch,
   clearStopFlag,
-  checkTreeEdge,
   compareQueueOrder,
   dependenciesSettled,
   descendantsOf,
@@ -182,10 +182,9 @@ import { reapOrphans } from "./worker/reapOrphans";
 import { ensureGuard, stopGuard } from "./worker/guard";
 import { laneOfWorker, recordLaneUsage } from "./judge/sessionLane";
 import { shardTitle, taskTitle } from "./usage/taskTitle";
-import { dispatchNoTable, dispatchOfRef, dispatchOfThreadNo } from "./usage/threadNo";
+import { dispatchNoTable, dispatchOfThreadNo } from "./usage/threadNo";
 import { dispatchNoLabel as dispatchDisplayLabel, taskNoLabel } from "../core/record/idMap";
 import { isGroupRef } from "../core/record/nodeRef";
-import { parseRef } from "../core/record/nodeRef";
 import { msgId } from "../core/message/msgId";
 import { decide } from "./judge/brain";
 import { brainSessionOf } from "./judge/brainLane";
@@ -3431,15 +3430,16 @@ async function applyOneDirective(
       }
       afterIds.push(String(hit.id));
     }
-    /* 父节点先按派单查找，未找到再按组查找。两种语义的拒绝原因不同，判定在 groupOps。 */
-    let parentId = "";
-    let parentAsGroup = "";
-    if (parentTok) {
-      const pn = resolveParentNode(root, parentTok, parentWhy, afterRows, (t) => resolveDispatchRef(root, afterRows, t));
-      if (!pn.ok) return reject(pn.error);
-      if (pn.asGroup) parentAsGroup = pn.id;
-      else parentId = pn.id;
-    }
+    /* 父节点可以是编号、派单 id、`@N`（同批第 N 单）或组号；三种语义的拒绝文案在 refs 里分开。 */
+    const pr = resolveParentTokens(root, {
+      msgId: String((d as SupervisorDirective).msg_id ?? ""),
+      tok: parentTok,
+      why: parentWhy,
+      rows: afterRows,
+    });
+    if (!pr.ok) return reject(pr.error);
+    const parentId = pr.id;
+    const parentAsGroup = pr.asGroup ? pr.id : "";
     /*
      * 分组声明：`new` 新建、`join` 加入既有组。成员归属只落在派单的 `group` 字段上，
      * 组记录不存成员表。两处保存同一事实会产生不一致。
@@ -3967,25 +3967,6 @@ async function applyOneDirective(
   }
 
   return reject(`未知动作“${action || d.text || "（空）"}”。可用动作：${CAPITALIST_ACTIONS.join(" / ")}`);
-}
-
-/**
- * 把 PARENT: / AFTER: 引用解析成台账行。
- *
- * 编号类引用（任务号、派单 id、进程号）统一走 {@link dispatchOfRef}，与看板按号操作、
- * 命令行排结构使用同一套基准：任务号取派单序最大的那一单，不按 `at` 或落盘顺序另算一遍。
- * 组号不在此处理：组不是派单行，解析结果是组号本身，由调用方在需要时查组台账。
- *
- * 不按状态过滤：前置单已经结束是正常情形（依赖已满足），指向它才不会重复等待。
- *
- * 落库一律写派单 id；找不到时返回 undefined。
- */
-function resolveDispatchRef(root: string, rows: Dispatch[], tok: string): Dispatch | undefined {
-  const ref = parseRef(tok);
-  if (ref.kind === "group") return undefined;
-  /* 历史 `D-` 号、线程键不是编号形态，按台账原文精确匹配。 */
-  if (ref.kind === "other") return rows.find((x) => String(x.id) === ref.id);
-  return dispatchOfRef(root, tok, { rows, anyStatus: true });
 }
 
 /**
@@ -6622,8 +6603,11 @@ function runFacts(root: string): { facts: string; count: number } | null {
         `${why ? `（${why}）` : ""}`,
     );
   }
-  const stage = loadState(root)?.stage ?? "";
-  lines.push(stage ? `当前阶段 ${stage} 没有在途单。` : "没有在途单。");
+  /*
+   * 不写阶段号：阶段是契约里的调度分段，用户看的是“单做完了没有”。
+   * 写进 facts 会被总结照抄成“当前停在 S0”，读的人还得反查 S0 是什么。
+   */
+  lines.push("没有在途单。");
   return { facts: lines.join("\n"), count: rows.length };
 }
 
@@ -6638,7 +6622,7 @@ async function summaryText(root: string, facts: string): Promise<string> {
     "写法：",
     "  · 开头一句话交代整体：几张单、成功几张、没成功的为什么失败。",
     "  · 中间只讲没成功的；成功的不逐张复述，除非耗时值得说明。",
-    "  · 结尾一句话说当前停在哪个阶段、有没有在途单。",
+    "  · 结尾一句话说有没有在途单。",
     "  · 只写上面存在的内容。不推测原因，不评价好坏，不列改进建议。",
     "  · 不逐条抄编号与状态，不用列表符号，不用感叹号。",
     "  · 用与用户相同的语言。",

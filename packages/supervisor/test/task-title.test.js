@@ -63,7 +63,11 @@ test("前端只有一份分片映射表，且取自服务端", () => {
   const copied = /export\s+const\s+SHARD_TITLES\s*=\s*Object\.freeze\(\{/.test(src);
   assert.strictEqual(copied, false, "web/src/lib/taskTitle.js 里又出现了独立的 SHARD_TITLES，请改为从服务端导入");
 
-  const imported = src.match(/import\s*\{\s*SHARD_TITLES\s*\}\s*from\s*"([^"]+)"/);
+  /*
+   * 判据只要求 SHARD_TITLES 出现在从服务端导入的符号表里：同一行还导入摘要函数是正常写法
+   * （前端需要与服务端同一份算法），正则不能因为多出一个逗号就判成“没有导入”。
+   */
+  const imported = src.match(/import\s*\{[^}]*\bSHARD_TITLES\b[^}]*\}\s*from\s*"([^"]+)"/);
   assert.ok(imported, "web/src/lib/taskTitle.js 未从服务端导入 SHARD_TITLES");
   assert.match(imported[1], /usage\/taskTitle(\.ts)?$/, `导入来源不是服务端的分片映射模块：${imported[1]}`);
 
@@ -74,6 +78,22 @@ test("前端只有一份分片映射表，且取自服务端", () => {
   /* 目标文件必须真的导出该符号，否则前端拿到的是 undefined，映射表会整体失效。 */
   const target = readFileSync(abs, "utf8");
   assert.match(target, /export\s+const\s+SHARD_TITLES\b/, `${abs} 未导出 SHARD_TITLES`);
+});
+
+test("前端摘要算法取自服务端，不在 web 侧另写一份", () => {
+  const src = readFileSync(WEB_TABLE, "utf8");
+  /*
+   * 前端曾复制过一整份 `summarizeTitle` / `cjkCount` / `shardTitle`。服务端后来修掉
+   * “删数字”的缺陷（`校验第 1 张单` → `校验第张单`），前端副本没跟上，同一个任务
+   * 在左栏与看板显示成两个标题。判据因此是双向的：必须导入服务端实现，且不得自带
+   * 摘要所需的汉字正则。本地复写无论怎么写都绕不开最后这条。
+   */
+  const imported = src.match(/import\s*\{[^}]*\bsummarizeTitle\b[^}]*\}\s*from\s*"([^"]+)"/);
+  assert.ok(imported, "web/src/lib/taskTitle.js 未从服务端导入 summarizeTitle");
+  assert.match(imported[1], /usage\/taskTitle(\.ts)?$/, `摘要来源不是服务端模块：${imported[1]}`);
+
+  assert.match(src, /summarizeTitle\s+as\s+\w+/, "服务端 summarizeTitle 应别名导入：前端只在原算法上加显示字数上限");
+  assert.doesNotMatch(src, /const\s+CJK\s*=/, "web/src/lib/taskTitle.js 自带汉字正则，说明又在本地实现了一遍摘要");
 });
 
 test("标题取值顺序：契约 title -> 分片映射 -> 正文摘要，不回退到 id", () => {
@@ -93,6 +113,27 @@ test("正文摘要只留中文，保留整句不再按字数截断", () => {
   // 线上实例：任务卡标题被截成“撤掉看板聊天区的未建”，这里要求整句落库。
   assert.strictEqual(summarizeTitle("撤掉看板聊天区的未建单标记按钮，含模板与样式"), "撤掉看板聊天区的未建单标记按钮");
   assert.strictEqual(taskTitle({ shard: "", action: "撤掉看板聊天区的未建单标记按钮" }), "撤掉看板聊天区的未建单标记按钮");
+});
+
+test("正文摘要保留数字，但剥掉行首的列表序号", () => {
+  /*
+   * 线上实例（2026-11-20）：派单写“2. 校验第 1 张单产出的文案问题与改法清单”，
+   * 任务卡标题成了“校验第张单产出的文案问题与改法清单”。数字被当成非中文删掉，
+   * “第几张单”这个指代直接消失，而且从标题上看不出被删过。
+   */
+  assert.strictEqual(
+    summarizeTitle("2. 校验第 1 张单产出的文案问题与改法清单：逐条核对"),
+    "校验第1张单产出的文案问题与改法清单",
+  );
+  /* 行首序号是书写格式，不该进标题；紧跟着的数字是内容，要留。 */
+  assert.strictEqual(
+    summarizeTitle("1. 按 wording-guard 技能规范逐文件盘点项目代码中的中文文案，找出口水话"),
+    "按技能规范逐文件盘点项目代码中的中文文案",
+  );
+  assert.strictEqual(summarizeTitle("把 3 个模块拆开，其余不动"), "把3个模块拆开");
+  /* 按逗号切段后取第一段：`%` 保留，后半句不并入标题。 */
+  assert.strictEqual(summarizeTitle("阈值从 4 调到 5%，观察一周"), "阈值从4调到5%");
+  assert.strictEqual(summarizeTitle("v57.22 的阈值校准"), "57.22的阈值校准");
 });
 
 

@@ -3,6 +3,7 @@ import { directPath, isWorkerRef } from "../../core/dispatch/commands";
 import { appendJsonl, writeJson } from "../../core/record/json";
 import { recordEvent } from "../../core/record/ledger";
 import { newMessageId } from "../../core/message/messages";
+import { userMsgDirectionOf } from "../../core/message/msgId";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { loadState } from "../../core/record/state";
 import { clearStopFlag, listWorkers, readDispatches, Dispatch } from "../../core/record/supervisor";
@@ -84,9 +85,9 @@ export function writeQuotedDirect(
   };
   const quoteAtts = attachmentsIn(input.text);
   if (quoteAtts.length) rec.atts = quoteAtts;
-  /* 插话由用户发出，方向 `U2W`；归属任务号从目标派单号反解。 */
+  /* 插话由用户发出，登记给工作进程，方向由承接方入口给出；归属任务号从目标派单号反解。 */
   const quoteTaskNo = taskNoOfDispatchId(String(input.target ?? "")) || "S0";
-  rec.msg_id = input.msgId || newMessageId(quoteTaskNo, "U2W");
+  rec.msg_id = input.msgId || newMessageId(quoteTaskNo, userMsgDirectionOf("worker"));
   if (input.lineage) rec.lineage = input.lineage;
   if (input.target) rec.target = input.target;
   if (input.thread) {

@@ -33,8 +33,24 @@ const DO_LINE = /^\s*DO:\s*([a-zA-Z-]+)\s*([\s\S]*)$/;
 
 
 
-/** 一个动作块：`DO:` 行及其后的 `ATT:` 行；一条消息多单时每单各自带附件。 */
-export interface ParsedAction {
+/**
+ * 树字段的集合。`ParsedReply`（单动作兼容）与 `ParsedAction`（每个动作）都满足它，
+ * 于是 `treeDirectiveFields` 只认这一份形状，不必区分调用方传的是整条还是单条。
+ *
+ * 字段只在这里列举一次：`ParsedAction` 直接继承它。两处各写一遍时，新增一个树字段
+ * 很容易只加到其中一处，表现是“解析出来了但没落库”，且不会报错。
+ */
+export interface TreeFieldBag {
+  parent?: string;
+  parentReason?: string;
+  after?: string[];
+  group?: string;
+  insert?: InsertRef;
+  insertMode?: "halt" | "keep" | "drop";
+}
+
+/** 一个动作块：`DO:` 行及其后的 `ATT:` 行与树字段；一条消息多单时每单各自带附件与结构。 */
+export interface ParsedAction extends TreeFieldBag {
   action: string;
   arg: string;
   /**
@@ -97,12 +113,16 @@ export function parseReply(raw: string): ParsedReply {
   let leadRevoke: string | undefined;
   /** 是否出现 `ATT:` 行，用于区分未写与明确不带。 */
   let attSeen = false;
-  let depRefs: string[] | undefined;
-  let parentRef: string | undefined;
-  let parentReason: string | undefined;
-  let groupRef: string | undefined;
-  let insertRef: InsertRef | undefined;
-  let insertMode: "halt" | "keep" | "drop" | undefined;
+  /**
+   * 树字段归属：写在哪个 `DO:` 之后就属于哪一单。
+   *
+   * 早先这些字段是整条消息共用的，`acts.length > 1` 时一律丢弃。一条消息派两单、
+   * 第二单要挂第一单时，写了 `PARENT` 也不生效，而且不报错，只能从结果反推。
+   * 现在与 `ATT` / `REVOKE` 同一套归属规则：挂到最近的 `DO:`，尚无 `DO:` 时先存起来，
+   * 归入随后第一单。
+   */
+  const lead: TreeFieldBag = {};
+  const treeBag = (): TreeFieldBag => (acts[acts.length - 1] as TreeFieldBag | undefined) ?? lead;
   const kept: string[] = [];
   for (const line of raw.split(/\r?\n/)) {
     /* `ATT:` 归属于其前面最近的 `DO:` 动作。 */
@@ -119,6 +139,11 @@ export function parseReply(raw: string): ParsedReply {
       if (leadRevoke) {
         block.revoke = leadRevoke;
         leadRevoke = undefined;
+      }
+      /* 写在首个 `DO:` 之前的树字段，归入这一单。 */
+      if (Object.keys(lead).length > 0) {
+        Object.assign(block, lead);
+        for (const k of Object.keys(lead) as (keyof TreeFieldBag)[]) delete lead[k];
       }
       acts.push(block);
       continue;
@@ -148,14 +173,14 @@ export function parseReply(raw: string): ParsedReply {
     const prM = PARENT_REASON_LINE.exec(line);
     if (prM) {
       const why = String(prM[1] ?? "").trim();
-      if (why && !/^(none|无|-|—)$/i.test(why)) parentReason = why;
+      if (why && !/^(none|无|-|—)$/i.test(why)) treeBag().parentReason = why;
       continue;
     }
     const parM = PARENT_LINE.exec(line);
     if (parM) {
       const t = String(parM[1] ?? "").trim();
       /* `PARENT: none` 等价于未写，不落字段。 */
-      if (t && !/^(none|no|无|-|—)$/i.test(t)) parentRef = t;
+      if (t && !/^(none|no|无|-|—)$/i.test(t)) treeBag().parent = t;
       continue;
     }
     const afterM = AFTER_LINE.exec(line);
@@ -171,26 +196,26 @@ export function parseReply(raw: string): ParsedReply {
               .filter(Boolean),
           ),
         ];
-        if (refs.length > 0) depRefs = refs;
+        if (refs.length > 0) treeBag().after = refs;
       }
       continue;
     }
     const grpM = GROUP_LINE.exec(line);
     if (grpM) {
       const t = String(grpM[1] ?? "").trim();
-      if (t && !/^(none|no|无|-|—)$/i.test(t)) groupRef = t;
+      if (t && !/^(none|no|无|-|—)$/i.test(t)) treeBag().group = t;
       continue;
     }
     const insM = INSERT_LINE.exec(line);
     if (insM) {
       const parsed = parseInsert(String(insM[1] ?? ""));
-      if (parsed) insertRef = parsed;
+      if (parsed) treeBag().insert = parsed;
       continue;
     }
     const modeM = INSERT_MODE_LINE.exec(line);
     if (modeM) {
       const m = parseInsertMode(String(modeM[1] ?? ""));
-      if (m) insertMode = m;
+      if (m) treeBag().insertMode = m;
       continue;
     }
     /* `ACTION:` 可出现在行中而非仅行首：按位置切分，前段留作正文，后段作为要求。 */
@@ -204,10 +229,14 @@ export function parseReply(raw: string): ParsedReply {
     if (before) kept.push(before);
     if (after) want = after;
   }
-  /* 树边与依赖仅在单动作时生效；多动作并行时忽略，由调用方提示。 */
+  /*
+   * 顶层树字段只为单动作消息保留（兼容既有调用点）。多动作时每单的树字段在 `acts` 里，
+   * 由调用方逐条取用。顶层若给一份不分归属的值，会让人误以为整条消息共用同一棵树边。
+   */
   const multi = acts.length > 1;
   const first = acts[0];
   const firstShots = first?.shots;
+  const solo: TreeFieldBag = multi ? {} : (first ?? lead);
   return {
     reply: kept.join("\n").trim(),
     want: want.replace(LEGACY_VERB, "").trim(),
@@ -215,12 +244,12 @@ export function parseReply(raw: string): ParsedReply {
     acts,
     /* `shots` 为兼容字段：单动作时取首单的 ATT；未写 ATT 由调用方按消息自带图处理。 */
     ...(attSeen ? { shots: firstShots ?? leadShots ?? [] } : {}),
-    ...(!multi && depRefs ? { after: depRefs } : {}),
-    ...(!multi && parentRef ? { parent: parentRef } : {}),
-    ...(!multi && parentReason ? { parentReason } : {}),
-    ...(!multi && groupRef ? { group: groupRef } : {}),
-    ...(!multi && insertRef ? { insert: insertRef } : {}),
-    ...(!multi && insertMode ? { insertMode } : {}),
+    ...(solo.after ? { after: solo.after } : {}),
+    ...(solo.parent ? { parent: solo.parent } : {}),
+    ...(solo.parentReason ? { parentReason: solo.parentReason } : {}),
+    ...(solo.group ? { group: solo.group } : {}),
+    ...(solo.insert ? { insert: solo.insert } : {}),
+    ...(solo.insertMode ? { insertMode: solo.insertMode } : {}),
   };
 }
 
@@ -230,7 +259,7 @@ export function parseReply(raw: string): ParsedReply {
  * 一处决定解析结果中哪些字段写入指令记录：`parent` / `after` / `group` / `insert` 各自
  * 有对应的记录字段名。分散在调用方拼接会导致字段已解析却未传递，且不会报错。
  */
-export function treeDirectiveFields(p: ParsedReply): {
+export function treeDirectiveFields(p: TreeFieldBag): {
   parent?: string;
   parent_reason?: string;
   after?: string[];

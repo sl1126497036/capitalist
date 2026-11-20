@@ -8,8 +8,12 @@ const { join, resolve } = require("node:path");
 const PKG = resolve(__dirname, "..");
 const { serveBoard, buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 const { recordUserMessage } = require(join(PKG, "dist/core/message/messages.js"));
+const { userMsgDirectionOf } = require(join(PKG, "dist/core/message/msgId.js"));
 const { settleChat } = require(join(PKG, "dist/supervisor/view/chatSettle.js"));
 const { listSupervisorDirectives } = require(join(PKG, "dist/supervisor/channel/direct.js"));
+
+/* 这些用例模拟监工面板直发，消息由监工承接。 */
+const SUPERVISOR_MSG = userMsgDirectionOf("supervisor");
 
 function sandbox(name = "capitalist-unhandled-api-") {
   const root = mkdtempSync(join(tmpdir(), name));
@@ -49,8 +53,8 @@ async function withBoard(root, fn) {
 test("接口：列出 -> 建单（原话预填、只带本条附件）-> 出列；重复请求返回 409", async () => {
   const root = sandbox();
   /* 前一条带过一张旧图，后一条本身没贴图：建单时不许把旧图带进来。 */
-  recordUserMessage(root, { text: "上一张图是别的单的", atts: [".capitalist/attachments/old.png"] });
-  const msg = recordUserMessage(root, { text: "新消息挪到中间，这里上方" });
+  recordUserMessage(root, { text: "上一张图是别的单的", atts: [".capitalist/attachments/old.png"], direction: SUPERVISOR_MSG });
+  const msg = recordUserMessage(root, { text: "新消息挪到中间，这里上方", direction: SUPERVISOR_MSG });
   settleChat(root, { msg_id: msg.id, verdict: "answered_only", text: "新消息挪到中间，这里上方" });
 
   await withBoard(root, async (call) => {
@@ -90,7 +94,7 @@ test("接口：列出 -> 建单（原话预填、只带本条附件）-> 出列�
 
 test("接口：已答复 -> 不再出现，消息流上的未建单标记一起消失", async () => {
   const root = sandbox();
-  const msg = recordUserMessage(root, { text: "把按钮换成圆角" });
+  const msg = recordUserMessage(root, { text: "把按钮换成圆角", direction: SUPERVISOR_MSG });
   settleChat(root, { msg_id: msg.id, verdict: "answered_only", text: "把按钮换成圆角" });
   assert.ok(buildSupervisorLog(root, { hours: 0 }).messages.some((m) => m.unhandled === true));
 

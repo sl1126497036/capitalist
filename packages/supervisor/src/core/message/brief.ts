@@ -3,6 +3,7 @@
 import { join } from "node:path";
 
 import type { Contract } from "../contract/contract";
+import { hasCustomContract } from "../contract/customContract";
 import { openInboxAsks } from "../dispatch/inbox";
 import { readJsonl } from "../record/json";
 import { supervisorDir } from "../record/paths";
@@ -92,10 +93,10 @@ export function buildBrief(input: BriefInput): string {
   /*
    * 只有用户自己定了契约，才提阶段与门槛。
    *
-   * 默认的 `generic` 是调度层的容器键，不对应工序。
+   * 默认的 `generic` 是调度层的容器键，`minimal` 是引擎自带的默认工序，都不对应用户定义的过程。
    * 未指定契约时不显示阶段与推进提示，只输出目标、任务池与在途进度。
    */
-  const custom = Boolean(state.contract && state.contract !== "generic" && state.contract !== "minimal");
+  const custom = hasCustomContract(state.contract);
   const stage = custom ? contract.stages.find((s) => s.id === state.stage) : undefined;
   lines.push(
     custom

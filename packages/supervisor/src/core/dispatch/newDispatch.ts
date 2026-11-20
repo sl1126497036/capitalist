@@ -17,6 +17,7 @@
 import type { Dispatch } from "../record/supervisor";
 import { appendDispatch } from "../record/supervisor";
 import { ensureTaskForDispatch } from "../record/tasks";
+import { stripLeadOrdinal } from "../text";
 
 /** 派单上的扩展字段。与 `loop.ts` 的 `DispatchEx` 同形，供组装结果带类型地读回。 */
 export interface ComposedDispatch extends Dispatch {
@@ -127,7 +128,12 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
     id: String(input.id),
     at: String(input.at ?? "") || new Date().toISOString(),
     stage: String(input.stage ?? ""),
-    action: String(input.action ?? ""),
+    /*
+     * 正文行首的列表序号在建单时去掉：一条消息派多单时，模型会把“第几条”写进每单正文，
+     * 而单是分头交给各自的进程的，上下文互相隔离。只拿到 `2.` 的那个会以为前面还有一条
+     * 没给它。放在这里而不是各调用点，是因为建单路径有多条（对话、命令行、重派、重开）。
+     */
+    action: stripLeadOrdinal(String(input.action ?? "")),
     status: input.status ?? "open",
   };
 

@@ -16,6 +16,7 @@ import { syncTaskForDispatch } from "../record/tasks";
 import { normalizeGroupId } from "../record/idMap";
 import { groupIndexOf, readGroups, resolveGroupRef, writeGroups } from "../record/groups";
 import { groupStatusOf, ancestorsOf } from "./groupGraph";
+import { groupIndexFrom } from "./groupOps";
 
 /** 一次结构变更的结果。`changed` 是真正改了字段的派单 id。 */
 export interface TreeChangeResult {
@@ -79,7 +80,7 @@ export function assignGroup(root: string, ids: readonly string[], groupId: strin
     }
   }
   if (want) {
-    const idx = groupIndexOf(rows, readGroups(root));
+    const idx = groupIndexFrom(root, rows);
     for (const m of idx.members.get(want) ?? []) {
       if (ids_.includes(m)) continue;
       const d = byId.get(m);
@@ -149,7 +150,7 @@ export function reassignParent(
   }
 
   /* 成环：新父的上溯链里出现本批任一节点即拒绝。 */
-  const idx = groupIndexOf(rows, readGroups(root));
+  const idx = groupIndexFrom(root, rows);
   if (parent) {
     const up = new Set([parent, ...ancestorsOf(parent, rows, idx)]);
     for (const id of ids_) {

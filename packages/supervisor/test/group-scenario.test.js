@@ -147,6 +147,15 @@ test("场景一：前后端并行成组，联调挂在组上，测试挂在联�
     const kids = all.filter((n) => n.parent === gid).map((n) => n.id);
     assert.deepStrictEqual(kids.sort(), ["4-1", "5-1", "6-1"].sort(), "组成员与挂组的下游都在组下");
 
+    /*
+     * 前端按 `edge` 分段渲染：成员内嵌进组卡片，下游排在组卡片下方。
+     * 两者混成同一层会让下游看起来是又一个成员，故契约固定在此。
+     */
+    const edgeOfKid = new Map(all.filter((n) => n.parent === gid).map((n) => [n.id, n.edge]));
+    assert.strictEqual(edgeOfKid.get("4-1"), "member", "组成员标 member");
+    assert.strictEqual(edgeOfKid.get("6-1"), "after", "挂组下游标 after");
+    assert.strictEqual(gnode.childCount, 1, "组的子单数只计挂组下游，成员由组内完成数表达");
+
     /* 成员不再同时挂在组的上游：3-1 的子节点只有组。 */
     const kidsOfParent = all.filter((n) => n.parent === "3-1").map((n) => n.id);
     assert.deepStrictEqual(kidsOfParent, [gid], "成员已从原父节点摘到组下");

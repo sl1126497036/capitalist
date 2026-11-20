@@ -39,3 +39,44 @@ export function errText(err: unknown): string {
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * 行首列表序号：`1. ` / `2、` / `3)` / `4：`。
+ *
+ * 只认 1-2 位数字，且序号后的点号不能紧跟数字：`2026. 年度盘点`、
+ * `3.5 倍的阈值` 是正文，不是列表编号，剥掉数字会丢掉语义。
+ */
+const LEAD_ORDINAL = /^[ \t]*\d{1,2}[ \t]*[.)）:：、](?![ \t]*\d)[ \t]*/;
+
+/**
+ * 去掉**首个非空行**的行首列表序号，其余行原样保留。
+ *
+ * 序号是书写格式，不是内容。注意只处理行首：正文里的“第 1 张单”中的数字是语义，
+ * 剥了就变成“第张单”，指代直接丢失。
+ */
+export function stripListMark(text: string): string {
+  const s = String(text ?? "");
+  const lines = s.split(/\r?\n/);
+  const i = lines.findIndex((l) => l.trim());
+  if (i < 0) return s;
+  const hit = LEAD_ORDINAL.exec(lines[i] ?? "");
+  if (!hit) return s;
+  lines[i] = (lines[i] ?? "").slice(hit[0].length);
+  return lines.join("\n");
+}
+
+/**
+ * 去掉派单正文开头的列表序号；整段每行都带序号时视为分步清单，不动。
+ *
+ * 正文为什么要去：一条消息派多单时，模型常把“第几条”写进每单正文
+ * （`2. 盘点 web/src 下所有含中文的文件`）。派单按单分发给各自进程，进程上下文
+ * 互相隔离，只拿到 `2.` 的那个会以为还有一条没给到它。
+ *
+ * 整段每行都带序号的是这张单自己的分步清单，属于内容，保留。
+ */
+export function stripLeadOrdinal(text: string): string {
+  const s = String(text ?? "");
+  const lines = s.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length >= 2 && lines.every((l) => LEAD_ORDINAL.test(l))) return s;
+  return stripListMark(s);
+}

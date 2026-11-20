@@ -500,6 +500,18 @@ export function buildApplyBlock(): string[] {
 }
 
 /**
+ * 派单在提示词里的抬头，例如 `派单 4-1（标题 盘点下所有含中文的文件）：`。
+ *
+ * 不写阶段号：阶段是契约里的调度分段，工作进程只做这一单，阶段号对它没有可执行含义。
+ * 写进去的后果是它被复述回来。申报里出现“S0 盘点：…”，用户读不懂 S0 是什么，
+ * 还会以为漏了别的阶段没给它。分片同理，只在确有分片时写。
+ */
+export function dispatchHead(d: Dispatch, title: string): string {
+  const bits = [d.shard ? `分片 ${d.shard}` : "", title ? `标题 ${title}` : ""].filter(Boolean);
+  return bits.length ? `派单 ${d.id}（${bits.join("，")}）：` : `派单 ${d.id}：`;
+}
+
+/**
  * 续跑提示词必须自包含：宿主换会话、上下文压缩或进程重启后仍可独立执行。
  * 本单要求原样重发，补上上一轮卡点与本次验收；只有“改过的文件不要重做”这类续跑语义依赖会话。
  */
@@ -536,7 +548,7 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
     "",
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
-    `派单 ${d.id}（阶段 ${d.stage}${d.shard ? `，分片 ${d.shard}` : ""}${title ? `，标题 ${title}` : ""}）：这一单的要求原文如下，原样重发，不重写。`,
+    `${dispatchHead(d, title)}这一单的要求原文如下，原样重发，不重写。`,
     baseAction || "(这一单没有留下正文，按下面的验收清单与卡点判断要做什么；无法判断时使用 capitalist ask)",
     "继续完成剩余部分；已改过的文件不重做，开始前先核对当前状态。",
     ...(tail
@@ -703,7 +715,7 @@ export function buildPrompt(opts: {
     ``,
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
-    `派单 ${d.id}（阶段 ${d.stage}${d.shard ? `，分片 ${d.shard}` : ""}${title ? `，标题 ${title}` : ""}）：`,
+    dispatchHead(d, title),
     attPayload.text,
     /* 卡点段只在发车时拼进提示词，不写入 action；放在正文之后、其余约束之前。 */
     ...(retryCtx ? ["", retryCtx] : []),

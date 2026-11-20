@@ -18,10 +18,14 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const { recordUserMessage } = require(join(PKG, "dist/core/message/messages.js"));
+const { userMsgDirectionOf } = require(join(PKG, "dist/core/message/msgId.js"));
 const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
 const { severeSupervisorEventLines, supervisorChatTurnSessionId } = require(join(PKG, "dist/supervisor/context/reload.js"));
 const { eventsPath, recordEvent } = require(join(PKG, "dist/core/record/ledger.js"));
 const { readJsonl } = require(join(PKG, "dist/core/record/json.js"));
+
+/* 这些用例模拟监工面板直发，消息由监工承接。 */
+const SUPERVISOR_MSG = userMsgDirectionOf("supervisor");
 
 function sandbox(name = "capitalist-msg-quote-") {
   return mkdtempSync(join(tmpdir(), name));
@@ -37,6 +41,7 @@ test("带引用的指令：quote 与原文摘要随 supervisor_chat_ask 持久�
     text: "按这张图改",
     quote: "SE-abc123",
     quoteText: "把顶栏改成一行",
+    direction: SUPERVISOR_MSG,
   });
   const rows = eventsOf(root, "supervisor_chat_ask");
   assert.strictEqual(rows.length, 1);
@@ -46,7 +51,7 @@ test("带引用的指令：quote 与原文摘要随 supervisor_chat_ask 持久�
 
 test("不带引用的指令：不写 quote 字段（老行为不变）", () => {
   const root = sandbox();
-  recordUserMessage(root, { text: "现在什么情况" });
+  recordUserMessage(root, { text: "现在什么情况", direction: SUPERVISOR_MSG });
   const rows = eventsOf(root, "supervisor_chat_ask");
   assert.strictEqual(rows.length, 1);
   assert.strictEqual(rows[0].quote, undefined);
@@ -59,9 +64,11 @@ test("重建路径：buildSupervisorLog 把引用原样下发", () => {
     text: "按这张图改",
     quote: "SE-abc123",
     quoteText: "把顶栏改成一行",
+    direction: SUPERVISOR_MSG,
   });
   const log = buildSupervisorLog(root, { limit: 50 });
-  const hit = log.messages.find((m) => String(m.msg_id ?? "").startsWith("M-"));
+  /* 消息对象可能不带 msg_id（视图层用指纹兜底），按角色与正文定位这一条。 */
+  const hit = log.messages.find((m) => m.role === "user" && m.text === "按这张图改");
   assert.ok(hit, "用户指令应出现在监工流里");
   assert.strictEqual(hit.quote, "SE-abc123");
   assert.strictEqual(hit.quote_text, "把顶栏改成一行");

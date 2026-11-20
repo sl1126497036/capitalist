@@ -42,6 +42,7 @@ import { buildThreads } from "../threads";
 import { buildSupervisorStatus } from "../views";
 import { findSkill, listSkills } from "../../skills";
 import { supervisorModelOf } from "../../judge/supervisorModel";
+import { SUPERVISOR_VIA, chatCarrierOf, chatDirectionOf } from "../chatDirection";
 
 /**
  * 会携带技能的动作：这些动作最终把正文下发成派单，技能名随正文一起下发。
@@ -160,7 +161,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
                   "回答时先说明暂停状态，再回答该问题。",
                 ]
               : []),
-            ...(via === "capitalist"
+            ...(via === SUPERVISOR_VIA
               ? [
                   "",
                   "【用户按了“监工介入”】提问发生在该进程的会话里，携带上面的任务编号直接回答；",
@@ -184,7 +185,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           ]
         : [];
 
-      if (thread && via !== "capitalist") {
+      if (thread && chatCarrierOf({ thread, via }) === "worker") {
         /*
          * 技能随补充内容一起注入。
          *
@@ -200,7 +201,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           ...(quote ? { quote } : {}),
           ...(quote ? { quoteText: resolveQuoteText(ctx.opts.root, thread, quote, quoteFallback) } : {}),
           ...(talkDispatch ? { taskNo: taskNoOfDispatchId(talkDispatch) || "S0" } : {}),
-          direction: "U2W",
+          direction: chatDirectionOf({ thread, via }),
         });
         const targetDispatch =
           String(me?.dispatch ?? threadDispatch?.id ?? "") || targetFromText(ctx.opts.root, text);
@@ -412,10 +413,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ...(quote ? { quote } : {}),
         ...(quote ? { quoteText: resolveQuoteText(ctx.opts.root, thread, quote, quoteFallback) } : {}),
         ...(talkDispatch ? { taskNo: taskNoOfDispatchId(talkDispatch) || "S0" } : {}),
-        direction: via === "capitalist" ? "U2S" : "U2W",
+        direction: chatDirectionOf({ thread, via }),
       });
-      const past = recentShots(ctx.opts.root, { thread });
-      const ownShots = past.filter((s) => s.msg_id === userMsg.id);
+      const ownShots = recentShots(ctx.opts.root, { thread }).filter((s) => s.msg_id === userMsg.id);
       const shots = ownShots.map((s, i) => ({ ...s, index: i + 1 }));
 
       /** 队列为空：没有派单在执行，没有排队项，没有失败项，属待命态。 */
@@ -446,7 +446,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ...(idleQueue ? ["队列状态：空（待命，没有派单在执行，也没有排队项）"] : []),
         `下一步：${state?.next_action ? String(state.next_action).slice(0, 300) : "（空）"}`,
         `线程总数：${threads.length} ｜ 已完成 ${threads.filter((t) => t.status === "done" || t.status === "exited").length}`,
-        ...(brief && via !== "capitalist"
+        ...(brief && via !== SUPERVISOR_VIA
           ? ["", "【重载后继承的上下文（压缩过，已完成且证据齐全的不要重做）】", brief]
           : []),
         ...(() => {
@@ -530,7 +530,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         "5. DO: 行与 ATT: 行各占单独一行，写在正文最后；它们不会显示给用户，写在正文中间会把话切断。",
         "",
         /** 是否工作进程会话只看 thread 有没有值，不看 me 是否存在。 */
-        supervisorPolicy({ shots, viaSupervisor: via === "capitalist", currentMsgId: userMsg.id, ownOnly: ownShots.length > 0 }),
+        supervisorPolicy({ shots, viaSupervisor: via === SUPERVISOR_VIA, currentMsgId: userMsg.id, ownOnly: ownShots.length > 0 }),
         "",
         `用户消息：${text}`,
         ...(quote
@@ -562,13 +562,13 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       /** 优先用工作进程记录上的 ai_session；老记录缺该字段才回落基名。 */
       const liveSession = String((me as unknown as { ai_session?: string } | null)?.ai_session ?? "").trim();
       /*
-       * 监工介入（via === "capitalist"）不得复用工作进程的 ai_session：
+       * 监工介入（via === SUPERVISOR_VIA）不得复用工作进程的 ai_session：
        * 复用会把工作进程的完整上下文（含“你是独立的工作进程”等系统提示）带进监工对话，
        * 形成监工与工作进程两套角色杂糅。监工介入一律走监工自己的会话，
        * 工作进程的执行内容只通过上面的 mine 块摘要（最近输出 / workerDigest）以纯文本进入 prompt。
        */
       const sessionId =
-        via === "capitalist"
+        via === SUPERVISOR_VIA
           ? supervisorChatTurnSessionId(ctx.opts.root)
           : me
             ? liveSession ||
@@ -721,7 +721,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             atts: chosen,
             target:
               targetFromText(ctx.opts.root, text) || String(me?.dispatch ?? threadDispatch?.id ?? ""),
-            ...treeDirectiveFields(parsed),
+            /* 树字段按动作取：一条消息多单时，各单的 PARENT / GROUP 跟着各自的 DO。 */
+            ...treeDirectiveFields(act),
             via: "capitalist",
           });
           if (!w.ok) {

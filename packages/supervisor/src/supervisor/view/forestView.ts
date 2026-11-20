@@ -13,9 +13,9 @@ import { clipLine } from "../../core/text";
 import { dispatchForest, listWorkers, parentOf, readDispatches, type Dispatch } from "../../core/record/supervisor";
 import { isFailed, isSettled } from "../../core/record/dispatchState";
 import { firstBlocker } from "../../core/dispatch/deps";
-import { groupIndexOf, readGroups } from "../../core/record/groups";
+import { groupIndexOf, readGroups, type GroupIndex } from "../../core/record/groups";
 import { normalizeGroupId } from "../../core/record/idMap";
-import { isGroupRef } from "../../core/record/nodeRef";
+import { isGroupRef, label } from "../../core/record/nodeRef";
 import { groupStatusOf, type GroupState } from "../../core/dispatch/groupGraph";
 import { workerUsage } from "../usage/usage";
 import { shardTitle, summarizeTitle } from "../usage/taskTitle";
@@ -204,9 +204,13 @@ function countInto(stats: ForestTreeStats, n: ForestNodeView): void {
 /**
  * 返回第一个未满足的前置 id，无则空串。判定统一走 `core/dispatch/deps`，视图不重复推导。
  * `"*"` 屏障不是具体节点，不计入卡点。
+ *
+ * 必须传组索引：组前置的满足条件是“整组了结”，缺索引时派单前置判定会把组号当成
+ * 找不到的行而永远判未满足。组已解散或已全部完成，界面仍显示“等待 #G1”，
+ * 与调度侧（`groupSettled`）分叉。
  */
-function pendingPrereqOf(d: Dispatch, rows: Dispatch[]): string {
-  return firstBlocker(d, rows);
+function pendingPrereqOf(d: Dispatch, rows: Dispatch[], gidx: GroupIndex): string {
+  return firstBlocker(d, rows, gidx);
 }
 
 /** 组节点在视图里要展示的派生信息。 */
@@ -214,6 +218,13 @@ interface GroupBadge {
   done: number;
   total: number;
   broken: string;
+  /**
+   * 挂在组上的下游单数（`parent` 指向组号）。
+   *
+   * 组成员不算子单：成员是组的组成部分，界面上由「组内完成 n/m」表达，
+   * 计入子单数会与成员数重复，也会把组读成一个有四个下游的任务。
+   */
+  downstream: number;
 }
 
 /** 构建一棵树所需的上下文。参数收进对象：树、组、边三类信息各自成组，避免长参数列表。 */
@@ -278,7 +289,7 @@ function walkTree(rootIds: string[], ctx: WalkContext): { nodes: ForestNodeView[
       ended_at: info.ended_at,
       retries: retriesOf(d),
       reason: reasonOf(d),
-      childCount: (children[id] ?? []).length,
+      childCount: badge ? badge.downstream : (children[id] ?? []).length,
       depth,
       parent: depth === 0 ? "" : (parentViewOf?.get(id) ?? parentOf(d)),
       /* 失败节点自身的 `chain` 等于其 id，不写入 `stuckOn`，避免显示为自环。 */
@@ -399,12 +410,12 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
   groups.forEach((g, gi) => {
     const st = groupStatusOf(g.id, rows, gidx);
     if (!st) return;
-    groupOf.set(g.id, { done: st.done, total: st.total, broken: st.brokenAt });
     const members = gidx.members.get(g.id) ?? [];
     /* 挂在该组上的下游：`parent` 指向组号（归一后比较，`#G01` 与 `G1` 是同一个）。 */
     const attached = rows
       .filter((d) => normalizeGroupId(parentOf(d)) === g.id)
       .map((d) => String(d.id));
+    groupOf.set(g.id, { done: st.done, total: st.total, broken: st.brokenAt, downstream: attached.length });
     const parent = members
       .map((m) => byId.get(m))
       .map((d) => (d ? parentOf(d) : ""))
@@ -460,7 +471,7 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
     retriesOfMap.set(String(r.id), Number.isFinite(attempt) ? Math.max(0, attempt - 1) : 0);
   }
 
-  const pendingPrereq = (d: Dispatch): string => pendingPrereqOf(d, rows);
+  const pendingPrereq = (d: Dispatch): string => pendingPrereqOf(d, rows, gidx);
 
   /* 同一 lineage 里已有完成的尝试时，早先的失败记录视为已归并，不再计断链。 */
   const lineageDone = new Set<string>();
@@ -484,7 +495,11 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
     return pendingPrereq(d) ? "waiting" : "queued";
   };
 
-  const stuckOf = (d: Dispatch): string => pendingPrereq(d);
+  /* 组号给显示形态（`G1` -> `#G1`），由 `nodeRef.label` 统一补，界面不再自己拼。 */
+  const stuckOf = (d: Dispatch): string => {
+    const s = pendingPrereq(d);
+    return s && isGroupRef(s) ? label(s) : s;
+  };
 
   const reasonOf = (d: Dispatch): string => {
     const status = String(d.status ?? "");

@@ -1,5 +1,15 @@
 /* 节点卡片配色只取 tokens.css 令牌；失败、断链子树、等父节点各有独立外观，不单靠颜色区分。 */
 .fv-col {
+  /*
+   * 卡片外宽、兄弟间距、层级缩进：连线几何（中线、干线长度）全部由这三个值推导，
+   * 改宽度只需改这里，不必再去改伪元素里的像素。
+   */
+  --fv-card-w: 218px;
+  --fv-kid-gap: 12px;
+  --fv-kid-indent: 16px;
+  /* 父卡片下沿到干线、干线到子卡片，两段竖线的高度。 */
+  --fv-kid-drop: 14px;
+  --fv-kid-rise: 12px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -7,7 +17,7 @@
 }
 
 .fv-node {
-  width: 218px;
+  width: var(--fv-card-w);
   display: flex;
   flex-direction: column;
   gap: var(--s6);
@@ -153,40 +163,163 @@
   border-style: dashed;
 }
 
-/* 子节点：父上子下，兄弟并排。 */
+/*
+ * 子节点：父上子下，兄弟并排。
+ * 连线三段：父卡片中线 -> 14px 竖线 -> 横向干线 -> 每个子卡片中线 12px 竖线。
+ * 干线按“自身左边缘 -> 下一个兄弟左边缘”一段一段接力，末位只画到自身中线；
+ * 接力点取列边界而非“上个子中线”，兄弟自带子树把列撑宽时也不会断开。
+ */
 .fv-kids {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-left: 16px;
-  padding-left: 16px;
-  border-left: 1px solid var(--line-soft);
+  gap: var(--fv-kid-gap);
+  margin-left: var(--fv-kid-indent);
+  padding-top: calc(var(--fv-kid-drop) + var(--fv-kid-rise));
 }
+
+/* 父卡片中线向下 14px 接干线；kids 容器左移 indent，故减掉这段缩进。 */
+.fv-kids::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--fv-card-w) / 2 - var(--fv-kid-indent));
+  top: 0;
+  width: 1px;
+  height: var(--fv-kid-drop);
+  background: var(--line-soft);
+}
+
 .fv-kids > .fv-col {
   position: relative;
-  padding-top: 16px;
 }
+
+/* 干线：从自身左边缘画到下一个兄弟的左边缘（含中间间距）。 */
 .fv-kids > .fv-col::before {
   content: "";
   position: absolute;
-  left: -16px;
-  top: 0;
-  width: 16px;
+  left: 0;
+  top: calc(-1 * var(--fv-kid-rise));
+  width: calc(100% + var(--fv-kid-gap));
   height: 1px;
+  background: var(--line-soft);
+}
+
+/* 末位兄弟右侧没有兄弟：只画到自身中线，不向右伸出。 */
+.fv-kids > .fv-col:last-child::before {
+  left: 0;
+  width: calc(var(--fv-card-w) / 2);
+}
+
+/* 首个兄弟左边是父卡片的空白：补上“父中线 -> 自身左边缘”这一小段。 */
+.fv-kids > .fv-col:first-child::before {
+  left: calc(var(--fv-card-w) / 2 - var(--fv-kid-indent));
+  width: calc(100% - var(--fv-card-w) / 2 + var(--fv-kid-indent) + var(--fv-kid-gap));
+}
+
+/* 独子：父中线直接接到自身中线，不再向右延伸。 */
+.fv-kids > .fv-col:first-child:last-child::before {
+  left: calc(var(--fv-card-w) / 2 - var(--fv-kid-indent));
+  width: var(--fv-kid-indent);
+}
+
+/* 干线落到子卡片：12px 竖线，接在卡片中线。 */
+.fv-kids > .fv-col::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--fv-card-w) / 2);
+  top: calc(-1 * var(--fv-kid-rise));
+  width: 1px;
+  height: var(--fv-kid-rise);
   background: var(--line-soft);
 }
 
 /*
  * 组是结构节点：用虚线边框表示节点归属，不靠颜色单独区分。
- * 与派单卡片共用尺寸，才能在同一列里上下对齐。
+ * 组成员内嵌在卡片里横向排开，组卡片宽度按成员数撑开，于是三片合成组这一个节点。
+ * 宽度写进 `--fv-self-w` 供连线取中线：组比成员卡宽，中线不再等于一张卡的半宽。
  */
+.fv-col.has-group {
+  /* 2px 为组卡片左右边框：全局 border-box，公式需把边框算进外宽。 */
+  --fv-self-w: calc(
+    var(--fv-gn) * var(--fv-card-w) + (var(--fv-gn) - 1) * var(--fv-kid-gap) + 2 * var(--s10) + 2px
+  );
+}
+
 .fv-node.group {
+  width: max(var(--fv-card-w), var(--fv-self-w));
   border-style: dashed;
   border-color: var(--t3);
+}
+
+.fv-gmembers {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--fv-kid-gap);
 }
 
 .fv-ngroup {
   font-size: var(--f-tiny, 11px);
   color: var(--t3);
   line-height: 1.3;
+}
+
+/* 组卡片底部的下游说明：组下面那一层是下一单，不是第四个成员。 */
+.fv-gnext-note {
+  margin: 0;
+  font-size: 10px;
+  color: var(--t6);
+  line-height: 1.5;
+}
+
+/*
+ * 挂组的下游：组卡片比成员卡宽，父中线不再落在 `--fv-card-w / 2`，
+ * 故竖线与干线改由容器按 `--fv-self-w` 定位，子节点不再各自画接力干线。
+ */
+.fv-kids.of-group::before {
+  left: calc(var(--fv-self-w) / 2 - var(--fv-kid-indent));
+}
+
+.fv-kids.of-group > .fv-col::before {
+  display: none;
+}
+
+.fv-kids.of-group::after {
+  content: "";
+  position: absolute;
+  top: var(--fv-kid-drop);
+  height: 1px;
+  /*
+   * 组框比成员卡宽，父中线可能落在子节点行的右侧之外，两端收口与百分比都不成立：
+   * 子节点容器被组框撑宽，`100%` 不等于子节点行宽。故按子节点数算出行的实际宽度，
+   * 干线从较左的一端画到较右的一端，宽度取两者之差。
+   */
+  left: min(calc(var(--fv-self-w) / 2 - var(--fv-kid-indent)), calc(var(--fv-card-w) / 2));
+  width: calc(
+    max(
+        calc(var(--fv-self-w) / 2 - var(--fv-kid-indent)),
+        calc(
+          var(--fv-gafter) * var(--fv-card-w) + (var(--fv-gafter) - 1) * var(--fv-kid-gap) -
+            var(--fv-card-w) / 2
+        )
+      ) - min(calc(var(--fv-self-w) / 2 - var(--fv-kid-indent)), calc(var(--fv-card-w) / 2))
+  );
+  background: var(--line-soft);
+}
+
+/*
+ * 组只有一个下游时，子节点行移到组框正下方居中，两者中线对齐，一条竖线直连。
+ * 保留折线会画成两个岔口，而这里确实只有一个下一单。
+ */
+.fv-kids.of-group.single {
+  margin-left: calc(var(--fv-self-w) / 2 - var(--fv-card-w) / 2);
+}
+
+.fv-kids.of-group.single::before {
+  left: calc(var(--fv-card-w) / 2);
+  height: calc(var(--fv-kid-drop) + var(--fv-kid-rise));
+}
+
+.fv-kids.of-group.single::after,
+.fv-kids.of-group.single > .fv-col::after {
+  display: none;
 }

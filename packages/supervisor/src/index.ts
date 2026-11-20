@@ -13,6 +13,7 @@ export * from "./core/message/brief";
 export * from "./core/contract/checks";
 export * from "./core/dispatch/commands";
 export * from "./core/contract/contract";
+export * from "./core/contract/customContract";
 export * from "./core/platform/http";
 export * from "./core/contract/init";
 export * from "./core/record/json";

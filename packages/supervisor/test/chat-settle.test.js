@@ -18,8 +18,13 @@ const {
 } = require(join(PKG, "dist/supervisor/view/chatSettle.js"));
 const { eventsPath } = require(join(PKG, "dist/core/record/ledger.js"));
 const { recordUserMessage } = require(join(PKG, "dist/core/message/messages.js"));
+const { userMsgDirectionOf } = require(join(PKG, "dist/core/message/msgId.js"));
 const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
+const { clearSupervisorLogCache } = require(join(PKG, "dist/supervisor/board/supervisorLog.js"));
 const { readJsonl } = require(join(PKG, "dist/core/record/json.js"));
+
+/* 这些用例模拟监工面板直发，消息由监工承接。 */
+const SUPERVISOR_MSG = userMsgDirectionOf("supervisor");
 
 function sandbox(name = "capitalist-chat-settle-") {
   return mkdtempSync(join(tmpdir(), name));
@@ -180,9 +185,9 @@ test("没有 msg_id 的调用不记录（老入口不带标识）", () => {
 
 test("对话流投影：未建单的指令在 capitalist-events 里带 unhandled 标记，纯提问不带", () => {
   const root = sandbox();
-  const asked = recordUserMessage(root, { text: "新消息挪到中间，这里上方" });
+  const asked = recordUserMessage(root, { text: "新消息挪到中间，这里上方", direction: SUPERVISOR_MSG });
   settleChat(root, { msg_id: asked.id, verdict: "answered_only", text: "新消息挪到中间，这里上方" });
-  const plain = recordUserMessage(root, { text: "这一单现运行中到哪一步了？" });
+  const plain = recordUserMessage(root, { text: "这一单现运行中到哪一步了？", direction: SUPERVISOR_MSG });
   settleChat(root, { msg_id: plain.id, verdict: "answered_only", text: "这一单现运行中到哪一步了？" });
 
   const log = buildSupervisorLog(root, { hours: 0 });
@@ -194,8 +199,9 @@ test("对话流投影：未建单的指令在 capitalist-events 里带 unhandled
   assert.ok(plainMsg, "纯提问也要照常上屏");
   assert.strictEqual(plainMsg.unhandled, undefined, "纯提问不该出现未建单标记");
 
-  /* 人补建单之后，标记消失。 */
+  /* 人补建单之后，标记消失。视图缓存按 2 秒分桶复用，读之前先清掉，断言不依赖读取时机。 */
   settleChat(root, { msg_id: asked.id, verdict: "dispatched", text: "新消息挪到中间，这里上方", dispatch: "SD-11" });
+  clearSupervisorLogCache();
   const after = buildSupervisorLog(root, { hours: 0 });
   const settled = after.messages.find((m) => m.role === "user" && m.text === "新消息挪到中间，这里上方");
   assert.strictEqual(settled.unhandled, undefined, "补建单后不再标未建单");

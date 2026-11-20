@@ -84,7 +84,7 @@ test("tree group new：只有一单时拒绝，理由说明不需要分组", () 
     put(root, "1-1");
     const r = run(root, ["group", "new", "单条", "1-1"]);
     assert.strictEqual(r.code, 2);
-    assert.match(r.out, /至少两单/);
+    assert.match(r.out, /至少需要两条派单/);
     assert.strictEqual(readGroups(root).length, 0, "被拒时不留空组");
   } finally {
     dropRoot(root);

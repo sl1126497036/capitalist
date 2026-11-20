@@ -4,6 +4,8 @@
  * 契约 title 原样保留不截断，标题写入台账后截掉的部分无法补回；显示宽度由前端渐隐省略处理。
  */
 
+import { stripListMark } from "../../core/text";
+
 /** 分片 id -> 中文短名；覆盖历史分片，用于老记录没有 `title` 时回落补名。 */
 export const SHARD_TITLES: Readonly<Record<string, string>> = Object.freeze({
   "api-latency": "首屏提速",
@@ -114,15 +116,27 @@ export function shardTitle(shard: unknown): string {
   return SHARD_TITLES[id] ?? SHARD_TITLES[id.toLowerCase()] ?? "";
 }
 
-/** 提取正文首个含中文的整句，移除非中文字符。 */
+/**
+ * 提取正文首个含中文的整句，去掉字母与标点，**保留数字**。
+ *
+ * 早先的实现把非汉字字符全部删掉，连数字一起删：`校验第 1 张单` → `校验第张单`，
+ * `把 3 个模块拆开` → `把个模块拆开`。数字在中文标题里常是指代的核心（第几张单、
+ * 几个模块、百分比、版本号），删掉会让标题失去意义，且看不出被删过。
+ *
+ * 行首列表序号的剥离与派单正文共用 {@link stripListMark}：序号是书写格式，
+ * 正文里那条已经一并去掉，标题不必再单独实现一份。
+ */
 export function summarizeTitle(text: string): string {
-  const raw = String(text ?? "").trim();
+  const raw = stripListMark(String(text ?? "").trim());
   if (!raw) return "";
   // 括号里通常是补充说明，先移除。
   const plain = raw.replace(/[（(][^）)]*[）)]/g, " ").replace(/[`*#>|]/g, " ");
   const parts = plain.split(/[。；;！!？?\n，,、：:]/);
   for (const part of parts) {
-    const seg = part.trim().replace(/[\s\S]/gu, (ch) => (CJK.test(ch) ? ch : ""));
+    /* 保留汉字与数字，连带小数点与百分号（`57.22`、`5%` 是一个整体）。 */
+    const seg = part
+      .trim()
+      .replace(/[\s\S]/gu, (ch) => (CJK.test(ch) || /[\d.%]/.test(ch) ? ch : ""));
     if (cjkCount(seg) >= 2) return seg;
   }
   return "";

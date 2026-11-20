@@ -3,7 +3,7 @@
 import { adoptAttachmentsForMessage, attachmentsIn, numberAttachmentLines } from "./attachments";
 import { readJsonl } from "../record/json";
 import { eventsPath, recordEvent } from "../record/ledger";
-import { msgId, type MsgDirection } from "./msgId";
+import { msgId, isUserMsgDirection, type MsgDirection } from "./msgId";
 
 /** 一条用户消息的身份与它自己的附件。 */
 export interface UserMessage {
@@ -46,13 +46,23 @@ export function recordUserMessage(
     skills?: string[];
     /** 归属任务号；缺省 `S0`（监工面板全局）。 */
     taskNo?: string | number;
-    /** 方向：`U2W` 用户发给 Worker，`U2S` 用户发给监工。缺省 `U2W`。 */
-    direction?: MsgDirection;
+    /** 方向：由承接方决定，取 `userMsgDirectionOf` 的结果；必填，不设缺省。 */
+    direction: MsgDirection;
   },
 ): UserMessage {
   /** 图在这里编一次号（`[附件] x.png` -> `[图1] x.png`），之后所有环节照抄这一套。 */
   let text = numberAttachmentLines(String(input.text ?? ""));
-  const id = newMessageId(input.taskNo ?? "S0", input.direction ?? "U2W");
+  /*
+   * 方向必须由调用方给出。缺省成 `U2W` 会把「忘记传方向」的调用静默记成
+   * 「用户发给某个工作进程」，事后无法与真实的工作进程消息区分，故在这里直接失败。
+   */
+  const direction = String(input.direction ?? "").trim();
+  if (!isUserMsgDirection(direction)) {
+    throw new Error(
+      `recordUserMessage 的 direction 必填，取 core/message/msgId.ts 的 userMsgDirectionOf；收到 "${direction}"`,
+    );
+  }
+  const id = newMessageId(input.taskNo ?? "S0", direction);
   /*
    * 附件按“消息 id + 序号”另存一份（`<msgId>-1.png`）：这张图属于哪条消息、是第几张，
    * 写进文件名，往下任何环节想拿错都能当场看出来。原文里的路径同步换成新路径。

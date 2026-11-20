@@ -1,3 +1,5 @@
+import { hasCustomContract } from "../../core/contract/customContract";
+import { loadState } from "../../core/record/state";
 import { listDirectives } from "../../core/dispatch/commands";
 import { mqPath } from "../../core/dispatch/mq";
 import { Dispatch, WorkerRecord } from "../../core/record/supervisor";
@@ -25,6 +27,8 @@ export interface ThreadContext {
   triaged: Set<string>;
   /** 派单 id 到任务编号只读一次编号表，与任务列表同源。 */
   nos: Map<string, string>;
+  /** 用户是否自己写了任务列表；默认任务列表下不描述阶段推进这类契约过程。 */
+  customContract: boolean;
 }
 
 export const messageContextCache = new Map<string, { at: number; ctx: ThreadContext }>();
@@ -86,7 +90,17 @@ export function buildMessageContext(root: string): ThreadContext {
       else eventsByWorker.set(w, [e]);
     }
   }
-  return { dispatches, workers, directives, eventsByDispatch, eventsByWorker, mqById, triaged, nos: dispatchNoTable(root) };
+  return {
+    dispatches,
+    workers,
+    directives,
+    eventsByDispatch,
+    eventsByWorker,
+    mqById,
+    triaged,
+    nos: dispatchNoTable(root),
+    customContract: hasCustomContract(loadState(root)?.contract),
+  };
 }
 
 export interface ThreadMessageOptions {
@@ -110,6 +124,7 @@ export function threadMessages(
   shard: string,
   opts: ThreadMessageOptions = {},
 ): { messages: ThreadMessage[]; total: number; next_since: number } {
+  const { customContract } = ctx;
   let s = shard;
   let taskStage = "";
   if (!s && threadId.startsWith("shard:")) s = threadId.slice(6);
@@ -418,7 +433,7 @@ export function threadMessages(
       continue;
     }
     if (name === "dispatch_open") continue;
-    const text = verdictText(e, ctx.mqById, ctx.nos);
+    const text = verdictText(e, ctx.mqById, ctx.nos, { customContract });
     if (!text.trim()) continue;
     const evMsgId = String((e as { msg_id?: unknown }).msg_id ?? "").trim();
     msgs.push({

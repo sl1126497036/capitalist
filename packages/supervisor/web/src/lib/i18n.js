@@ -248,6 +248,8 @@ const EN = {
   /* ---- 会话区 / 工作树 / 全局提示 ---- */
   " {n} 条未读": " {n} unread",
   "{n} 个子单": "Sub-tasks: {n}",
+  "组内完成": "Group progress:",
+  "整组完成后放行下一单": "The next task runs after the whole group completes",
   "{n} 个已完成": "Done: {n}",
   "{n} 个已结束": "Closed: {n}",
   "{n} 个节点": "Nodes: {n}",

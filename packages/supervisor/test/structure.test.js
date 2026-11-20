@@ -155,3 +155,28 @@ test("规则7：建单写盘只有一个入口", () => {
       "请改用 core/dispatch/newDispatch.ts 的 composeDispatch / deriveDispatch + commitDispatch。",
   );
 });
+
+test("规则8：用户消息方向只有一个判定入口", () => {
+  /*
+   * 方向段曾在四处各自判定：对话路由的线程分支写死 `U2W`、监工分支按 `via` 字符串判、
+   * 插话写死 `U2W`、消息模块以 `U2W` 作缺省。按「是否监工介入」判方向时，
+   * 监工面板直发的消息全部落成 `U2W`，与「用户发给工作进程」无法区分。
+   *
+   * 现只允许 `core/message/msgId.ts` 出现方向字面量（类型定义与承接方映射），
+   * 其余模块取 `userMsgDirectionOf` 的结果，对话路由的承接方由 `board/chatDirection.ts` 判定。
+   */
+  const allowed = new Set(["src/core/message/msgId.ts"]);
+  const offenders = [];
+  for (const file of walk(SRC)) {
+    const relPath = rel(file);
+    if (allowed.has(relPath)) continue;
+    if (/["']U2[WS]["']/.test(readFileSync(file, "utf8"))) offenders.push(relPath);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `方向段被写死在多个地方：\n${offenders.join("\n")}\n` +
+      "请改用 core/message/msgId.ts 的 userMsgDirectionOf；会话承接方判定见 board/chatDirection.ts。",
+  );
+});
+

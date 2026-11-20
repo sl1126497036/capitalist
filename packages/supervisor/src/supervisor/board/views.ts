@@ -1,4 +1,4 @@
-import { BoardSnapshot, signature, ageSec, describeEvent, buildSnapshot, contractDirs, ledgerOnlyRoot } from "./snapshot";
+import { BoardSnapshot, signature, ageSec, describeEvent, buildSnapshot, contractDirs, ledgerOnlyRoot, stageViewOf } from "./snapshot";
 import { buildThreads, TaskCounts, taskCountsOf, settledThreadKeys, acceptedThreadKeys, taskCounts } from "./threads";
 import { clipText } from "../../core/text";
 import { maskBoardText } from "./render";
@@ -12,6 +12,7 @@ import { ReloadStatus, SupervisorContextView, reloadStatus, buildSupervisorConte
 import { SupervisorActivityKind, SupervisorAction, supervisorActivityOf, currentSupervisorAction } from "../worker/activity";
 import { loadSupervisor, listWorkers, pidAlive, supervisorStaleSec, readDispatches } from "../../core/record/supervisor";
 import { loadState } from "../../core/record/state";
+import { hasCustomContract } from "../../core/contract/customContract";
 import { loadContract, stageById } from "../../core/contract/contract";
 import { tokenTotals, usageTotalsOf, type UsageTotals, ThreadCostRow, costRowsWith, pickCurrentCostRows, costTotals } from "./stats";
 import { readPendingMq } from "../../core/dispatch/mq";
@@ -158,6 +159,8 @@ export function buildAlerts(
   };
 
   const ledgerOnly = ledgerOnlyRoot(root);
+  /* 默认任务列表下不描述契约过程：阶段推进按中性说法上屏。 */
+  const customContract = hasCustomContract(loadState(root)?.contract);
   /*
    * 告警正文与线程消息使用同一口径：`describeEvent` 会把执行进程写入括号，
    * ask 正文由工作进程填写，两处都可能包含进程号。
@@ -171,7 +174,7 @@ export function buildAlerts(
     if (!lvl) continue;
     const at = String(e.at ?? "");
     const id = `evt:${name}:${at}:${String(e.dispatch ?? "")}:${String(e.worker ?? "")}`;
-    push({ id, level: lvl, at, event: name, text: clipText(show(describeEvent(e)), ALERT_TEXT_CHARS) });
+    push({ id, level: lvl, at, event: name, text: clipText(show(describeEvent(e, { customContract })), ALERT_TEXT_CHARS) });
   }
 
   for (const q of openInboxAsks(root)) {
@@ -245,9 +248,10 @@ function stageGateOk(root: string, contractName: string, stage: Stage): boolean 
   return ok;
 }
 
-/** 契约阶段按契约数组顺序，不排序不去重。 */
+/** 契约阶段按契约数组顺序，不排序不去重。默认任务列表返回空：阶段是流程壳子，界面不展示。 */
 function stageViews(root: string, contract: { name: string; stages: Stage[] } | null, stageIndex: number): SupervisorStageView[] {
   if (!contract) return [];
+  if (!hasCustomContract(contract.name)) return [];
   return contract.stages.map((s, i) => {
     const raw = (s as unknown as { parallel?: unknown }).parallel;
     return {
@@ -373,10 +377,8 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
   const activity = supervisorActivityOf({ reloading: reload.active, action: currentSupervisorAction(), hasPendingReceipt, running });
 
   const base = {
-    stage: stageId,
-    stage_name: stage?.name ?? "",
-    stage_index: stageIndex,
-    stage_total: contract ? contract.stages.length : 0,
+    /* 默认任务列表下阶段读数整体置空，与 buildSnapshot 同一处口径。 */
+    ...stageViewOf(String(state?.contract ?? ""), stageId, stage?.name ?? "", stageIndex, contract ? contract.stages.length : 0),
     stages: stageViews(root, contract, stageIndex),
     inflight,
     tasks: taskStats,
