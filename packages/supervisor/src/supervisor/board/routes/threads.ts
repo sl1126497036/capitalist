@@ -12,7 +12,8 @@ import { balanceView } from "../../usage/balance";
 import { stripDispatchEcho } from "../../view/msgView";
 import { readJsonlFromTail } from "../logs";
 import { buildThreadMessages } from "../messages";
-import { fingerprint } from "../render";
+import { fingerprint, maskThreadMessage } from "../render";
+import { dispatchNoTable } from "../../usage/threadNo";
 import { THREAD_PAGE_LIMIT, ThreadRole, ThreadKind, ThreadMessage, rootFromUrl } from "../snapshot";
 import { eventsFile } from "../sources";
 import { buildThreadsPage, markThreadSeen } from "../threads";
@@ -235,7 +236,13 @@ export function handleThreadMessage(ctx: BoardCtx): void {
       return Math.abs(ta - tb) < 5000;
     };
     const baseKept = base.messages.filter((m) => !talk.some((t) => sameSaid(m, t)));
-    const messages = [...baseKept, ...talk].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    /*
+     * 对话通道（supervisor_chat_ask / supervisor_reply）与线程消息是两条构造路径，
+     * 下发前必须经同一出口处理，否则自由文本中的进程号会从该路径进入界面。
+     */
+    const messages = [...baseKept, ...talk]
+      .sort((a, b) => String(a.at).localeCompare(String(b.at)))
+      .map((m) => maskThreadMessage(m, dispatchNoTable(root)));
     const total = base.total + talk.length;
     const next_since = base.next_since;
     markThreadSeen(root, id);

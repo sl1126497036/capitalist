@@ -102,6 +102,8 @@ export function notifyWorker(
     ...(target.dispatch ? { lineage: target.dispatch } : {}),
     ...(target.dispatch || target.worker ? { target: target.dispatch || target.worker } : {}),
     via: "capitalist",
+    /* 权限通知发给工作进程，界面按转告口吻显示。 */
+    audience: "worker",
   });
 }
 

@@ -1169,7 +1169,11 @@ async function onInterject({ text, alsoBlock, quote }) {
       body: { id: t.worker || t.id, shard: t.shard || "" },
       text: (d, ok) =>
         ok
-          ? `${$t("已中断")} ${d.worker || t.id} ${d.effective || $t("下一轮调度重派")}`
+          /*
+           * 回执只显示任务号：进程号是调度内部标识，不向用户展示。
+           * 任务号缺失（旧格式单）时使用泛称，不以进程 id 代替。
+           */
+          ? `${$t("已中断")} ${t.no ? `#${t.no}` : $t("工作进程")} ${d.effective || $t("下一轮调度重派")}`
           : `${$t("中断失败")} ${d.error || d.reason || $t("未知原因")}`,
     });
   } finally {

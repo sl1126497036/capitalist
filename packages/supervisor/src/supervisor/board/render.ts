@@ -61,7 +61,12 @@ export function toolSummary(e: Record<string, unknown>): { text: string; cmd: st
   return { text: short ? `${verb} ${short}` : verb, cmd };
 }
 
-/** worker id 显示加 `#` 前缀（`2-P1` -> `#02-P1`）；编号统一经 idMap 的 workerNoLabel 补 `#` 与两位任务号。 */
+/**
+ * 进程号在显示时加 `#` 前缀（`2-P1` -> `#02-P1`）。
+ *
+ * 仅用于内部日志与排查。界面不展示进程号：看板文本统一经 {@link maskWorkerIds}
+ * 改成任务号，工作进程叙述中出现的编号也会一并改写。
+ */
 export function workerLabel(id: string): string {
   const s = String(id ?? "").trim();
   if (!s) return s;
@@ -153,6 +158,115 @@ export function maskDispatchIds(text: string, nos?: Map<string, string>): string
     out = out.replace(new RegExp(`(?<![\\d#-])${escapeRe(id)}(?![\\d-])`, "g"), label);
   }
   return out;
+}
+
+/**
+ * 把进程号换成任务号：`6-P1` -> `#06`。
+ *
+ * 界面只发行任务号与派单号，进程号是调度内部标识，不对外展示。进程号通过三条途径
+ * 进入界面文本：监工分诊的自由文本、工作进程的叙述与工具摘要、工作进程目录路径
+ * （`.capitalist/workers/6-P1/brief.md`）。源头无法穷举：工作进程能看到
+ * `CAPITALIST_WORKER_ID` 与所在目录名，可能在表述中复述。因此在出口统一改写。
+ *
+ * 本函数仅供内部使用，外部一律用 {@link maskBoardText} 或
+ * {@link maskThreadMessage}，避免出现第二套改写口径。
+ *
+ * 边界：
+ *   - 已带 `#` 的编号不替换，避免二次处理生成 `##06`；
+ *   - 前一位不能是字母、数字、下划线、`#` 或 `-`，后一位不能是字母、数字、下划线
+ *     或 `-`，避免从包含 `P1` 的长串中截取片段；
+ *   - 路径中的进程号同样替换，`workers/6-P1/x` 显示成 `workers/#06/x`：路径仍指向
+ *     真实目录，读者可对应，界面上不再出现进程号。
+ */
+function maskWorkerIds(text: string): string {
+  const s = String(text ?? "");
+  if (!s) return s;
+  return s.replace(/(?<![\w#-])(\d{1,4})-P(\d{1,4})(?![\w-])/g, (_m, no: string) =>
+    taskNoLabel(Number(no)),
+  );
+}
+
+/**
+ * 任意界面文本的出口：进程号换成任务号，再按编号表给派单号补 `#`。
+ *
+ * 用于不属于消息对象的零散文本，如线程摘要的说明字段与概览提示。
+ * 顺序固定：先替换进程号，再改写派单号。反序会先把 `6-1` 变成 `#06-1`，进程号
+ * 前一位成了 `-`，反而躲开匹配。
+ */
+export function maskBoardText(text: string, nos?: Map<string, string>): string {
+  return maskDispatchIds(maskWorkerIds(text), nos);
+}
+
+/**
+ * 界面消息的唯一出口。
+ *
+ * 所有下发到前端的消息对象都在这里改写一次。调用方只负责传入消息，不判断字段。
+ * 新增可读字段要在这里登记，否则会形成第二种口径。
+ *
+ * 字段分两类：
+ *   - 正文与供人阅读的说明（`text`、`reason`、`detail`、引用与指令文字）：完整改写，
+ *     编号按界面口径补 `#`；
+ *   - 命令与工具名（`tool`、`cmd`）：只替换进程号，不动派单号。两者是操作原文，
+ *     把命令参数当成派单号改写，会导致按界面内容抄写的命令执行失败。
+ */
+export function maskThreadMessage(m: ThreadMessage, nos?: Map<string, string>): ThreadMessage {
+  const body = (v: unknown): string => maskBoardText(String(v ?? ""), nos);
+  const raw = (v: unknown): string => maskWorkerIds(String(v ?? ""));
+  return {
+    ...m,
+    text: body(m.text),
+    tool: raw(m.tool),
+    cmd: raw(m.cmd),
+    ...(m.reason ? { reason: body(m.reason) } : {}),
+    ...(m.detail ? { detail: body(m.detail) } : {}),
+    ...(m.quote ? { quote: body(m.quote) } : {}),
+    ...(m.quote_text ? { quote_text: body(m.quote_text) } : {}),
+    ...(m.action ? { action: body(m.action) } : {}),
+    ...(m.arg ? { arg: body(m.arg) } : {}),
+    ...(Array.isArray(m.debug) ? { debug: m.debug.map((x) => body(x)) } : {}),
+  };
+}
+
+/**
+ * 流式增量的出口。
+ *
+ * `onDelta` 逐字输出模型正文，进程号可能被切成两块（`6-` 与 `P1`），逐块改写会漏掉。
+ * 这里保留一段尾部缓冲，与下一块拼接后再判断。尾部 12 个字符足以覆盖 `9999-P9999`
+ * 这一最长形态，代价是首字延迟十余个字符，影响可忽略。
+ *
+ * 只缓冲正文与思考两类；工具帧原样转发（工具名不含编号）。
+ * 调用方在流结束时必须调用 `flush()`，否则尾部内容不会输出。
+ */
+export function maskStream(send: (d: Record<string, unknown>) => void, nos?: Map<string, string>) {
+  const TAIL = 12;
+  let pending = "";
+  let kind = "text";
+  const flush = (): void => {
+    if (!pending) return;
+    const text = maskBoardText(pending, nos);
+    pending = "";
+    if (text) send({ kind, text });
+  };
+  return {
+    onDelta: (d: { kind?: string; text?: string }): void => {
+      const k = String(d?.kind ?? "");
+      if (k !== "text" && k !== "thinking") {
+        send(d as Record<string, unknown>);
+        return;
+      }
+      if (k !== kind) {
+        flush();
+        kind = k;
+      }
+      pending += String(d.text ?? "");
+      if (pending.length <= TAIL) return;
+      const cut = pending.length - TAIL;
+      const head = maskBoardText(pending.slice(0, cut), nos);
+      pending = pending.slice(cut);
+      if (head) send({ kind, text: head });
+    },
+    flush,
+  };
 }
 
 export function fingerprint(e: object): string {

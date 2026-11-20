@@ -1,6 +1,7 @@
 import { readQuotaState } from "../../core/guard/quota";
 import { loadState } from "../../core/record/state";
 import { listWorkers, loadSupervisor, pidAlive, readDispatches } from "../../core/record/supervisor";
+import { dispatchNoLabel } from "../../core/record/idMap";
 import { balanceView } from "../usage/balance";
 import { UsageFigures } from "../usage/usage";
 import { threadCostRows, tokenTotals, usageTotalsOf, type UsageTotals } from "./stats";
@@ -74,7 +75,11 @@ function unreclaimedOf(roots: string[]): UnreclaimedProc[] {
           kind: "worker",
           id: w.id,
           at: String(w.started_at ?? ""),
-          why: `worker 已 ${w.status}，进程仍在${w.dispatch ? `（派单 ${w.dispatch}）` : ""}`,
+          /*
+           * 提示文案展示给用户：不显示进程号（`id` 字段保留原值供内部匹配），
+           * 派单号经统一口径补 `#`，与界面其它位置一致。
+           */
+          why: `工作进程已 ${w.status}，进程仍在${w.dispatch ? `（派单 ${dispatchNoLabel(String(w.dispatch))}）` : ""}`,
         });
       }
     } catch {

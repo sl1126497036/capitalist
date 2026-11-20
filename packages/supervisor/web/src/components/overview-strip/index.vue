@@ -6,6 +6,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { t } from "../../lib/i18n.js";
 import { fmtTokens, billParts, totalUsageText } from "../../lib/usage.js";
+import { workerOwnerNo } from "../../lib/no.js";
 
 const props = defineProps({
   /** /api/overview 原样（App 已拉）；未传则自行取数。 */
@@ -138,7 +139,8 @@ const fileLockTip = computed(() => {
       const mode = e.mode === "write" ? t("写锁") : t("读锁");
       const age = Number(e.age_sec);
       const ago = Number.isFinite(age) && age >= 0 ? t("{n} 秒前有心跳", { n: age }) : t("无心跳");
-      return `${mode}  ${String(e.path ?? "")}\n   ← ${String(e.holder ?? "")}（${ago}）`;
+      /* 持有者只显示任务号：进程号属于调度内部标识。 */
+      return `${mode}  ${String(e.path ?? "")}\n   ← ${workerOwnerNo(e.holder)}（${ago}）`;
     })
     .join("\n");
 });
@@ -162,7 +164,10 @@ const zombieTip = computed(() => {
   return arr
     .map((x) => {
       const when = String(x.at ?? "").slice(0, 19).replace("T", " ");
-      return `p${x.pid} ${x.kind} ${x.id}\n   ${t("起于 {t}", { t: when || t("未知") })}\n   ${x.why}`;
+      /* 保留操作系统 pid（用于清理残留进程），归属进程号降级为任务号。 */
+      const kind = String(x.kind ?? "") === "worker" ? t("工作进程") : String(x.kind ?? "");
+      const owner = workerOwnerNo(x.id);
+      return `p${x.pid} ${kind}${owner ? ` ${owner}` : ""}\n   ${t("起于 {t}", { t: when || t("未知") })}\n   ${x.why}`;
     })
     .join("\n");
 });

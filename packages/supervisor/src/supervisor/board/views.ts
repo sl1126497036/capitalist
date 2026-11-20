@@ -1,6 +1,8 @@
 import { BoardSnapshot, signature, ageSec, describeEvent, buildSnapshot, contractDirs, ledgerOnlyRoot } from "./snapshot";
 import { buildThreads, TaskCounts, taskCountsOf, settledThreadKeys, acceptedThreadKeys, taskCounts } from "./threads";
 import { clipText } from "../../core/text";
+import { maskBoardText } from "./render";
+import { dispatchNoTable } from "../usage/threadNo";
 import { readJsonlFromTail } from "./logs";
 import { eventsFile, atTs, readDispatchesBoard } from "./sources";
 import { openInboxAsks } from "../../core/dispatch/inbox";
@@ -156,6 +158,12 @@ export function buildAlerts(
   };
 
   const ledgerOnly = ledgerOnlyRoot(root);
+  /*
+   * 告警正文与线程消息使用同一口径：`describeEvent` 会把执行进程写入括号，
+   * ask 正文由工作进程填写，两处都可能包含进程号。
+   */
+  const nos = dispatchNoTable(root);
+  const show = (v: unknown): string => maskBoardText(String(v ?? ""), nos);
   for (const e of readJsonlFromTail(eventsFile(root), 512_000)) {
     const name = String(e.event ?? e.kind ?? "");
     if (ledgerOnly && name === "supervisor_done") continue;
@@ -163,12 +171,12 @@ export function buildAlerts(
     if (!lvl) continue;
     const at = String(e.at ?? "");
     const id = `evt:${name}:${at}:${String(e.dispatch ?? "")}:${String(e.worker ?? "")}`;
-    push({ id, level: lvl, at, event: name, text: clipText(describeEvent(e), ALERT_TEXT_CHARS) });
+    push({ id, level: lvl, at, event: name, text: clipText(show(describeEvent(e)), ALERT_TEXT_CHARS) });
   }
 
   for (const q of openInboxAsks(root)) {
     const id = `ask:${q.id}`;
-    push({ id, level: "P0", at: String(q.at ?? ""), event: "ask", text: clipText(String(q.text ?? ""), ALERT_TEXT_CHARS) });
+    push({ id, level: "P0", at: String(q.at ?? ""), event: "ask", text: clipText(show(q.text), ALERT_TEXT_CHARS) });
   }
 
   out.sort((a, b) => atTs(b.at) - atTs(a.at));

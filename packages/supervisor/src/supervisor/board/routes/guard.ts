@@ -10,25 +10,35 @@
 import { answerAsk } from "../../../core/dispatch/inbox";
 import { appendDecision, readGuardRequests, type GuardRequest } from "../../../core/guard/requests";
 import { notifyWorker } from "../../guard/judge";
+import { dispatchNoTable } from "../../usage/threadNo";
+import { maskBoardText } from "../render";
 import { isLoopback, sendJson, type BoardCtx } from "../types";
 
-/** 对外视图。只给判定需要的信息，命令截断到 400 字。 */
-function view(rec: GuardRequest): Record<string, unknown> {
+/**
+ * 对外视图。仅保留判定所需信息，命令截断到 400 字。
+ *
+ * 权限申请文本由工作进程填写，理由常包含其读取过的路径（`workers/6-P1/brief.md`），
+ * 路径数组同样。两类字段统一经 {@link maskBoardText} 改写，与线程消息口径一致：
+ * 进程号不展示在界面，派单号按界面口径补 `#`。
+ */
+function view(rec: GuardRequest, nos?: Map<string, string>): Record<string, unknown> {
+  const text = (v: unknown): string => maskBoardText(String(v ?? ""), nos);
+  const paths = Array.isArray(rec.paths) ? rec.paths.map((p) => text(p)) : [];
   return {
     id: rec.id,
     kind: rec.kind,
     action: rec.action,
     tool: rec.tool,
-    paths: rec.paths,
-    command: rec.command,
-    reason: rec.reason,
+    paths,
+    command: text(rec.command),
+    reason: text(rec.reason),
     worker: rec.worker,
     dispatch: rec.dispatch,
     stage: rec.stage,
     status: rec.status,
-    why: rec.why,
-    alternative: rec.alternative,
-    ask: rec.ask,
+    why: text(rec.why),
+    alternative: text(rec.alternative),
+    ask: text(rec.ask),
     at: rec.at,
   };
 }
@@ -44,11 +54,12 @@ export function handleGuard(ctx: BoardCtx): void {
     return;
   }
   const rows = readGuardRequests(ctx.opts.root);
+  const nos = dispatchNoTable(ctx.opts.root);
   sendJson(ctx, {
     /* 已补理由、等监工处理。没有理由的申请不展示：用户看不到判断依据。 */
-    pending: rows.filter((r) => r.status === "open" && r.reason.trim() !== "").map(view),
+    pending: rows.filter((r) => r.status === "open" && r.reason.trim() !== "").map((r) => view(r, nos)),
     /* 监工无法判定，等用户裁决。 */
-    escalated: rows.filter((r) => r.status === "escalated").map(view),
+    escalated: rows.filter((r) => r.status === "escalated").map((r) => view(r, nos)),
   });
 }
 

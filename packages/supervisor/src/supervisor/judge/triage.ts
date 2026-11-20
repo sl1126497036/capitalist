@@ -94,6 +94,8 @@ function buildPrompt(input: TriageInput): string {
     "- 申报卡住的，先区分“不会做”还是“要求有问题”：前者 nudge，后者 escalate 或 requeue。",
     "- 申报类型为 progress（只是告知）的，通常判 continue。",
     "- 不需要干预时不干预：nudge 误判会使工作进程做无效工作。",
+    "- 不写进程编号（形如 6-P1）：SAY 与 WHY 都是界面可读文字，要指代执行方时写“工作进程”，",
+    "  要标明归属时写任务号（#06）或派单号（#06-2）。",
     "",
     "【输出格式，三行，一行都不能少】",
     "DECISION: <上面七选一>",

@@ -456,6 +456,13 @@ function buildBoundaryBlock(id: string): string[] {
     "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
     "     那三项属于监工，工作进程代为执行会使执行与验收职责不分。",
     `  4. 卡在外部条件（验证码、账号、授权）：capitalist block <类型> "<卡在哪>" 后停手。`,
+    /*
+     * 界面只发行任务号与派单号，进程号属于调度内部标识。此条为软约束：模型仍可能
+     * 在叙述中包含编号，看板出口另设统一改写作为兜底（见 board/render 的
+     * maskWorkerIds），两处配合，提示词不单独承担该约束。
+     */
+    "  5. 不提进程编号：报告、申报与插话中不写（形如 6-P1）。指代自身用“本进程”，",
+    "     指代同一任务中先前那次执行用“上一轮进程”；标明归属时用任务号（#06）或派单号（#06-2）。",
   ];
 }
 

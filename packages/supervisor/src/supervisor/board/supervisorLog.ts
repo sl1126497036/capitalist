@@ -7,7 +7,7 @@ import { stripDispatchEcho, supervisorReplyView } from "../view/msgView";
 import { shardTitle } from "../usage/taskTitle";
 import { dispatchNoTable } from "../usage/threadNo";
 import { readJsonlFromTail } from "./logs";
-import { MQ_KIND_LABEL, fingerprint, maskDispatchIds } from "./render";
+import { MQ_KIND_LABEL, fingerprint, maskThreadMessage } from "./render";
 import { ThreadRole, ThreadMessage, describeEvent, ledgerOnlyRoot } from "./snapshot";
 import { atTs, attachmentsOf, eventsFile, readDispatchesBoard } from "./sources";
 import { taskKeyOf } from "./state";
@@ -108,11 +108,12 @@ function supervisorEventText(name: string, e: Record<string, unknown>, nos?: Map
       /** 给全 id，不给四位短号，便于前端渲染成任务号。 */
       const from = String(e.from ?? "");
       const evTaskNo = d && nos ? nos.get(d) ?? "" : "";
-      /** 正文只写裸编号，`#` 由外层 {@link maskDispatchIds} 统一补一次，避免双重补 `#`。 */
+      /** 正文只写裸编号，`#` 由出口 {@link maskThreadMessage} 统一补一次，避免双重补 `#`。 */
       const fromLabel = from
         ? evTaskNo
           ? `来自 ${evTaskNo}`
-          : `来自进程 ${from}`
+          : /* 无法识别归属单时只写泛称：进程号是调度内部标识，界面只发行任务号与派单号。 */
+            "来自工作进程"
         : "";
       const shard = shardTitle(e.shard) || "";
       const sev = String(e.severity ?? "");
@@ -316,7 +317,8 @@ export function buildSupervisorLog(
       role:
         ((e as { from?: unknown }).from as ThreadRole) || (name === "supervisor_chat_ask" ? "user" : "supervisor"),
       kind: name === "supervisor_reply" || name === "supervisor_chat_ask" ? "say" : "verdict",
-      text: maskDispatchIds(supervisorEventText(name, e, nos), nos),
+      /* 脱敏不在本处执行：消息构造完成后统一经 maskThreadMessage 处理，规则集中一处。 */
+      text: supervisorEventText(name, e, nos),
       tool: "",
       cmd: "",
       /** 申报行带状态：待回执/已回执，判定依据是存在 mq_triage。 */
@@ -469,7 +471,7 @@ export function buildSupervisorLog(
         ? {
             ok: r.result.ok,
             reason: r.result.reason,
-            detail: maskDispatchIds(String(r.result.detail ?? ""), nos),
+            detail: String(r.result.detail ?? ""),
           }
         : {}),
     });
@@ -493,7 +495,8 @@ export function buildSupervisorLog(
       (cutTs > 0 &&
         (rows.some((e) => (atTs(String((e as { at?: unknown }).at ?? "")) || 0) < cutTs) ||
           dispatchRows.some((d) => (atTs(String(d.at ?? "")) || 0) < cutTs))),
-    messages: msgs.slice(Math.max(0, msgs.length - limit)),
+    /* 与线程消息同一出口：字段级改写只在 maskThreadMessage 一处维护。 */
+    messages: msgs.slice(Math.max(0, msgs.length - limit)).map((m) => maskThreadMessage(m, nos)),
   };
   if (fp) supervisorLogCache = { root, key: fp, value };
   return value;

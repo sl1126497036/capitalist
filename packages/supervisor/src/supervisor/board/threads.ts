@@ -14,7 +14,7 @@ import { activeTakeover } from "../../core/dispatch/commands";
 import { costRowOf, spawnCountFor, fillContextWindow, costTotals, tokenTotals } from "./stats";
 import { dispatchModel, atTs } from "./sources";
 import { noUsage } from "../usage/usage";
-import { oneLine } from "./render";
+import { maskBoardText, oneLine } from "./render";
 import { taskNoOfRef, threadNoOf } from "../usage/threadNo";
 /**
  * 看板线程视图层：线程列表、消息流、任务分桶与已读水位。
@@ -612,7 +612,11 @@ export function buildThreadsPageUncached(
     const p = parentOf(d);
     if (p) t.parent = p;
     const why = String(d.parent_reason ?? "").trim();
-    if (why) t.parent_reason = why;
+    /*
+     * 前置说明是监工填写的自由文本，可能包含进程号。该字段不属于消息对象，
+     * 经散文本出口 {@link maskBoardText} 改写；消息正文由 maskThreadMessage 处理，两者规则同源。
+     */
+    if (why) t.parent_reason = maskBoardText(why, noOfDispatch);
     const stuck = pendingPrerequisites(d, dispatches).filter((id) => id !== "*")[0] ?? "";
     t.stuck_on = stuck;
     t.stuck_on_no = stuck ? noOfDispatch.get(stuck) || threadNoOf(root, stuck) : "";

@@ -14,6 +14,8 @@ import { appendSupervisorDirective } from "../../channel/direct";
 import { listTaskRoots, clearSourceCache } from "../sources";
 import { clearThreadsCaches } from "../threads";
 import { messageContextCache } from "../messages";
+import { maskBoardText } from "../render";
+import { dispatchNoTable } from "../../usage/threadNo";
 import { clearSupervisorLogCache } from "../supervisorLog";
 import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";
@@ -274,16 +276,22 @@ ctx.req.on("end", () => {
     return;
   }
   const rejected = r.rec.result && r.rec.result.ok === false ? r.rec.result.reason : "";
+  /*
+   * 回执展示给用户：指令正文、参数与说明都经同一出口改写。
+   * `effective` 为固定文案，不含编号，不参与改写。
+   */
+  const nos = dispatchNoTable(targetRoot);
+  const show = (v: unknown): string => maskBoardText(String(v ?? ""), nos);
   ctx.res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   ctx.res.end(
     JSON.stringify({
       ok: !rejected,
       id: r.rec.id,
       action: r.rec.action,
-      arg: r.rec.arg,
-      text: r.rec.text,
-      ...(rejected ? { rejected: true, reason: rejected } : { effective: "下一轮调度生效" }),
-      detail: r.rec.result?.detail ?? "",
+      arg: show(r.rec.arg),
+      text: show(r.rec.text),
+      ...(rejected ? { rejected: true, reason: show(rejected) } : { effective: "下一轮调度生效" }),
+      detail: show(r.rec.result?.detail ?? ""),
     }),
   );
 });

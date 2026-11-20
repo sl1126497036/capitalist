@@ -3,7 +3,7 @@ import { mqPath } from "../../core/dispatch/mq";
 import { Dispatch, WorkerRecord } from "../../core/record/supervisor";
 import { dispatchNoTable } from "../usage/threadNo";
 import { readWorkerEvents, FRESH_LOG_SEC, logIdleSec, chunkWorkerLines, readJsonlFromTail } from "./logs";
-import { fingerprint, toolSummary, verdictText } from "./render";
+import { fingerprint, maskThreadMessage, toolSummary, verdictText } from "./render";
 import { ThreadMessage } from "./snapshot";
 import { BOARD_READ_TTL_MS, atTs, attachmentsOf, eventsFile, listWorkersBoard, readDispatchesBoard } from "./sources";
 import { taskKeyOf } from "./state";
@@ -477,6 +477,12 @@ export function threadMessages(
     if (!keys.has(threadId) && !keys.has(wantKey) && !keys.has(tid)) continue;
     const took = r.consumed === true ? String((r as { consumed_by?: unknown }).consumed_by ?? "").trim() : "";
     const tookNo = took ? ctx.nos.get(took) ?? "" : "";
+    /*
+     * 收件人为工作进程的发言是调度指令，不直接展示，界面改为转告口吻。
+     * 用户发言（audience 缺省）保留原文，改写会失真。
+     */
+    const toWorker = r.audience === "worker";
+    const body = String(r.text ?? "");
     /* 插话 id 优先用落盘的 msg_id；老记录没有时回落到指纹。 */
     const dirMsgId = String((r as { msg_id?: unknown }).msg_id ?? "").trim();
     msgs.push({
@@ -484,7 +490,7 @@ export function threadMessages(
       at: String(r.at ?? ""),
       role: (r as { via?: unknown }).via === "capitalist" ? "supervisor" : "user",
       kind: "say",
-      text: String(r.text ?? ""),
+      text: toWorker ? `已转告工作进程：${body}` : body,
       tool: "",
       cmd: "",
       status: r.consumed
@@ -552,7 +558,12 @@ export function threadMessages(
   const fresh =
     sinceTs > 0 ? nonEmpty.filter((m) => m.kind === "thinking" || atTs(m.at) > sinceTs) : nonEmpty;
   const limit = Math.min(Math.max(opts.limit ?? 400, 1), 2000);
-  const messages = fresh.length > limit ? fresh.slice(fresh.length - limit) : fresh;
+  const limited = fresh.length > limit ? fresh.slice(fresh.length - limit) : fresh;
+  /*
+   * 所有消息对象统一交给 {@link maskThreadMessage} 改写一次，字段规则集中在一处维护。
+   * 上游分支只负责构造消息，不各自处理编号。
+   */
+  const messages = limited.map((m) => maskThreadMessage(m, ctx.nos));
   // 游标只前进不后退，没有新增时停在调用方传入的 since。
   let next_since = sinceTs;
   for (const m of messages) {

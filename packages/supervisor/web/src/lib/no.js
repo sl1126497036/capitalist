@@ -54,6 +54,18 @@ export function workerNo(no) {
   return noLabel(no);
 }
 
+/**
+ * 进程号降级为其所属任务号：`"6-P1"` -> `"#06"`。
+ *
+ * 进程号是调度内部标识，界面不展示。文件锁持有者与待回收进程原先直接显示进程号，
+ * 改为只显示所属任务。非进程号（如 `user`、空值）原样返回，不生成编号。
+ */
+export function workerOwnerNo(id) {
+  const raw = String(id ?? "").trim();
+  const m = /^(\d+)-P\d+$/.exec(stripHash(raw));
+  return m ? noLabel(m[1]) : raw;
+}
+
 /** 消息编号显示：`"2-U2W-…"` -> `#2-U2W-…`。 */
 export function msgNo(no) {
   return noLabel(no);

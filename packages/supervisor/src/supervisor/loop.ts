@@ -2538,6 +2538,8 @@ export async function handleStuckWorker(
       lineage: String((d as DispatchEx).lineage ?? d.id),
       lane: laneKeyOf(d as { stage?: string; shard?: string | null; lineage?: string; id?: string }),
       via: "capitalist",
+      /* 卡点指导发给工作进程，界面按转告口吻显示，不照抄原文。 */
+      audience: "worker",
     });
     delivered = rec !== null;
     directiveAt = rec?.at;
@@ -6421,6 +6423,8 @@ export function applyVerdict(args: {
       ...(chainKey ? { lineage: chainKey } : {}),
       /* via 标为 capitalist：回显时按监工来源渲染。 */
       via: "capitalist",
+      /* 分诊结论是监工发给工作进程的指令，正文面向执行，界面只显示转告内容。 */
+      audience: "worker",
     });
     return;
   }

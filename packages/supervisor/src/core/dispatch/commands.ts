@@ -109,6 +109,13 @@ export interface Directive {
   text: string;
   via?: "user" | "capitalist";
   /**
+   * 收件人：`worker` 表示监工发给工作进程的调度指令，包括卡点指导、方向纠正与权限通知。
+   *
+   * 正文面向进程，不直接展示给用户，界面按转告口吻改写。缺省为 `user`。
+   * 旧记录没有该字段，按用户发言处理，行为不变。
+   */
+  audience?: "user" | "worker";
+  /**
    * 这句话自带的附件路径（一行一个的 `[附件]` 行解析出来的）。
    *
    * 落库时就把归属钉死在这里：看板读消息时按这条记录自己的 atts 画图，
@@ -314,6 +321,8 @@ export function appendDirective(
     target?: string;
     /** 说话人来源：`capitalist` = 对话层（监工）落的指令，缺省按用户处理。 */
     via?: "user" | "capitalist";
+    /** 收件人：`worker` 表示监工发给工作进程的调度指令，界面按转告口吻显示。 */
+    audience?: "user" | "worker";
   },
 ): Directive | null {
   const text = input.text.trim();
@@ -336,6 +345,8 @@ export function appendDirective(
   if (input.lineage) rec.lineage = input.lineage;
   if (input.target) rec.target = input.target;
   if (input.via === "capitalist" || input.via === "user") rec.via = input.via;
+  /* 仅当收件人为工作进程时写入该字段。用户发言与旧记录均不含此字段，读取时按 `user` 处理。 */
+  if (input.audience === "worker") rec.audience = "worker";
   /*
    * 时间戳精度到毫秒：同一毫秒内连发两条时，`directiveRef` 会指向同一行，结束落到相邻记录上。
    * 与前一条相同或更早（时钟回拨）则顺延 1ms，保证引用唯一，落盘格式不变。

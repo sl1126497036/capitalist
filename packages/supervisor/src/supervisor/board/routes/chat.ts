@@ -33,7 +33,8 @@ import { writeQuotedDirect, runCli, resolveQuoteText, quoteDispatchLabel, sayArg
 import { serializeSupervisorChat, supervisorPolicy, workerSessionId } from "../commands";
 import { chatAuthHint } from "../models";
 import { reopenDirective, resolveThreadAction } from "../threadAction";
-import { targetFromText } from "../render";
+import { maskBoardText, maskStream, targetFromText } from "../render";
+import { dispatchNoTable } from "../../usage/threadNo";
 import { dispatchTitle } from "../snapshot";
 import { dispatchModel, readDispatchesBoard } from "../sources";
 import { buildThreads } from "../threads";
@@ -363,6 +364,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           sse({ kind: "status", text: `正在续接会话` });
         }, 3_000);
         const chatHost = chatHostOf(ctx.opts.root);
+        /* 流式正文同样经统一出口处理：该路径是进程号逐字显示的主要泄漏点。 */
+        const stream = maskStream((f) => sse(f), dispatchNoTable(ctx.opts.root));
         const r = await askModelStream({
           prompt,
           sessionId,
@@ -372,8 +375,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           model: supervisorModelOf(ctx.opts.root),
           ...(ctx.opts.token ? { token: ctx.opts.token } : {}),
           signal,
-          onDelta: (d) => sse(d),
+          onDelta: stream.onDelta,
         }).finally(() => {
+          stream.flush();
           clearInterval(beat);
           leaveChat();
         });
@@ -582,6 +586,8 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       sse({ kind: "status", text: "正在思考" });
       const beat = setInterval(() => sse({ kind: "status", text: "正在思考" }), 3_000);
       const chatHost = chatHostOf(ctx.opts.root);
+      /* 流式正文同样经统一出口处理：该路径是进程号逐字显示的主要泄漏点。 */
+      const stream = maskStream((f) => sse(f), dispatchNoTable(ctx.opts.root));
       const r = await askModelStream({
         prompt,
         sessionId,
@@ -591,8 +597,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         model: supervisorModelOf(ctx.opts.root),
         ...(ctx.opts.token ? { token: ctx.opts.token } : {}),
         signal,
-        onDelta: (d) => sse(d),
+        onDelta: stream.onDelta,
       }).finally(() => {
+        stream.flush();
         clearInterval(beat);
         leaveChat();
       });
@@ -800,8 +807,14 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         msg_id: msgId(msgTaskNo(userMsg.id) || "S0", "S"),
       });
       /** 实时帧与重建走同一个视图函数（msgView.ts），刷新前后逐字一致。 */
-      const display = supervisorReplyView({ reply, want, applied, acted, dispatch_text: dispatchText });
-      sse({ kind: "done", reply: display, display, want, applied, ...(settled.unhandled ? { unhandled: true } : {}) });
+      /*
+       * 收尾帧与流式增量使用同一口径：模型正文、执行说明与建议都经出口改写，
+       * 避免增量已改写而整段回放又出现进程号。
+       */
+      const nos = dispatchNoTable(ctx.opts.root);
+      const show = (v: unknown): string => maskBoardText(String(v ?? ""), nos);
+      const display = show(supervisorReplyView({ reply, want, applied, acted, dispatch_text: dispatchText }));
+      sse({ kind: "done", reply: display, display, want: show(want), applied: show(applied), ...(settled.unhandled ? { unhandled: true } : {}) });
       ctx.res.end();
     };
     if (askedThread) void exec(new AbortController().signal);
