@@ -1,5 +1,6 @@
 
-import { archiveFinished, listWorkers, loadWorker, loadSupervisor, readDispatches, setWorkerModel, wakeDispatch, workerModelPath } from "../../core/record/supervisor";
+import { listWorkers, loadWorker, loadSupervisor, readDispatches, setWorkerModel, wakeDispatch, workerModelPath } from "../../core/record/supervisor";
+import { archiveFinished } from "../../core/record/archive";
 import { isWorkerRef, promoteTask, stopWorker } from "../../core/dispatch/commands";
 import { loadState, updateState } from "../../core/record/state";
 import { readJson } from "../../core/record/json";
@@ -17,6 +18,7 @@ import { clearPause, quoteDispatchLabel, reopenDispatch, resolveQuoteText, runCl
 import { diagnose } from "./snapshot";
 import { markThreadCleared, threadStatusAbnormal, threadStatusTerminal } from "./state";
 import { buildThreads } from "./threads";
+import { TREE_PROMPT_LINES } from "./promptTree";
 
 /**
  * 看板命令执行：把界面上的操作翻译成监工指令或台账写入。
@@ -173,7 +175,7 @@ export function supervisorPolicy(opts: {
     "  · 图跟单走：`ATT:` 写在它自己那张单的 `DO:` 行下面。写了 ATT 的单按它取图，未写 ATT 的单不带图。",
     "  · 正文里每提到一张图，必须附带它的内容特征，让编号和内容当场对上：",
     "    正确：“图1 那条 `上下文 ≈50.3k/600.0k` 的长串”“图2 那条带竖线和三个按钮的指标条”；",
-    "    错：“图1 是参照样式”。没有内容特征，编号安错了也无从核对。",
+    "    错：“图1 是参照样式”。没有内容特征，编号对不上也无从核对。",
     "  · 参照方向不可颠倒：“A 的样式参考 B”＝ B 是参照物（目标长这样），A 是要改的（现在不对）。",
     "    “参照”只能挂在 B 那张图上，挂在 A 上即方向颠倒。",
     "  · 每张图须逐张核对；正文引用它只写“图1”“图2”，不直接引用用户消息里的 `[附件] 路径` 行。",
@@ -346,28 +348,7 @@ export function supervisorPolicy(opts: {
     "    那个结果长什么样由这件事决定：一个数值、一段输出、一个能复现的现象、一份能打开的文件。",
     "  · 只有用户明确点名要看截图时，才在参数里写截图。",
     "",
-    "【派单顺序是多节点，不是一条队】每张派单是树上一个节点：最多一个父节点（做完它才能开始），",
-    "  同父的节点是兄弟（可以同时跑），没有父节点的节点自成一棵树，树与树之间互不影响。",
-    "  派单时先判断这一单属于哪一种，判断写进数据，不写在参数里：",
-    "  · 要先等某一单做完 -> 动作行下面写两行：",
-    "      PARENT: #<编号>",
-    "      PARENT_REASON: <为什么必须先做它，一两句，写清等的是它的哪个产出>",
-    "    例：",
-    "      DO: dispatch [ui] 重做顶栏布局",
-    "      PARENT: #03",
-    "      PARENT_REASON: 新顶栏按 #03 定稿的栅格尺寸排版，提前做会全部返工",
-    "  · 可以同时做 -> 写 `PARENT: none`。先后关系不成立就不要挂父节点：为了整齐建立 A->B->C",
-    "    的长链，会把本来能并行的活压成单列。",
-    "  · 兄弟由“同父”自动形成：两张单都写 `PARENT: #03`，父节点完成后两张一起进队列。",
-    "  · 父节点编号必须出现在【任务编号表】里。父节点不存在、已被结束（closed）、或成环时，",
-    "    该派单会被拒绝并给出原因；不挂父节点重新提交，不会静默降级为无依赖。",
-    "  · 老写法 `AFTER: #<编号>` 仍然有效（多个编号 = 多个前置；收尾单写 `AFTER: *`）。",
-    "    只有确实要同时等多个单时才用它，单条先后关系写 PARENT。",
-    "  · 【红线】参数里绝不许出现“等…完成再做…”“先做 X 再改 Y”这类顺序句。工作进程看不到别的单、",
-    "    也不会等待：它只会占住并发槽空等，被等的那一单永远排不进队列。",
-    "    顺序一律用 `PARENT:` 表达：挂着父节点的单在父节点完成前不会启动，也就不占槽。",
-    "    参数含顺序句时，工作进程会占住并发槽等待另一单完成，两条派单互相阻塞。",
-    "    顺序关系一律写入数据，不写进参数。",
+    ...TREE_PROMPT_LINES,
     "",
     "【他说“立即做”“最高优先级”是什么意思】他要的不是“排到队首”，是“马上跑”：",
     "  · 先 `DO: dispatch` 建单，正文只写要做什么，不要把“最高优先级”这几个字写进参数，",

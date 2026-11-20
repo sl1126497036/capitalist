@@ -5,7 +5,7 @@ const { mkdtempSync, mkdirSync, readFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const { parseReply } = require("../dist/supervisor/channel/llm");
+const { parseReply } = require("../dist/supervisor/channel/parseReply");
 const { brainSessionOf } = require("../dist/supervisor/judge/brainLane");
 const { recordEventThrottled, eventsPath } = require("../dist/core/record/ledger");
 const { readJsonl } = require("../dist/core/record/json");

@@ -9,7 +9,8 @@ import { dirname } from "node:path";
 import { laneKeyOf } from "../../core/dispatch/commands";
 import { padBareNo } from "../../core/record/idMap";
 import { ledger as ledgerLoc } from "../../core/record/locations";
-import { readDispatches } from "../../core/record/supervisor";
+import { loadWorker, readDispatches } from "../../core/record/supervisor";
+import { parseRef } from "../../core/record/nodeRef";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import type { Dispatch } from "../../core/record/supervisor";
 
@@ -60,8 +61,8 @@ function write(root: string, data: ThreadNoFile): void {
 /**
  * @deprecated 界面任务号已改为直接取派单号前缀，本函数不再为任何线程发号。
  *
- * 保留原因：旧格式单（`D-` 前缀）没有任务号，历史编号表仍需能读；但**不得再调用本函数为新线程
- * 分配号**——按列表顺序发号会让任务号随启动时刻漂移，正是历史错乱的成因。
+ * 保留原因：旧格式单（`D-` 前缀）没有任务号，历史编号表仍需能读。但不得再调用本函数为新线程
+ * 分配号：按列表顺序发号会让任务号随启动时刻漂移，正是历史错乱的成因。
  */
 export function assignThreadNos(root: string, orderedIds: readonly string[]): Map<string, number> {
   const data = read(root);
@@ -164,11 +165,13 @@ export function dispatchOfThreadNo(
   root: string,
   no: number,
   rows: Dispatch[] = readDispatches(root),
-  opts: { includeDone?: boolean } = {},
+  opts: { includeDone?: boolean; anyStatus?: boolean } = {},
 ): Dispatch | undefined {
   const want = Math.trunc(no);
   const prefix = `${want}-`;
   const live = (s: string): boolean => {
+    /* 排结构、挂依赖要能指向已经结束的单，这类场合由调用方打开 `anyStatus`。 */
+    if (opts.anyStatus === true) return true;
     if (["open", "claimed", "reported", "review"].includes(s)) return true;
     /*
      * 重开要的是已经结束的单，而“结束”有三种终态：done、closed（用户结束）、failed。
@@ -190,24 +193,84 @@ export function dispatchOfThreadNo(
    * 只读不建：新单不会走这条路径。
    */
   const ids = read(root).ids ?? {};
-  const keys = new Set(
+  const norm = (s: unknown): string => String(s ?? "").trim().toLowerCase();
+  /*
+   * 历史表里的键可能由旧版规则生成：早期只记录“阶段 + 派生链尾号”，未包含分片。
+   * 仅比较完整键会使这类旧档无法按号定位；先比完整键，不匹配时再比派生链形态。
+   * `x` 前缀用于区分派生链键与分片名，避免两种形态互相误认。
+   */
+  const wanted = new Set(
     Object.entries(ids)
       .filter(([, n]) => Number(n) === want)
-      .map(([id]) => String(id)),
+      .map(([id]) => norm(id)),
   );
-  if (keys.size === 0) return undefined;
+  if (wanted.size === 0) return undefined;
+  const lineageKeyOf = (d: Dispatch): string => {
+    const lin = norm((d as Dispatch & { lineage?: string }).lineage || d.id);
+    return `${norm(d.stage)}/x${lin.slice(-6)}`;
+  };
   return pick(
-    rows.filter((d) =>
-      keys.has(
-        laneKeyOf({
-          stage: String(d.stage ?? ""),
-          shard: d.shard,
-          lineage: String((d as Dispatch & { lineage?: string }).lineage ?? ""),
-          id: d.id,
-        }),
-      ),
+    rows.filter(
+      (d) =>
+        wanted.has(
+          norm(
+            laneKeyOf({
+              stage: String(d.stage ?? ""),
+              shard: d.shard,
+              lineage: String((d as Dispatch & { lineage?: string }).lineage ?? ""),
+              id: d.id,
+            }),
+          ),
+        ) || wanted.has(lineageKeyOf(d)),
     ),
   );
+}
+
+/**
+ * 把一次编号引用解析成台账行：全系统统一入口。
+ *
+ * 命令行（`tree move` / `tree group`）、调度（`PARENT:` / `AFTER:`）、看板按号操作
+ * 共用一套基准：任务号一律按“派单序最大”定位。此前调度侧另走“at 最新 → 线程键 →
+ * 台账最后一行”，落盘顺序被并发打乱时会指向旧单；派生链与任务号脱钩时会落到别的任务上，且不报错。
+ *
+ * 形态判定交给 `nodeRef.parseRef`，与显示层使用同一处规则。组不是派单行，返回 undefined
+ * 由调用方查组台账；无法识别的形态（历史 `D-` 号、线程键）同样返回 undefined，
+ * 由调用方按原文精确匹配或给出错误提示。
+ *
+ * @param opts.rows 复用已读台账，避免重复读取。
+ * @param opts.anyStatus 为真时不按状态过滤：排结构、挂依赖要能指向已结束的单。
+ */
+export function dispatchOfRef(
+  root: string,
+  tok: string,
+  opts: { rows?: Dispatch[]; anyStatus?: boolean; includeDone?: boolean } = {},
+): Dispatch | undefined {
+  const ref = parseRef(tok);
+  if (!ref.id || ref.kind === "group" || ref.kind === "other") return undefined;
+  const rows = opts.rows ?? readDispatches(root);
+
+  if (ref.kind === "task-no") {
+    return dispatchOfThreadNo(root, Number(ref.id), rows, {
+      ...(opts.anyStatus ? { anyStatus: true } : {}),
+      ...(opts.includeDone ? { includeDone: true } : {}),
+    });
+  }
+
+  if (ref.kind === "worker-no") {
+    /*
+     * 进程号指认对应的派单：派单 id 是 `任务号-派单序`，去掉 `-P1` 得到的是任务号，
+     * 不是派单 id，必须查进程记录。记录已被回收时退回台账按 id 精确匹配。
+     */
+    const held = String(loadWorker(root, ref.id)?.dispatch ?? "");
+    if (held) {
+      const hit = rows.find((x) => String(x.id) === held);
+      if (hit) return hit;
+    }
+    return rows.find((x) => String(x.id) === ref.id);
+  }
+
+  /* 派单 id：`2-3` 与 `02-3` 在 parseRef 里都已归一成 `2-3`。 */
+  return rows.find((x) => String(x.id) === ref.id);
 }
 
 /** 派单 id 里的派发序（`2-2` -> 2）；非新格式返回 0。 */

@@ -19,7 +19,8 @@ import { taskNoOfDispatchId } from "../../../core/record/tasks";
 import { enterSupervisorAction } from "../../worker/activity";
 import { chatVerdictOf, settleChat, ChatVerdict } from "../../view/chatSettle";
 import { appendSupervisorDirective } from "../../channel/direct";
-import { askModelStream, isQuotaText, parseReply } from "../../channel/llm";
+import { askModelStream, isQuotaText } from "../../channel/llm";
+import { parseReply, treeDirectiveFields } from "../../channel/parseReply";
 import { readPause } from "../../../core/record/pause";
 import { memoryLines } from "../../context/memory";
 import { supervisorReplyView } from "../../view/msgView";
@@ -423,7 +424,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       const contextLines = [
         ...(capitalist.stage_name ? [`阶段：${capitalist.stage_name}`] : []),
         ...mine,
-        ...taskNoLines(threads),
+        ...taskNoLines(ctx.opts.root, threads),
         ...workerRuntimeLines(ctx.opts.root),
         ...(() => {
           const lines = recentUserLines(ctx.opts.root);
@@ -720,9 +721,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             atts: chosen,
             target:
               targetFromText(ctx.opts.root, text) || String(me?.dispatch ?? threadDispatch?.id ?? ""),
-            ...(parsed.parent ? { parent: parsed.parent } : {}),
-            ...(parsed.parentReason ? { parent_reason: parsed.parentReason } : {}),
-            ...(parsed.after ? { after: parsed.after } : {}),
+            ...treeDirectiveFields(parsed),
             via: "capitalist",
           });
           if (!w.ok) {

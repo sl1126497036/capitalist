@@ -175,3 +175,18 @@
   height: 1px;
   background: var(--line-soft);
 }
+
+/*
+ * 组是结构节点：用虚线边框表示节点归属，不靠颜色单独区分。
+ * 与派单卡片共用尺寸，才能在同一列里上下对齐。
+ */
+.fv-node.group {
+  border-style: dashed;
+  border-color: var(--t3);
+}
+
+.fv-ngroup {
+  font-size: var(--f-tiny, 11px);
+  color: var(--t3);
+  line-height: 1.3;
+}

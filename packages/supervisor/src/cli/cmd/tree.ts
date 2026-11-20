@@ -1,19 +1,17 @@
 
-import { dependenciesSettled, dispatchForest, dispatchPaused, openQueue, parentOf, pausedDispatches, readDispatches, type Dispatch } from "../../core/record/supervisor";
+import { dispatchForest, dispatchPaused, openQueue, parentOf, pausedDispatches, readDispatches, type Dispatch } from "../../core/record/supervisor";
 import { findRoot } from "../../core/record/paths";
 import { clipLine } from "../../core/text";
 import { buildForestView } from "../../supervisor/view/forestView";
 import { applyRebuild, planRebuild } from "../../core/dispatch/rebuildTree";
+import { isReady } from "../../core/dispatch/deps";
+import { groupIndexOf, readGroups } from "../../core/record/groups";
 import { flagBool, flagString, type Parsed } from "../args";
-import { dispatchNoLabel, workerNoLabel } from "../../core/record/idMap";
+import { label as nodeLabel } from "../../core/record/nodeRef";
+import { cmdTreeGroup, cmdTreeMove } from "./treeGroup";
 
-/** 派单/进程号显示：新编号补 `#`，非编号原样。统一经 idMap 的 label 入口，不各自拼 `#`。 */
-function noOf(id: unknown): string {
-  const s = String(id ?? "").trim();
-  if (/^\d+-\d+$/.test(s)) return dispatchNoLabel(s);
-  if (/^\d+-P\d+$/.test(s)) return workerNoLabel(s);
-  return s;
-}
+/** 派单/组/进程号显示：统一经 nodeRef.label 分派，不在此处各自拼 `#` 或补零。 */
+const noOf = nodeLabel;
 
 /** 只要任务根：树相关命令不依赖 state / 契约，台账在就能看。 */
 function rootOf(p: Parsed): string {
@@ -61,11 +59,16 @@ function listTrees(root: string, all = false): number {
     const head = `${t.cycle ? "[脏] " : ""}${noOf(t.rootId)}  深 ${t.maxDepth}  剩 ${t.stats.remaining}${t.alive ? "" : "（无活）"}`;
     process.stdout.write(`${head}\n`);
     for (const n of t.nodes) {
-      const mark = STATE_MARK[n.state] ?? "?";
+      const isGroup = n.kind === "group";
+      const mark = isGroup ? "组" : (STATE_MARK[n.state] ?? "?");
       const indent = "  ".repeat(n.depth + 1);
+      const progress = isGroup ? `  ${n.groupDone ?? 0}/${n.groupTotal ?? 0} 完成` : "";
+      const broken = isGroup && n.groupBroken ? `  [断链 ${noOf(n.groupBroken)}]` : "";
       const stuck = n.stuckOn ? `  ← 等 ${noOf(n.stuckOn)}` : "";
-      const block = n.blocked && n.blockedBy !== n.id ? `  [断在 ${noOf(n.blockedBy)}]` : "";
-      process.stdout.write(`${indent}[${mark}] ${noOf(n.id)} ${clipLine(n.title, 34)}${stuck}${block}\n`);
+      const block = !isGroup && n.blocked && n.blockedBy !== n.id ? `  [断链 ${noOf(n.blockedBy)}]` : "";
+      process.stdout.write(
+        `${indent}[${mark}] ${noOf(n.id)} ${clipLine(n.title, 32)}${progress}${broken}${stuck}${block}\n`,
+      );
     }
   }
   if (done > 0 && !all) {
@@ -85,7 +88,7 @@ function printPlan(plan: ReturnType<typeof planRebuild>): void {
       `将关闭 ${plan.stats.close} 条、重开 ${plan.stats.reopen} 条、保留 ${plan.stats.keep} 条 · 重建后 ${plan.stats.trees} 棵树\n\n`,
   );
 
-  for (const g of plan.groups) {
+  for (const g of plan.clusters) {
     const flag = g.settledBy ? `已完成于 ${noOf(g.settledBy)}` : `未完成 -> 代表 ${noOf(g.representative)}`;
     process.stdout.write(`· ${clipLine(g.label, 38)}  [${g.members.length} 条] ${flag}\n`);
   }
@@ -115,6 +118,13 @@ export function cmdTree(p: Parsed): number {
   const root = rootOf(p);
   const action = p.positional[0] ?? "list";
 
+  /* 组是树结构的一部分：子命令挂在这里，不新增顶层命令（顶层命令表有规模上限）。 */
+  if (action === "group") return cmdTreeGroup(p, root);
+
+  /* 单点改挂：`move` 挂到指定父节点，`detach` 摘成根。两者只动指定的单，不动整组。 */
+  if (action === "move") return cmdTreeMove(p, root, false);
+  if (action === "detach") return cmdTreeMove(p, root, true);
+
   if (action === "list" || action === "") return listTrees(root, flagBool(p, "all"));
 
   if (action === "rebuild") {
@@ -137,10 +147,12 @@ export function cmdTree(p: Parsed): number {
 
   if (action === "next") {
     const rows = readDispatches(root);
+    /* 组索引必须传：缺它时挂组的派单会被当成“等一个不存在的前置”，表现为持续等待。 */
+    const gidx = groupIndexOf(rows, readGroups(root));
     /* 暂停单不参与本轮调度，需用户唤醒后重新进入候选。 */
     const q = openQueue(root)
       .filter((d) => !dispatchPaused(d))
-      .filter((d) => dependenciesSettled(d, rows));
+      .filter((d) => isReady(d, rows, gidx));
     if (q.length === 0) {
       process.stdout.write("下一轮没有可拉起的单（都在等前置，或被接管/暂停）。\n");
     } else {
@@ -156,7 +168,11 @@ export function cmdTree(p: Parsed): number {
     return 0;
   }
 
-  process.stdout.write("用法：capitalist tree [list] | capitalist tree rebuild [--apply] | capitalist tree next\n");
+  process.stdout.write(
+    "用法：capitalist tree [list] | capitalist tree rebuild [--apply] | capitalist tree next\n" +
+      "      capitalist tree group [ls] | new <标题> <派单...> | add|rm <#G> <派单...> | attach <#G> <父> | close <#G>\n" +
+      "      capitalist tree move <派单...> --under <父|#G> [--reason X] | capitalist tree detach <派单...>\n",
+  );
   return 2;
 }
 

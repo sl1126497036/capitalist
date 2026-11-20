@@ -49,7 +49,7 @@ export const ledger = {
   direct: (root: string) => join(supervisorDir(root), "ledger", "direct.jsonl"),
   supervisorDirect: (root: string) => join(supervisorDir(root), "ledger", "supervisor-direct.jsonl"),
   threadNo: (root: string) => join(supervisorDir(root), "ledger", "thread-no.json"),
-  /** 派单号占位：号一旦发行就追加一行，作为「只增不复用」的权威依据。 */
+  /** 派单号占位：号一旦发行就追加一行，作为“只增不复用”的权威依据。 */
   dispatchReserve: (root: string) => join(supervisorDir(root), "ledger", "dispatch-reserve.jsonl"),
   /** 进程号占位：领号时 held，拉起成功 committed，拉起失败 released（该号可再用）。 */
   workerReserve: (root: string) => join(supervisorDir(root), "ledger", "worker-reserve.jsonl"),
@@ -128,6 +128,8 @@ export const inbox = {
   dir: (root: string) => join(supervisorDir(root), "inbox"),
   qa: (root: string) => join(supervisorDir(root), "inbox", "qa.jsonl"),
   dispatch: (root: string) => join(supervisorDir(root), "inbox", "dispatch.jsonl"),
+  /** 分组台账：一行一个组，只存组自身属性；成员归属由派单上的 `group` 字段表达。 */
+  groups: (root: string) => join(supervisorDir(root), "inbox", "groups.jsonl"),
   reject: (root: string, id: string) => join(supervisorDir(root), "inbox", `reject-${id}.json`),
 };
 
@@ -182,7 +184,7 @@ export const archive = {
 /**
  * `.capitalist` 下需要遍历的全部落点目录（含根级）。
  *
- * 供启动清理这类"按目录扫一遍"的场景使用：原子写的 `.tmp` 分散在各业务目录下，
+ * 供启动清理这类“按目录扫一遍”的场景使用：原子写的 `.tmp` 分散在各业务目录下，
  * 清理面必须与写入面一致。新增目录时在这里补一条，收集点不必各改一遍。
  * 根级保留在首位，用于清掉旧布局遗留的散落临时文件。
  */

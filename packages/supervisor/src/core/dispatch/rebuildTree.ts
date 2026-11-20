@@ -9,6 +9,8 @@ import {
 } from "../record/supervisor";
 import { writeJsonl } from "../record/json";
 import { syncTaskForDispatch } from "../record/tasks";
+import { isCompletionOf, isSettled, isStructureLive } from "../record/dispatchState";
+import { normalizeGroupId } from "../record/idMap";
 
 export type RebuildAction = "close" | "reopen" | "keep";
 
@@ -32,7 +34,7 @@ export interface RebuildItem {
   pending: boolean;
 }
 
-export interface RebuildGroup {
+export interface RebuildCluster {
   /** 组标签：标题或正文前 40 字。 */
   label: string;
   members: string[];
@@ -53,7 +55,7 @@ export interface RebuildEdge {
 
 export interface RebuildPlan {
   root: string;
-  groups: RebuildGroup[];
+  clusters: RebuildCluster[];
   items: RebuildItem[];
   edges: RebuildEdge[];
   stats: {
@@ -67,23 +69,6 @@ export interface RebuildPlan {
     trees: number;
   };
   warnings: string[];
-}
-
-function isSettledStatus(s: string): boolean {
-  return s === "done" || s === "closed";
-}
-
-/**
- * 这一行是否算“这件事做完了”。
- *
- * 重建自己关掉的残留（`rebuilt_at` 有值）不算：它们是被重建关掉的，不是被做完的。
- * 不排除它们的后果是第二次重建把待办也关掉，第一轮把 A 并进 A2（A 记 closed），
- * 第二轮就会把 A 当成“同一件事已完成”，于是 A2 这个待办也被关，桌上什么都不剩。
- * 幂等的要害就在这里。
- */
-function isCompletion(d: Dispatch): boolean {
-  const row = d as { status?: unknown; rebuilt_at?: unknown };
-  return isSettledStatus(String(row.status)) && !String(row.rebuilt_at ?? "");
 }
 
 function labelOf(d: Dispatch): string {
@@ -104,17 +89,23 @@ export function planRebuild(root: string): RebuildPlan {
 
   const byKey = new Map<string, Dispatch[]>();
   for (const d of rows) {
-    const k = workKeyOf(d);
+    /*
+     * 归并键带上分组：同一件事若分属两个组，不能并成一条。
+     * 并了以后只有一个代表留在台账里，另一个组的成员表就少一名成员，
+     * 而组的完成条件是“全体完成”。少算一名就可能提前放行下游。
+     */
+    const gid = normalizeGroupId((d as { group?: unknown }).group);
+    const k = `${workKeyOf(d)}\u0000${gid}`;
     const list = byKey.get(k);
     if (list) list.push(d);
     else byKey.set(k, [d]);
   }
 
-  const groups: RebuildGroup[] = [];
+  const clusters: RebuildCluster[] = [];
   const groupOf = new Map<string, number>();
 
   for (const [key, members] of byKey) {
-    const settled = members.filter((d) => isCompletion(d));
+    const settled = members.filter((d) => isCompletionOf(d));
     const settledBy = settled.length
       ? settled
           .slice()
@@ -124,8 +115,8 @@ export function planRebuild(root: string): RebuildPlan {
       (d) => String((d as { closed_by?: string }).closed_by ?? "") !== "user",
     );
     const representative = settledBy || pickable.length === 0 ? "" : String(pickable[pickable.length - 1]!.id);
-    const idx = groups.length;
-    groups.push({
+    const idx = clusters.length;
+    clusters.push({
       label: labelOf(members[0]!),
       members: members.map((d) => String(d.id)),
       settledBy,
@@ -157,7 +148,7 @@ export function planRebuild(root: string): RebuildPlan {
   for (const d of rows) {
     const id = String(d.id);
     const status = String(d.status);
-    const g = groups[groupOf.get(id)!]!;
+    const g = clusters[groupOf.get(id)!]!;
 
     if (g.settledBy) {
       /*
@@ -175,7 +166,7 @@ export function planRebuild(root: string): RebuildPlan {
           parentReason: "",
           pending: false,
         });
-      } else if (isSettledStatus(status)) {
+      } else if (isSettled(status)) {
         items.push({
           id,
           action: "keep",
@@ -228,8 +219,8 @@ export function planRebuild(root: string): RebuildPlan {
 
   const edges: RebuildEdge[] = [];
   for (const re of rawEdges) {
-    const childRep = groups[re.from]!.representative;
-    const parentRep = groups[re.to]!.representative;
+    const childRep = clusters[re.from]!.representative;
+    const parentRep = clusters[re.to]!.representative;
     if (childRep && parentRep) {
       const it = items.find((x) => x.id === childRep)!;
       it.parent = parentRep;
@@ -239,14 +230,14 @@ export function planRebuild(root: string): RebuildPlan {
     }
     if (childRep && !parentRep) {
       /* 父组已完成：完成的单不进树，子单按根处理并留一句说明。 */
-      edges.push({ child: childRep, parent: "", why: `${re.why}；但父组已完成（${groups[re.to]!.settledBy}），按根处理` });
-      warnings.push(`${childRep} 原本挂在已完工的 ${groups[re.to]!.settledBy} 上：不连边（完成的单不进树），按根处理`);
+      edges.push({ child: childRep, parent: "", why: `${re.why}；但父组已完成（${clusters[re.to]!.settledBy}），按根处理` });
+      warnings.push(`${childRep} 原本挂在已完工的 ${clusters[re.to]!.settledBy} 上：不连边（完成的单不进树），按根处理`);
       continue;
     }
     edges.push({ child: "", parent: parentRep, why: `${re.why}；子组已完成，边不保留` });
   }
 
-  const live = groups.filter((g) => g.representative);
+  const live = clusters.filter((g) => g.representative);
   const fake: Dispatch[] = live.map((g) => {
     const it = items.find((x) => x.id === g.representative)!;
     const row = { ...byId.get(g.representative)! } as Record<string, unknown>;
@@ -271,7 +262,7 @@ export function planRebuild(root: string): RebuildPlan {
     const cur = byId.get(it.id);
     if (!cur) continue;
     if (it.action === "close") {
-      it.pending = !isSettledStatus(it.status);
+      it.pending = !isSettled(it.status);
     } else if (it.action === "reopen") {
       const curRow = cur as { parent?: unknown; retry_verdict?: unknown };
       /* 待裁决派单的状态不随重建改变，pending 按同一规则计算。 */
@@ -287,13 +278,13 @@ export function planRebuild(root: string): RebuildPlan {
   const roots = new Set(items.filter((x) => x.action === "reopen" && !x.parent).map((x) => x.id));
   return {
     root,
-    groups,
+    clusters,
     items,
     edges,
     stats: {
       total: rows.length,
       inFlight: rows.filter((d) => d.status === "open" || d.status === "claimed" || d.status === "review").length,
-      settled: rows.filter((d) => isSettledStatus(String(d.status))).length,
+      settled: rows.filter((d) => isSettled(String(d.status))).length,
       close: items.filter((x) => x.action === "close" && x.pending).length,
       reopen: items.filter((x) => x.action === "reopen" && x.pending).length,
       keep: items.filter((x) => x.action === "keep").length,
@@ -324,7 +315,7 @@ export function applyRebuild(root: string, plan: RebuildPlan, by = "rebuild"): {
     const cur = rows[idx]!;
 
     if (it.action === "close") {
-      if (isSettledStatus(String(cur.status))) continue;
+      if (isSettled(String(cur.status))) continue;
       /** `rebuilt_at` 是给重建自己看的记号：这一行是被重建关掉的，不是被做完的。 */
       const next = {
         ...cur,
@@ -372,7 +363,7 @@ export function applyRebuild(root: string, plan: RebuildPlan, by = "rebuild"): {
       continue;
     }
 
-    /* keep：已完工的单，只在需要补父边时动一下（不常见）。 */
+    /* keep：已完工的单，只在需要补父边时处理（不常见）。 */
     if (it.parent && String(cur.parent ?? "") !== it.parent) {
       const next = { ...cur, parent: it.parent, parent_reason: it.parentReason } as Dispatch;
       rows[idx] = next;
@@ -390,8 +381,6 @@ export function applyRebuild(root: string, plan: RebuildPlan, by = "rebuild"): {
   return { closed, reopened };
 }
 
-/** 未完工的状态集合：与调度口径一致（`open` 等拉起、`claimed` 运行中、`review` 待复核）。 */
-const IN_FLIGHT_STATUS = new Set(["open", "claimed", "review"]);
 
 export interface FlatCheck {
   /** 未完工单是否一条父边都没有，台账是平的，不是树。 */
@@ -403,7 +392,7 @@ export interface FlatCheck {
 /** 判“台账是平的”：未完工单超过 1 张，且每一张都没有父节点。 */
 export function looksFlat(root: string): FlatCheck {
   const rows = readDispatches(root);
-  const live = rows.filter((d) => IN_FLIGHT_STATUS.has(String(d.status)));
+  const live = rows.filter((d) => isStructureLive(String(d.status)));
   return { flat: live.length > 1 && live.every((d) => !parentOf(d)), inFlight: live.length };
 }
 

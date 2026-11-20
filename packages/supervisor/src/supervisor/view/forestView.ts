@@ -10,7 +10,13 @@ import { join } from "node:path";
 import { readJson } from "../../core/record/json";
 import { board as boardLoc } from "../../core/record/locations";
 import { clipLine } from "../../core/text";
-import { dispatchForest, listWorkers, parentOf, pendingPrerequisites, readDispatches, type Dispatch } from "../../core/record/supervisor";
+import { dispatchForest, listWorkers, parentOf, readDispatches, type Dispatch } from "../../core/record/supervisor";
+import { isFailed, isSettled } from "../../core/record/dispatchState";
+import { firstBlocker } from "../../core/dispatch/deps";
+import { groupIndexOf, readGroups } from "../../core/record/groups";
+import { normalizeGroupId } from "../../core/record/idMap";
+import { isGroupRef } from "../../core/record/nodeRef";
+import { groupStatusOf, type GroupState } from "../../core/dispatch/groupGraph";
 import { workerUsage } from "../usage/usage";
 import { shardTitle, summarizeTitle } from "../usage/taskTitle";
 
@@ -41,8 +47,14 @@ function dropCleared(rows: Dispatch[], cleared: Set<string>): Dispatch[] {
   const ids = new Set(kept.map((r) => String(r.id)));
   for (const r of kept) {
     const p = String(r.parent ?? "");
-    if (p && !ids.has(p)) r.parent = "";
-    if (Array.isArray(r.after)) r.after = r.after.filter((x) => String(x) === "*" || ids.has(String(x)));
+    /*
+     * 组号不是派单 id，不在 `ids` 里是正常的：清除某个任务不该让挂组的派单失去父节点。
+     * 不排除组号会把“挂在组上”变成“孤儿”，看板上表现为突然断链。
+     */
+    if (p && !ids.has(p) && !isGroupRef(p)) r.parent = "";
+    if (Array.isArray(r.after)) {
+      r.after = r.after.filter((x) => String(x) === "*" || isGroupRef(String(x)) || ids.has(String(x)));
+    }
   }
   return kept;
 }
@@ -53,6 +65,19 @@ export type ForestNodeState = "running" | "queued" | "waiting" | "review" | "don
 /** 打开弹窗时一张卡片要的全部字段。 */
 export interface ForestNodeView {
   id: string;
+  /**
+   * 节点类型。`group` 是分组：组内并行、整组完成才放行挂在组上的单。
+   * 组不是任务，不占任务编号，也不计入节点总数。
+   */
+  kind: "dispatch" | "group";
+  /** 组节点专有：已完成成员数。 */
+  groupDone?: number;
+  /** 组节点专有：成员总数。 */
+  groupTotal?: number;
+  /** 组节点专有：断链的成员 id；未断链为空。 */
+  groupBroken?: string;
+  /** 相对父节点的边类型：组成员（`member`）或挂在组后的下游（`after`）。 */
+  edge?: "member" | "after";
   /** 任务编号（`01`、`21`…，任务编号表里的号）；表里还没有时为空串。 */
   no: string;
   title: string;
@@ -177,30 +202,46 @@ function countInto(stats: ForestTreeStats, n: ForestNodeView): void {
 }
 
 /**
- * 返回第一个未满足的前置 id，无则空串。判定复用 core 的 {@link pendingPrerequisites}，视图不重复推导。
+ * 返回第一个未满足的前置 id，无则空串。判定统一走 `core/dispatch/deps`，视图不重复推导。
  * `"*"` 屏障不是具体节点，不计入卡点。
  */
 function pendingPrereqOf(d: Dispatch, rows: Dispatch[]): string {
-  return pendingPrerequisites(d, rows).filter((id) => id !== "*")[0] ?? "";
+  return firstBlocker(d, rows);
+}
+
+/** 组节点在视图里要展示的派生信息。 */
+interface GroupBadge {
+  done: number;
+  total: number;
+  broken: string;
+}
+
+/** 构建一棵树所需的上下文。参数收进对象：树、组、边三类信息各自成组，避免长参数列表。 */
+interface WalkContext {
+  rows: Map<string, Dispatch>;
+  children: Record<string, string[]>;
+  seqOf: Map<string, number>;
+  stateOf: (d: Dispatch) => ForestNodeState;
+  stuckOf: (d: Dispatch) => string;
+  reasonOf: (d: Dispatch) => string;
+  retriesOf: (d: Dispatch) => number;
+  cycleSet: Set<string>;
+  noOf?: ((id: string) => string) | undefined;
+  infoOf?: ((d: Dispatch) => { model: string; started_at: string; ended_at: string }) | undefined;
+  /** 组节点 id -> 成员统计。出现键即表示该节点是组。 */
+  groupOf: Map<string, GroupBadge>;
+  /** 子节点 id -> 它相对父节点的边类型。 */
+  edgeOf: Map<string, "member" | "after">;
+  /** 子节点 id -> 展示用父 id。组成员的数据父是组的上游，树上应挂在组下。 */
+  parentViewOf?: Map<string, string> | undefined;
 }
 
 /**
  * 从给定的根构建扁平先序列表。`breakAt` 为链上的断链祖先 id，子节点继承；
  * `visited` 防环，`limit` 限制节点数。
  */
-function walkTree(
-  rootIds: string[],
-  rows: Map<string, Dispatch>,
-  children: Record<string, string[]>,
-  seqOf: Map<string, number>,
-  stateOf: (d: Dispatch) => ForestNodeState,
-  stuckOf: (d: Dispatch) => string,
-  reasonOf: (d: Dispatch) => string,
-  retriesOf: (d: Dispatch) => number,
-  cycleSet: Set<string>,
-  noOf?: (id: string) => string,
-  infoOf?: (d: Dispatch) => { model: string; started_at: string; ended_at: string },
-): { nodes: ForestNodeView[]; maxDepth: number } {
+function walkTree(rootIds: string[], ctx: WalkContext): { nodes: ForestNodeView[]; maxDepth: number } {
+  const { rows, children, seqOf, stateOf, stuckOf, reasonOf, retriesOf, cycleSet, noOf, infoOf, groupOf, edgeOf, parentViewOf } = ctx;
   const nodes: ForestNodeView[] = [];
   const visited = new Set<string>();
   const limit = rows.size * 2 + 8;
@@ -210,6 +251,7 @@ function walkTree(
     const d = rows.get(id);
     if (!d) return;
     visited.add(id);
+    const badge = groupOf.get(id);
     const state = stateOf(d);
     /*
      * 断链来源为祖先失败或自身在环上；`chain` 向下传递。
@@ -222,7 +264,12 @@ function walkTree(
     const waitingOn = !blocked && state === "waiting" ? stuckOf(d) : "";
     nodes.push({
       id,
-      no: noOf?.(id) ?? "",
+      kind: badge ? "group" : "dispatch",
+      ...(badge ? { groupDone: badge.done, groupTotal: badge.total } : {}),
+      ...(badge?.broken ? { groupBroken: badge.broken } : {}),
+      ...(edgeOf.get(id) ? { edge: edgeOf.get(id)! } : {}),
+      /* 组节点不在任务编号表里，直接给未格式化的组号（`G1`），前端统一补零成 `#G01`。 */
+      no: badge ? String(id) : (noOf?.(id) ?? ""),
       title: ledgerTitle(d),
       state,
       status: String(d.status ?? ""),
@@ -233,7 +280,7 @@ function walkTree(
       reason: reasonOf(d),
       childCount: (children[id] ?? []).length,
       depth,
-      parent: depth === 0 ? "" : parentOf(d),
+      parent: depth === 0 ? "" : (parentViewOf?.get(id) ?? parentOf(d)),
       /* 失败节点自身的 `chain` 等于其 id，不写入 `stuckOn`，避免显示为自环。 */
       stuckOn: blocked ? (chain === id ? "" : chain) : waitingOn,
       stuckOnNo: waitingOn ? (noOf?.(waitingOn) ?? "") : "",
@@ -323,6 +370,88 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
   const cycleSet = new Set(forest.cycles.flat());
 
   /*
+   * 把组叠到派单森林上。
+   *
+   * 组没有自己的派单行，直接在树上会缺席，形成“两个互不相干的根 + 一个隐式依赖”。
+   * 界面因此无法解释下游为何不动。此处为组构造一条虚拟行并入 `byId`，再把成员从原父节点
+   * 摘下挂到组下：组在树上占一个节点，成员与挂组的派单都是它的子节点。
+   *
+   * 组的状态由成员派生（`groupStatusOf`），映射成派单状态后交给同一套 `stateOf`，
+   * 于是断链沿组向下传递，不需要第二套阻断逻辑。
+   */
+  const GROUP_STATUS: Record<GroupState, string> = {
+    queued: "open",
+    waiting: "open",
+    running: "claimed",
+    review: "reported",
+    done: "done",
+    blocked: "failed",
+    closed: "closed",
+  };
+  const groups = readGroups(root);
+  const gidx = groupIndexOf(rows, groups);
+  const groupOf = new Map<string, GroupBadge>();
+  const edgeOf = new Map<string, "member" | "after">();
+  const parentViewOf = new Map<string, string>();
+  const rootSet = new Set(forest.roots);
+  const orphanSet = new Set(forest.orphans);
+
+  groups.forEach((g, gi) => {
+    const st = groupStatusOf(g.id, rows, gidx);
+    if (!st) return;
+    groupOf.set(g.id, { done: st.done, total: st.total, broken: st.brokenAt });
+    const members = gidx.members.get(g.id) ?? [];
+    /* 挂在该组上的下游：`parent` 指向组号（归一后比较，`#G01` 与 `G1` 是同一个）。 */
+    const attached = rows
+      .filter((d) => normalizeGroupId(parentOf(d)) === g.id)
+      .map((d) => String(d.id));
+    const parent = members
+      .map((m) => byId.get(m))
+      .map((d) => (d ? parentOf(d) : ""))
+      .find((p) => p) ?? "";
+
+    byId.set(g.id, {
+      id: g.id,
+      at: g.at,
+      stage: String(g.stage ?? ""),
+      shard: "",
+      title: g.title,
+      action: "",
+      status: GROUP_STATUS[st.state],
+      ...(parent ? { parent } : {}),
+    } as Dispatch);
+    seqOf.set(g.id, rows.length + gi);
+    parentViewOf.set(g.id, parent);
+
+    /* 移除成员的原始父边：它们在树上只出现在组下面，不再同时挂在组的上游。 */
+    for (const m of members) {
+      const md = byId.get(m);
+      const mp = md ? parentOf(md) : "";
+      if (mp && forest.children[mp]) forest.children[mp] = forest.children[mp].filter((x) => x !== m);
+      rootSet.delete(m);
+      orphanSet.delete(m);
+      edgeOf.set(m, "member");
+      parentViewOf.set(m, g.id);
+    }
+    for (const a of attached) {
+      rootSet.delete(a);
+      orphanSet.delete(a);
+      edgeOf.set(a, "after");
+      parentViewOf.set(a, g.id);
+    }
+    forest.children[g.id] = [...members, ...attached];
+
+    if (parent && parent !== g.id) {
+      (forest.children[parent] ??= []).push(g.id);
+      rootSet.delete(g.id);
+    } else {
+      rootSet.add(g.id);
+    }
+  });
+  forest.roots = [...rootSet];
+  forest.orphans = [...orphanSet];
+
+  /*
    * 重派次数取 `attempt - 1`。`lineage` 为同支根节点共用，按它计数会把兄弟节点算成重派。
    */
   const retriesOfMap = new Map<string, number>();
@@ -337,7 +466,7 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
   const lineageDone = new Set<string>();
   for (const r of rows) {
     const st = String(r.status ?? "");
-    if (st !== "done" && st !== "closed") continue;
+    if (!isSettled(st)) continue;
     lineageDone.add(String((r as unknown as Record<string, unknown>).lineage || r.id));
   }
 
@@ -346,11 +475,11 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
     if (status === "claimed") return "running";
     if (status === "reported" || status === "review") return "review";
     if (status === "done") return "done";
-    if (status === "failed") {
+    if (isFailed(status)) {
       const lin = String((d as unknown as Record<string, unknown>).lineage || d.id);
       return lineageDone.has(lin) ? "closed" : "failed";
     }
-    if (status === "closed" || status === "superseded") return "closed";
+    if (isSettled(status) || status === "superseded") return "closed";
     /* `open` 及其它未知值：前置满足为 queued，未满足为 waiting。 */
     return pendingPrereq(d) ? "waiting" : "queued";
   };
@@ -396,12 +525,29 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
   const trees: ForestTreeView[] = [];
   const placed = new Set<string>();
 
+  const walkCtx: WalkContext = {
+    rows: byId,
+    children: forest.children,
+    seqOf,
+    stateOf,
+    stuckOf,
+    reasonOf,
+    retriesOf,
+    cycleSet,
+    noOf,
+    infoOf,
+    groupOf,
+    edgeOf,
+    parentViewOf,
+  };
+
   const pushTree = (rootIds: string[], cycle: boolean): void => {
-    const built = walkTree(rootIds, byId, forest.children, seqOf, stateOf, stuckOf, reasonOf, retriesOf, cycleSet, noOf, infoOf);
+    const built = walkTree(rootIds, walkCtx);
     if (built.nodes.length === 0) return;
     for (const n of built.nodes) placed.add(n.id);
     const stats = emptyStats();
-    for (const n of built.nodes) countInto(stats, n);
+    /* 组是结构节点，不是任务：计入节点总数会让“还剩几单”多出几个虚假计数。 */
+    for (const n of built.nodes) if (n.kind !== "group") countInto(stats, n);
     trees.push({
       rootId: built.nodes[0]?.id ?? rootIds[0] ?? "",
       /* alive 只统计未阻塞且处于运行、排队、等待或验收状态的节点；断链子树节点不计入。 */

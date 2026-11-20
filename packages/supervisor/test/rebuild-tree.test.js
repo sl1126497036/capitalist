@@ -48,7 +48,7 @@ test("同一件事的三条失败记录：归并成一条待办，另两条关�
   }
 
   const plan = planRebuild(root);
-  const group = plan.groups.find((g) => g.members.includes("C3"));
+  const group = plan.clusters.find((g) => g.members.includes("C3"));
   assert.ok(group, "三条记录归成一组");
   assert.deepStrictEqual([...group.members].sort(), ["C1", "C2", "C3"]);
   assert.strictEqual(group.representative, "C3", "全组没完工时取台账最后一张做代表");
@@ -82,7 +82,7 @@ test("组内有 done：整组不进树，失败的残留被关闭，代表为空
   put(root, "D3", { action: "做同一件事", status: "failed", done_at: doneAt });
 
   const plan = planRebuild(root);
-  const group = plan.groups.find((g) => g.members.includes("D2"));
+  const group = plan.clusters.find((g) => g.members.includes("D2"));
   assert.ok(group);
   assert.strictEqual(group.settledBy, "D2", "取组内完工的那张做代表");
   assert.strictEqual(group.representative, "", "已完工的组不参与重建，代表为空");
@@ -185,4 +185,32 @@ test("用户手动关的单，重建不许再把它排回队列", () => {
   applyRebuild(root, plan);
 
   assert.equal(rowsById(root).get("D-user-closed").status, "closed", "人关掉的单不许复活");
+});
+
+test("重建不跨组归并：分属两个组的同 workKey 记录各成一条", () => {
+  /*
+   * 跨组合并的后果是静默的：并成一条后只有一个代表留在台账里，另一个组少一名成员。
+   * 组的完成条件是"全体完成"，少算一名就可能提前放行下游。
+   */
+  const root = sandbox();
+  put(root, "A1", { action: "做同一件事", status: "failed", group: "G1" });
+  put(root, "A2", { action: "做同一件事", status: "failed", group: "G1" });
+  put(root, "B1", { action: "做同一件事", status: "failed", group: "G2" });
+
+  const plan = planRebuild(root);
+  const withA = plan.clusters.find((g) => g.members.includes("A1"));
+  const withB = plan.clusters.find((g) => g.members.includes("B1"));
+  assert.ok(withA && withB);
+  assert.notStrictEqual(withA, withB, "不同组不得并成一条");
+  assert.deepStrictEqual([...withA.members].sort(), ["A1", "A2"]);
+  assert.deepStrictEqual([...withB.members], ["B1"]);
+});
+
+test("重建跨组归并：组号大小写与前导零不影响判定", () => {
+  const root = sandbox();
+  put(root, "A1", { action: "做同一件事", status: "failed", group: "G01" });
+  put(root, "A2", { action: "做同一件事", status: "failed", group: "g1" });
+  const plan = planRebuild(root);
+  const g = plan.clusters.find((x) => x.members.includes("A1"));
+  assert.deepStrictEqual([...g.members].sort(), ["A1", "A2"], "#G01 与 G1 归为同一组后可以并");
 });

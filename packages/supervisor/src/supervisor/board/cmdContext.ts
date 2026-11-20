@@ -3,7 +3,10 @@ import { stripAttachments } from "../../core/message/attachments";
 import { listWorkers, readDispatches } from "../../core/record/supervisor";
 import { readTasks } from "../../core/record/tasks";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
-import { taskNoLabel, dispatchNoLabel } from "../../core/record/idMap";
+import { groupNoLabel, taskNoLabel } from "../../core/record/idMap";
+import { readGroups, groupIndexOf } from "../../core/record/groups";
+import { groupStateWord, groupStatusOf } from "../../core/dispatch/groupGraph";
+import { label as nodeLabel } from "../../core/record/nodeRef";
 import { laneBaseOf, laneContextWindow, readLane } from "../judge/sessionLane";
 import { dispatchNoTable } from "../usage/threadNo";
 import { parseWorkerLog } from "../worker/workerLog";
@@ -20,22 +23,53 @@ export function forestNoOf(root: string): (id: string) => string {
   return (id) => byDispatch.get(String(id)) ?? "";
 }
 
-export function taskNoLines(threads: readonly ThreadSummary[], limit = 24): string[] {
+export function taskNoLines(root: string, threads: readonly ThreadSummary[], limit = 24): string[] {
   const rank = (s: string): number =>
     s === "running" || s === "starting" ? 0 : s === "queued" ? 1 : s === "failed" ? 2 : 3;
   const picked = threads
     .filter((t) => t.no)
     .sort((a, b) => rank(a.status) - rank(b.status) || Number(a.no) - Number(b.no))
     .slice(0, limit);
-  if (picked.length === 0) return [];
+  const lines = picked.map((t) => {
+    const who = t.worker ? "执行中" : "排队中";
+    const title = t.title ? ` · ${t.title}` : "";
+    return `  ${taskNoLabel(Number(t.no))} [${t.shard || t.stage}] ${t.status}${title} · ${who}`;
+  });
+  if (lines.length === 0 && readGroups(root).length === 0) return [];
   return [
     "",
     "【任务编号表】用户给出的 #号 就是这里的号，回答时直接引用它，不要自己编号：",
-    ...picked.map((t) => {
-      const who = t.worker ? "执行中" : "排队中";
-      const title = t.title ? ` · ${t.title}` : "";
-      return `  ${taskNoLabel(Number(t.no))} [${t.shard || t.stage}] ${t.status}${title} · ${who}`;
-    }),
+    ...lines,
+    ...groupNoLines(root),
+  ];
+}
+
+/**
+ * 分组行。没有组时不输出任何内容，避免给模型一个空标题引发猜测。
+ *
+ * 组号必须出现在这张表里：模型只认这里列出的号，看不到 `#G1` 就不会写 `PARENT: #G1`，
+ * 分组功能将无法使用。
+ */
+export function groupNoLines(root: string, limit = 12): string[] {
+  const groups = readGroups(root);
+  if (groups.length === 0) return [];
+  const rows = readDispatches(root);
+  const idx = groupIndexOf(rows, groups);
+  const lines = groups
+    .slice(-limit)
+    .map((g) => {
+      const st = groupStatusOf(g.id, rows, idx);
+      const done = st?.done ?? 0;
+      const total = st?.total ?? 0;
+      const state = st ? groupStateWord(st.state) : "";
+      const broken = st?.brokenAt ? ` · 断链 ${st.brokenAt}` : "";
+      return `  ${groupNoLabel(g.id)} [组] ${g.title} ${done}/${total} 完成 · ${state}${broken}`;
+    });
+  return [
+    "",
+    "  以 [组] 开头的是分组：组内并行、整组完成才放行挂在组上的派单。",
+    "  加入组写 `GROUP: #G号`，新建组写 `GROUP: new <组标题>`，挂组写 `PARENT: #G号`（仍须填写 PARENT_REASON）。",
+    ...lines,
   ];
 }
 
@@ -144,7 +178,7 @@ export function settledLines(root: string, limit = 8): string[] {
     if (seen.has(key)) continue;
     seen.add(key);
     const res = verdict(t.note);
-    rows.push(`  ${no ? dispatchNoLabel(no) : "-"} ${word(String(t.state ?? ""))} · ${ask(t.detail)}${res ? ` · ${res}` : ""}`);
+    rows.push(`  ${no ? nodeLabel(no) : "-"} ${word(String(t.state ?? ""))} · ${ask(t.detail)}${res ? ` · ${res}` : ""}`);
     if (rows.length >= limit) break;
   }
   return [

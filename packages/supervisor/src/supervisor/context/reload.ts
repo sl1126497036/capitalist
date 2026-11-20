@@ -31,6 +31,7 @@ import { dirs } from "../../agent/registry";
 import { hhmmOf } from "../../core/clock";
 import { runCheck, type CheckResult } from "../../core/contract/checks";
 import { listDirectives } from "../../core/dispatch/commands";
+import { composeDispatch } from "../../core/dispatch/newDispatch";
 import { stageById, type Contract } from "../../core/contract/contract";
 import { openInboxAsks } from "../../core/dispatch/inbox";
 import { readJson, readJsonl, writeJson } from "../../core/record/json";
@@ -1081,20 +1082,18 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
     }
 
     const id = newDispatchId(root, item.stage, item.shard ?? undefined);
-    /* title 是派单上的扩展字段（见 loop.ts 的 DispatchEx）：核心 Dispatch 不带它，
-       但界面按它显示任务名，所以这里一并写进去。 */
-    const d: Dispatch & { title?: string } = {
+    /* title 是派单上的扩展字段（见 newDispatch.ts 的 ComposedDispatch）：核心 Dispatch 不带它，
+       但界面按它显示任务名，因此一并写入。 */
+    const d = composeDispatch({
       id,
-      at: new Date().toISOString(),
       stage: item.stage,
       shard: item.shard,
       title: `复验 · ${clipText(item.title, 40)}`,
       action: reverifyAction(item),
-      status: "open",
       source: "reverify",
       attempt: 1,
       note: `重载 gen ${plan.gen} 派出的复验单：${item.why}`,
-    };
+    });
     appendDispatch(root, d);
     recordEvent(root, "dispatch_reverify", {
       dispatch: id,

@@ -12,6 +12,8 @@ import { recordEvent } from "../../core/record/ledger";
 import { ledger as ledgerLoc } from "../../core/record/locations";
 import { msgId } from "../../core/message/msgId";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
+import { parseGroupSpec } from "../../core/dispatch/groupOps";
+import { parseInsert, parseInsertMode } from "./treeLines";
 
 /**
  * 允许的动作，顺序即界面快捷清单顺序。`dispatch` 当场建单并插到队首；
@@ -93,6 +95,21 @@ export interface SupervisorDirective {
    * 新派单优先用 `PARENT:`，`AFTER:` 仍兼容。
    */
   after?: string[];
+  /**
+   * 分组声明（`GROUP:` 行），仅 `dispatch` 消费。
+   *
+   * 落盘保存解析后的结构（`mode: new` 带标题、`mode: join` 带归一后的组号），不存模型原话：
+   * 建单时若再解析一次原话，就会出现“回显 #G01、实际挂 G1”这类两处口径。
+   * 注：`GROUP: none` 等价于未写，不落字段。
+   */
+  group?: { mode: "new"; title: string } | { mode: "join"; id: string };
+  /**
+   * 插入声明（`INSERT:` 行），仅 `dispatch` 消费：把本单插到锚点之前或之后。
+   * `now` 表示建单后立即执行，建单与置顶在同一事务里完成。
+   */
+  insert?: { where: "before" | "after"; anchor: string; now: boolean };
+  /** 在途处置（`INSERT_MODE:` 行）：`halt` 退回重做 / `keep` 不中断 / `drop` 作废。 */
+  insert_mode?: "halt" | "keep" | "drop";
   /** 目标线程（`capitalist say --thread` 写入的记录）：回显归位到该工作进程会话，不进入监工流。 */
   thread?: string;
   /**
@@ -224,6 +241,11 @@ export function appendSupervisorDirective(
     /** 父派单编号 / id 与挂边理由（只有 dispatch 用，来自 `PARENT:` / `PARENT_REASON:` 行）。 */
     parent?: string;
     parent_reason?: string;
+    /** 分组声明原话（只有 dispatch 用，来自 `GROUP:` 行）。 */
+    group?: string;
+    /** 插入声明原话（只有 dispatch 用，来自 `INSERT:` / `INSERT_MODE:` 行）。 */
+    insert?: string;
+    insert_mode?: string;
   },
 ): { ok: true; rec: SupervisorDirective } | { ok: false; error: string } {
   const text = String(input.text ?? "").trim();
@@ -278,6 +300,20 @@ export function appendSupervisorDirective(
   }
   if (Array.isArray(input.after)) {
     rec.after = [...new Set(input.after.map((x) => String(x ?? "").trim()).filter(Boolean))];
+  }
+  /* 分组：`new <标题>` 与 `#G1` 两种。无法识别的写法不落字段，建单时按未写处理并给出提示。 */
+  if (input.group) {
+    const spec = parseGroupSpec(input.group);
+    if (spec && spec.mode !== "none") rec.group = spec;
+  }
+  /* 插入：无法识别插入位置时不落字段，由建单侧按未写处理，避免把派单插到推测的层级。 */
+  if (input.insert) {
+    const ins = parseInsert(input.insert);
+    if (ins) rec.insert = ins;
+  }
+  if (input.insert_mode) {
+    const mode = parseInsertMode(input.insert_mode);
+    if (mode) rec.insert_mode = mode;
   }
   if (Array.isArray(input.atts)) {
     rec.atts = [...new Set(input.atts.map((p) => String(p ?? "").trim()).filter(Boolean))];

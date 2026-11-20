@@ -181,6 +181,36 @@ const HELP_GROUPS: HelpGroup[] = [
         brief: ["存量重建：同一事项的多条记录归并，按已有 after/parent 连边"],
         opts: [{ f: "--apply", d: ["写入结果；缺省只输出计划"] }],
       },
+      {
+        cmd: "tree group [ls]",
+        brief: ["查看分组：成员、完成数、是否断链"],
+      },
+      {
+        cmd: "tree group new <标题> <派单...>",
+        brief: ["将多条并行派单归入一组：组内并行，整组完成才放行挂在组上的派单"],
+      },
+      {
+        cmd: "tree group add|rm <#G> <派单...>",
+        brief: ["增补或移出成员；成员必须共享同一个父节点"],
+      },
+      {
+        cmd: "tree group attach <#G> <父|none>",
+        brief: ["整组改挂：批量改成员父节点"],
+        opts: [{ f: "--reason X", d: ["改挂理由"] }],
+      },
+      {
+        cmd: "tree group close <#G>",
+        brief: ["解散：挂在组上的派单按已收尾放行"],
+      },
+      {
+        cmd: "tree move <派单...> --under <父|#G>",
+        brief: ["单点改挂父节点：适用于已有树的结构调整，不影响整组"],
+        opts: [{ f: "--reason X", d: ["改挂理由"] }],
+      },
+      {
+        cmd: "tree detach <派单...>",
+        brief: ["摘成根节点：不再等待任何前置"],
+      },
     ],
   },
   {

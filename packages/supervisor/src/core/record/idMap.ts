@@ -63,6 +63,34 @@ export function workerNoLabel(no: string): string {
 }
 
 /**
+ * 组号归一：`#G01` / `g1` / `G001` 一律归一为落盘形式 `G1`；非组号返回空串。
+ *
+ * 这是组号解析的唯一入口。组号有两种形态同时在系统里流动：显示形态带 `#` 且补零
+ * （`#G01`），落盘形态不带 `#` 且不补零（`G1`）。LLM 与人都会照抄显示形态，若各处
+ * 只做 `toUpperCase()`，`G01` 与 `G1` 会变成两个不同的键：成员查不到组、组查不到成员，
+ * 组会始终显示缺员。反过来，成员被记成 `dangling` 后组只剩部分成员，组内成员未全部完成就可能放行下游。
+ *
+ * 因此任何比较、建索引、找记录之前都先过这个函数，不允许另写正则。
+ */
+export function normalizeGroupId(ref: unknown): string {
+  const m = /^G(\d+)$/i.exec(stripHash(String(ref ?? "")));
+  if (!m) return "";
+  return `G${Number(m[1])}`;
+}
+
+/**
+ * 组号显示形式：`#G01`。入参为落盘形式 `G1`。
+ *
+ * 组号不属于任务号 / 派单号 / 进程号三套编号：组是树上的结构节点，不发行任务号、
+ * 不占派单序、不拉起进程。补零仍在这里统一做，避免各处自行拼 `#G`。
+ */
+export function groupNoLabel(no: string): string {
+  const id = normalizeGroupId(no);
+  if (!id) return String(no ?? "").trim() ? `#${stripHash(String(no))}` : "";
+  return `#G${id.slice(1).padStart(2, "0")}`;
+}
+
+/**
  * 剥掉编号开头的 `#`，得落盘形式。
  *
  * 解析输入的唯一入口：容忍用户带 `#`（`#02-2`）或不带（`02-2`），统一回落到盘形式。

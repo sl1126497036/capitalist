@@ -93,8 +93,8 @@ function reservedTaskNos(root: string): number[] {
  * 占住一个派单号。
  *
  * 写占位是一次追加，落在算号的同一临界区内：号离开临界区时已经被占用，后来者读到的最大值
- * 必然包含它，因此不会出现「算出来又被别人算一遍」的撞号。派单最终没有落成也不回收该号，
- * 与「任务号、派单号只增不复用」一致。
+ * 必然包含它，因此不会出现“算出来又被别人算一遍”的撞号。派单最终没有落成也不回收该号，
+ * 与“任务号、派单号只增不复用”一致。
  */
 function reserveDispatchNo(root: string, id: string, taskNo: number, seq: number): void {
   appendJsonl(ledgerLoc.dispatchReserve(root), {
@@ -177,14 +177,14 @@ export function resolveDispatchNo(
    * 重派：按原派单号反解任务号并复用，派发序按“已存在的最大派发序 +1”。
    *
    * 锁键带任务号（`dispatch-2`）：同一任务的重派串行，不同任务的重派互不排队。
-   * 锁内完成「算号 + 写占位」，号出临界区即被占用。
+   * 锁内完成“算号 + 写占位”，号出临界区即被占用。
    */
   const originNo = originDispatchId ? taskNoOfDispatchId(originDispatchId) : 0;
   if (originNo > 0) {
     return withNoLock(root, `dispatch-${originNo}`, () => {
       const rows = readTasks(root);
       /*
-       * 派发序取「派单台账与占位记录的最大序」与「任务项 attempts」两者的较大值：
+       * 派发序取“派单台账与占位记录的最大序”与“任务项 attempts”两者的较大值：
        *   - 台账与占位是权威（号一旦发行就计入，不会因 attempts 未同步而回退或重复）；
        *   - attempts 兜底（任务项已登记但号尚未落盘的窗口内，仍能正确递增）。
        */
@@ -271,6 +271,13 @@ export function syncTaskForDispatch(root: string, d: Dispatch): void {
   if (idx < 0) return;
   const cur = rows[idx] as TaskItem;
 
+  /**
+   * 派单状态 -> 任务池状态的转换表。
+   *
+   * 这不是状态判定：派单状态属于哪一档（已收尾 / 在途 / 可派发 / 失败）由
+   * `core/record/dispatchState.ts` 判定，此处只做“派单生命周期”到“任务池口径”的
+   * 跨域映射，两者不是同构关系（例如 `closed` 在任务池里记 `void`）。
+   */
   const map: Record<string, TaskState> = {
     open: "dispatched",
     claimed: "dispatched",
@@ -299,13 +306,13 @@ export interface TaskSummary {
   total: number;
   /** 已派出（含重试中）。 */
   dispatched: number;
-  /** 自称完成、等着确认。 */
+  /** 已上报，待验收。 */
   submitted: number;
   /** 已验收。 */
   accepted: number;
   /** 失败待重试。 */
   failed: number;
-  /** 人关掉的。 */
+  /** 人工关闭的。 */
   voided: number;
   /** 尚未派出的。 */
   pending: number;
@@ -330,7 +337,7 @@ export function taskSummary(root: string): TaskSummary {
   };
 }
 
-/** 人手动关掉一项（不在池里了）。 */
+/** 人工关闭一项（已不在池中）。 */
 export function voidTask(root: string, id: string, note = ""): TaskItem | null {
   const rows = readTasks(root);
   const idx = rows.findIndex((t) => t.id === id);
@@ -346,7 +353,7 @@ export function voidTask(root: string, id: string, note = ""): TaskItem | null {
   return next;
 }
 
-/** 人手动建一项（动态追加的需求，尚无对应派单时用）。 */
+/** 人工新建一项（动态追加的需求，尚无对应派单时用）。 */
 export function createTask(
   root: string,
   input: { title: string; detail?: string; tags?: string[]; stage?: string },

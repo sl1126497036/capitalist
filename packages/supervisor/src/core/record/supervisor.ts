@@ -26,6 +26,8 @@ import { join } from "node:path";
 import { attachmentsIn, withAttachmentLines } from "../message/attachments";
 import { readJson, readJsonl, appendJsonl, writeJson, writeJsonl } from "./json";
 import { statCached } from "./fsCache";
+import { isFailed, isSettled, isTerminal } from "./dispatchState";
+import { isGroupRef } from "./nodeRef";
 import { runtime, meta, workers, inbox, model, rootIndex, archive, ledger } from "./locations";
 import { pidAlive } from "./process";
 import { resolveDispatchNo, syncTaskForDispatch, taskNoOfDispatchId } from "./tasks";
@@ -151,6 +153,15 @@ export interface Dispatch {
   /** 恢复顺序（从 0 起，小的先上）。 */
   yield_rank?: number;
   /**
+   * 结构变更退回的时刻（ISO）。
+   *
+   * 中途插入改变了这单的上游，正在按旧上游开展的工作需要退回重做。与让位分开记：
+   * 让位是“排在别人后面”，结构退回是“产出作废、要按新结构重做”，
+   * 两套语义共用标记会让界面把“待重做”显示成“已让位”，恢复顺序也会互相干扰。
+   * 重新被领取时清除（见 `claimDispatch`）。
+   */
+  restructured_at?: string;
+  /**
    * 暂停时刻（ISO）。非空表示该派单处于暂停：不派发、不被 `capitalist next` 领取，
    * 但仍占用所属分片，避免被判定为“未派发”而重复建单。
    *
@@ -176,6 +187,14 @@ export interface Dispatch {
   parent?: string;
   parent_reason?: string;
   after?: string[];
+  /**
+   * 所属分组（组号，落盘 `G1`）。空表示不属于任何组。
+   *
+   * 组是树上的结构节点（见 `core/record/groups.ts`）：组内成员并行，组整体作为后继的前置。
+   * 与 `parent` 分工明确：`group` 表示“我是这个组的一员”，`parent` 表示“这单等待谁完成”。
+   * 下游挂组时写 `parent: "G1"` 且不写 `group`；组成员写 `group: "G1"`，`parent` 留给组的上游。
+   */
+  group?: string;
 
   retry_accept?: string;
 
@@ -438,7 +457,7 @@ export function workersDir(root: string): string {
  * 之外：读是越权，写更糟，`saveWorker` 会在任务根外落一个 json。id 由本模块生成，
  * 但入口（CLI 参数、HTTP 查询串）是外部输入，必须在拼路径之前挡住。
  */
-function isSafeWorkerId(id: string): boolean {
+export function isSafeWorkerId(id: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) && !id.includes("..");
 }
 
@@ -526,7 +545,7 @@ export function releaseWorkerNo(root: string, workerNo: string): void {
  * 该任务已经占用的进程序集合（`1`、`2`…）。
  *
  * 数据来源四处取并集：worker 索引、编号关系表、workers 目录、进程号占位表。
- * 前索引可能因并发写丢条目，关系表可能因旧档缺失，占位表补齐「已领走但尚未登记」的窗口。
+ * 前索引可能因并发写丢条目，关系表可能因旧档缺失，占位表补齐“已领走但尚未登记”的窗口。
  *
  * 不扫派单的 `worker` 字段：那张单可能拉起失败，号不该被它永久占住。
  *
@@ -562,7 +581,7 @@ function usedWorkerSeqs(root: string, taskNo: number): Set<number> {
 /**
  * 生成进程号：从派单号派生任务号，再按该任务已拉起的进程数递增，落盘形式 `2-P1`（不带 `#`）。
  *
- * 锁键带任务号（`worker-2`）：同一任务串行取号，不同任务互不排队。锁内完成「算号」，
+ * 锁键带任务号（`worker-2`）：同一任务串行取号，不同任务互不排队。锁内完成“算号”，
  * 调用方紧接着用该号 `claimDispatch`，两者在同一临界区内看到的是同一份台账，
  * 不会出现两个进程同时拿到 `2-P1`。
  *
@@ -639,6 +658,16 @@ export function listWorkers(root: string): WorkerRecord[] {
 /** worker 记录的短缓存。 */
 const WORKERS_CACHE_MS = 1000;
 let workersCache: { root: string; at: number; rows: WorkerRecord[] } | null = null;
+
+/**
+ * 清空 worker 列表缓存。
+ *
+ * 归档会把 per-worker 目录整体移走，缓存里的条目随即指向不存在的路径。
+ * 归档后若不立即失效，`listWorkers` 会继续返回已迁走的记录。
+ */
+export function invalidateWorkersCache(): void {
+  workersCache = null;
+}
 
 /**
  * 登记 worker：写 worker 记录，并把 id 登记进 `index.jsonl` 索引。同一 id 不重复登记。
@@ -754,108 +783,6 @@ export function pruneWorkers(
   }
 
   return { removed: drop.size, kept: entries.length - drop.size };
-}
-
-export function archiveFinished(
-  root: string,
-  bucket: "all" | "done" | "bad" | "run" | "queue" = "all",
-): { dir: string; workers: number; dispatches: number } {
-  const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-  const dir = archive.cleared(root, stamp);
-  mkdirSync(join(dir, "workers"), { recursive: true });
-
-  const ALIVE = new Set(["running", "starting", "claimed"]);
-  const BAD = new Set(["failed", "orphan", "missing", "gone"]);
-
-  /*
-   * 分档与界面使用同一套口径。
-   *
-   * 手动取消的派单（`closed_by: "user"`）在看板归入“已完成”档，台账中的原始状态仍可能是
-   * `failed`。只按 `closed_by` 判：`note` 会带用户填写的理由，按固定文案匹配会漏掉这类单。
-   */
-  const rows0 = readDispatches(root);
-  const canceledDispatch = new Set(
-    rows0
-      .filter((d) => d.status === "closed" && d.closed_by === "user")
-      .map((d) => d.id),
-  );
-  const failedDispatch = new Set(
-    rows0.filter((d) => d.status === "failed").map((d) => String(d.id)),
-  );
-
-  const wantWorker = (w: WorkerRecord): boolean => {
-    const s = String(w.status || "");
-    const alive = ALIVE.has(s);
-    if (bucket === "all") return true;
-    if (bucket === "run") return alive;
-    /* 排队单没有 worker 记录，那一档只动派单。 */
-    if (bucket === "queue") return false;
-    if (alive) return false;
-    const isCanceled = Boolean(w.dispatch) && canceledDispatch.has(String(w.dispatch));
-    const onFailedDispatch = Boolean(w.dispatch) && failedDispatch.has(String(w.dispatch));
-    const bad = (BAD.has(s) || onFailedDispatch) && !isCanceled;
-    if (bucket === "bad") return bad;
-    return !bad;
-  };
-
-  const wdir = workersDir(root);
-  const drop = new Set<string>();
-
-  for (const w of listWorkers(root)) {
-    if (!wantWorker(w)) continue;
-    const id = String(w.id || "");
-    if (!id || !isSafeWorkerId(id)) continue;
-    /* per-worker 目录整体归档：record/output/brief 一并移走。 */
-    const from = workers.of(root, id);
-    if (!existsSync(from)) {
-      drop.add(id);
-      continue;
-    }
-    try {
-      renameSync(from, join(dir, "workers", id));
-    } catch {
-      /* 移不动的留着，下次再清 */
-    }
-    if (!existsSync(workers.record(root, id))) drop.add(id);
-  }
-
-  if (drop.size) {
-    const index = rootIndex.worker(root);
-    try {
-      const rows = readJsonl<{ id?: string }>(index);
-      const kept = rows.filter((r) => !drop.has(String(r.id ?? "")));
-      if (kept.length !== rows.length) writeJsonl(index, kept);
-    } catch {
-      /* 索引读取失败时，多出的空条目会被 listWorkers 跳过。 */
-    }
-    workersCache = null;
-  }
-
-  let dispatches = 0;
-  try {
-    const rows = readDispatches(root);
-    /* 派单侧同样按档走：`all` 连排队与已领取的一起撤，`queue` 只撤排队。 */
-    const movesIn = (d: Dispatch): boolean => {
-      const s = String(d.status);
-      if (bucket === "all") return true;
-      if (bucket === "queue") return s === "open";
-      if (bucket === "run") return s === "claimed";
-      if (s === "closed" || s === "done") return bucket === "done";
-      if (s === "failed") return bucket === "bad";
-      return false;
-    };
-    const keep = rows.filter((d) => !movesIn(d));
-    const moved = rows.filter((d) => movesIn(d));
-    if (moved.length) {
-      writeJsonl(join(dir, "dispatch.jsonl"), moved);
-      writeJsonl(dispatchPath(root), keep);
-      dispatches = moved.length;
-    }
-  } catch {
-    /* 台账读取失败时保留原样。 */
-  }
-
-  return { dir, workers: drop.size, dispatches };
 }
 
 /** 回收参数。 */
@@ -1180,7 +1107,7 @@ export function markReported(
   const idx = rows.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   const cur = rows[idx] as Dispatch;
-  if (isSettled(cur.status)) return null;
+  if (isTerminal(cur.status)) return null;
   const ev = String(evidence ?? "").trim();
   const next: Dispatch = {
     ...cur,
@@ -1249,19 +1176,14 @@ export function claimDispatch(root: string, id: string, worker: string, session 
   delete next.yielded_at;
   delete next.yielded_by;
   delete next.yield_rank;
+  /*
+   * 结构变更标记同样到此为止：这一单是被退回重做的，重新领取说明它已按新上游开工。
+   * 若不予清除，界面会一直标“待重做”，后续判定也会继续按旧结构处理它。
+   */
+  delete next.restructured_at;
   rows[idx] = next;
   writeJsonl(dispatchPath(root), rows);
   return next;
-}
-
-/**
- * 了这一单就再也没有下文的状态。
- *
- * `closed` 也在里面：结束是终态，`finishDispatch` 之类“改结论”的写入一律拒绝，
- * 否则一次晚到的 worker 上报能把人刚关掉的单重新打开。
- */
-function isSettled(status: DispatchStatus): boolean {
-  return status === "done" || status === "failed" || status === "closed";
 }
 
 /**
@@ -1280,7 +1202,7 @@ export function finishDispatch(
   const idx = rows.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   const cur = rows[idx] as Dispatch;
-  if (isSettled(cur.status)) return null;
+  if (isTerminal(cur.status)) return null;
 
   const next: Dispatch = {
     ...cur,
@@ -1372,7 +1294,11 @@ export function missingPrerequisites(
   const { ids } = prerequisitesOf(d);
   if (ids.length === 0) return [];
   const byId = new Set(rows.map((x) => String(x.id)));
-  return ids.filter((id) => !byId.has(id));
+  /*
+   * 组号不是派单，不按“派单孤儿”计：组的缺失由组索引的 `dangling` 单独上报
+   * （`group_missing`）。若合并统计，每张挂组的派单都会记一条误报的孤儿事件。
+   */
+  return ids.filter((id) => !isGroupRef(id) && !byId.has(id));
 }
 
 /** 一条链的身份：`lineage` 为空的单自成一链。 */
@@ -1426,7 +1352,7 @@ export function pendingPrerequisites(
   }
   if (ids.length === 0) return pending;
 
-  const settled = rows.filter((x) => x.status === "done" || x.status === "closed");
+  const settled = rows.filter((x) => isSettled(String(x.status)));
   const settledIds = new Set(settled.map((x) => String(x.id)));
   /* 派生链 -> 已完成的那些记录。判据是“同一件事的后续尝试”，不是“同一条链上任一张”。 */
   const settledByLineage = new Map<string, Dispatch[]>();
@@ -1740,7 +1666,7 @@ export function closeDispatch(root: string, id: string, note?: string, by = "use
   if (idx < 0) return null;
   const cur = rows[idx] as Dispatch;
   /** `failed` 必须能关。 */
-  if (isSettled(cur.status) && cur.status !== "failed") return null;
+  if (isTerminal(cur.status) && cur.status !== "failed") return null;
 
   const now = new Date().toISOString();
   const next: Dispatch = {
@@ -1792,7 +1718,7 @@ export function openReviewDispatch(
   const idx = rows.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   const cur = rows[idx] as Dispatch;
-  if (isSettled(cur.status)) return null;
+  if (isTerminal(cur.status)) return null;
   const next: Dispatch = {
     ...cur,
     status: "review",

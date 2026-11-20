@@ -94,7 +94,7 @@ import { copyStandardNote, memoriesFor, primeMemory, rememberLesson, renderMemor
 import { commitCursor, readPendingMq, type MqMessage } from "../core/dispatch/mq";
 import { attachmentsIn, bindAttachments, stripAttachments, withAttachmentLines } from "../core/message/attachments";
 import { attachmentsOfMessage } from "../core/message/messages";
-import { ensureTaskForDispatch, taskNoOfDispatchId, titleSimilarity } from "../core/record/tasks";
+import { taskNoOfDispatchId, titleSimilarity } from "../core/record/tasks";
 import {
   clearPreemptLease,
   isImmediate,
@@ -107,6 +107,10 @@ import {
   yieldedDispatches,
 } from "../core/dispatch/preempt";
 import { autoRebuild } from "../core/dispatch/rebuildTree";
+import { commitDispatch, composeDispatch, deriveDispatch } from "../core/dispatch/newDispatch";
+import { applyGroupDecl, groupIndexFrom, resolveParentNode } from "../core/dispatch/groupOps";
+import { applyInsertNow } from "./loop/restructure";
+import { isReady } from "../core/dispatch/deps";
 import {
   allDirs,
   workers as workersLoc,
@@ -119,7 +123,6 @@ import { markQuotaExhausted } from "../core/guard/quota";
 import { loadState, updateState } from "../core/record/state";
 import {
   activeDispatches,
-  appendDispatch,
   claimDispatch,
   clearStopFlag,
   checkTreeEdge,
@@ -179,8 +182,10 @@ import { reapOrphans } from "./worker/reapOrphans";
 import { ensureGuard, stopGuard } from "./worker/guard";
 import { laneOfWorker, recordLaneUsage } from "./judge/sessionLane";
 import { shardTitle, taskTitle } from "./usage/taskTitle";
-import { dispatchNoTable, dispatchOfThreadNo, threadIdByNo } from "./usage/threadNo";
+import { dispatchNoTable, dispatchOfRef, dispatchOfThreadNo } from "./usage/threadNo";
 import { dispatchNoLabel as dispatchDisplayLabel, taskNoLabel } from "../core/record/idMap";
+import { isGroupRef } from "../core/record/nodeRef";
+import { parseRef } from "../core/record/nodeRef";
 import { msgId } from "../core/message/msgId";
 import { decide } from "./judge/brain";
 import { brainSessionOf } from "./judge/brainLane";
@@ -757,28 +762,20 @@ function resetSubtree(
     return;
   }
   const nextId = issued.id;
-  const next: Dispatch = {
+  const next = deriveDispatch(failed, {
     id: nextId,
-    at: new Date().toISOString(),
     stage: failed.stage,
     shard: failed.shard ?? "",
     action: stripAttachments(String(failed.action ?? "")),
-    status: "open",
     source: "requeue",
     attempt: Number(failed.attempt ?? 1) + 1,
     lineage: String(de.lineage ?? failed.id),
     atts: [],
-    ...(de.title ? { title: de.title } : {}),
-    ...(failed.tags ? { tags: failed.tags } : {}),
-    ...(failed.parent ? { parent: String(failed.parent) } : {}),
-    ...(failed.parent_reason ? { parent_reason: String(failed.parent_reason) } : {}),
-    ...(Array.isArray(failed.after) && failed.after.length ? { after: [...failed.after] } : {}),
-    ...(de.model ? { model: de.model } : {}),
-    ...(de.model_fallback ? { model_fallback: de.model_fallback } : {}),
-    cascade_resets: resets,
-  };
-  appendDispatch(root, next);
-  ensureTaskForDispatch(root, next);
+    cascadeResets: resets,
+    /* 继承树边、标题、标签、模型与多前置，不继承 role。 */
+    keys: ["tree", "title", "tags", "model", "after"],
+  });
+  commitDispatch(root, next);
 
   for (const id of victims) {
     const r = readDispatches(root).find((x) => x.id === id);
@@ -2957,21 +2954,17 @@ function handleModelFallback(
     const action = freshAction === null
       ? spliceDirectives(d.action, taken)
       : withAcceptance(root, spliceDirectives(freshAction, taken));
-    const nd = {
+    const nd = composeDispatch({
       id: nid,
-      at: new Date().toISOString(),
       stage: d.stage,
       shard: d.shard,
       /* 换模型重试沿用原单标题；原单无标题时按分片映射补齐。 */
       title: ex.title || shardTitle(d.shard) || taskTitle({ shard: d.shard, action }),
       action,
-      status: "open",
       source: "requeue",
       model: fb,
-    } as DispatchEx;
-    nd.lineage = nd.lineage ?? nd.id;
-    appendDispatch(root, nd);
-    ensureTaskForDispatch(root, nd);
+    });
+    commitDispatch(root, nd);
     recordEvent(root, "dispatch_open", {
       dispatch: nd.id,
       stage: nd.stage,
@@ -3050,7 +3043,7 @@ function reject(reason: string): SupervisorResult {
 /**
  * 取号失败即不建单。
  *
- * 取号锁重试用尽后不静默降级成「按当前最大值猜一个号」——那正是撞号的来源。调用方拿到
+ * 取号锁重试用尽后不静默降级成“按当前最大值猜一个号”：那正是撞号的来源。调用方拿到
  * `error` 后必须把失败如实回给用户（用户建单），或跳过本轮（监工内部重派）。
  */
 function issueDispatchId(
@@ -3354,7 +3347,9 @@ async function applyOneDirective(
      * 与 `queue` 的区别保留：queue 只插队到队首，不抢占。
      */
     const nowM = /^\s*--now\s+/i.exec(boundArg.text);
-    const wantNow = Boolean(nowM);
+    /* `INSERT: before #G1 now` 与 `--now` 同义：建单后立即执行，由同一处 promote 处理。 */
+    const insDecl = (d as SupervisorDirective).insert;
+    const wantNow = Boolean(nowM) || insDecl?.now === true;
     const argClean = nowM ? boundArg.text.slice(nowM[0].length).trim() : boundArg.text;
     /*
      * 分类标签写在正文最前的方括号内，作为会话键：同类共用一个键以复用上下文，
@@ -3436,23 +3431,41 @@ async function applyOneDirective(
       }
       afterIds.push(String(hit.id));
     }
+    /* 父节点先按派单查找，未找到再按组查找。两种语义的拒绝原因不同，判定在 groupOps。 */
     let parentId = "";
+    let parentAsGroup = "";
     if (parentTok) {
-      const hit = resolveDispatchRef(root, afterRows, parentTok);
-      if (!hit) {
-        return reject(
-          `PARENT 里的父派单“${parentTok}”在台账里找不到：树边不落数据就不生效。先派父节点，或核对编号后重发。`,
-        );
-      }
-      parentId = String(hit.id);
-      /* checkTreeEdge 校验父节点存在、未结束、不成环、已写理由；拒绝原因写入指令记录供界面显示。 */
-      const chk = checkTreeEdge(afterRows, parentId, parentWhy);
-      if (!chk.ok) return reject(chk.reason);
+      const pn = resolveParentNode(root, parentTok, parentWhy, afterRows, (t) => resolveDispatchRef(root, afterRows, t));
+      if (!pn.ok) return reject(pn.error);
+      if (pn.asGroup) parentAsGroup = pn.id;
+      else parentId = pn.id;
+    }
+    /*
+     * 分组声明：`new` 新建、`join` 加入既有组。成员归属只落在派单的 `group` 字段上，
+     * 组记录不存成员表。两处保存同一事实会产生不一致。
+     * 校验（取号、组是否存在、成员父一致）在 `applyGroupDecl` 里，本处只处理拒绝。
+     */
+    const groupDecl = (d as SupervisorDirective).group;
+    /* 落盘与判定统一用“父节点”：派单 id 或组号，两者不会互相误认（派单 id 不以 G 开头）。 */
+    const parentNode = parentId || parentAsGroup;
+    let groupId = "";
+    if (groupDecl) {
+      const applied = applyGroupDecl(root, groupDecl, {
+        parentId: parentNode,
+        stage: state.stage,
+        rows: afterRows.length ? afterRows : readDispatches(root),
+      });
+      if (!applied.ok) return reject(applied.error);
+      groupId = applied.id;
     }
     /* 同标签且内容相似的需求合并到同一 open 单，action 超过 `MERGE_MAX_CHARS` 时改为新建。 */
     const MERGE_MAX_CHARS = 6000;
-    /* 带依赖的单不合并：并入他单后依赖边不随记录保存，重启会丢失执行顺序。 */
-    if (tag && afterIds.length === 0 && !parentId) {
+    /*
+     * 带依赖的单不合并：并入他单后依赖边不随记录保存，重启会丢失执行顺序。
+     * 组成员同样不合并：并入别的单会让组少一名成员，而组的完成条件是"全体完成"，
+     * 少算一名成员就可能提前放行下游。
+     */
+    if (tag && afterIds.length === 0 && !parentNode && !groupId) {
       /* 标签仅作必要条件，另按标题与正文开头的相似度判定，阈值 0.45。 */
       const head = body.slice(0, 80);
       const same = readDispatches(root).find((x) => {
@@ -3545,32 +3558,35 @@ async function applyOneDirective(
      * 插入执行的单没有契约分片可以继承模型设定，不在这里确定就只能使用启动参数，面板上选择的模型会失效。
      */
     const adhocModel = defaultDispatchModel(root, undefined);
-    const adhoc = {
+    const adhoc = composeDispatch({
       id,
-      at: new Date().toISOString(),
       stage: state.stage,
       shard: "",
       /* title 在建单时确定；缺失时界面回落为正文前 40 字。 */
       title: taskTitle({ shard: "", action: body }),
       action: actionText,
-      status: "open",
       source: "adhoc",
       attempt: 1,
       urgent: true,
       /* `atts` 在建单时固化，重派按此字段重建附件行。 */
       atts: ownAtts,
-      ...(bound.msgId ? { src_msg: bound.msgId } : {}),
-      ...(srcMsgs.length ? { src_msgs: srcMsgs } : {}),
+      srcMsg: bound.msgId,
+      srcMsgs,
       ...(tag ? { tags: [tag] } : {}),
       /* `after` 落库供 fillSlots 每轮重算，重启与重派后执行顺序保持不变。 */
       ...(afterIds.length ? { after: afterIds } : {}),
       /* `parent` 与 `parent_reason` 一起落盘，缺理由时重启后无法判定该依赖是否为必需。 */
-      ...(parentId ? { parent: parentId, parent_reason: parentWhy } : {}),
+      ...(parentNode ? { parent: parentNode, parentReason: parentWhy } : {}),
+      /* 组成员归属只落这一处；重派由建单工厂的 `tree` 继承键自动带上。 */
+      ...(groupId ? { group: groupId } : {}),
       ...(adhocModel ? { model: adhocModel } : {}),
-    } as Dispatch;
-    adhoc.lineage = adhoc.lineage ?? adhoc.id;
-    appendDispatch(root, adhoc);
-    ensureTaskForDispatch(root, adhoc);
+    });
+    commitDispatch(root, adhoc);
+    /* 结构插入：细节在 `loop/restructure.ts`（台账先改、进程后停，失败不回滚建单）。 */
+    if (insDecl) {
+      const resolve = (rows: Dispatch[], tok: string) => resolveDispatchRef(root, rows, tok);
+      applyInsertNow(root, id, insDecl, (d as SupervisorDirective).insert_mode, resolve, detail);
+    }
     /* `--now` 建单当轮由 `promoteTask` 写 `promoted_at` 触发抢占；失败不阻断建单，降级为排队优先。 */
     const nowPrompted = wantNow ? promoteTask(root, id, { by: "supervisor" }) : null;
     if (wantNow && !nowPrompted?.ok) {
@@ -3590,16 +3606,17 @@ async function applyOneDirective(
       atts: ownAtts,
       src_msg: bound.msgId,
       after: afterIds,
-      parent: parentId,
+      parent: parentNode,
       parent_reason: parentWhy,
+      group: groupId,
     });
     /* 回执按槽位占用如实标注是否会立即执行。 */
     const cap = Math.max(1, Number(loadSupervisor(root)?.max_workers ?? 1) || 1);
     const busy = liveWorkers(root).length;
     const when = wantNow && nowPrompted?.ok
       ? "已立即执行：抢占槽位，运行中的派单退回队首"
-      : parentId
-      ? `已挂到父节点 ${parentId} 下（${parentWhy}）：父节点完成前不会启动，不占并行槽位`
+      : parentNode
+      ? `已挂到父节点 ${parentNode} 下（${parentWhy}）：父节点完成前不会启动，不占并行槽位`
       : afterIds.length
         ? `已登记依赖 ${afterIds.join("、")}：前置单全部完成前不会启动，不占并行槽位`
         : busy < cap
@@ -3631,25 +3648,21 @@ async function applyOneDirective(
     }
     const id = issued.id;
     const tag = action === "fix" ? `fix-${id.slice(-6)}` : "diagnose";
-    const rec = {
+    const rec = composeDispatch({
       id,
-      at: new Date().toISOString(),
       stage: state.stage,
       shard: "",
       title: `${action === "fix" ? "修复" : "诊断"}：${boundArg.text.slice(0, 56)}`,
       action: boundArg.text,
-      status: "open",
       source: "adhoc",
       attempt: 1,
       urgent: true,
       role: action,
       tags: [tag],
       atts: boundArg.kept,
-      ...(bound.msgId ? { src_msg: bound.msgId } : {}),
-    } as Dispatch;
-    rec.lineage = rec.lineage ?? rec.id;
-    appendDispatch(root, rec);
-    ensureTaskForDispatch(root, rec);
+      srcMsg: bound.msgId,
+    });
+    commitDispatch(root, rec);
     recordEvent(root, "dispatch_open", {
       dispatch: id,
       stage: state.stage,
@@ -3817,25 +3830,19 @@ async function applyOneDirective(
       return reject(`重开未执行：${issued.error?.message ?? "取号锁被占用"}。稍后重试即可，原单状态未改动。`);
     }
     const nextId = issued.id;
-    const next: Dispatch = {
+    const next = deriveDispatch(hit, {
       id: nextId,
-      at: new Date().toISOString(),
       stage: hit.stage,
       shard: hit.shard ?? "",
       action: stripAttachments(String(hit.action ?? "")),
-      status: "open",
       source: "requeue",
       attempt: Number(hit.attempt ?? 1) + 1,
       lineage: String(de.lineage ?? hit.id),
       atts: [],
-      ...(de.title ? { title: de.title } : {}),
-      ...(hit.tags ? { tags: hit.tags } : {}),
-      ...(hit.parent ? { parent: String(hit.parent) } : {}),
-      ...(de.model ? { model: de.model } : {}),
-      ...(de.model_fallback ? { model_fallback: de.model_fallback } : {}),
-    };
-    appendDispatch(root, next);
-    ensureTaskForDispatch(root, next);
+      /* 重开要回到原来的树位置：树边（含分组）、标题、标签、模型一并继承。 */
+      keys: ["tree", "title", "tags", "model"],
+    });
+    commitDispatch(root, next);
     recordEvent(root, "dispatch_reopened", {
       dispatch: nextId,
       from: String(hit.id),
@@ -3963,25 +3970,22 @@ async function applyOneDirective(
 }
 
 /**
- * 把 PARENT: / AFTER: 引用解析成台账行：#NN 按任务编号表转线程键取该链最新一张，其余按派单 id 精确匹配。
- * 落库一律写派单 id；找不到返回 undefined。
+ * 把 PARENT: / AFTER: 引用解析成台账行。
+ *
+ * 编号类引用（任务号、派单 id、进程号）统一走 {@link dispatchOfRef}，与看板按号操作、
+ * 命令行排结构使用同一套基准：任务号取派单序最大的那一单，不按 `at` 或落盘顺序另算一遍。
+ * 组号不在此处理：组不是派单行，解析结果是组号本身，由调用方在需要时查组台账。
+ *
+ * 不按状态过滤：前置单已经结束是正常情形（依赖已满足），指向它才不会重复等待。
+ *
+ * 落库一律写派单 id；找不到时返回 undefined。
  */
 function resolveDispatchRef(root: string, rows: Dispatch[], tok: string): Dispatch | undefined {
-  const noM = /^#\s*(\d{1,4})$/.exec(tok);
-  if (!noM) return rows.find((x) => String(x.id) === tok);
-  const key = threadIdByNo(root, Number(noM[1]));
-  if (!key) return undefined;
-  const [st, tailRaw] = key.split("/");
-  const stage = String(st ?? "").trim().toLowerCase();
-  const tail = String(tailRaw ?? "").trim().toLowerCase();
-  const linTail = tail.startsWith("x") ? tail.slice(1) : "";
-  return [...rows].reverse().find((x) => {
-    if (stage && String(x.stage ?? "").toLowerCase() !== stage) return false;
-    const lin = String(x.lineage ?? x.id);
-    if (linTail) return lin.slice(-6).toLowerCase() === linTail;
-    if (!tail || tail === "main") return !String(x.shard ?? "").trim();
-    return String(x.shard ?? "").toLowerCase() === tail;
-  });
+  const ref = parseRef(tok);
+  if (ref.kind === "group") return undefined;
+  /* 历史 `D-` 号、线程键不是编号形态，按台账原文精确匹配。 */
+  if (ref.kind === "other") return rows.find((x) => String(x.id) === ref.id);
+  return dispatchOfRef(root, tok, { rows, anyStatus: true });
 }
 
 /**
@@ -4781,15 +4785,13 @@ function requeueAdhoc(root: string, state: TaskState, out: (s: string) => void):
      */
     const prevBlocker = failures > 0 ? findPreviousBlocker(root, { lineage: chainId }) : null;
     /* 重派剥离正文附件行并将 atts 清零，避免附件逐轮累积。 */
-    const rec: Dispatch = {
+    const rec = deriveDispatch(d, {
       id,
-      at: new Date().toISOString(),
       stage: d.stage,
       shard: "",
       action: prevBlocker
         ? appendSection(stripAttachments(String(d.action ?? "")), BLOCKER_MARKER, blockerLines(prevBlocker))
         : stripAttachments(String(d.action ?? "")),
-      status: "open",
       source: "adhoc",
       /* attempt 按整条链的失败次数计。 */
       attempt: failures + 1,
@@ -4797,22 +4799,14 @@ function requeueAdhoc(root: string, state: TaskState, out: (s: string) => void):
       atts: [],
       /* 继承 lineage，供下次重派识别同一件事。 */
       lineage: chainId,
-      /* 重派继承 parent 与 after，否则树边丢失、重启前后顺序不一致。 */
-      ...(Array.isArray(d.after) && d.after.length ? { after: [...d.after] } : {}),
-      ...(d.parent ? { parent: String(d.parent) } : {}),
-      ...(d.parent_reason ? { parent_reason: String(d.parent_reason) } : {}),
-      ...(de.title ? { title: de.title } : {}),
       /* role=fix 的重派改用新会话，不复用上次修复的上下文。 */
-      ...(d.tags ? { tags: d.role === "fix" ? [`fix-${id.slice(-6)}`] : d.tags } : {}),
-      ...(d.role ? { role: d.role } : {}),
-      ...(de.model ? { model: de.model } : {}),
-      ...(de.model_fallback ? { model_fallback: de.model_fallback } : {}),
+      tags: d.tags ? (d.role === "fix" ? [`fix-${id.slice(-6)}`] : d.tags) : undefined,
       /* retry_accept 写入独立字段，不拼进 action：避免改变会话指纹导致上下文丢失。 */
-      ...(accept ? { retry_accept: accept } : {}),
-    };
-    rec.lineage = rec.lineage ?? rec.id;
-    appendDispatch(root, rec);
-    ensureTaskForDispatch(root, rec);
+      retryAccept: accept,
+      /* 重派继承树边（含分组）、标题、标签、模型、角色与多前置。 */
+      keys: ["tree", "title", "tags", "model", "role", "after"],
+    });
+    commitDispatch(root, rec);
     recordEvent(root, "dispatch_retry", {
       dispatch: id,
       stage: d.stage,
@@ -4858,7 +4852,8 @@ const forestWarned = new Set<string>();
 function reportForestAnomalies(root: string, rows: Dispatch[], out: (s: string) => void): void {
   const f = dispatchForest(rows);
   const live = new Set<string>();
-  reportMultiPrereqOrphans(root, rows, f, live, detail);
+  /* 播报统一走调用方出口：写死 `detail` 会让传入的回调收不到。 */
+  reportMultiPrereqOrphans(root, rows, f, live, out);
   for (const cyc of f.cycles) {
     const key = `cycle:${cyc.join(">")}`;
     live.add(key);
@@ -4867,10 +4862,15 @@ function reportForestAnomalies(root: string, rows: Dispatch[], out: (s: string) 
     detail(`[监工] 派单依赖成环（${cyc.join("、")}）：这几单互相等待，没有一张会启动，需人工改树边`);
   }
   for (const id of f.orphans) {
+    const row = rows.find((x) => String(x.id) === id);
+    /*
+     * 父节点是组号时不是孤儿：组没有自己的派单行，位置由成员合成（见森林视图）。
+     * 若不跳过，每张挂组的派单每轮都会记一条“父节点不在台账里”，掩盖真正的孤儿。
+     */
+    if (row && isGroupRef(String(row.parent ?? ""))) continue;
     const key = `orphan:${id}`;
     live.add(key);
     if (forestWarned.has(key)) continue;
-    const row = rows.find((x) => String(x.id) === id);
     recordEvent(root, "dispatch_parent_missing", { dispatch: id, parent: String(row?.parent ?? ""), stage: String(row?.stage ?? "") });
     detail(`[监工] ${id} 的父节点不在台账里：按已满足处理并放行，顺序可能比原计划靠前`);
   }
@@ -4904,7 +4904,7 @@ function reportMultiPrereqOrphans(
       stage: String(r.stage ?? ""),
       missing,
     });
-    detail(`[监工] ${r.id} 挂的前置 ${missing.join("、")} 不在台账里（可能已归档或台账被改）：依赖按已满足放行，顺序可能比原计划靠前`);
+    out(`[监工] ${r.id} 挂的前置 ${missing.join("、")} 不在台账里（可能已归档或台账被改）：依赖按已满足放行，顺序可能比原计划靠前`);
   }
 }
 
@@ -5083,6 +5083,11 @@ function fillSlots(
      * after 为 "*" 时等所有其它单到终态。
      */
     const allRows = readDispatches(root);
+    /*
+     * 组索引每轮按当前台账重算一次。挂组的派单必须靠它判定"整组是否做完"：
+     * 缺索引时组号会被当成不存在的前置，按孤儿规则放行，成员还在排队时下游就已启动。
+     */
+    const gidx = groupIndexFrom(root, allRows);
     if (!forestChecked) {
       reportForestAnomalies(root, allRows, detail);
       forestChecked = true;
@@ -5092,7 +5097,7 @@ function fillSlots(
         x.status === "open" &&
         /* 暂停单不参与派发：用户的意图优先于队列顺序，只有唤醒后才重新进入候选。 */
         !dispatchPaused(x) &&
-        dependenciesSettled(x, allRows) &&
+        isReady(x, allRows, gidx) &&
         !(hold.all || (Boolean(x.shard) && hold.shards.includes(String(x.shard)))),
     );
     if (open.length === 0) return;
@@ -5243,9 +5248,8 @@ function dispatch(
         lane: laneKeyOf({ stage: fresh.stage, shard: s.id }),
       });
       const action = withAcceptance(root, spliceDirectives(s.action, taken));
-      const d = {
+      const d = composeDispatch({
         id,
-        at: new Date().toISOString(),
         stage: fresh.stage,
         shard: s.id,
         /* 标题优先级：契约中文 title -> 分片映射 -> 正文摘要；重派沿用首次登记的标题。 */
@@ -5257,15 +5261,12 @@ function dispatch(
               ) || taskTitle({ contractTitle: s.title, shard: s.id, action })
             : taskTitle({ contractTitle: s.title, shard: s.id, action }),
         action,
-        status: "open",
         source,
         attempt,
         model: model ?? undefined,
-        model_fallback: fb ?? undefined,
-      } as DispatchEx;
-      d.lineage = d.lineage ?? d.id;
-      appendDispatch(root, d);
-      ensureTaskForDispatch(root, d);
+        modelFallback: fb ?? undefined,
+      });
+      commitDispatch(root, d);
       recordEvent(root, "dispatch_open", {
         dispatch: d.id,
         stage: d.stage,
@@ -5300,9 +5301,8 @@ function dispatch(
   const action = withAcceptance(root, spliceDirectives(pickAction(stageById(contract, fresh.stage), fresh), taken));
   /* 整阶段单同样按 defaultDispatchModel 取常驻派单模型。 */
   const model = defaultDispatchModel(root, wopts.model);
-  const d = {
+  const d = composeDispatch({
     id,
-    at: new Date().toISOString(),
     stage: fresh.stage,
     /* 整阶段单标题取阶段名、再退正文摘要；重派沿用首次登记的标题。 */
     title:
@@ -5320,14 +5320,11 @@ function dispatch(
         action,
       }),
     action,
-    status: "open",
     source,
     attempt,
     model: model ?? undefined,
-  } as DispatchEx;
-  d.lineage = d.lineage ?? d.id;
-  appendDispatch(root, d);
-  ensureTaskForDispatch(root, d);
+  });
+  commitDispatch(root, d);
   recordEvent(root, "dispatch_open", {
     dispatch: d.id,
     stage: d.stage,
@@ -5404,9 +5401,8 @@ function createOpenShardDispatch(
     : withAcceptance(root, spliceDirectives(actionText, taken));
   /* 标题沿用这一片首次登记的值；查不到前身才现生成。 */
   const contractShard = stageParallel(contract, state.stage).find((s) => s.id === shard.id);
-  const d = {
+  const d = composeDispatch({
     id,
-    at: new Date().toISOString(),
     stage: state.stage,
     shard: shard.id,
     title:
@@ -5415,16 +5411,13 @@ function createOpenShardDispatch(
         (x) => String(x.stage ?? "") === state.stage && String(x.shard ?? "") === shard.id,
       ) || taskTitle({ contractTitle: contractShard?.title ?? shard.title, shard: shard.id, action }),
     action,
-    status: "open",
     source: "requeue",
     attempt,
     model: model ?? undefined,
-    model_fallback: fb ?? undefined,
-    ...(accept ? { retry_accept: accept } : {}),
-  } as DispatchEx;
-  d.lineage = d.lineage ?? d.id;
-  appendDispatch(root, d);
-  ensureTaskForDispatch(root, d);
+    modelFallback: fb ?? undefined,
+    retryAccept: accept,
+  });
+  commitDispatch(root, d);
   recordEvent(root, "dispatch_open", {
     dispatch: d.id,
     stage: d.stage,
@@ -5515,7 +5508,7 @@ function launch(
   const alloc = (): { id: string; claimed: Dispatch | null } => {
     const wid = newWorkerId(root, d.id);
     /*
-     * 领号即占位；只有「领走了这张单」才算真正用掉该号。领不到或中途抛错都立即释放，
+     * 领号即占位；只有“领走了这张单”才算真正用掉该号。领不到或中途抛错都立即释放，
      * 保证拉起失败的号下次还能用（进程号不因失败而 +1）。
      */
     try {
@@ -6072,25 +6065,21 @@ function escalateStuckShard(
     return;
   }
   const id = issued.id;
-  const rec = {
+  const rec = composeDispatch({
     id,
-    at: new Date().toISOString(),
     stage,
     shard: "",
     title: `诊断：${stage}/${shardId} 连续失败 ${failures} 次`,
     action:
       `[${mark}] 分片 ${stage}/${shardId} 已连续失败 ${failures} 次，查清根因：为什么每次都失败、卡在哪一步。` +
       `失败历史：${history || "（无）"}。只查不改。`,
-    status: "open",
     source: "adhoc",
     attempt: 1,
     urgent: true,
     role: "diagnose",
     tags: ["diagnose"],
-  } as Dispatch;
-  rec.lineage = rec.lineage ?? rec.id;
-  appendDispatch(root, rec);
-  ensureTaskForDispatch(root, rec);
+  });
+  commitDispatch(root, rec);
   recordEvent(root, "stuck_escalated", { dispatch: id, stage, shard: shardId, failures, history });
   /* 连续失败作为反复出现的卡点记入记忆。 */
   rememberLesson(root, `分片 ${stage}/${shardId} 连续失败 ${failures} 次：${history || "无失败说明"}`, id);

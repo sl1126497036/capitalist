@@ -125,3 +125,33 @@ test("规则6：board 子模块用 __dirname 上跳不少于两级", () => {
       "产物在 dist/supervisor/board/，到 dist 要上跳两级。",
   );
 });
+
+test("规则7：建单写盘只有一个入口", () => {
+  /*
+   * 建单曾在 11 处各写一遍“组装字段 + appendDispatch + 同步任务池”：
+   * 新增一个字段（例如分组 `group`）要改 10 处，漏一处就是重派后树边或分组丢失。
+   * 现收口于 `core/dispatch/newDispatch.ts`，其余模块不得直接写台账。
+   *
+   * 例外只有两个：
+   *   - `core/record/supervisor.ts` 是 `appendDispatch` 的定义处；
+   *   - `supervisor/context/reload.ts` 的复验单不投影任务池（它是核对动作，不是待办），
+   *     通过 `composeDispatch` 组装后直接落盘。
+   */
+  const allowed = new Set([
+    "src/core/record/supervisor.ts",
+    "src/core/dispatch/newDispatch.ts",
+    "src/supervisor/context/reload.ts",
+  ]);
+  const offenders = [];
+  for (const file of walk(SRC)) {
+    const relPath = rel(file);
+    if (allowed.has(relPath)) continue;
+    if (/\bappendDispatch\s*\(/.test(readFileSync(file, "utf8"))) offenders.push(relPath);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `建单写盘绕过了唯一入口：\n${offenders.join("\n")}\n` +
+      "请改用 core/dispatch/newDispatch.ts 的 composeDispatch / deriveDispatch + commitDispatch。",
+  );
+});

@@ -24,6 +24,8 @@ function ntitle(node) {
  * 仅已启动状态显示时间读数。
  */
 function started(node) {
+  /* 组是结构节点，没有进程与耗时。显示“启动/耗时”会被误认为独立任务。 */
+  if (node.kind === "group") return false;
   const s = String(node.state || "");
   return s === "running" || s === "review" || s === "done" || s === "failed" || s === "closed";
 }
@@ -50,11 +52,21 @@ function durText(node) {
   <div class="fv-col">
     <div
       class="fv-node"
-      :class="[item.node.state, { cut: item.node.blocked && item.node.state !== 'failed', cycle: item.node.inCycle }]"
+      :class="[
+        item.node.state,
+        {
+          cut: item.node.blocked && item.node.state !== 'failed',
+          cycle: item.node.inCycle,
+          group: item.node.kind === 'group',
+        },
+      ]"
     >
       <div class="fv-nl1">
         <i class="fv-dot" :class="item.node.state" />
         <span class="fv-ntitle">{{ ntitle(item.node) }}</span>
+      </div>
+      <div v-if="item.node.kind === 'group'" class="fv-ngroup">
+        {{ t("组内完成") }} {{ item.node.groupDone ?? 0 }}/{{ item.node.groupTotal ?? 0 }}
       </div>
       <div class="fv-nmeta">
         <span v-if="started(item.node)" class="fv-tm">
