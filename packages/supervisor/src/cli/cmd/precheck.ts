@@ -21,6 +21,7 @@ import { findRoot } from "../../core/record/paths";
 import { decide } from "../../core/guard/permission";
 import { resolveModeFor } from "../../core/record/state";
 import { skillDirs } from "../../agent/locations";
+import { skillAllowRoots } from "../../supervisor/skills";
 import { flagBool, flagString, type Parsed } from "../args";
 import { loadOrDie, rootOrDie } from "./context";
 import { die, write } from "../output";
@@ -63,7 +64,9 @@ export function cmdGate(p: Parsed): number {
   }
 
   const act = detectAction(text);
-  const local = root ? localCheck(contract, root, extractLocalPaths(text, root), act) : null;
+  /* 与 hook 同一口径：技能目录内的读取不算越界，预检不能比实际拦截更严。 */
+  const extra = root ? skillExtraOf(root) : {};
+  const local = root ? localCheck(contract, root, extractLocalPaths(text, root), act, extra) : null;
   const localDecision = local ? tightenLocal(mode, local.decision, act, decide) : null;
 
   if (flagBool(p, "json")) {
@@ -83,6 +86,14 @@ export function cmdGate(p: Parsed): number {
 }
 
 /**
+ * 只读白名单的技能根，口径与 hook 侧（agent/dispatch）一致。
+ */
+function skillExtraOf(root: string): { skillRoots: string[]; skillCacheRoots: string[] } {
+  const r = skillAllowRoots(root);
+  return { skillRoots: r.skills, skillCacheRoots: r.cache };
+}
+
+/**
  * 本机边界预检。
  *
  * 只判一条路径，不执行。返回码：0 放行 / 2 需说明理由或被拒。
@@ -95,7 +106,7 @@ export function cmdLocalCheck(p: Parsed): number {
 
   const action = (flagString(p, "action") ?? "read") as "read" | "write" | "delete";
   const mode = resolveModeFor(root, contract);
-  const res = localCheck(contract, root, [one], action);
+  const res = localCheck(contract, root, [one], action, skillExtraOf(root));
   const decided = tightenLocal(mode, res.decision, action, decide);
 
   if (flagBool(p, "json")) {

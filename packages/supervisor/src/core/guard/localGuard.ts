@@ -7,15 +7,16 @@
  *   1. 敏感路径或敏感文件名   拒，不接受理由
  *   2. 删除任务根以外的内容   拒
  *   3. 在任务根或 allow_roots 内   放行
- *   4. 在边界外且理由仍在有效期内   放行，列入待复核
- *   5. 在边界外且无理由     先要求登记理由
+ *   4. 只读白名单命中（技能目录 / allow_read_paths）且动作为读   放行
+ *   5. 在边界外的其它动作     转申请，由监工裁决
  *
  * 敏感位置在理由之前判定：`~/.ssh` 与浏览器凭据不属于“给个理由就能碰”的范围。
+ * 只读白名单只对读生效，且挡掉凭据类文件名，不把技能目录变成可写区或凭据通道。
  */
 
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import type { Contract } from "../contract/contract";
 import { readJsonl } from "../record/json";
@@ -85,6 +86,67 @@ export interface LocalCheckResult {
 }
 
 /**
+ * 判定的额外输入。由上层（agent / cli）注入，core 不反向依赖宿主注册表。
+ *
+ * 技能根按宿主配置目录展开，只有上层知道当前装了哪些宿主；这里只接收结果。
+ */
+export interface LocalCheckExtra {
+  /** 各宿主 `skills/` 目录：其下任意文件的只读访问都放行。 */
+  skillRoots?: string[];
+  /** 各宿主插件缓存目录：其下须位于含 `SKILL.md` 的技能包内才放行。 */
+  skillCacheRoots?: string[];
+}
+
+/**
+ * 该路径是否位于插件缓存里的技能包内。
+ *
+ * 缓存目录下不全是技能（还有连接器、其它插件），整目录放行会把无关内容一起放出去。
+ * 判据是向上找到 `SKILL.md`：技能包的内容文件都在自己的包目录内。
+ *
+ * @param cacheRoots 已归一化的缓存根。
+ */
+function insideSkillPackage(np: string, cacheRoots: string[]): boolean {
+  for (const c of cacheRoots) {
+    if (!isInside(np, c)) continue;
+    /* 从路径本身开始向上找，最多 6 级：缓存/市场/插件/版本/文件 的层数上限。 */
+    let cur = np;
+    for (let i = 0; i < 6; i += 1) {
+      if (existsSync(join(cur, "SKILL.md"))) return true;
+      const parent = dirname(cur);
+      if (parent === cur || !isInside(parent, c)) break;
+      cur = parent;
+    }
+  }
+  return false;
+}
+
+/**
+ * 即便落在技能目录里也不放行的文件名。
+ *
+ * 凭据不属于“资料”。这条不依赖契约配置：默认契约没有列敏感名时，白名单也不能把技能包里
+ * 顺手放着的 `.env` 或私钥读出去。
+ */
+const HARD_SECRET_RX =
+  /^(?:\.env(?:\.[\w.-]+)?|\.netrc|\.npmrc|\.pgpass|id_[rd]sa|id_ecdsa|id_ed25519|credentials(?:\.json)?|.*\.(?:pem|key|p12|pfx|keystore|jks))$/i;
+
+/**
+ * 只读白名单判定：技能目录与显式放行路径。
+ *
+ * 只对读生效。写入、删除不因命中白名单而放行——技能是资料，不是可写区。
+ */
+function inReadAllowlist(
+  np: string,
+  cfg: { skillRoots: string[]; skillCacheRoots: string[]; paths: string[] },
+): boolean {
+  /* 凭据文件先挡：显式放行路径也要过这一关。 */
+  const base = np.split("/").pop() ?? "";
+  if (HARD_SECRET_RX.test(base)) return false;
+  if (cfg.paths.some((p) => isInside(np, p))) return true;
+  if (cfg.skillRoots.some((p) => isInside(np, p))) return true;
+  return insideSkillPackage(np, cfg.skillCacheRoots);
+}
+
+/**
  * 本机边界判定。行为与归档的 Python 实现 `local_check()` 逐条对齐。
  *
  * 敏感文件名（`.env`、`id_rsa` 一类）分两种处理：在任务根内的属于项目自身凭据，
@@ -101,6 +163,7 @@ export function localCheck(
   root: string | null,
   paths: string[],
   action: ActionKind = "read",
+  extra: LocalCheckExtra = {},
 ): LocalCheckResult {
   const cfg = contract.localGuard;
   if (!cfg || Object.keys(cfg).length === 0 || paths.length === 0) {
@@ -156,11 +219,31 @@ export function localCheck(
    * 越界一律转申请，不再查理由文件。理由由监工裁决，不由写入理由的一方决定；
    * 判据是申请台账里的批准记录，见 core/guard/requests.ts。
    */
+  /*
+   * 只读白名单。
+   *
+   * 派单时已把技能文件的完整路径写进派单内容，工作进程按该路径取资料属于执行派单本身，
+   * 不应再等一次授权；否则每读一次技能都要监工放行一次。
+   *
+   * 三条边界：只对读生效（写入与删除仍走原规则）；敏感路径与敏感文件名在上面已判过，
+   * 不会被技能目录放行绕过；插件缓存只认含 `SKILL.md` 的技能包，不整目录放行。
+   */
+  const readOnly = action === "read";
+  const skillsOn = readOnly && cfg.allow_read_skills !== false;
+  const readAllow = {
+    skillRoots: skillsOn ? (extra.skillRoots ?? []).map((x) => normLocal(x)).filter(Boolean) : [],
+    skillCacheRoots: skillsOn
+      ? (extra.skillCacheRoots ?? []).map((x) => normLocal(x)).filter(Boolean)
+      : [],
+    paths: readOnly ? (cfg.allow_read_paths ?? []).map((x) => normLocal(x)).filter(Boolean) : [],
+  };
+
   const outside: string[] = [];
   for (const p of paths) {
     const np = normLocal(p, root);
     if (isInside(np, taskRoot)) continue;
     if (allowRoots.some((r) => isInside(np, r))) continue;
+    if (inReadAllowlist(np, readAllow)) continue;
     outside.push(p);
   }
   if (outside.length === 0) {

@@ -40,13 +40,40 @@ const SKILL_LIMIT = 200;
 const SKILL_DESC_LIMIT = 42;
 
 /** 各宿主的技能目录与插件缓存目录，相对配置根。 */
-function hostRoots(): { skills: string; cache: string }[] {
+export function hostRoots(): { skills: string; cache: string }[] {
   return all()
     .filter((impl) => !impl.fallback && Boolean(impl.configDir))
     .map((impl) => ({
       skills: join(impl.configDir, "skills"),
       cache: join(impl.configDir, "plugins", "cache"),
     }));
+}
+
+/** 只读白名单根。两类分开：技能目录下直接放行；插件缓存下还须确认在技能包内。 */
+export interface SkillAllowRoots {
+  /** 各宿主 `skills/` 目录，项目级与用户级。 */
+  skills: string[];
+  /** 各宿主插件缓存目录，用户级。其下属技能包才放行。 */
+  cache: string[];
+}
+
+/**
+ * 只读白名单根：各宿主技能目录与插件缓存，覆盖项目级与用户级。
+ *
+ * 口径取自 registry 的 `configDir`，新增宿主自动纳入，不另外硬编码目录名。
+ * 项目级用任务根拼接，用户级用家目录；插件缓存只有用户级——插件市场装在家目录下。
+ */
+export function skillAllowRoots(root: string): SkillAllowRoots {
+  const skills: string[] = [];
+  const cache: string[] = [];
+  for (const r of hostRoots()) {
+    skills.push(join(root, r.skills));
+    skills.push(join(homedir(), r.skills));
+    cache.push(join(homedir(), r.cache));
+  }
+  const norm = (list: string[]): string[] =>
+    [...new Set(list.map((p) => p.replace(/\\/g, "/")))];
+  return { skills: norm(skills), cache: norm(cache) };
 }
 
 /**

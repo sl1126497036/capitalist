@@ -25,6 +25,8 @@ import {
   touchSession,
 } from "../core/record/ledger";
 import { detectAction, extractLocalPaths, localCheck, normLocal, tightenLocal } from "../core/guard/localGuard";
+import type { LocalCheckExtra } from "../core/guard/localGuard";
+import { skillAllowRoots } from "../supervisor/skills";
 /* 重复越界的升级提示与申请台账共用一份文案。 */
 import { escalation } from "../core/guard/requests";
 import {
@@ -317,7 +319,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
    */
   if (act === "delete") return deleteGate(guardBase(ctx, event, hook, offline), cmd);
 
-  const local = localCheck(ctx.contract, ctx.root, extractLocalPaths(cmd, ctx.root), act);
+  const local = localCheck(ctx.contract, ctx.root, extractLocalPaths(cmd, ctx.root), act, skillExtra(ctx.root));
   const localTightened = tightenLocal(ctx.mode, local.decision, act, decide);
 
   recordEvent(ctx, event, {
@@ -544,6 +546,17 @@ function guardBase(ctx: Ctx, event: UnifiedEvent, hook: HookFacet, offline: bool
   };
 }
 
+/**
+ * 只读白名单的技能根。
+ *
+ * 技能分散在各宿主配置目录下（`.claude` / `.codebuddy` / `.workbuddy`），路径随宿主与安装
+ * 位置变化，所以按分类判定：落在任一宿主的技能目录、或插件缓存里的技能包内，就按资料读取处理。
+ */
+function skillExtra(root: string): LocalCheckExtra {
+  const r = skillAllowRoots(root);
+  return { skillRoots: r.skills, skillCacheRoots: r.cache };
+}
+
 function judgeLocal(
   hook: HookFacet,
   event: UnifiedEvent,
@@ -552,7 +565,7 @@ function judgeLocal(
   act: ActionKind,
   offline: boolean,
 ): HookDecision {
-  const local = localCheck(ctx.contract, ctx.root, paths, act);
+  const local = localCheck(ctx.contract, ctx.root, paths, act, skillExtra(ctx.root));
   const decision: LocalDecision = tightenLocal(ctx.mode, local.decision, act, decide);
   if (decision === "allow") return hook.passthrough();
 

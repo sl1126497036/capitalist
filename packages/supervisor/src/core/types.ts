@@ -92,6 +92,16 @@ export interface LocalGuardConfig {
   never_delete_outside_task_root?: boolean;
   justify_ttl_sec?: number;
   deny_message?: string;
+  /**
+   * 只读白名单：各宿主技能目录（项目级、用户级、插件缓存）内的读取不按越界处理。
+   *
+   * 派单时已把技能文件的完整路径写进派单内容，工作进程按该路径读取属于执行派单本身，
+   * 不应再等一次授权。缺省开启；置 `false` 关闭，回到逐次申请。
+   * 只对读生效：写入与删除仍按原规则申请或拒绝。
+   */
+  allow_read_skills?: boolean;
+  /** 只读白名单：额外放行的路径，前缀匹配。只对读生效，用于技能目录之外的固定资料。 */
+  allow_read_paths?: string[];
 }
 
 /** 契约文件内容。未知键原样透传，契约可扩展而不必改代码。 */
