@@ -6624,7 +6624,7 @@ function runFacts(root: string): { facts: string; count: number } | null {
         ? String(d.note ?? "").trim()
         : "";
     lines.push(
-      `- ${label || d.id} ${title}${spent ? `（${spent}）` : ""}：${closedWord(d)}` +
+      `· ${label || d.id} ${title}${spent ? `（${spent}）` : ""}：${closedWord(d)}` +
         `${why ? `（${why}）` : ""}`,
     );
   }
