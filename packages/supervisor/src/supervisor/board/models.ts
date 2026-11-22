@@ -44,7 +44,7 @@ export let modelsCache: { host: string; at: number; view: ModelsView } | null = 
 /**
  * 通道失败时补一行处置。
  *
- * 授权只在启动监工时发生一次：拿到就是全树可用，拿不到则后续统一失败。因此这里的处置
+ * 授权只在启动监工时发生一次：成功即全树可用，失败则后续统一失败。因此这里的处置
  * 是“重启监工并允许授权”，而不是让用户在发消息时再点一次授权。
  */
 export function chatAuthHint(root: string): string {

@@ -14,8 +14,23 @@ import { byId, currentHost, siblings } from "../../agent/registry";
 import { recordEvent } from "../../core/record/ledger";
 import { resolveModel } from "../judge/modelPolicy";
 import { findBin, needsShell, quoteShellArg, workerEnv, workerImpl, type WorkerHost } from "../worker/worker";
+/* 故障判定收口在 `./fault`：本文件只提供文本来源，不另写正则与阈值。 */
+import { faultText, judgeFault, judgeResultFault, type FaultKind } from "./fault";
 /* 回复解析在 `./parseReply`：本文件只负责与模型通信，不解析标记行。 */
 import { officialAccessToken, tokenInjectionEnabled } from "./officialToken";
+
+/* 兼容既有调用点：判定与文案的唯一实现在 `./fault`。 */
+export {
+  AUTH_HINT_TEXT,
+  AUTH_REQUIRED_TEXT,
+  QUOTA_EXHAUSTED_TEXT,
+  RATE_BUSY_TEXT,
+  faultText,
+  isQuotaText,
+  judgeFault,
+  judgeResultFault,
+} from "./fault";
+export type { FaultKind } from "./fault";
 
 /**
  * 将宿主令牌写入子进程环境。
@@ -315,58 +330,12 @@ export function contextUsedOfAssistantMessage(o: unknown): number | null {
 }
 
 /**
- * 模型通道被上游拒绝时的统一措辞。额度耗尽时宿主以 code 0 退出，将 429 说明作为 assistant 正文输出；
- * 该说明含账号信息，只留在工作进程日志，不进入事件台账。
- */
-export const QUOTA_EXHAUSTED_TEXT = "额度已耗尽";
-
-/**
  * 进程静默退出时的说明。
  *
  * 与 {@link QUOTA_EXHAUSTED_TEXT} 分开：静默退出只是“没有任何诊断信息”，不等于额度耗尽。
  * 两者混用会让一次误判被写进 quota.json，而该状态不按时间过期，后续调用会直接短路。
  */
 export const NO_OUTPUT_TEXT = "模型进程无输出（code 0）：可能是登录失效、通道中断或上游拒绝";
-
-/** 判断错误文本是否属于额度或积分类，供上层决定是否提示。 */
-export function isQuotaText(text: string): boolean {
-  return String(text ?? "").includes(QUOTA_EXHAUSTED_TEXT);
-}
-
-/**
- * 额度耗尽特征。
- *
- * 要求词与状态后缀同时出现，或 429/402 带上协议上下文：日志是整段 JSON，裸数字 429
- * 会命中 token 计数与耗时，把正常退出误判成额度耗尽，之后重试判定按“额度问题”挂起，
- * 该单就再也派不出去。中文同理，只认“额度已耗尽”这类短语。
- */
-const QUOTA_HINT =
-  /(quota|insufficient[_\s-]?(funds|balance|credit)|credits?[_\s-]?(exhausted|exceeded)|balance[_\s-]?(low|insufficient|exhausted)|payment[_\s-]required|(额度|积分|余额|配额)[^\n。，,；;]{0,8}(用尽|用完|不足|耗尽|超出|不够)|欠费|(?:http|status|code|error|response)[^\n]{0,24}\b(?:402|429)\b|\b(?:402|429)\b[^\n]{0,24}(?:too many requests|rate[_\s-]?limit|quota|余额|额度))/i;
-
-/** 认证失效特征，与额度特征分开匹配，两者处置不同。 */
-const AUTH_HINT = /(\b401\b|\b403\b|unauthorized|invalid[_\s-]?api[_\s-]?key|authentication|认证失败|凭证(?:失效|过期|无效)|未登录)/i;
-
-/**
- * 工作进程的 CLI 读不到登录态时的统一措辞。
- *
- * 宿主拉起子进程时注入自身身份（产品名、会话 id 等），CLI 据此读取宿主登录态，而该登录态
- * 中的令牌不是 CLI 可用形态。进程正常启动，模型调用返回 `Authentication required`，退出码
- * 为 0。不复述上游原文，账号信息只留在工作进程日志。
- */
-export const AUTH_REQUIRED_TEXT = "登录状态无效";
-
-/**
- * 输出是否命中登录失效特征。
- *
- * 与额度分开处置：额度耗尽存在恢复可能，登录态不可用在同一环境下重试结果相同，调用方
- * 直接判定失败，不进入重试裁决。
- */
-export function looksLikeAuth(text: string): boolean {
-  return AUTH_HINT.test(String(text ?? ""));
-}
-
-/** 限流特征：可自行恢复，不按故障处理。 */
-const RATE_HINT = /(\b429\b|rate[_\s-]?limit|too[_\s-]?many[_\s-]?requests|限流|频繁)/i;
 
 /** stderr 过长时取尾部：失败原因通常出现在末尾。 */
 function tailOf(s: string, n = 600): string {
@@ -375,53 +344,19 @@ function tailOf(s: string, n = 600): string {
 }
 
 /**
- * 输出是否命中额度特征，供工作进程侧复用：进程 code 0 退出却无产出时也需判定。
- * 整段扫描而非只看尾部：429 可能出现在前部 assistant 行，其后仍有 result 行。
- */
-export function looksLikeQuota(text: string): boolean {
-  return QUOTA_HINT.test(String(text ?? ""));
-}
-
-/**
- * 判定正文是否为上游拒绝说明。额度耗尽时宿主把 429 说明作为 assistant 正文输出并以 code 0 退出，未识别会被当成模型回答。
- * 长度上限 400 字：拒绝说明很短，正常回答中提及“额度”不应被误判。
- */
-function quotaReplyOf(text: string): string {
-  const t = String(text ?? "").trim();
-  if (!t || t.length > 400) return "";
-  return looksLikeQuota(t) ? t : "";
-}
-
-/** 从 result 行的 `errors_info` 取额度拒绝说明；`category` / `status` 为上游分类，比正文措辞可靠。 */
-function quotaOfResult(o: unknown): string {
-  const arr = (o as Record<string, unknown>)?.errors_info;
-  if (!Array.isArray(arr)) return "";
-  for (const x of arr) {
-    if (!x || typeof x !== "object") continue;
-    const r = x as Record<string, unknown>;
-    const status = Number(r.status);
-    const cat = String(r.category ?? "").toLowerCase();
-    if (status === 429 || cat === "quota" || cat === "rate_limit" || cat === "insufficient_quota") {
-      return String(r.details ?? r.message ?? "").trim();
-    }
-  }
-  return "";
-}
-
-/**
  * 进程正常退出却无输出时给出可读原因，区分额度耗尽、登录失效与限流，否则返回退出码描述。
  * 不携带上游原文：账号链接、request-id 与会话 id 属于账号信息，只留在工作进程日志。
+ * 判定本身在 `./fault` 的 `judgeFault("diag", …)`，这里只做文案映射。
  */
 export function emptyExitReason(err: string, code: number | null, signal: NodeJS.Signals | null): string {
+  const kind = judgeFault("diag", err);
+  if (kind) return faultText(kind);
   const tail = tailOf(err);
-  if (looksLikeQuota(tail)) return QUOTA_EXHAUSTED_TEXT;
-  if (AUTH_HINT.test(tail)) return authFailureText();
-  if (RATE_HINT.test(tail)) return "通道繁忙，稍后会自动重试";
   /*
    * stderr 为空且 code 0 退出，只能说明进程没留下任何诊断信息，不能据此断言额度耗尽：
    * 登录失效、通道中断、上游拒绝都可能表现为该形态。若经 isQuotaText 写入 quota.json，
    * 该状态不按时间过期，一次误判会使后续调用长期直接返回“额度已耗尽”，
-   * 不再请求模型。额度判定只认含额度字样或 429 的情形（见 looksLikeQuota）。
+   * 不再请求模型。额度判定只认含额度字样或 429 的情形（见 judgeFault）。
    */
   if (!tail && (code === 0 || (code === null && signal === null))) return NO_OUTPUT_TEXT;
   if (tail) return "模型进程已退出，未输出正文（stderr 有诊断输出）";
@@ -429,33 +364,14 @@ export function emptyExitReason(err: string, code: number | null, signal: NodeJS
 }
 
 /**
- * 认证类失败的统一提示。
- *
- * 写现象与可执行的处置：登录状态失效后，重新登录或在授权弹窗中放行都能恢复。
- */
-function authFailureText(): string {
-  return "登录状态无效，请重新登录或授权";
-}
-
-/**
  * 从会话原始输出里取上游错误原因。
  *
  * 会话以上游拒绝结束时，`result` 行携带 `errors` 而正文为空；只按解析后的正文判断，
- * 会把“登录失效”退化成“无输出”。这里对原始行做特征匹配，返回文案不含上游原文：
- * 账号链接、request-id 与会话 id 属于账号信息，不进入界面。
+ * 会把“登录失效”退化成“无输出”。这里交给 `judgeFault("stream", …)`：它只认带
+ * errors / is_error 的协议行，不扫正文与历史行，返回文案不含上游原文。
  */
 export function upstreamErrorOf(raw: string): string {
-  if (!raw) return "";
-  /* 优先只看带 errors 的行，避免正常正文里的词被误判；没有则退化为全文匹配。 */
-  const errLines = raw
-    .split("\n")
-    .filter((line) => line.includes('"errors"') || line.includes('"is_error":true'))
-    .join("\n");
-  const hay = errLines || raw;
-  if (looksLikeQuota(hay)) return QUOTA_EXHAUSTED_TEXT;
-  if (AUTH_HINT.test(hay)) return authFailureText();
-  if (RATE_HINT.test(hay)) return "通道繁忙，稍后会自动重试";
-  return "";
+  return faultText(judgeFault("stream", raw));
 }
 
 /**
@@ -584,8 +500,9 @@ export async function askModel(opts: AskModelOptions): Promise<AskModelResult> {
     child.on("error", (e) => done({ ok: false, text: `启动模型失败：${e.message}` }));
     child.on("exit", (code, signal) => {
       const raw = out.trim();
-      const q = quotaReplyOf(raw);
-      if (q) return done({ ok: false, text: QUOTA_EXHAUSTED_TEXT });
+      /* 正文只在整段像宿主转述的拒绝说明时才作废，见 `judgeFault("reply", …)`。 */
+      const kind = judgeFault("reply", raw);
+      if (kind) return done({ ok: false, text: faultText(kind) });
       if (raw) return done({ ok: true, text: raw });
       const reason = emptyExitReason(err, code, signal);
       /* 失败时保留原始诊断：界面只给路径，stderr 原文含账号信息，不进消息流。 */
@@ -621,7 +538,7 @@ export async function askModelStream(
   opts: AskModelOptions & { onDelta: (d: StreamDelta) => void },
 ): Promise<AskModelResult> {
   const host = resolveChatHost(opts.host);
-  /* 还没起进程就已经被抢占：直接返回，不产生一次模型调用，也不必关心通道是否可用。 */
+  /* 进程尚未启动就已被抢占：直接返回，不产生一次模型调用，也不必关心通道是否可用。 */
   if (opts.signal?.aborted) return { ok: false, aborted: true, text: "" };
   const bin = findBin(host);
   if (!bin) return { ok: false, text: `找不到 ${host} 可执行文件，对话通道不可用` };
@@ -672,8 +589,8 @@ export async function askModelStream(
     let ctxUsed: number | undefined;
     let ctxWindow: number | undefined;
     let ctxModel: string | undefined;
-    /* 上游拒绝（额度 / 限流）说明；非空表示正文为错误说明。 */
-    let quotaHit = "";
+    /* result 行的上游拒绝分类；非空表示本次调用被上游拒绝。 */
+    let resultFault: FaultKind = "";
     let stopTimers = (): void => {};
     /** 移除中止监听；本轮已结束时必须移除，否则上层复用的信号会留下一条失效引用。 */
     let detachAbort = (): void => {};
@@ -724,7 +641,7 @@ export async function askModelStream(
       done({ ok: false, aborted: true, text: "" });
     };
     if (opts.signal) {
-      /* 起进程这段时间内被抢占的，信号已经处于 aborted，监听不会再回调，需补判一次。 */
+      /* 启动进程期间被抢占的，信号已经处于 aborted，监听不会再回调，需补充判断一次。 */
       if (opts.signal.aborted) onAbort();
       else {
         opts.signal.addEventListener("abort", onAbort, { once: true });
@@ -798,9 +715,9 @@ export async function askModelStream(
         if (u.window !== null) ctxWindow = u.window;
         const m = contextModelOfResult(j);
         if (m) ctxModel = m;
-        /* 上游拒绝时记录额度说明，避免正文被当作模型回答。 */
-        const q = quotaOfResult(j);
-        if (q) quotaHit = q;
+        /* 上游拒绝时记下分类，避免正文被当作模型回答。 */
+        const q = judgeResultFault(j);
+        if (q.kind) resultFault = q.kind;
         return;
       }
       if (j.type !== "stream_event") return;
@@ -876,9 +793,12 @@ export async function askModelStream(
         }
       }
       const raw = text.trim();
-      /* 上游拒绝优先于正文：额度耗尽时 assistant 正文为 429 说明，不能按成功结算。 */
-      const q = quotaHit || quotaReplyOf(raw);
-      if (q) return done({ ok: false, text: QUOTA_EXHAUSTED_TEXT });
+      /*
+       * 协议行给出分类时以协议为准；只有正文时才看正文。正文作用域的判据要求整段像宿主
+       * 转述的拒绝说明（长度、无动作行、带协议特征），模型正常回答里提到额度不计。
+       */
+      const kind: FaultKind = resultFault || judgeFault("reply", raw);
+      if (kind) return done({ ok: false, text: faultText(kind) });
       if (raw) return done({ ok: true, text: raw });
       /* 正文为空但原始输出含上游错误时，按原始行判读。 */
       const upstream = upstreamErrorOf(rawAll);

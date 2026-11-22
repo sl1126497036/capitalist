@@ -33,7 +33,7 @@ export const MODES: Record<Mode, ModeSpec> = {
     enforce: false,
     // 只停用档位层。红线在 `dispatch` 里于任何档位生效之前就已执行，
     // 因此 bypass 下的 BLOCK 仍然拦下，此处若写“不拦任何东西”，
-    // 就是一个代码并不兑现的承诺。
+    // 此为代码并不兑现的承诺。
     desc: "不拦档位与本机边界，但仍记账；任务列表红线照旧生效",
   },
 };

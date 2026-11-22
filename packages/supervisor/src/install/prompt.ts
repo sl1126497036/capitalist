@@ -15,7 +15,7 @@ import { all, normalize } from "../agent/registry";
 import { VERSION } from "../cli/help";
 import { hostInstalled } from "./install";
 
-/** 大号标识。只在交互安装 / 卸载时打印，管道与 CI 的输出里不出现。 */
+/** 字符画横幅。只在交互安装 / 卸载时打印，管道与 CI 的输出里不出现。 */
 export const BANNER = [
   "  ____      _      ____    ___   _____      _      _       ___   ____    _____",
   " / ___|    / \\    |  _ \\  |_ _| |_   _|    / \\    | |     |_ _| / ___|  |_   _|",

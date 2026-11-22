@@ -7,7 +7,7 @@
 /** 段标题；提示词组装据此判断是否已带过。 */
 export const PREFLIGHT_MARKER = "【执行前先核对现状】";
 
-/** 派单创建时刻；取不到或解析不了时返回 null，块内不写具体时刻。 */
+/** 派单创建时刻；读取失败或解析失败时返回 null，块内不写具体时刻。 */
 export function preflightAtOf(d: { at?: string } | null | undefined): { iso: string; epoch: number } | null {
   const raw = String(d?.at ?? "").trim();
   if (!raw) return null;
@@ -20,11 +20,11 @@ export function preflightAtOf(d: { at?: string } | null | undefined): { iso: str
 export function buildPreflightBlock(d: { at?: string } | null | undefined): string[] {
   const at = preflightAtOf(d);
   return [
-    `${PREFLIGHT_MARKER}本单正文是派单创建时的快照，动手前先核对代码现状：`,
+    `${PREFLIGHT_MARKER}本单正文是派单创建时的快照，先核对代码现状：`,
     "  · 先读本单要改的文件，确认代码现状与派单描述是否一致。",
     "  · 派单要求的事情若已实现，不重做：在结束报告里指出实现位置（文件 + 行号）与差异。",
-    "  · 只做了一半的补缺的部分，不推倒重来。",
-    "  · 本单要求若与已验收的做法相反（要恢复一个已被撤掉的东西），先读 `.capitalist/ledger/tasks.jsonl` 里",
+    "  · 只完成一半的，补齐缺少的部分，不整体重做。",
+    "  · 本单要求若与已验收的做法相反（要恢复一项已被撤销的改动），先读 `.capitalist/ledger/tasks.jsonl` 里",
     "    同一线程已结束任务的 `note`（裁决结论写着当时定的口径），按本单最新要求做，",
     "    并在结束报告里写明推翻了哪一条，不留两套实现。",
     at

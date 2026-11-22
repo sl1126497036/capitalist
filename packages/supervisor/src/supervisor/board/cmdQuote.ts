@@ -1,19 +1,17 @@
 import { attachmentsIn, stripAttachments } from "../../core/message/attachments";
-import { directPath, isWorkerRef } from "../../core/dispatch/commands";
-import { appendJsonl, writeJson } from "../../core/record/json";
+import { appendDirective, isWorkerRef } from "../../core/dispatch/commands";
 import { recordEvent } from "../../core/record/ledger";
-import { newMessageId } from "../../core/message/messages";
-import { userMsgDirectionOf } from "../../core/message/msgId";
+import { msgId } from "../../core/message/msgId";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { loadState } from "../../core/record/state";
-import { clearStopFlag, listWorkers, readDispatches, Dispatch } from "../../core/record/supervisor";
-import { pausePath } from "../../core/record/pause";
+import { chatDirectionOf } from "./chatDirection";
+import { listWorkers, readDispatches, Dispatch } from "../../core/record/supervisor";
+import { pauseAll, resumeAll, type PauseOutcome, type ResumeOutcome } from "../../core/record/pause";
 import { dispatchNoTable } from "../usage/threadNo";
 import { dispatchNoLabel } from "../../core/record/idMap";
 import { buildThreadMessages } from "./messages";
 import { buildThreads } from "./threads";
 import { spawnSync } from "node:child_process";
-import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 /**
  * 命令引用与派单操作：定位被引用的指令、改写引用、重开派单、调 CLI。
@@ -24,6 +22,8 @@ export function quoteDispatchLabel(root: string, msgId: string): string {
   const id = String(msgId ?? "").trim();
   if (!id) return "";
   const hits = readDispatches(root).filter((x) => {
+    /* 引用目标就是这张单本身（老引用存派单号）。 */
+    if (String(x.id ?? "") === id) return true;
     const list = Array.isArray((x as { src_msgs?: string[] }).src_msgs)
       ? ((x as { src_msgs?: string[] }).src_msgs as string[])
       : [];
@@ -71,32 +71,40 @@ export function writeQuotedDirect(
     msgId?: string;
     lineage?: string;
     target?: string;
+    /** 请求声明的承接方；缺省按会话归属判定，与对话路由读同一个入口。 */
+    via?: string;
   },
 ): boolean {
-  const rec: Record<string, unknown> = {
-    at: new Date().toISOString(),
-    at_ts: Date.now() / 1000,
-    type: "direct",
+  /*
+   * 只走 appendDirective 这一个写入口。
+   *
+   * 早先本函数手搓记录直接写盘：没有自身编号、没有 `at` 同毫秒顺延、没有 `direct_inject`
+   * 事件，方向还写死成“用户发给工作进程”。同一毫秒连发两条时引用会指向同一行，结论也会
+   * 落到相邻记录上；监工面板代发的话还会被记成用户发给工作进程。
+   */
+  const no = taskNoOfDispatchId(String(input.target ?? "")) || "S0";
+  const identity =
+    String(input.msgId ?? "").trim() ||
+    msgId(
+      no,
+      chatDirectionOf({
+        ...(input.thread !== undefined ? { thread: input.thread } : {}),
+        ...(input.via !== undefined ? { via: input.via } : {}),
+      }),
+    );
+  const rec = appendDirective(root, {
     text: input.text,
     shard: input.shard ? input.shard : null,
+    ...(input.thread ? (isWorkerRef(input.thread) ? { thread: input.thread } : { lane: input.thread }) : {}),
+    stage: loadState(root)?.stage ?? "",
+    ...(input.lineage ? { lineage: input.lineage } : {}),
+    ...(input.target ? { target: input.target } : {}),
+    msgId: identity,
     quote: input.quote,
-    quote_text: input.quoteText,
-    consumed: false,
-  };
-  const quoteAtts = attachmentsIn(input.text);
-  if (quoteAtts.length) rec.atts = quoteAtts;
-  /* 插话由用户发出，登记给工作进程，方向由承接方入口给出；归属任务号从目标派单号反解。 */
-  const quoteTaskNo = taskNoOfDispatchId(String(input.target ?? "")) || "S0";
-  rec.msg_id = input.msgId || newMessageId(quoteTaskNo, userMsgDirectionOf("worker"));
-  if (input.lineage) rec.lineage = input.lineage;
-  if (input.target) rec.target = input.target;
-  if (input.thread) {
-    if (isWorkerRef(input.thread)) rec.thread = input.thread;
-    else rec.lane = input.thread;
-  }
-  const stage = loadState(root)?.stage;
-  if (stage) rec.stage = stage;
-  return appendJsonl(directPath(root), rec);
+    quoteText: input.quoteText,
+    via: "user",
+  });
+  return Boolean(rec);
 }
 
 export function reopenDispatch(root: string, thread: string, shard = ""): { ok: boolean; reason: string; id?: string } {
@@ -158,24 +166,19 @@ export function runCli(args: string[]): { code: number; stdout: string; stderr: 
   };
 }
 
-/** 暂停状态写入 .capitalist/pause.json，格式与 capitalist pause 一致，读取统一经 core/record/pause 的 readPause。 */
-export function setPause(root: string, reason: string): void {
-  const rec = { at: new Date().toISOString(), reason: reason || "看板暂停调度", by: "board" };
-  writeJson(pausePath(root), rec);
-  recordEvent(root, "pause_set", { reason: rec.reason, by: rec.by });
+/**
+ * 暂停与恢复走 `core/record/pause.ts` 的同一对函数：看板不再自行写文件，
+ * 否则派单标记与全局暂停会各写一半。
+ */
+export function setPause(root: string, reason: string): PauseOutcome {
+  return pauseAll(root, "board", reason || "看板暂停调度");
 }
 
-/** 解除暂停删除 .capitalist/pause.json；文件不存在时按成功处理，不记事件。 */
-export function clearPause(root: string): void {
-  const file = pausePath(root);
-  if (!existsSync(file)) return;
-  try {
-    unlinkSync(file);
-  } catch (err) {
-    throw new Error(`暂停状态删除失败：${err instanceof Error ? err.message : String(err)}`);
-  }
-  clearStopFlag(root);
-  recordEvent(root, "pause_cleared", { by: "board" });
+/** 解除暂停并清除派单标记；失败时抛错，由调用方回给用户。 */
+export function clearPause(root: string): ResumeOutcome {
+  const r = resumeAll(root, "board");
+  if (!r.ok) throw new Error(`暂停状态删除失败：${r.error || "未知原因"}`);
+  return r;
 }
 
 export function workerOfThread(root: string, threadId: string, shard: string): string {
@@ -221,7 +224,8 @@ export function resolveQuoteText(root: string, thread: string, ref: string, fall
     stripAttachments(String(s || "")).replace(/\s*\n\s*/g, " ").trim().slice(0, 200);
   try {
     const { messages } = buildThreadMessages(root, thread, "", { limit: 500, logTailBytes: 512 * 1024 });
-    const hit = messages.find((m) => m.id === ref);
+    /* 老引用存的是派单号（`19-1`）：派单卡改为消息编号后，按 `no` 字段再认一次。 */
+    const hit = messages.find((m) => m.id === ref || (m.no && String(m.no) === ref));
     if (hit) {
       const t = cut(hit.text);
       if (t) return t;

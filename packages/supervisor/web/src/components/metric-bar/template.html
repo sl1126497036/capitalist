@@ -1,4 +1,4 @@
-<!-- 停止调度与关停按 props.root 发指令；顶栏账号菜单的暂停调度只对默认根生效。 -->
+<!-- 暂停调度与关停按 props.root 发指令；顶栏账号菜单的暂停调度只对默认根生效。 -->
 <span class="mbar" role="group" :aria-label="t('监工指标')">
   <!--
     中间信息作为一个整体参与收缩：内部每格保持完整宽度，宽度不够时由外层容器从右往左
@@ -71,21 +71,36 @@
     >
       {{ t("关停") }}
     </button>
+    <button
+      type="button"
+      class="mbtn"
+      :disabled="busy"
+      @click="newSession"
+    >
+      {{ t("新会话") }}
+    </button>
   </span>
 
-  <div v-if="confirmAsk" class="mpick confirm" role="dialog" :aria-label="confirmAsk.title" @click.stop>
-    <div class="mpickhd">
-      <span>{{ confirmAsk.title }}</span>
-      <button class="mpickx" type="button" @click.stop="confirmAsk = null">×</button>
+  <!--
+    确认框是模态：遮罩铺满视口，卡片外一律不响应，避免在确认前点到背后的按钮。
+    遮罩与卡片样式在 styles/app.css，与队列清空确认框共用一份。
+  -->
+  <Teleport to="body">
+    <div v-if="confirmAsk" class="askwrap" @click.self="confirmAsk = null">
+      <div class="askbox" role="dialog" aria-modal="true" :aria-label="confirmAsk.title">
+        <div class="askhd">{{ confirmAsk.title }}</div>
+        <div class="askbd">
+          <p>{{ confirmAsk.text }}</p>
+        </div>
+        <div class="askacts">
+          <button class="mbtn" type="button" @click="confirmAsk = null">{{ t("取消") }}</button>
+          <button class="mbtn" :class="{ danger: confirmAsk.danger }" type="button" @click="confirmYes">
+            {{ confirmAsk.ok }}
+          </button>
+        </div>
+      </div>
     </div>
-    <div class="mptext">{{ confirmAsk.text }}</div>
-    <div class="mpacts">
-      <button class="mbtn" type="button" @click.stop="confirmAsk = null">{{ t("取消") }}</button>
-      <button class="mbtn" :class="{ danger: confirmAsk.danger }" type="button" @click.stop="confirmYes">
-        {{ confirmAsk.ok }}
-      </button>
-    </div>
-  </div>
+  </Teleport>
 
   <!-- 弹层用 fixed 定位：.chead / .chat 都有 overflow:hidden，放里面会被裁。 -->
   <div

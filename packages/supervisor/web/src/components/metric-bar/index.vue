@@ -17,7 +17,7 @@ const props = defineProps({
   paused: { type: Boolean, default: null },
 });
 
-const emit = defineEmits(["pause", "refresh"]);
+const emit = defineEmits(["pause", "refresh", "new-session"]);
 
 const busy = ref(false);
 const note = ref("");
@@ -43,13 +43,13 @@ const pausePending = ref("");
 
 const pauseLabel = computed(() => {
   if (pausePending.value === "resume") return t("恢复中…");
-  if (pausePending.value === "pause") return t("停止中…");
-  return paused.value ? t("恢复调度") : t("停止调度");
+  if (pausePending.value === "pause") return t("暂停中…");
+  return paused.value ? t("恢复调度") : t("暂停调度");
 });
 
 /**
  * 刚切换成功的目标模型（`""` 为宿主默认）：轮询把 supervisor_model 带回来之前先用它显示。
- * 不这样做，蒙版撤掉时顶栏仍停在旧模型，看起来像是“关了蒙版还要再等一会儿”。
+ * 不这样做，蒙版撤掉时顶栏仍停在旧模型，看起来像是“关闭蒙版后仍需等待片刻”。
  */
 const modelPending = ref(null);
 
@@ -235,6 +235,18 @@ function shutdown() {
     ok: t("关停"),
     danger: true,
     run: () => post("stop"),
+  };
+}
+
+/* 新建会话与清空任务列表互不影响：清空只归档任务卡，会话由这里单独换。 */
+function newSession() {
+  confirmAsk.value = {
+    /* 标题与按钮同名，正文只讲影响面：用户不需要知道监工对话与派单会话是两套。 */
+    title: t("新会话"),
+    text: t("将新建监工会话，任务和产物不受影响，是否确认？"),
+    ok: t("新建"),
+    danger: false,
+    run: () => emit("new-session"),
   };
 }
 

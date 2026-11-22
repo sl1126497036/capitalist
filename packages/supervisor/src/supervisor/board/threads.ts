@@ -58,14 +58,44 @@ export function buildThreads(root: string): ThreadSummary[] {
 
 export type TaskBucket = "run" | "queue" | "paused" | "bad" | "done" | "canceled" | "closed";
 
-export function taskBucket(status: unknown): TaskBucket {
+/** 档位词条：回执与命令行输出与界面筛选同词，避免同一档出现两种叫法。 */
+export const TASK_BUCKET_WORD: Record<TaskBucket, string> = {
+  run: "运行中",
+  queue: "排队",
+  paused: "暂停中",
+  bad: "异常",
+  done: "已完成",
+  canceled: "已取消",
+  closed: "已结束",
+};
+
+/** 界面筛选与清空动作共用的档位全集，顺序与筛选菜单一致。 */
+export const TASK_BUCKETS: readonly TaskBucket[] = [
+  "run",
+  "queue",
+  "paused",
+  "bad",
+  "done",
+  "canceled",
+  "closed",
+];
+
+/**
+ * 分档唯一入口：界面筛选、状态计数、按档清空三处都读它。
+ *
+ * `exited` 有两种结局：派单已结（做完或人工结束）归已完成，派单未结（被打回重排、
+ * 被重启打断）归排队，与“待重派”词条一致。调用方拿不到线程键的结束判据时按
+ * 已结处理，保持旧行为。
+ */
+export function taskBucket(status: unknown, settled?: boolean): TaskBucket {
   const s = String(status ?? "");
   if (s === "running" || s === "starting" || s === "claimed") return "run";
   if (s === "queued" || s === "open") return "queue";
   if (s === "suspended") return "queue";
   /* 暂停单单独成档：该状态既不在等待槽位，也不在运行，不与排队状态合并。 */
   if (s === "paused") return "paused";
-  if (s === "done" || s === "exited" || s === "finished") return "done";
+  if (s === "done" || s === "finished") return "done";
+  if (s === "exited") return settled === false ? "queue" : "done";
   if (s === "canceled") return "canceled";
   /* 作废与结束单单独成档，不计入排队与运行。 */
   if (s === "closed" || s === "superseded") return "closed";
@@ -87,7 +117,7 @@ export interface TaskCounts {
 
 /** total = running + queued + paused + failed + done + canceled + closed，每条线程只计入一个分类。 */
 export function taskCountsOf(
-  threads: ReadonlyArray<{ id?: string | null; status?: string | null }>,
+  threads: ReadonlyArray<{ id?: string | null; status?: string | null; bucket?: string | null }>,
   acceptedKeys?: ReadonlySet<string>,
   settledKeys?: ReadonlySet<string>,
 ): TaskCounts {
@@ -104,7 +134,11 @@ export function taskCountsOf(
     ended: 0,
   };
   for (const t of threads) {
-    const b = taskBucket(t.status);
+    const key = String(t.id ?? "");
+    /* 线程自带 bucket 时直接用它，避免同一批线程在计数与列表里落到两个档。 */
+    const b =
+      (String(t.bucket ?? "") as TaskBucket) ||
+      taskBucket(t.status, settledKeys ? settledKeys.has(key) : undefined);
     out.total += 1;
     if (b === "run") out.running += 1;
     else if (b === "queue") out.queued += 1;
@@ -113,12 +147,8 @@ export function taskCountsOf(
     else if (b === "canceled") out.canceled += 1;
     else if (b === "closed") out.closed += 1;
     else {
-      const unsettled = String(t.status ?? "") === "exited" && settledKeys && !settledKeys.has(String(t.id ?? ""));
-      if (unsettled) out.queued += 1;
-      else {
-        out.done += 1;
-        if (acceptedKeys?.has(String(t.id ?? ""))) out.accepted += 1;
-      }
+      out.done += 1;
+      if (acceptedKeys?.has(key)) out.accepted += 1;
     }
   }
   return out;
@@ -189,8 +219,8 @@ export function yieldedOf(d: Dispatch): { yielded_at?: string; yielded_by?: stri
 export function yieldedReason(d: Dispatch): string {
   const by = String(d.yielded_by ?? "").trim();
   return by
-    ? `已为立即执行派单 ${by} 让出槽位，该单结束后按原顺序恢复`
-    : "已为立即执行派单让出槽位，该单结束后按原顺序恢复";
+    ? `已为立即执行派单 ${by} 释放槽位，该单结束后按原顺序恢复`
+    : "已为立即执行派单释放槽位，该单结束后按原顺序恢复";
 }
 
 export const WORKER_ACTION_TAIL_BYTES = 256 * 1024;
@@ -226,7 +256,7 @@ export function threadDoingOf(d: Dispatch | undefined, worker: WorkerRecord, ali
 /**
  * 归档态占位线程：取消与作废的单没有工作进程，只按派单记录生成一行。
  *
- * 两种状态的字段完全一致，差别只在 status；合并成一个工厂，避免以后再抄第三份。
+ * 两种状态的字段完全一致，差别只在 status；合并成一个工厂，避免以后再复制第三份实现。
  * 字段顺序与合并前保持一致，接口输出的键序不变。
  *
  * @param held 该分片是否被人工接管。判定依赖调用方作用域内的接管快照，故由调用方传入。
@@ -338,7 +368,11 @@ export function buildThreadsPageUncached(
       shard: w.shard ?? "",
       lineage: String((d as { lineage?: string } | undefined)?.lineage ?? w.dispatch ?? w.id),
       stage: w.stage,
-      status: w.status,
+      /*
+       * 暂停优先于进程状态：进程已按暂停停掉，仍按 `exited` 上屏会显示成“待重派”，
+       * 与没有进程记录的暂停单出现两种词。
+       */
+      status: d && dispatchPaused(d) ? "paused" : w.status,
       model: dispatchModel(d),
       worker: w.id,
       last_at: "",
@@ -601,10 +635,16 @@ export function buildThreadsPageUncached(
       threadNoOf(root, t.id);
   }
 
+  /*
+   * 分档在这里一次算定：界面列表、状态计数、按档清空都读 t.bucket，
+   * 不再各自按 status 推导。exited 的结局按台账里该任务是否已有结束单判定。
+   */
+  const settledKeys = settledThreadKeys(dispatches);
   for (const t of all) {
     const own = dispatchById.get(String(t.dispatch || ""));
     const s = String(own?.status ?? "");
     t.settled = isSettled(s);
+    t.bucket = taskBucket(t.status, settledKeys.has(t.id));
   }
 
   const noOfDispatch = new Map<string, string>();
@@ -666,7 +706,7 @@ export function buildThreadsPageUncached(
   );
   const totals = { ...cost, ...tokenTotals(all.map((t) => t.usage)) };
   /** 统计在全量上算完再截断，分页不影响数字。 */
-  const counts = rememberTaskCounts(root, taskCountsOf(all, acceptedThreadKeys(root, dispatches), settledThreadKeys(dispatches)));
+  const counts = rememberTaskCounts(root, taskCountsOf(all, acceptedThreadKeys(root, dispatches), settledKeys));
 
   const want = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : THREAD_PAGE_LIMIT;
   const total = all.length;

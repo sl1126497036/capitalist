@@ -22,7 +22,7 @@ export function writeJson(value: unknown): void {
 /**
  * 以非零状态结束进程。
  *
- * 用于参数不对、前置条件不满足这类无法继续的情形。消息必须说清发生了什么、下一步怎么改。
+ * 用于参数不对、前置条件不满足这类无法继续的情形。消息必须说明发生了什么以及如何调整。
  */
 export function die(message: string): never {
   writeErr(`${message}\n`);

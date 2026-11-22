@@ -443,14 +443,20 @@ function msOf(v) {
  * 本地回显无 at，留在末尾。
  */
 function mergeMessages(prev, next) {
+  /*
+   * 身份键带角色：同编号但角色不同的两条是两条消息，按编号覆盖会吞掉其中一条。
+   * 正常路径由服务端保证编号唯一，这里是兜底；角色相同仍按编号覆盖，
+   * 工作进程输出块靠这一点原地增长。
+   */
+  const keyOf = (m) => `${msgRef(m)}|${String(m?.role || "")}`;
   const idx = new Map();
-  prev.forEach((m, i) => idx.set(msgRef(m), i));
+  prev.forEach((m, i) => idx.set(keyOf(m), i));
   const out = prev.slice();
   for (const m of next) {
-    const id = msgRef(m);
-    const at = idx.get(id);
+    const key = keyOf(m);
+    const at = idx.get(key);
     if (at === undefined) {
-      idx.set(id, out.length);
+      idx.set(key, out.length);
       out.push(m);
     } else {
       out[at] = m;
@@ -623,6 +629,25 @@ async function loadMessages() {
   /* 响应被截断说明服务端窗口已滑走，游标失效，退回全量取数。 */
   if (d.truncated) msgSince = 0;
   else if (typeof d.next_since === "number") msgSince = d.next_since;
+}
+
+/**
+ * 整块丢弃消息缓冲并从服务端重取。
+ *
+ * 缓冲只合并不替换（见 {@link mergeMessages}），服务端台账被改写后旧消息不会自己退场。
+ * 清空任务卡、新建会话之后调用本函数，让界面与刷新后的读数一致。
+ */
+function rebuildMessages() {
+  /* 置空换代键，下一次取数按全量重建；同时清屏，避免旧内容停到请求返回。 */
+  msgKey = "";
+  msgSince = 0;
+  forceFull = true;
+  messages.value = [];
+  msgTotal.value = 0;
+  msgTruncated.value = false;
+  msgHasOlder.value = false;
+  msgPending.value = true;
+  void loadMessages();
 }
 
 /* 展开更早的消息把时间窗放宽为不限并重拉全量；窗口变化后结果集不同，只重拉不追加。 */
@@ -1137,7 +1162,7 @@ async function onSend(text, quoteRef, meta) {
       await sendSupervisor(text, quoteRef, meta?.skills || []);
     } else {
       const t = curThread.value;
-      /* 进程已结束也走这条对话接口：服务端在原会话里接着答，不会把一句问话变回一次重开。 */
+      /* 进程已结束也走这条对话接口：服务端在原会话里接着答，不会将一条问话变为一次重开。 */
       await talkTo(text, t.id, meta?.via || "", quoteRef);
     }
     load();
@@ -1280,7 +1305,7 @@ function onPromoteTask({ id, shard, title }) {
   });
 }
 
-/* 唤醒同样使用页面级回执；暂停单可能已过时，回执说明“下一轮调度起参与调度”。 */
+/* 唤醒同样使用页面级回执；回执由服务端给出，说明只解除这一张、全局暂停仍生效。 */
 function onWakeTask({ id, shard, title }) {
   if (!id) return null;
   return applyAction({
@@ -1295,13 +1320,26 @@ function onWakeTask({ id, shard, title }) {
   });
 }
 
-/* bucket 取界面筛选档名（all / done / bad）；后端只归档已结束记录，运行中与排队的保留。 */
+/* bucket 取界面筛选档名（all / run / queue / bad / done / canceled / closed）：
+   后端按同一档筛出线程，只归档这些线程引用的派单与进程记录。 */
 function onClearThreads(bucket) {
   return applyAction({
     action: "clear-threads",
     body: { bucket: String(bucket || "all") },
     toast: true,
     text: (d, ok) => (ok ? d.effective || $t("已清空") : `${$t("清空失败")} ${d.error || d.reason || $t("未知原因")}`),
+    /* 派单台账已归档：派单卡要从监工流退场，对话本身由后端保留，故重建缓冲而不是清空记录。 */
+    after: () => rebuildMessages(),
+  });
+}
+
+/* 新建会话只换监工与派单的会话，任务卡与台账不动；回执由服务端给，随后整块重建消息缓冲。 */
+function onNewSession() {
+  return applyAction({
+    action: "new-session",
+    toast: true,
+    text: (d, ok) => (ok ? d.effective || $t("已新建监工会话") : `${$t("新建失败")} ${d.error || $t("未知原因")}`),
+    after: () => rebuildMessages(),
   });
 }
 
@@ -1564,6 +1602,7 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
         @pick="pickThread"
         @locate="onLocateTask"
         @close="onCloseTask"
+        @new-session="onNewSession"
         @refresh="load"
       />
       </template>

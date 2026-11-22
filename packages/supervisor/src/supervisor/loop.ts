@@ -12,7 +12,7 @@
  * 手动暂停（`.capitalist/pause.json`）时不派新单，心跳、判定失败回收与已完成派单的结算照常。
  */
 
-import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
@@ -24,7 +24,7 @@ import { rotationCandidates } from "../agent/modelCatalog";
 
 import { runCheck } from "../core/contract/checks";
 import { clearBoardModuleCache } from "./boardCache";
-import { askModel, AUTH_REQUIRED_TEXT, isQuotaText, looksLikeAuth, looksLikeQuota, QUOTA_EXHAUSTED_TEXT } from "./channel/llm";
+import { askModel, AUTH_REQUIRED_TEXT, isQuotaText, judgeFault, QUOTA_EXHAUSTED_TEXT } from "./channel/llm";
 import {
   activeTakeover,
   appendDirective,
@@ -83,7 +83,17 @@ import { enterStage } from "../core/contract/init";
 import { markChannelDown, markChannelUp, readChannelDown } from "../core/message/channel";
 import { appendJsonl, pruneTempFiles, readJson, readJsonl, writeJson, writeJsonl } from "../core/record/json";
 import { recordEvent, recordEventThrottled } from "../core/record/ledger";
-import { type PauseFile, pausePath, readPause } from "../core/record/pause";
+import {
+  type PauseFile,
+  hasUnfinishedDispatches,
+  pauseAll,
+  pauseLiveDispatches,
+  pausePath,
+  readPause,
+  resumeAll,
+  resumeDanglingMarks,
+  setPauseGate,
+} from "../core/record/pause";
 /* 文件写锁供调度查询占用，避免派单命中已被占用的文件。 */
 import { reap as reapFileLocks, releaseAll as releaseFileLocks, writeHolderOf } from "../core/record/fileLock";
 import { NoLockTimeoutError, withNoLock } from "../core/record/noLock";
@@ -110,7 +120,9 @@ import { autoRebuild } from "../core/dispatch/rebuildTree";
 import { commitDispatch, composeDispatch, deriveDispatch } from "../core/dispatch/newDispatch";
 import { applyGroupDecl, groupIndexFrom } from "../core/dispatch/groupOps";
 import { applyInsertNow } from "./loop/restructure";
+import { findBusyDuplicate } from "./loop/dedupe";
 import { resolveDispatchRef, resolveParentTokens } from "./loop/refs";
+import { resolveSupersede } from "./loop/supersede";
 import { isReady } from "../core/dispatch/deps";
 import {
   allDirs,
@@ -134,7 +146,6 @@ import {
   dispatchPaused,
   finishDispatch,
   frontDispatch,
-  holdDispatches,
   isSupervisorAlive,
   isWorkerAlive,
   listWorkers,
@@ -147,11 +158,11 @@ import {
   missingPrerequisites,
   newDispatchId,
   newWorkerId,
-  pausedDispatches,
   pidAlive,
   prerequisitesOf,
   pruneWorkers,
   readDispatches,
+  wakeDispatch,
   releaseWorkerNo,
   saveSupervisor,
   saveWorker,
@@ -181,11 +192,11 @@ import { applyResumePlan, beginReload, noteContractChange, shouldAutoReload } fr
 import { reapOrphans } from "./worker/reapOrphans";
 import { ensureGuard, stopGuard } from "./worker/guard";
 import { laneOfWorker, recordLaneUsage } from "./judge/sessionLane";
-import { shardTitle, taskTitle } from "./usage/taskTitle";
+import { TITLE_MAX_CHARS, shardTitle, taskTitle } from "./usage/taskTitle";
 import { dispatchNoTable, dispatchOfThreadNo } from "./usage/threadNo";
 import { dispatchNoLabel as dispatchDisplayLabel, taskNoLabel } from "../core/record/idMap";
 import { isGroupRef } from "../core/record/nodeRef";
-import { msgId } from "../core/message/msgId";
+import { isUserMsgDirection, msgDirection, msgId } from "../core/message/msgId";
 import { decide } from "./judge/brain";
 import { brainSessionOf } from "./judge/brainLane";
 import { deniedModelsUsed, resolveModel } from "./judge/modelPolicy";
@@ -193,7 +204,7 @@ import { triage, worthTriaging, type TriageVerdict } from "./judge/triage";
 import { workspaceFacts } from "./context/workspaceFacts";
 import { workerUsage } from "./usage/usage";
 import { ensureRoot } from "./bootstrap/root";
-import { describeStatusLine } from "./statusLine";
+import { createStatusReporter } from "./statusLine";
 import { reopenSettledDispatch } from "./reopenDispatch";
 import { reopenOneByRef } from "./reopenOne";
 import { isLogNoise, tailWithinChars, withoutThinking } from "./worker/workerLog";
@@ -440,6 +451,7 @@ const DEFAULT_RETRY_JITTER = 0.2;
 /**
  * 工作进程退出时判定这一单的失败原因。code 非 0 为常规崩溃；code 0 且无产出时按日志末尾
  * 判定，上游返回 429 时命中配额文案。不携带上游原文，账号链接、request-id 与会话 id 只留在日志。
+ * 判定在 `channel/fault.ts` 的 `judgeFault("log", …)`，本函数只做文案映射。
  */
 function workerExitReason(root: string, wid: string, code: number | null): string {
   if (code !== 0) return `worker 进程退出（code ${code ?? "?"}）`;
@@ -453,9 +465,10 @@ function workerExitReason(root: string, wid: string, code: number | null): strin
     /* 日志被强杀截断时按无输出处理。 */
   }
   if (!body) return "工作进程没有输出就退出";
-  if (looksLikeQuota(body)) return QUOTA_EXHAUSTED_TEXT;
+  const kind = judgeFault("log", body);
+  if (kind === "quota") return QUOTA_EXHAUSTED_TEXT;
   /* 登录态不可用：进程以 code 0 退出，仅模型调用被拒，与静默退出区分。 */
-  if (looksLikeAuth(body)) return AUTH_REQUIRED_TEXT;
+  if (kind === "auth") return AUTH_REQUIRED_TEXT;
   return `worker 进程退出（code 0）`;
 }
 
@@ -485,7 +498,8 @@ function failDispatchAndJudge(
       stage: d.stage,
       shard: d.shard ?? "",
     });
-    detail(`[监工] 派单 ${d.id} 判定失败：${AUTH_REQUIRED_TEXT}，不重派`);
+    /* 输出走调用方给的通道：监工日志与测试收集器只在这一处接入。 */
+    out(`[监工] 派单 ${d.id} 判定失败：${AUTH_REQUIRED_TEXT}，不重派`);
     return true;
   }
 
@@ -1011,7 +1025,7 @@ async function judgeRetry(
      * 判定通道自身登录态不可用时按判定失败处理：同一登录态下裁决不可恢复，重派结果相同。
      * 其余通道故障（超时、解析失败）仍按可重试处理。
      */
-    if (looksLikeAuth(String(r.error ?? ""))) {
+    if (judgeFault("diag", String(r.error ?? "")) === "auth") {
       return { decision: "give_up", why: AUTH_REQUIRED_TEXT, fallback: true };
     }
     /* 通道不可用时按可重试处理。 */
@@ -1348,44 +1362,40 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     return 1;
   }
 
+  /* 排空式停止的门闩只为“退出前别再派新单”，不该跨进程生效；先清掉再由启动分支重判。 */
+  if (readPause(opts.root)?.by === "supervisor") resumeAll(opts.root, "startup");
+
   /*
-   * 启动默认不派单：上次退出时未完成的派单统一暂停，队列原样保留，等用户唤醒。
+   * 启动等同一次暂停调度：不派单、不推进阶段，等用户恢复。
    *
-   * 暂停是派单级标记，不写全局暂停：宿主侧新派入的单没有该标记，可以立即执行，
-   * 旧单则停在队列里等用户确认。无待办时不写任何标记，直接进入待命。
-   * 两种状态都保持在线，不退出进程。
+   * 判据是“有没有未结派单”，不是“有没有待办”：阶段还没走完但一张单都没派时，
+   * 没有可冻结的对象，写暂停会让新任务根一启动就停在 paused，看板与日志都看不出它已在跑。
+   * 有单则先停上次退出留下的存活进程，再写暂停与打标记；没有单时只清理孤儿进程。
    */
   const pendingWork0 = hasPendingWork(opts.root, contract0, state0);
   if (!pendingWork0) {
     detail("[监工] 无待办任务：待命在线（不派单、不轮询），等待派单");
-  } else {
-    /* 旧版本在启动时写全局暂停标记；那是监工写的，不是用户动作，迁移为逐单暂停后删除。 */
-    if (readPause(opts.root)?.by === "supervisor") {
-      try {
-        unlinkSync(pausePath(opts.root));
-        detail("[监工] 已移除上次启动写入的全局暂停标记：改为逐单暂停，不再阻塞新派单");
-      } catch {
-        /* 删除失败时保留原状，全局暂停继续生效。 */
-      }
-    }
-    const held = holdLegacyDispatches(opts.root);
-    /* 重复启动时本次未新增标记；队列中仍有上次启动时暂停的派单，此时不判定为全部结束。 */
-    const stillHeld = pausedDispatches(opts.root).length;
+  } else if (hasUnfinishedDispatches(opts.root)) {
+    /* 崩溃退出时清理没走完，工作进程可能仍在跑；接管前先停，否则恢复后会双跑同一单。 */
+    stopLiveWorkers(opts.root, detail);
+    const paused = pauseAll(opts.root, "startup", "监工启动：调度暂停，恢复后按原状态继续");
     detail(
-      held > 0
-        ? `[监工] ${held} 张上次未完成的派单已暂停（不影响新派单）。确认后执行 capitalist wake --user，或在看板逐单唤醒。`
-        : stillHeld > 0
-          ? `[监工] ${stillHeld} 张派单保持暂停（此前已标记）。确认后执行 capitalist wake --user，或在看板逐单唤醒。`
-          : "[监工] 启动默认不派单：现有派单均已结束，等待用户派单。",
+      t(
+        `[supervisor] ${paused.marked} unfinished dispatches paused (running ${paused.origins.running}, retry-waiting ${paused.origins.retry}, queued ${paused.origins.queued}); resume from the board to continue them`,
+        `[监工] ${paused.marked} 张未完成派单已暂停（运行中 ${paused.origins.running}、待重派 ${paused.origins.retry}、排队 ${paused.origins.queued}）。看板“恢复调度”按原状态继续。`,
+      ),
     );
+  } else {
+    stopLiveWorkers(opts.root, detail);
+    detail("[监工] 没有未完成的派单：不写暂停，按调度继续");
   }
 
   // 并行度上限只由用户设定（--workers 或运行时指令），不按阶段分片数取小；命令行缺省取 3。
   const maxWorkers = Math.max(1, opts.workers ?? DEFAULT_WORKERS);
   // 不 spawn 时并行度记 0，使 fillSlots 直接返回，派单留在 open 等外部领取。
   const capacity0 = spawnWorkers ? maxWorkers : 0;
-  /* 状态行去重游标：内容变化才打印，避免逐轮刷同一行。 */
-  let statusSig = "";
+  /* 状态行：去重与首行“已启动”都在 statusLine 里，这里只负责每轮询问一次。 */
+  const printStatus = createStatusReporter(opts.root, out);
 
   let rec: SupervisorRecord = {
     pid: process.pid,
@@ -1828,11 +1838,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         const live = listWorkers(opts.root).filter((w) => w.status === "running");
         if (live.length > 0 && !stopForced(opts.root)) {
           if (!readPause(opts.root)) {
-            writeJson(pausePath(opts.root), {
-              at: new Date().toISOString(),
-              reason: "停止请求：等待运行中的派单结束后退出",
-              by: "supervisor",
-            });
+            setPauseGate(opts.root, "supervisor", "停止请求：等待运行中的派单结束后退出", true);
             recordEvent(opts.root, "stop_pending", { running: live.map((w) => w.id) });
             detail(
               t(
@@ -1911,8 +1917,13 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       // 心跳间隔在暂停与重载时不准。记录只含序号与阶段，不参与 FEED_EVENTS。
       recordEvent(opts.root, "supervisor_tick", { n: rec.ticks, stage: state.stage });
 
-      /* 暂停时停掉运行中进程并把派单退回 open，恢复后按原样重派；排在 step 之前，step 负责不再派新单。 */
-      if (readPause(opts.root)) stopWorkersForPause(opts.root, detail);
+      /*
+       * 暂停每轮补两件事：停掉仍在跑的进程、给尚未标记的单补标记（用户手写 pause.json 时
+       * 没有标记）。恢复兜底同在此处：手工删除 pause.json 也能回到调度。
+       */
+      const pauseNow = readPause(opts.root);
+      if (pauseNow) pauseRun(opts.root, pauseNow, detail);
+      else resumeDanglingMarks(opts.root, "supervisor");
 
       // 收件箱自检：畸形记录不参与调度但要可见（同一批只报一次）；须排在 step 之前，两者读同一份台账。
       warnIgnoredInbox(opts.root, detail);
@@ -2211,11 +2222,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         opts.autoDispatch === true,
       );
       /* 状态行只在内容变化时打印：常态是一行“运行中”，逐轮重刷会把真正发生的事挤出窗口。 */
-      const statusLine = describeStatusLine(opts.root, capacity);
-      if (statusLine && statusLine !== statusSig) {
-        out(statusLine);
-        statusSig = statusLine;
-      }
+      printStatus(capacity);
 
       /* 在途单由有到无时写一条结束总结：队列空了，用户需要知道各单的结果。 */
       const inFlightNow = inFlightCount(opts.root);
@@ -2305,6 +2312,9 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         heartbeat_ts: Date.now() / 1000,
       });
     }
+
+    /* 门闩随进程结束失效：留着会让下个进程把队列已清空的根显示成暂停中，新派单也不跑。 */
+    if (readPause(opts.root)?.by === "supervisor") resumeAll(opts.root, "supervisor");
   }
 
   out(t("[supervisor] stopped", "[监工] 已停止"));
@@ -2988,51 +2998,36 @@ const executedDirectiveIds = new Set<string>();
  */
 const lastGateSig = new Map<string, string>();
 
-/** 写 `.capitalist/pause.json`（与 `capitalist pause` 同源，面板指令不另立暂停态）。 */
-function writePauseFile(root: string, reason: string, by: string): void {
-  writeJson(pausePath(root), { at: new Date().toISOString(), reason, by });
-  recordEvent(root, "pause_set", { reason, by });
+/**
+ * 暂停与恢复都走 `core/record/pause.ts` 的同一对函数：文件与派单标记必须同进同退。
+ * 本文件只补进程控制，不再自行拼标记字段。
+ */
+function writePauseFile(root: string, reason: string, by: string) {
+  return pauseAll(root, by, reason);
 }
 
-/**
- * 解除暂停：删除 `pause.json` 即恢复，与 `capitalist resume` 同一路径。
- * 删除失败先重试，再回落到改名；Windows 上文件被 hook 或轮询短暂持有时 unlink 返回 EPERM/EBUSY，
- * 同卷 rename 通常可用，改名后读取侧即视为已解除。全部失败时如实报错。
- */
 function clearPauseFile(root: string, by: string): { ok: boolean; error?: string } {
-  const p = pausePath(root);
-  let lastErr: unknown = null;
-  for (let i = 0; i < 6; i += 1) {
-    try {
-      if (!existsSync(p)) {
-        /* 恢复派单同时取消停止请求，否则下一轮调度会重新写回暂停。 */
-        clearStopFlag(root);
-        recordEvent(root, "pause_cleared", { by });
-        return { ok: true };
-      }
-      unlinkSync(p);
-      clearStopFlag(root);
-      recordEvent(root, "pause_cleared", { by });
-      return { ok: true };
-    } catch (e) {
-      lastErr = e;
-      try {
-        const stale = `${p}.${Date.now()}.stale`;
-        renameSync(p, stale);
-        try {
-          unlinkSync(stale);
-        } catch {
-          /* 改名成功即已解除；残留的 `.stale` 不影响判定，留待下次清理。 */
-        }
-        recordEvent(root, "pause_cleared", { by, via: "rename" });
-        clearStopFlag(root);
-        return { ok: true };
-      } catch {
-        /* 改名失败时继续重试。 */
-      }
-    }
+  const r = resumeAll(root, by);
+  return { ok: r.ok, ...(r.error === undefined ? {} : { error: r.error }) };
+}
+
+/** 暂停一轮：先停进程，再补齐派单标记。标记写入幂等，重复调用只补新增的单。 */
+function pauseRun(root: string, rec: PauseFile, out: (s: string) => void): void {
+  /* 排空式停止只挡新派单：停进程或打暂停标记会把“等在途跑完”变成“当场中断”。 */
+  if (rec.drain) return;
+  stopLiveWorkers(root, out);
+  const marks = pauseLiveDispatches(
+    root,
+    String(rec.by ?? "supervisor"),
+    rec.reason || "调度暂停",
+    rec.at || undefined,
+  );
+  if (marks.marked > 0) {
+    out(
+      `[监工] 补记 ${marks.marked} 张派单为暂停中（运行中 ${marks.origins.running}、` +
+        `待重派 ${marks.origins.retry}、排队 ${marks.origins.queued}）`,
+    );
   }
-  return { ok: false, error: lastErr instanceof Error ? lastErr.message : String(lastErr ?? "未知原因") };
 }
 
 function reject(reason: string): SupervisorResult {
@@ -3066,19 +3061,6 @@ function issueDispatchId(
 function dispatchNoLabel(root: string, id: string): string {
   const no = dispatchNoTable(root).get(String(id ?? "").trim());
   return no ? dispatchDisplayLabel(no) : "";
-}
-
-/**
- * 判重用的正文归一化：去掉附件行、空白与标点，全角转半角。
- *
- * 这里只判“是否为同一段文字”，措辞差异由相似度判定处理。
- */
-function dedupeKey(text: string): string {
-  return String(text ?? "")
-    .replace(/^\s*\[附件\].*$/gm, "")
-    .normalize("NFKC")
-    .replace(/[\s\p{P}\p{S}]+/gu, "")
-    .toLowerCase();
 }
 
 /**
@@ -3121,7 +3103,8 @@ function answerSupervisorQuestion(root: string, contract: Contract, state: TaskS
       ? `门槛已过${gate.missing.length ? `（${gate.missing.slice(0, 3).join("；")}）` : ""}`
       : `门槛未过：${gate.missing.slice(0, 4).join("；") || "未给出缺失项"}`,
   );
-  bits.push(pause ? `派单已暂停（${pause.reason || "手动暂停"}），在途进程已停，恢复后重派` : "派单未暂停");
+  /* 排空式停止与用户暂停分开写：前者在途还在跑，不能说成“进程已停”。 */
+  bits.push(pause ? (pause.drain ? `停止中（${pause.reason || "等待在途结束"}），不再派新单` : `调度暂停中（${pause.reason || "手动暂停"}），在途进程已停，恢复后按原状态继续`) : "派单未暂停");
   if (asks) bits.push(`有 ${asks} 条待裁决问题（capitalist inbox）`);
   if (debt) bits.push(`待补项 ${debt} 条`);
   if (retries.length) bits.push(`重派最多的分片：${retries.slice(0, 3).map((x) => `${x.id} ×${x.n}`).join("，")}`);
@@ -3180,8 +3163,8 @@ async function applyOneDirective(
   const arg = String(d.arg ?? "").trim();
 
   if (action === "pause") {
-    writePauseFile(root, `面板指令 ${d.id}`, "supervisor-direct");
-    return { ok: true, reason: "", detail: "已暂停派单；在途进程下一轮停止，恢复后重派" };
+    const r = writePauseFile(root, `面板指令 ${d.id}`, "supervisor-direct");
+    return { ok: true, reason: "", detail: r.written ? "已暂停调度；在途进程下一轮停止，恢复后按原状态继续" : "当前没有需要暂停的派单，未写暂停文件" };
   }
 
   if (action === "resume") {
@@ -3200,6 +3183,25 @@ async function applyOneDirective(
       );
     }
     return { ok: true, reason: "", detail: had ? "已恢复派单" : "未处于暂停状态，已置为恢复态" };
+  }
+
+  /*
+   * 单张恢复：用户点名，或工作进程在申报里明确要求继续某一张单。
+   * 只解这一张，不解除全局暂停；全局暂停期间它仍不参与调度。
+   */
+  if (action === "wake") {
+    if (!arg) return reject("wake 缺少单号：写成 wake #12");
+    const hit = resolveDispatchRef(root, readDispatches(root), arg);
+    if (!hit) return reject(`找不到派单“${arg}”：确认任务编号后重试`);
+    const r = wakeDispatch(root, hit.id);
+    if (!r) return reject(`派单 ${hit.id} 无法唤醒：已完成、已关闭或不在暂停状态`);
+    recordEvent(root, "dispatch_wake", {
+      dispatch: r.id,
+      from: r.from,
+      to: r.to,
+      by: "supervisor-direct",
+    });
+    return { ok: true, reason: "", detail: `${r.from} 改为 ${r.to}，下一轮参与调度` };
   }
 
   if (action === "set-next") {
@@ -3242,6 +3244,16 @@ async function applyOneDirective(
     const rows = readDispatches(root);
     const want = String(d.target ?? "").trim();
     const byId = want ? rows.find((x) => String(x.id) === want) : undefined;
+    /*
+     * 线程内追加只作用于当前单：`target` 是会话归属，正文编号指向别的单即越界
+     * （典型是监工顺带给同批另一单改口径）。以 `target` 为准拒绝，不静默改到当前单——
+     * 那会让针对另一单的正文落到本单上，语义错位更难查。
+     */
+    if (byId && noM && Number(noM[1]) !== taskNoOfDispatchId(byId.id)) {
+      return reject(
+        `这条追加指向 #${Number(noM[1])}，不属本次对话的单 #${taskNoOfDispatchId(byId.id)}；线程内追加只能改当前单`,
+      );
+    }
     /* 按编号定位链上的在途单（见 dispatchOfThreadNo）。 */
     const byNo = noM ? dispatchOfThreadNo(root, Number(noM[1]), rows) : undefined;
     const live = (st: string): boolean => ["open", "claimed", "reported", "review"].includes(st);
@@ -3363,45 +3375,21 @@ async function applyOneDirective(
       );
     }
     /*
-     * 忽略附件行、空白与标点后比较 action：已有在途的同内容单时不新派，
-     * 避免两个进程执行同一任务并互相覆盖。
+     * 同一件事已在途时不新派，避免两个进程执行同一任务并互相覆盖。
+     * 判据与阈值在 `loop/dedupe.ts`，本处只按结果回执。
      */
-    const bodyKey = dedupeKey(body);
-    /* 空正文不参与判重：归一化后都是空串，会把互不相干的单判成同一件。 */
-    const dup = bodyKey
-      ? readDispatches(root).find(
-          (x) =>
-            (x.status === "open" || x.status === "claimed" || x.status === "review") &&
-            dedupeKey(String(x.action ?? "")) === bodyKey,
-        )
-      : undefined;
-    if (dup) {
-      const label = dispatchNoLabel(root, dup.id);
-      const at = label ? ` ${label}` : "";
+    const dupe = findBusyDuplicate(root, body, tag);
+    if (dupe?.kind === "dup") {
+      const label = dispatchNoLabel(root, dupe.id);
       return reject(
-        `已有在途单${at}（${dup.status}）覆盖同一件事，本条未新建。需要重跑时对该单执行 capitalist retry。`,
+        `已有在途单${label ? ` ${label}` : ""}（${dupe.status}）覆盖同一件事，本条未新建。需要重跑时对该单执行 capitalist retry。`,
       );
     }
-    /*
-     * 同会话（同 `[标签]`）且正文高度相似时按同一件事处理，已有在途单不再新建。
-     * 阈值 0.8 高于下方合并的 0.45：相似到这一程度的内容追加进去会污染原单正文。
-     * 标签不同不算重复，作用对象不同的两件事文字常常相似。
-     */
-    if (tag) {
-      const twin = readDispatches(root).find((x) => {
-        const st = String(x.status ?? "");
-        if (st !== "open" && st !== "claimed" && st !== "reported" && st !== "review") return false;
-        const tags = (x as DispatchEx).tags;
-        if (!Array.isArray(tags) || !tags.includes(tag)) return false;
-        return titleSimilarity(String(x.action ?? ""), body) >= 0.8;
-      });
-      if (twin) {
-        const label = dispatchNoLabel(root, twin.id);
-        const at = label ? ` ${label}` : "";
-        return reject(
-          `已有在途单${at}覆盖同一件事，本条未新建。补充或更正用 amend${at}；重跑需先结束该单。`,
-        );
-      }
+    if (dupe?.kind === "twin") {
+      const label = dispatchNoLabel(root, dupe.id);
+      return reject(
+        `已有在途单${label ? ` ${label}` : ""}覆盖同一件事，本条未新建。补充或更正用 amend${label ? ` ${label}` : ""}；重跑需先结束该单。`,
+      );
     }
     /*
      * 将 `PARENT` / `AFTER` 的编号或 id 翻译为台账派单 id：编号表仅用于界面，台账 id 在重派后仍可追踪。
@@ -3458,6 +3446,11 @@ async function applyOneDirective(
       if (!applied.ok) return reject(applied.error);
       groupId = applied.id;
     }
+    /* 接替声明：换台账 id 并校验同组、目标已了结；拒绝时不取号，队列不变。 */
+    const supDecl = String((d as SupervisorDirective).supersede ?? "").trim();
+    const supRows = afterRows.length ? afterRows : readDispatches(root);
+    const sup = supDecl ? resolveSupersede(root, supDecl, { rows: supRows, groupId }) : null;
+    if (sup && !sup.ok) return reject(sup.error);
     /* 同标签且内容相似的需求合并到同一 open 单，action 超过 `MERGE_MAX_CHARS` 时改为新建。 */
     const MERGE_MAX_CHARS = 6000;
     /*
@@ -3562,8 +3555,8 @@ async function applyOneDirective(
       id,
       stage: state.stage,
       shard: "",
-      /* title 在建单时确定；缺失时界面回落为正文前 40 字。 */
-      title: taskTitle({ shard: "", action: body }),
+      /* 标题优先取派单方的 `TITLE:` 行；未写时才按正文摘要兜底。 */
+      title: declaredTitle(d) || taskTitle({ shard: "", action: body }),
       action: actionText,
       source: "adhoc",
       attempt: 1,
@@ -3579,6 +3572,8 @@ async function applyOneDirective(
       ...(parentNode ? { parent: parentNode, parentReason: parentWhy } : {}),
       /* 组成员归属只落这一处；重派由建单工厂的 `tree` 继承键自动带上。 */
       ...(groupId ? { group: groupId } : {}),
+      /* 接替关系随单落盘，组判定按它把补单与原事项合并。 */
+      ...(sup?.ok && sup.id ? { supersedes: sup.id } : {}),
       ...(adhocModel ? { model: adhocModel } : {}),
     });
     commitDispatch(root, adhoc);
@@ -4010,8 +4005,19 @@ async function applySupervisorDirectives(args: {
     if (!markSupervisorDirective(args.root, d.id, res)) {
       args.out(`[监工] 指令 ${d.id} 结果未能落盘（锁被占用），下一轮只补标记，不重复执行`);
     }
+    /*
+     * 回执发自己的号。
+     *
+     * `d.id` 是触发这条回执的插话记录身份：用户来源的记录它就是用户消息编号，
+     * 直接拿来当回执的编号，界面上一张用户原话与一张执行回执会共用一个编号，
+     * 引用回执时引用条显示的还是用户方向号。回执由监工产生，记 `S`；
+     * 触发它的用户消息号记在 `msg_id`，与 `direct.jsonl` 的字段语义一致。
+     */
+    const triggerNo =
+      [String(d.msg_id ?? ""), String(d.id ?? "")].find((x) => isUserMsgDirection(msgDirection(x))) || "";
     recordEvent(args.root, "supervisor_cmd", {
-      id: d.id,
+      id: msgId(taskNoOfDispatchId(String(d.target ?? "")) || "S0", "S2U"),
+      ...(triggerNo ? { msg_id: triggerNo } : {}),
       action: d.action || "",
       arg: d.arg,
       ok: res.ok,
@@ -4036,11 +4042,7 @@ async function applySupervisorDirectives(args: {
  * @returns 新写入标记的张数。
  */
 export function holdLegacyDispatches(root: string): number {
-  const live = new Set(["open", "claimed", "reported", "review"]);
-  const ids = readDispatches(root)
-    .filter((d) => live.has(String(d.status ?? "")))
-    .map((d) => d.id);
-  return holdDispatches(root, ids, "startup", "上次退出时未完成，启动后默认暂停；确认后唤醒");
+  return pauseLiveDispatches(root, "startup", "监工启动：调度暂停，恢复后按原状态继续").marked;
 }
 
 /**
@@ -4053,23 +4055,7 @@ export function holdLegacyDispatches(root: string): number {
  * 与 `step` 的差别：这里只判定是否存在待办，不判门槛能否推进、不派单、不写台账。
  */
 export function hasPendingWork(root: string, contract: Contract, state: TaskState): boolean {
-  const live = listWorkers(root).filter((w) => w.status === "running" || w.status === "starting");
-  if (live.length > 0) return true;
-
-  const dispatches = readDispatches(root);
-  if (
-    dispatches.some(
-      (d) =>
-        d.status === "open" ||
-        d.status === "claimed" ||
-        d.status === "reported" ||
-        d.status === "review" ||
-        /* 存在暂停单时不派单，监工也不转入待命状态，否则队列显示为空。 */
-        (dispatchPaused(d) && d.status !== "done" && d.status !== "closed"),
-    )
-  ) {
-    return true;
-  }
+  if (hasLiveWork(root)) return true;
 
   /* 待裁决问题与阻塞均需用户回复，归入待处理状态。 */
   if (openAsks(root).length > 0) return true;
@@ -4084,6 +4070,28 @@ export function hasPendingWork(root: string, contract: Contract, state: TaskStat
   /* 最后阶段：门槛未达成时仍有待办。 */
   const gate = runCheck(stageById(contract, state.stage)?.done as Record<string, unknown> | undefined, root);
   return !gate.ok;
+}
+
+/**
+ * 是否有需要冻结的现场：存活的工作进程，或未结（含带暂停标记）的派单。
+ *
+ * 与 {@link hasPendingWork} 的区别：后者还包含“阶段尚未走完”这类待推进事项。启动时要不要
+ * 落暂停文件取决于这里——空任务根停在中间阶段算“有待办”，但没有单可冻结，写成暂停会让
+ * 刚建好的根一启动就停在 paused。
+ */
+export function hasLiveWork(root: string): boolean {
+  const live = listWorkers(root).filter((w) => w.status === "running" || w.status === "starting");
+  if (live.length > 0) return true;
+
+  return readDispatches(root).some(
+    (d) =>
+      d.status === "open" ||
+      d.status === "claimed" ||
+      d.status === "reported" ||
+      d.status === "review" ||
+      /* 存在暂停单时不派单，监工也不转入待命状态，否则队列显示为空。 */
+      (dispatchPaused(d) && d.status !== "done" && d.status !== "closed"),
+  );
 }
 
 /** 通道不可用提示的节流窗口。 */
@@ -5149,6 +5157,19 @@ function fillSlots(
 }
 
 /**
+ * 派单方声明的标题（`TITLE:` 行）：有就照用，没有返回空串让调用方走摘要。
+ *
+ * 这里只做三件清理：合并换行与多余空白、丢掉不含汉字的值、拦住异常长文。
+ * 不按建议字数截断：31 字与 30 字是同一件事，按字数砍会砍掉读者需要的那半句。
+ */
+function declaredTitle(d: SupervisorDirective | undefined): string {
+  const t = String(d?.title ?? "").replace(/\s+/g, " ").trim();
+  if (!t || !/[\u4e00-\u9fa5]/.test(t)) return "";
+  const chars = Array.from(t);
+  return chars.length > TITLE_MAX_CHARS ? `${chars.slice(0, TITLE_MAX_CHARS).join("")}…` : t;
+}
+
+/**
  * 取这张单第一次登记时的标题：标题只在建单时定一次，重派按同阶段、同分片、同来源找回。
  * @param like 判定是否为同一张单的前身。
  */
@@ -5891,13 +5912,15 @@ function terminateWorkers(root: string, out: (s: string) => void): void {
 }
 
 /**
- * 暂停时停掉工作进程并把派单退回 open：只改状态，不写失败、不记重试次数。
- * 可见窗口模式不代关；无 running/starting 进程时直接返回。
+ * 停掉全部存活工作进程。只停进程，不改派单：派单状态由 `pauseLiveDispatches` 统一改写，
+ * 两处都改会让“运行中退回排队”的 note 与 `paused_from` 出现两种口径。
+ *
+ * 两处调用：暂停每轮补停，启动接管时清理上次退出留下的进程。可见窗口模式不代关；
+ * 无 running/starting 进程时直接返回。
  */
-function stopWorkersForPause(root: string, out: (s: string) => void): void {
+function stopLiveWorkers(root: string, out: (s: string) => void): void {
   const live = listWorkers(root).filter((w) => w.status === "running" || w.status === "starting");
   if (live.length === 0) return;
-  const dispatches = readDispatches(root);
   for (const w of live) {
     if (w.mode === "visible") {
       detail(`[监工] 暂停：可见窗口工作进程 ${w.id}（pid ${w.pid}）保留，窗口由人工管理`);
@@ -5905,11 +5928,6 @@ function stopWorkersForPause(root: string, out: (s: string) => void): void {
     }
     const how = killWorkerPid(w.pid);
     saveWorker(root, { ...w, status: "exited" });
-    /* claimed 单无进程接会一直占队列，且判定失败只看心跳不看单状态，故退回 open。 */
-    const d = w.dispatch ? dispatches.find((x) => x.id === w.dispatch) : undefined;
-    if (d && d.status === "claimed") {
-      patchDispatch(root, d.id, { status: "open", note: "调度暂停：进程已停，恢复调度后重派" });
-    }
     recordEvent(root, "worker_paused", {
       worker: w.id,
       dispatch: w.dispatch ?? "",
@@ -6654,7 +6672,7 @@ async function summarizeRun(root: string, out: (s: string) => void): Promise<voi
   const f = runFacts(root);
   if (!f) return;
   const text = await summaryText(root, f.facts);
-  recordEvent(root, "supervisor_reply", { reply: text, thread: "", msg_id: msgId("S0", "S") });
+  recordEvent(root, "supervisor_reply", { reply: text, thread: "", msg_id: msgId("S0", "S2U") });
   detail(`[监工] 队列已清空，已写结束总结（${f.count} 张派单）`);
 }
 
@@ -6825,6 +6843,7 @@ export const __testing = {
   summarizeRun,
   createOpenShardDispatch,
   killWorkerPid,
+  pauseRun,
   killJudgedWorker,
   raiseRedispatchCap,
   pausePath,

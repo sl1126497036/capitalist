@@ -42,7 +42,7 @@ export function readQuotaState(root: string): QuotaState {
   return { exhausted: true, at: String(j.at ?? ""), text: String(j.text ?? "") };
 }
 
-/** 记下“额度耗尽”。同一秒内重复调用只写一次，避免看板每轮失败都刷盘。 */
+/** 记下“额度耗尽”。同一秒内重复调用只写一次，避免看板每轮失败都重复写盘。 */
 export function markQuotaExhausted(root: string, text: string): void {
   const cur = readQuotaState(root);
   if (cur.exhausted) {

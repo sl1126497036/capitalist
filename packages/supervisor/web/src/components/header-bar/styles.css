@@ -234,11 +234,8 @@
   padding: 0 var(--s4) var(--s4);
   scrollbar-width: thin;
 }
-.themes::-webkit-scrollbar {
-  width: 6px;
-}
 .themes::-webkit-scrollbar-thumb {
-  border-radius: 3px;
+  border-radius: var(--r-pill);
   background: var(--line-2);
 }
 

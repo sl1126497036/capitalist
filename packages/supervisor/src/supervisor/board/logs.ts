@@ -132,10 +132,20 @@ export function capByChars(lines: string[], budget: number): string[] {
 }
 
 export function capParts(parts: WorkerLogParts): WorkerLogParts {
+  /** 正文被截断时，时间数组按同样长度丢弃头部，保持两边同索引。 */
+  const cut = (lines: string[], times: number[]): { lines: string[]; times: number[] } => {
+    const kept = capByChars(lines, LOG_PARTS_MAX_CHARS);
+    const drop = lines.length - kept.length;
+    return { lines: kept, times: drop > 0 ? times.slice(drop) : times };
+  };
+  const text = cut(parts.text, parts.textTimes);
+  const think = cut(parts.thinking, parts.thinkingTimes);
   return {
-    text: capByChars(parts.text, LOG_PARTS_MAX_CHARS),
+    text: text.lines,
+    textTimes: text.times,
     tools: capByChars(parts.tools, LOG_PARTS_MAX_CHARS),
-    thinking: capByChars(parts.thinking, LOG_PARTS_MAX_CHARS),
+    thinking: think.lines,
+    thinkingTimes: think.times,
     debug: capByChars(parts.debug, LOG_PARTS_MAX_CHARS),
     hidden: parts.hidden,
     stream: parts.stream,
@@ -143,7 +153,27 @@ export function capParts(parts: WorkerLogParts): WorkerLogParts {
   };
 }
 
-/** 从中间起读时退到第一个换行之后并前移偏移；末尾未完成的行留给下一次。 */
+/**
+ * 起点是否落在行首：前一字节为换行即算。
+ *
+ * 读不到时按不在行首处理，让调用方退到下一个换行之后，宁可少一行也不切出半行 UTF-8。
+ */
+function startsAtLine(fd: number, start: number): boolean {
+  if (start <= 0) return true;
+  const one = Buffer.alloc(1);
+  try {
+    return readSync(fd, one, 0, 1, start - 1) === 1 && one[0] === 0x0a;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 从中间起读时退到第一个换行之后并前移偏移；末尾未完成的行留给下一次。
+ *
+ * 起点已在行首时保留首行：增量游标记的是上一片末尾换行之后的位置，正好落在行首，
+ * 无条件下退会每轮吞掉一行新内容。
+ */
 export function readLogRange(
   file: string,
   start: number,
@@ -162,7 +192,7 @@ export function readLogRange(
     }
     const view = read === buf.length ? buf : buf.subarray(0, read);
     let from = 0;
-    if (start > 0) {
+    if (start > 0 && !startsAtLine(fd, start)) {
       const nl = view.indexOf(0x0a);
       if (nl < 0) return { text: "", offset: start, consumed: start };
       from = nl + 1;
@@ -180,9 +210,18 @@ export function readLogRange(
 }
 
 export function readWorkerEvents(file: string, tailBytes: number = LOG_EVENTS_TAIL_BYTES): WorkerLogParts {
-  const st = statCached(file);
-  if (!st) return parseWorkerLog([]);
-  const size = st.size;
+  /**
+   * 日志由工作进程追加，大小必须现读。
+   *
+   * 走 {@link statCached} 会命中 500ms 内的旧大小，同一轮里与 `fileSize` / `logIdleSec` 读出两个值，
+   * 增量游标停在旧偏移上，新写入的内容要等下一轮才出现。
+   */
+  let size: number;
+  try {
+    size = statSync(file).size;
+  } catch {
+    return parseWorkerLog([]);
+  }
 
   const needFrom = Math.max(0, size - Math.max(64 * 1024, tailBytes));
 
@@ -214,27 +253,39 @@ export function readWorkerEvents(file: string, tailBytes: number = LOG_EVENTS_TA
     return reuse?.parts ?? parseWorkerLog([]);
   }
 
-  /** stream/纯文本只在文件开头判一次，增量分片沿用该判定。 */
-  const chunk = parseWorkerLog(range.text.split("\n"), reuse ? { stream: reuse.parts.stream } : {});
+  /**
+   * 模式只升不降。
+   *
+   * 已判为 stream 的日志整片强制沿用该模式，避免不含事件行的分片被误判成纯文本。
+   * 尚未判为 stream 时不强制，交给本片自行判定：工作进程先落启动横幅（`[launch]` 与 `serve 0`）
+   * 再拉起 CLI，首个事件行要几秒后才到，首读落在横幅上会判成纯文本；若把该结论固定下来，
+   * 此后每个增量分片都按纯文本处理，事件行全部进 debug，正文、工具与思考永远为空。
+   */
+  const chunk = parseWorkerLog(range.text.split("\n"), reuse?.parts.stream ? { stream: true } : {});
 
   let parts: WorkerLogParts;
   if (reuse && start === reuse.offset) {
     const lastAction = chunk.lastAction !== undefined ? chunk.lastAction : reuse.parts.lastAction;
     parts = capParts({
       text: [...reuse.parts.text, ...chunk.text],
+      textTimes: [...reuse.parts.textTimes, ...chunk.textTimes],
       tools: [...reuse.parts.tools, ...chunk.tools],
       thinking: [...reuse.parts.thinking, ...chunk.thinking],
+      thinkingTimes: [...reuse.parts.thinkingTimes, ...chunk.thinkingTimes],
       debug: [...reuse.parts.debug, ...chunk.debug],
       hidden: reuse.parts.hidden + chunk.hidden,
-      stream: reuse.parts.stream,
+      /* 逐片合并同样只升不降：本片认出事件行即转为 stream，此前判错的部分照旧保留。 */
+      stream: reuse.parts.stream || chunk.stream,
       ...(lastAction !== undefined ? { lastAction } : {}),
     });
   } else {
     /** 首轮与重建的结果不拼接，直接替换。 */
     parts = capParts({
       text: chunk.text,
+      textTimes: chunk.textTimes,
       tools: chunk.tools,
       thinking: chunk.thinking,
+      thinkingTimes: chunk.thinkingTimes,
       debug: chunk.debug,
       hidden: chunk.hidden,
       stream: chunk.stream,

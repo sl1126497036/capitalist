@@ -38,6 +38,8 @@ export interface ComposedDispatch extends Dispatch {
 export type InheritKey =
   /** 树边：`parent` / `parent_reason` / `group`。 */
   | "tree"
+  /** 接替关系：`supersedes`。重派后仍要记得自己顶替的是哪一件事。 */
+  | "supersede"
   /** 标题（重派沿用首次登记值）。 */
   | "title"
   /** 分类标签。 */
@@ -50,7 +52,15 @@ export type InheritKey =
   | "after";
 
 /** 继承的默认清单：重派场景的常规组合。 */
-export const DEFAULT_INHERIT: readonly InheritKey[] = ["tree", "title", "tags", "model", "role", "after"];
+export const DEFAULT_INHERIT: readonly InheritKey[] = [
+  "tree",
+  "supersede",
+  "title",
+  "tags",
+  "model",
+  "role",
+  "after",
+];
 
 /** 组装输入。除 `id` / `stage` / `action` 外都可省略。 */
 export interface ComposeInput {
@@ -72,6 +82,8 @@ export interface ComposeInput {
   after?: string[] | undefined;
   /** 所属分组（组号，落盘 `G1`）。 */
   group?: string | undefined;
+  /** 接替的目标派单 id（落盘 `supersedes`）。 */
+  supersedes?: string | undefined;
   model?: string | undefined;
   modelFallback?: string | undefined;
   /** 附件路径。传空数组表示显式无附件。 */
@@ -103,6 +115,7 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
   const from = (k: InheritKey): Dispatch | undefined => (src && keys.has(k) ? src : undefined);
 
   const tree = from("tree");
+  const supersedeSrc = from("supersede");
   const titleSrc = from("title");
   const tagsSrc = from("tags");
   const modelSrc = from("model");
@@ -116,6 +129,10 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
   const parent = picked(input.parent, nonEmpty(tree?.parent) || undefined);
   const parentReason = picked(input.parentReason, nonEmpty(tree?.parent_reason) || undefined);
   const group = picked(input.group, nonEmpty((tree as { group?: string } | undefined)?.group) || undefined);
+  const supersedes = picked(
+    input.supersedes,
+    nonEmpty((supersedeSrc as { supersedes?: string } | undefined)?.supersedes) || undefined,
+  );
   const after = picked(input.after, Array.isArray(afterSrc?.after) ? afterSrc.after : undefined);
   const model = picked(input.model, nonEmpty((modelSrc as { model?: string } | undefined)?.model) || undefined);
   const modelFallback = picked(
@@ -147,6 +164,7 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
   if (nonEmpty(parentReason)) d.parent_reason = String(parentReason);
   if (Array.isArray(after) && after.length > 0) d.after = [...after];
   if (nonEmpty(group)) d.group = String(group);
+  if (nonEmpty(supersedes)) d.supersedes = String(supersedes);
   if (nonEmpty(model)) d.model = String(model);
   if (nonEmpty(modelFallback)) d.model_fallback = String(modelFallback);
   if (input.atts !== undefined) d.atts = [...input.atts];

@@ -1,5 +1,5 @@
 /**
- * 任务标题中文化：按契约 title、分片映射、正文摘要、阶段名的顺序取中文名，均取不到时返回空串。
+ * 任务标题中文化：按契约 title、分片映射、正文摘要、阶段名的顺序取中文名，均不可用时返回空串。
  *
  * 契约 title 原样保留不截断，标题写入台账后截掉的部分无法补回；显示宽度由前端渐隐省略处理。
  */
@@ -102,6 +102,15 @@ export const SHARD_TITLES: Readonly<Record<string, string>> = Object.freeze({
 
 const CJK = /[\u4e00-\u9fa5]/;
 
+/**
+ * 标题落盘上限：60 个字符。
+ *
+ * 提示词建议写到 30 字左右，那是给人读的舒适长度，不在这里卡死：31 字、35 字同样成立，
+ * 按字数截断只会把读者需要的那半句砍掉。这个上限只拦异常长文（把整段正文塞进标题），
+ * 正常标题不会碰到。
+ */
+export const TITLE_MAX_CHARS = 60;
+
 /** 统计汉字数，非汉字字符不计入。 */
 export function cjkCount(text: string): number {
   let n = 0;
@@ -117,29 +126,44 @@ export function shardTitle(shard: unknown): string {
 }
 
 /**
- * 提取正文首个含中文的整句，去掉字母与标点，**保留数字**。
+ * 句读边界：句号、分号、问叹号、换行、逗号、冒号。
  *
- * 早先的实现把非汉字字符全部删掉，连数字一起删：`校验第 1 张单` → `校验第张单`，
- * `把 3 个模块拆开` → `把个模块拆开`。数字在中文标题里常是指代的核心（第几张单、
- * 几个模块、百分比、版本号），删掉会让标题失去意义，且看不出被删过。
+ * 顿号不在其中。顿号连接并列词（`test、scripts、.github`），按顿号切会把标题切在
+ * 并列项之前，只剩开头的动词。
+ */
+const CLAUSE_BREAK = /[。；;！!？?\n，,：:]/;
+
+/**
+ * 标题兜底：正文中第一个含中文的句读段。
  *
- * 行首列表序号的剥离与派单正文共用 {@link stripListMark}：序号是书写格式，
- * 正文里那条已经一并去掉，标题不必再单独实现一份。
+ * 只在派单方没写 `TITLE:` 行时使用，正常路径不经过这里。两件事刻意不做：
+ *
+ * 1. 不按字符白名单过滤。早先只留汉字与数字，`加载 code-craft 技能` 被洗成
+ *    `加载技能`，`packages/supervisor/src/cli` 被整段删掉；这批单唯一的区别就在路径上，
+ *    洗完之后十几张单同名，而且从标题上看不出被删过。
+ * 2. 不判断哪一段是任务本体。判断依据只有词面，`按…` `依据…` 这类从句既可能是前提，
+ *    也可能是本体，猜错的代价高于标题多带几个字。
  */
 export function summarizeTitle(text: string): string {
   const raw = stripListMark(String(text ?? "").trim());
   if (!raw) return "";
-  // 括号里通常是补充说明，先移除。
-  const plain = raw.replace(/[（(][^）)]*[）)]/g, " ").replace(/[`*#>|]/g, " ");
-  const parts = plain.split(/[。；;！!？?\n，,、：:]/);
-  for (const part of parts) {
-    /* 保留汉字与数字，连带小数点与百分号（`57.22`、`5%` 是一个整体）。 */
-    const seg = part
-      .trim()
-      .replace(/[\s\S]/gu, (ch) => (CJK.test(ch) || /[\d.%]/.test(ch) ? ch : ""));
-    if (cjkCount(seg) >= 2) return seg;
-  }
-  return "";
+  const plain = raw
+    .replace(/[（(][^）)]*[）)]/g, " ")
+    .replace(/[`*|]/g, " ")
+    .replace(/(^|\s)#{1,6}(?=\s)/g, " ");
+  const clause = plain
+    .split(CLAUSE_BREAK)
+    .map((s) => s.replace(/\s+/g, " ").trim())
+    .find((s) => cjkCount(s) >= 2);
+  /* 整段没有汉字时返回空串：英文正文的标题交给调用方的占位处理，不把英文当标题。 */
+  return clause ? clipTitle(clause) : "";
+}
+
+/** 合并空白并限长；超长时留省略号，读者能看出这不是原文结尾。 */
+function clipTitle(text: string): string {
+  const plain = String(text ?? "").replace(/\s+/g, " ").trim();
+  const chars = Array.from(plain);
+  return chars.length > TITLE_MAX_CHARS ? `${chars.slice(0, TITLE_MAX_CHARS).join("")}…` : plain;
 }
 
 export interface TitleInput {

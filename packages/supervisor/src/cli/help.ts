@@ -248,9 +248,8 @@ const HELP_GROUPS: HelpGroup[] = [
           "创建任务根并常驻：派单、验收、回收重派。队列无待办时转入待命。",
           "在终端前台运行，随终端存活；关闭终端后监工下线。",
           "WorkBuddy 会话运行在沙箱里，不能在会话内启动；其他宿主可直接启动。",
-          "启动后不执行上次未完成的派单：这些单逐张标为暂停，队列原样保留；",
-          "新派入的单不受暂停影响，可立即执行。唤醒暂停单用 capitalist wake --user，",
-          "或在看板按“已暂停”筛选后逐单唤醒。",
+          "启动等同一次暂停调度：未完成的派单全部显示暂停中，暂停期间新派入的单",
+          "同样等待恢复。看板点“恢复调度”后按原状态继续，也可用 capitalist resume。",
           "监工不自行生成派单：阶段门槛通过只推进状态，不建单。",
           "派单入口：看板、capitalist dispatch、capitalist say（追加要求）。",
           "看板默认随监工启动（127.0.0.1:7788，端口占用时顺延），启动时输出地址。",
@@ -297,7 +296,7 @@ const HELP_GROUPS: HelpGroup[] = [
           },
         ],
       },
-      { cmd: "supervise-stop", brief: ["请求监工退出（下一轮调度生效）"] },
+      { cmd: "supervise-stop", brief: ["请求监工退出"] },
       { cmd: "auth", brief: ["已移除；认证使用宿主自身登录态"] },
       {
         cmd: "auth-check",
@@ -308,10 +307,10 @@ const HELP_GROUPS: HelpGroup[] = [
           { f: "--json", d: ["输出 JSON"] },
         ],
       },
-      { cmd: 'pause ["<原因>"]', brief: ["写 .capitalist/pause.json：下一轮调度起不派新单，", "运行中的进程被停止，对应派单退回排队"] },
+      { cmd: 'pause ["<原因>"]', brief: ["暂停调度：不再派新单，运行中的进程停止，", "全部未结派单显示暂停中"] },
       {
         cmd: "resume",
-        brief: ["删除 .capitalist/pause.json：下一轮调度起恢复派单。", "暂停的旧派单由 capitalist wake --user 唤醒"],
+        brief: ["恢复调度：清除暂停标记，未结派单按原状态继续。", "进程未退出的单保留暂停，先中断再恢复"],
         opts: [
           {
             f: "--user",
@@ -326,7 +325,7 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       {
         cmd: "wake [<派单id|分片>]",
-        brief: ["唤醒暂停的派单；省略目标时唤醒本任务根全部暂停单。", "暂停由监工启动时写入（上次退出时未完成），不阻塞新派单"],
+        brief: ["单张恢复：只解除指定派单的暂停，不解除全局暂停。", "用于用户点名恢复某一张，或恢复进程未退出而保留暂停的单"],
         opts: [{ f: "--user", d: ["唤醒属用户动作：非交互终端默认拒绝，须加 --user"] }],
       },
       {
@@ -393,7 +392,7 @@ const HELP_GROUPS: HelpGroup[] = [
       { cmd: "release [<分片>]", brief: ["交还被接管的分片，恢复监工自动重派与自动验收"] },
       {
         cmd: "stop-worker <id>",
-        brief: ["中断指定工作进程：结束其进程，并把它的派单按失败结束", "（下一轮调度重派，分片被接管或登记阻塞时除外）"],
+        brief: ["中断指定工作进程：结束其进程，并把它的派单按失败结束", "（该派单随后重派，分片被接管或登记阻塞时除外）"],
       },
       {
         cmd: "close <派单id|worker-id|分片>",
@@ -402,7 +401,7 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       {
         cmd: "promote <派单id|worker-id|分片>",
-        brief: ["手动插队：将排队中的派单提到队首，下一轮填槽时最先拉起", "（有空槽时立即拉起；不越过并行度与暂停状态，不新建派单）"],
+        brief: ["手动插队：将排队中的派单提到队首，下一次填槽时最先启动", "（有空槽时立即启动；不越过并行度与暂停状态，不新建派单）"],
       },
     ],
   },
@@ -579,23 +578,23 @@ export const COMMAND_HELP: Record<string, string> = {
   takeover: `capitalist takeover [<分片>] [--reason "<原因>"]
 接管指定分片。省略分片时为整个任务根。
   - 写入 .capitalist/takeover.json，记 root / shard / at / reason / active
-  - 生效时机：下一轮调度起监工不自动重派该分片，也不自动验收该分片
+  - 生效时机：监工不再自动重派该分片，也不再自动验收该分片
   - 不终止运行中的进程；中断进程使用 capitalist stop-worker
   - 交还：capitalist release [<分片>]`,
   release: `capitalist release [<分片>]
 交还被接管的分片。省略分片时交还全部接管项。
   - 把 .capitalist/takeover.json 里对应条目的 active 置为 false，并记 released_at
-  - 生效时机：下一轮调度起监工恢复该分片的自动重派与自动验收`,
+  - 生效时机：监工恢复该分片的自动重派与自动验收`,
   "stop-worker": `capitalist stop-worker <worker-id>
 中断指定工作进程。
   - 结束该进程（SIGTERM），并把它的派单按失败结束
-  - 下一轮调度重派该派单；分片被接管（capitalist takeover）或登记阻塞（capitalist block）时除外
+  - 该派单随后重派；分片被接管（capitalist takeover）或登记阻塞（capitalist block）时除外
   - worker-id 由 capitalist workers 输出`,
   close: `capitalist close <派单id|worker-id|分片> [--reason "原因"]
 手动结束：运行中与排队中的派单均可关闭。
   - 派单状态置为终态 closed，写 done_at / closed_at / closed_by / note
   - 存在运行中的进程时，先写 closed 结束再发送 SIGTERM；顺序颠倒会让进程退出回调
-    按失败结束，下一轮调度重派
+    按失败结束，随后重派
   - 写 dispatch_closed 事件到 .capitalist/ledger/events.jsonl（含原状态、是否发送过 SIGTERM）
   - 监工不再为已关闭分片补单；关闭的分片计入完成数，不阻塞阶段推进
   - stop-worker 中断进程并触发重派；close 关闭派单且不再补单
@@ -608,7 +607,7 @@ export const COMMAND_HELP: Record<string, string> = {
     保留需求原文、未完成项、决策结论、待复验清单
   - 切换监工对话会话，原会话中的工具输出不再读取
   - 写 .capitalist/reload/resume.json：done_verified 不重派；done_unverified（已做但未验证）
-    由监工下一轮调度派 source=reverify 的复验单，不按完成处理
+    由监工派 source=reverify 的复验单，不按完成处理
   - 重载期间看板监工面板显示“监工重载中”，结束后隐藏（.capitalist/reload/active.json）
-  - 生效时机：复验单在下一轮调度由监工补出；阶段推进与门槛判定不受影响`,
+  - 生效时机：复验单随后由监工补出；阶段推进与门槛判定不受影响`,
 };

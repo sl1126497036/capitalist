@@ -60,7 +60,7 @@ function loadedSkills(root: string): string[] {
         if (!names.includes(n)) names.push(n);
       }
     } catch {
-      /* 目录读不了就跳过 */
+      /* 目录读取失败时跳过 */
     }
   }
   return names.slice(0, 40);
@@ -75,21 +75,21 @@ const SCHEMA_HINT = `只输出一个 JSON 对象，不要任何解释、不要�
       "id": "S0",
       "name": "阶段名（用用户语言，4-8 字）",
       "goal": "阶段目标，简要说明",
-      "next": "交给执行者的下一步动作，要具体到做什么、产出什么文件",
+      "next": "交给执行者的下一步动作，要具体到任务内容与产出文件",
       "done": { "type": "file_exists", "path": "相对产出路径" }
     }
   ],
-  "brief_redlines": ["不许碰凭据", "改既有文件前先备份"]
+  "brief_redlines": ["不得访问凭据", "改既有文件前先备份"]
 }
 
 规则：
-1. 阶段数按任务实际需要设定。零散任务就 1 个阶段（id 用 T），有明确交付的长任务 3-6 个。
-2. 阶段必须是这个任务真实要走的步骤，不套用预置模板（不要出现“功能盘点”“视觉还原”这类与任务无关的名字）。
-3. done 用这三种之一，别的不要用：
+1. 阶段数按任务实际需要设定。零散任务用 1 个阶段（id 用 T），有明确交付的长任务 3-6 个。
+2. 阶段必须是这个任务真实要执行的步骤，不套用预置模板（不要出现“功能盘点”“视觉还原”这类与任务无关的名字）。
+3. done 用以下三种之一，不得使用其他形式：
    - { "type": "file_exists", "path": "<该阶段的产出文件>" }
    - { "type": "glob_min", "pattern": "<通配>", "min": <数字> }
    - { "type": "jsonl_min", "file": "<记录文件>", "min": <数字> }
-4. 单阶段（零散任务）用 { "type": "file_exists", "path": ".capitalist/never-done.marker" }，让监工常驻待命，不自动收工。
+4. 单阶段（零散任务）用 { "type": "file_exists", "path": ".capitalist/never-done.marker" }，让监工常驻待命，不自动结束。
 5. 不要写 parallel 字段。`;
 
 /**
@@ -106,7 +106,7 @@ export async function generateContract(opts: {
   host?: string;
   out?: string;
   effort?: string;
-  /** 监工模型（`--capitalist-model`）：拆任务也是监工的活，与后续判定、对话用同一个模型。 */
+  /** 监工模型（`--capitalist-model`）：拆任务也属监工职责，与后续判定、对话用同一个模型。 */
   model?: string;
 }): Promise<GenContractResult> {
   const dir = join(supervisorDir(opts.root), "contracts");
@@ -168,7 +168,7 @@ export async function generateContract(opts: {
     memory_file: "memory.md",
     brief_redlines: [
       "不许删除任务根以外的本机内容",
-      "不许碰凭据：.env / 密钥 / *.pem / ~/.ssh",
+      "不得访问凭据：.env / 密钥 / *.pem / ~/.ssh",
       "动手改既有文件之前先备份",
     ],
     stages,
@@ -178,7 +178,7 @@ export async function generateContract(opts: {
     mkdirSync(dir, { recursive: true });
     writeFileSync(path, `${JSON.stringify(contract, null, 2)}\n`, "utf8");
   } catch (err) {
-    return { ok: false, path, why: `写不进契约文件：${err instanceof Error ? err.message : String(err)}`, stages: [] };
+    return { ok: false, path, why: `契约文件写入失败：${err instanceof Error ? err.message : String(err)}`, stages: [] };
   }
   return { ok: true, path, why: "", stages: stages.map((s) => ({ id: s.id, name: s.name })) };
 }

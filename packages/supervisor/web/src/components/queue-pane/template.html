@@ -147,7 +147,7 @@
           <span class="nm">
             <!-- 状态点放在 .nm 内用 align-self 对齐首行；放在 .row 下会被居中到整块中心。 -->
             <i class="dot" :class="[r.tone, r.unreadDot ? 'unread' : '']" />
-            <em class="sid">#{{ r.short }}</em>
+            <em v-if="r.short" class="sid">#{{ r.short }}</em>
             <span v-fadeclip class="nmtext">{{ r.title }}</span>
             <em v-if="r.t.promoted_at && !r.retry" class="pin">{{ t("立即执行") }}</em>
             <em v-if="r.t.yielded_at && !r.retry" class="yield">{{ t("已让位") }}</em>
@@ -205,7 +205,7 @@
               role="button"
               tabindex="0"
               :aria-label="`${t('唤醒')} ${r.title}`"
-              :data-tip="t('解除暂停，按队列顺序重新参与调度')"
+              :data-tip="t('只解除这一张；全局暂停解除后参与调度')"
               @click.stop="wakeTap(r)"
               @keydown.enter.stop.prevent="wakeTap(r)"
             >
@@ -362,7 +362,7 @@
           @click="touchThread(h.t.id); emit('pick', h.t.id)"
         >
           <i class="dot" :class="h.tone" />
-          <em class="hsid">#{{ h.short }}</em>
+          <em v-if="h.short" class="hsid">#{{ h.short }}</em>
           <span class="hat">{{ h.at }}</span>
           <span v-if="h.word" class="hst">{{ h.word }}</span>
           <span class="hdur">{{ h.durText || t("无采样") }}</span>

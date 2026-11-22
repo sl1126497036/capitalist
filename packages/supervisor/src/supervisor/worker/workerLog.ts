@@ -25,10 +25,14 @@ export interface WorkerAction {
 export interface WorkerLogParts {
   /** 工作进程输出的正文；不含工具调用与思考过程。 */
   text: string[];
+  /** 与 `text` 同索引的创建时刻（毫秒），取日志事件自带的 `__timestamp`；取不到为 0。 */
+  textTimes: number[];
   /** `▸ 读取 x` 这样的工具调用摘要，给标题下的活动条用。 */
   tools: string[];
   /** 模型的思考过程。 */
   thinking: string[];
+  /** 与 `thinking` 同索引的创建时刻（毫秒），取所在事件的 `__timestamp`；取不到为 0。 */
+  thinkingTimes: number[];
   /** 被过滤的宿主调试行数，供页面显示隐藏行数。 */
   hidden: number;
   /** 被过滤的宿主调试行原文，默认不上屏，供折叠展开与复制使用。 */
@@ -328,17 +332,36 @@ function eventParts(ev: Record<string, unknown>): {
  *
  * 过滤仅作用于展示层，日志原文保留；隐藏行数返回调用方挂到同一次输出。
  */
+/**
+ * 一条日志行的创建时刻（毫秒）。
+ *
+ * stream 事件取 `__timestamp`；非事件的启动横幅取行首 ISO 时间。都取不到时返回 0，
+ * 调用方回退到进程启动时刻。这里只解析日志原文里已有的时间，不读文件 mtime：
+ * mtime 随每次追加变化，用它取号会让同一条消息在每次重建时换号。
+ */
+function lineTime(line: string, ev: Record<string, unknown> | null): number {
+  const fromEvent = ev ? String(ev.__timestamp ?? "") : "";
+  const iso = fromEvent || (/^\[[^\]]+\]\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)/.exec(line)?.[1] ?? "");
+  if (!iso) return 0;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 export function parseWorkerLog(
   rawLines: readonly string[],
   opts: { stream?: boolean } = {},
 ): WorkerLogParts {
   const stream = opts.stream ?? detectStream(rawLines);
   const text: string[] = [];
+  const textTimes: number[] = [];
   const tools: string[] = [];
   const thinking: string[] = [];
+  const thinkingTimes: number[] = [];
   const debug: string[] = [];
   let hidden = 0;
   let lastAction: WorkerAction | null | undefined;
+  /** 事件缺时间戳时沿用上一条：同一毫秒内的连续片段仍归同一个创建时刻。 */
+  let lastTs = 0;
 
   /** 计数被过滤行；宿主运维噪声不保留原文，其余调试行保留供折叠展开。原文仍留在 .log 文件。 */
   const hide = (line: string): void => {
@@ -351,7 +374,10 @@ export function parseWorkerLog(
     if (line.trim() === "") continue;
 
     if (LOG_KEEP.some((re) => re.test(line))) {
+      const at = lineTime(line, null) || lastTs;
+      if (at) lastTs = at;
       text.push(line);
+      textTimes.push(at);
       continue;
     }
 
@@ -372,10 +398,14 @@ export function parseWorkerLog(
         hide(line);
         continue;
       }
+      const at = lineTime(line, ev) || lastTs;
+      if (at) lastTs = at;
       const parts = eventParts(ev);
       text.push(...parts.text);
+      for (let i = 0; i < parts.text.length; i += 1) textTimes.push(at);
       tools.push(...parts.tools);
       thinking.push(...parts.thinking);
+      for (let i = 0; i < parts.thinking.length; i += 1) thinkingTimes.push(at);
       /* 仅本事件带语义片段时更新动作，宿主诊断与未知事件不覆盖已有动作。 */
       if (parts.action !== undefined) lastAction = parts.action;
       continue;
@@ -397,18 +427,26 @@ export function parseWorkerLog(
         /* 不是完整 JSON：按普通文本行处理 */
       }
     }
+    const at = lineTime(line, null) || lastTs;
+    if (at) lastTs = at;
     const m = /^\[thinking\]\s?(.*)$/.exec(line);
     if (m) {
-      if ((m[1] ?? "").trim() !== "") thinking.push((m[1] ?? "").trim());
+      if ((m[1] ?? "").trim() !== "") {
+        thinking.push((m[1] ?? "").trim());
+        thinkingTimes.push(at);
+      }
       continue;
     }
     text.push(line);
+    textTimes.push(at);
   }
 
   return {
     text,
+    textTimes,
     tools,
     thinking,
+    thinkingTimes,
     hidden,
     debug,
     stream,

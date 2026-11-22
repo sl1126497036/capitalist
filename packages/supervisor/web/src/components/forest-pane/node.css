@@ -235,13 +235,20 @@
 
 /*
  * 组是结构节点：用虚线边框表示节点归属，不靠颜色单独区分。
- * 组成员内嵌在卡片里横向排开，组卡片宽度按成员数撑开，于是三片合成组这一个节点。
+ * 组成员内嵌在卡片里横向排开，组卡片宽度按列数撑开，于是三片合成组这一个节点。
  * 宽度写进 `--fv-self-w` 供连线取中线：组比成员卡宽，中线不再等于一张卡的半宽。
+ *
+ * 列数有上限：成员数直接决定宽度时，11 个成员的组宽 2540px，远超面板宽度，
+ * 卡片会画到树边框之外。上限取 4 是因为面板 1200px 扣掉内外边距后可用约 1146px，
+ * 5 张卡加间距需 1160px 放不下；超出的成员换到下一行，组框增高而不增宽。
  */
 .fv-col.has-group {
+  --fv-group-cols: 4;
+  --fv-gcols: min(var(--fv-gn), var(--fv-group-cols));
   /* 2px 为组卡片左右边框：全局 border-box，公式需把边框算进外宽。 */
   --fv-self-w: calc(
-    var(--fv-gn) * var(--fv-card-w) + (var(--fv-gn) - 1) * var(--fv-kid-gap) + 2 * var(--s10) + 2px
+    var(--fv-gcols) * var(--fv-card-w) + (var(--fv-gcols) - 1) * var(--fv-kid-gap) + 2 * var(--s10) +
+      2px
   );
 }
 
@@ -251,10 +258,36 @@
   border-color: var(--t3);
 }
 
+/*
+ * 成员按列排，超过 `--fv-group-cols` 换行：组框宽度已被列数上限固定，
+ * 不换行时多出的成员会溢出组框。行距取 s10，比兄弟间距略小，以区别于并列关系。
+ */
 .fv-gmembers {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  gap: var(--fv-kid-gap);
+  column-gap: var(--fv-kid-gap);
+  row-gap: var(--s10);
+}
+
+/*
+ * 列数随树宽分档：4 列需 930px 外宽，面板收窄到 4 列放不下时若仍按 4 列排，
+ * 末列会被树边框裁掉一半。断点取各档所需外宽加 30px 余量，留给深层节点的缩进。
+ */
+@container (max-width: 959px) {
+  .fv-col.has-group {
+    --fv-group-cols: 3;
+  }
+}
+@container (max-width: 729px) {
+  .fv-col.has-group {
+    --fv-group-cols: 2;
+  }
+}
+@container (max-width: 499px) {
+  .fv-col.has-group {
+    --fv-group-cols: 1;
+  }
 }
 
 .fv-ngroup {

@@ -61,7 +61,7 @@ export interface SkillAllowRoots {
  * 只读白名单根：各宿主技能目录与插件缓存，覆盖项目级与用户级。
  *
  * 口径取自 registry 的 `configDir`，新增宿主自动纳入，不另外硬编码目录名。
- * 项目级用任务根拼接，用户级用家目录；插件缓存只有用户级——插件市场装在家目录下。
+ * 项目级用任务根拼接，用户级用家目录；插件缓存只有用户级：插件市场装在家目录下。
  */
 export function skillAllowRoots(root: string): SkillAllowRoots {
   const skills: string[] = [];

@@ -65,8 +65,8 @@ function printGroups(root: string): number {
     if (!st) continue;
     const head =
       `${groupNoLabel(g.id)} ${clipLine(g.title, 32)}  ` +
-      `${st.done}/${st.total} 完成 · ${groupStateWord(st.state)}` +
-      (st.brokenAt ? ` · 断链 ${st.brokenAt}` : "");
+      `${st.done}/${st.total} 完成 | ${groupStateWord(st.state)}` +
+      (st.brokenAt ? ` | 断链 ${st.brokenAt}` : "");
     process.stdout.write(`${head}\n`);
     const byId = new Map(rows.map((d) => [String(d.id), d] as const));
     for (const m of idx.members.get(g.id) ?? []) {
@@ -78,6 +78,17 @@ function printGroups(root: string): number {
     const settled = groupSettled(g.id, rows, idx);
     if (!settled.settled && settled.pending.length > 0) {
       process.stdout.write(`  待完成：${settled.pending.join("、")}\n`);
+    }
+    /*
+     * 卡在等待或断链时给出下一步。此前的输出只列待完成号，用户看不出该重派、该作废，
+     * 还是该放弃整组；三条出口各自影响的范围不同，必须写清。
+     */
+    if (!settled.settled && (st.state === "waiting" || st.state === "blocked")) {
+      const first = st.pending[0] ?? st.failed[0] ?? "";
+      process.stdout.write(
+        `  下一步：重派该成员用看板的重试按钮；放弃该成员 capitalist close ${first}；` +
+          `放弃整组 capitalist tree group close ${groupNoLabel(g.id)}\n`,
+      );
     }
   }
   return 0;

@@ -1,12 +1,22 @@
 /**
- * 树相关标记行：`PARENT:` / `PARENT_REASON:` / `AFTER:` / `GROUP:` / `INSERT:` / `INSERT_MODE:`。
+ * 派单标记行：`TITLE:` / `PARENT:` / `PARENT_REASON:` / `AFTER:` / `GROUP:` / `SUPERSEDE:` /
+ * `INSERT:` / `INSERT_MODE:`。
  *
  * 抽成一处的理由：这些正则与提示词里的语法一一对应，改语法时若只改提示词不改正则，
- * 模型写了新写法却被静默当成正文。放同一个文件，改一处即可对照。
+ * 模型写了新写法却被无提示地当作正文。放同一个文件，改一处即可对照。
  *
  * 只认行首（允许前导空白）。行中出现的 `PARENT:` 属于正文，不当作标记。
  * 工作进程常在自己的说明里引用这些字样，误切会把正文内容写入树字段。
  */
+
+/**
+ * 标题行：`TITLE: 校验 cli 文案`。
+ *
+ * 标题由派单方给出，不从正文摘要推测。摘要只能看到词面，判断不出哪一段是任务本体，
+ * 首段常是“加载某技能”这类执行交代，十几张单会得到同一个标题。
+ * 缺该行时建单侧仍按正文摘要兜底，不阻塞派单。
+ */
+export const TITLE_LINE = /^\s*(?:TITLE|标题)[:：]\s*(.*)$/i;
 
 /** 树边行：`PARENT: #03` / `PARENT: none`。 */
 export const PARENT_LINE = /^\s*(?:PARENT|父节点)[:：]\s*(.*)$/i;
@@ -19,6 +29,14 @@ export const AFTER_LINE = /^\s*AFTER[:：]\s*(.*)$/i;
 
 /** 分组行：`GROUP: new <标题>` / `GROUP: #G1` / `GROUP: none`。 */
 export const GROUP_LINE = /^\s*(?:GROUP|分组)[:：]\s*(.*)$/i;
+
+/**
+ * 接替行：`SUPERSEDE: #65`。
+ *
+ * 语义是“本单顶替某一件事”，不是新增一项。组内计数与放行以合并且后的事项为准，
+ * 补单因此可以在不改变组成员数的前提下接替失败成员。
+ */
+export const SUPERSEDE_LINE = /^\s*(?:SUPERSEDE|接替)[:：]\s*(.*)$/i;
 
 /** 插入行：`INSERT: before #03` / `INSERT: after #G1 now`。 */
 export const INSERT_LINE = /^\s*INSERT[:：]\s*(.*)$/i;

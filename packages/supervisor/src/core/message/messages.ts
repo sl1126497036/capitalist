@@ -50,7 +50,7 @@ export function recordUserMessage(
     direction: MsgDirection;
   },
 ): UserMessage {
-  /** 图在这里编一次号（`[附件] x.png` -> `[图1] x.png`），之后所有环节照抄这一套。 */
+  /** 图在这里编一次号（`[附件] x.png` -> `[图1] x.png`），后续环节统一沿用该编号。 */
   let text = numberAttachmentLines(String(input.text ?? ""));
   /*
    * 方向必须由调用方给出。缺省成 `U2W` 会把「忘记传方向」的调用静默记成
@@ -65,7 +65,7 @@ export function recordUserMessage(
   const id = newMessageId(input.taskNo ?? "S0", direction);
   /*
    * 附件按“消息 id + 序号”另存一份（`<msgId>-1.png`）：这张图属于哪条消息、是第几张，
-   * 写进文件名，往下任何环节想拿错都能当场看出来。原文里的路径同步换成新路径。
+   * 写进文件名，以便各环节核对，避免错用。原文里的路径同步换成新路径。
    */
   const own = input.atts?.length
     ? [...new Set(input.atts.map((p) => String(p ?? "").trim()).filter(Boolean))]

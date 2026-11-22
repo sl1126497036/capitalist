@@ -79,8 +79,8 @@ export function flagNumber(p: Parsed, key: string): number | undefined {
 /**
  * 取“token 数量”选项：支持 `300000`、`300k`、`1m`、`1M` 三种写法。
  *
- * 上下文上限就是按 token 说话的，用户不会愿意数六个零；写 `1m` 更不容易错。
- * 只认 k/m 后缀（大小写不敏感），其它写法按没给处理。
+ * 上下文上限以 token 为单位，用户无需逐位数零；写 `1m` 更不易出错。
+ * 只认 k/m 后缀（大小写不敏感），其他写法按未提供处理。
  */
 export function flagTokens(p: Parsed, key: string): number | undefined {
   const v = flagString(p, key);

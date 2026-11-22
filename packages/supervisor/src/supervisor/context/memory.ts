@@ -233,8 +233,8 @@ function normalizeNote(text: string): string {
 }
 
 /**
- * 记录一条记忆。正文非空即收；同类别内按关键词重合（≥2，或单键完全命中）判为同类并合并，否则新建。
- * 提不出关键词的正文照常落盘，只是不注入提示词。
+ * 记录一条记忆。正文非空即收录；同类别内按关键词重合（≥2，或单键完全命中）判为同类并合并，否则新建。
+ * 无法提出关键词的正文照常落盘，只是不注入提示词。
  *
  * @param kind 非法值按 blocker 处理。
  * @param manual 面板人工新增：不查删除留痕，并解除同文留痕。
@@ -407,7 +407,7 @@ export function renderMemoryConstraints(entries: readonly MemoryEntry[]): string
       const n = e.count > 1 ? `（已发生 ${e.count} 次，最近 ${String(e.last_at).slice(0, 10)}）` : "";
       /*
        * 两类条目性质不同：习惯与环境是既有事实，按其执行；卡点记录要求先核对是否仍成立，
-       * 避免在同一个地方重复失败。
+       * 避免在同一处重复失败。
        */
       const tag = e.kind === "habit" ? "【用户习惯与运行环境】" : "【项目卡点】";
       const how =
@@ -420,9 +420,9 @@ export function renderMemoryConstraints(entries: readonly MemoryEntry[]): string
 }
 
 /**
- * 派单正文追加约束；注入前剥掉旧区块，避免重派时重复注入。
+ * 派单正文追加约束；注入前先移除旧区块，避免重派时重复注入。
  *
- * 兼容旧标题：此前写入的派单正文里区块头为“【调度经验记忆”，重派时仍要能被剥掉。
+ * 兼容旧标题：此前写入的派单正文里区块头为“【调度经验记忆”，重派时仍要能被移除。
  */
 const MEMORY_SECTION_HEADS = ["【项目记忆", "【调度经验记忆"];
 

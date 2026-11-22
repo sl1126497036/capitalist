@@ -1,9 +1,9 @@
-
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { attachmentsIn, stripAttachments } from "../message/attachments";
+import { stampDirective } from "../message/msgIdentity";
 import { appendJsonl, readJson, readJsonl, writeJson, writeJsonl } from "../record/json";
 import { recordEvent } from "../record/ledger";
 import { ledger as ledgerLoc, meta as metaLoc } from "../record/locations";
@@ -78,11 +78,12 @@ export function withFileLock<T>(file: string, fn: () => T): { ok: true; value: T
   }
 }
 
-
 export interface Directive {
   at: string;
   at_ts: number;
   type: "direct";
+  /** 记录自己的消息编号（监工来源带，方向 `S`）。`msg_id` 是触发它的用户消息编号，两者不可互换。 */
+  id?: string;
   /**
    * 在 `direct.jsonl` 中的行号（从 1 开始）。
    *
@@ -184,21 +185,22 @@ export function isDirectiveOpen(r: Directive): boolean {
 /**
  * 一条插话的对外编号：回报结论、拼进派单、界面回显都用它。
  *
- * 优先 `msg_id`（与看板消息号同一份，人能对着聊天记录核对）；老记录没有它时退回落盘
- * 时间，时间在台账里唯一，且 worker 从派单正文里抄得下来。
+ * 优先记录自己的消息编号 `id`（监工来源形如 `19-S-…`，用户来源与触发它的用户消息同号）；
+ * 老记录没有 `id` 时退 `msg_id`，再退落盘时间。三者都在台账里唯一。
  */
 export function directiveRef(r: Directive): string {
-  return String(r.msg_id ?? "") || String(r.at ?? "");
+  return String(r.id ?? "") || String(r.msg_id ?? "") || String(r.at ?? "");
 }
 
 /**
- * 对外的短号：`@行号`。老记录没有行号时回落到 {@link directiveRef}。
+ * 对外的可抄写编号：一律用消息编号，与界面显示同一串。
  *
- * 前缀用 `@` 不用 `#`：`#` 已专属于任务号、派单号、进程号，插话行号与之区分，避免解析歧义。
- * 派单正文与回报都用它，worker 不必抄一串消息号。
+ * 早先这里返回 `@行号`：行号是台账下标，全局递增，用户看到“本单只插一次话却是 @3”无法解释，
+ * 且与 `PARENT: @1` 的同批派单序同形不同义。现在每条插话落盘就带消息编号，回报直接抄它。
+ * 只有既无 `id` 又无 `msg_id` 的老记录才回落到 {@link directiveRef} 的时间形态。
  */
 export function directiveShortRef(r: Directive): string {
-  return r.no ? `@${r.no}` : directiveRef(r);
+  return directiveRef(r);
 }
 
 /**
@@ -315,6 +317,9 @@ export function appendDirective(
     atts?: string[];
     /** 这条插话对应的用户消息标识（看板发送时生成）。 */
     msgId?: string;
+    /** 被引用的消息编号与原文摘要；引用随记录一并落盘。 */
+    quote?: string;
+    quoteText?: string;
     /** 目标派生链：无分片单靠它认领，避免消息串进其他派生链。 */
     lineage?: string;
     /** 目标单：这条话是说给哪一单的（派单 id 或 worker id）。 */
@@ -338,7 +343,6 @@ export function appendDirective(
   /* 附件按“这条记录自己的”落盘：调用方给了就用它，没给就从自己的正文里解一次。 */
   const atts = input.atts?.length ? input.atts.map(String) : attachmentsIn(text);
   if (atts.length) rec.atts = [...new Set(atts)];
-  if (input.msgId) rec.msg_id = input.msgId;
   if (input.thread) rec.thread = input.thread;
   if (input.lane) rec.lane = input.lane;
   if (input.stage) rec.stage = input.stage;
@@ -347,20 +351,10 @@ export function appendDirective(
   if (input.via === "capitalist" || input.via === "user") rec.via = input.via;
   /* 仅当收件人为工作进程时写入该字段。用户发言与旧记录均不含此字段，读取时按 `user` 处理。 */
   if (input.audience === "worker") rec.audience = "worker";
-  /*
-   * 时间戳精度到毫秒：同一毫秒内连发两条时，`directiveRef` 会指向同一行，结束落到相邻记录上。
-   * 与前一条相同或更早（时钟回拨）则顺延 1ms，保证引用唯一，落盘格式不变。
-   */
+  /* 身份、引用与时间戳顺延统一在 msgIdentity.stampDirective 里做，写盘前一次落定。 */
   const file = directPath(root);
   const prev = readJsonl<Directive>(file);
-  const lastAt = String(prev[prev.length - 1]?.at ?? "");
-  if (lastAt && lastAt >= rec.at) {
-    const next = new Date(new Date(lastAt).getTime() + 1);
-    if (Number.isFinite(next.getTime())) {
-      rec.at = next.toISOString();
-      rec.at_ts = next.getTime() / 1000;
-    }
-  }
+  stampDirective(rec, input, String(prev[prev.length - 1]?.at ?? ""));
   if (!appendJsonl(file, rec)) return null;
   recordEvent(root, "direct_inject", {
     thread: input.thread ?? "",
@@ -557,7 +551,7 @@ export function spliceDirectives(action: string, directives: Directive[]): strin
       : "";
     return [head, ...(quoteLine ? [quoteLine] : []), ...files.map((p) => `  [附件] ${p}`)].join("\n");
   });
-  /** 先让它判断，再让它做；判断的结论必须逐条回报。 */
+  /** 先判定，再执行；判定结论必须逐条回报。 */
   const hint =
     "（逐条处理，每条都要给结论，收尾时用 capitalist report 的 --outcome 逐条回报：" +
     "本单做完写 `<编号>=done`；判定不属于本单写 `<编号>=not_mine` 并说明该归哪一单；" +
@@ -618,7 +612,7 @@ export function markDirectiveOutcome(
         break;
       }
     }
-    if (hit < 0) return { ok: false as const, reason: `找不到编号 ${key} 的插话（编号见派单正文里的 [方括号]）` };
+    if (hit < 0) return { ok: false as const, reason: `找不到编号 ${key} 的插话（编号写在派单正文的 [编号] 或 [@行号] 行首方括号里）` };
     const rec = rows[hit] as Directive;
     const owner = String(rec.delivered_by ?? rec.consumed_by ?? "");
     if (by && owner && owner !== by) {
@@ -660,7 +654,6 @@ export function appendSection(action: string, header: string, lines: string[]): 
   if (!body) return action;
   return `${action}\n\n${header}\n${body}`;
 }
-
 
 /**
  * 接管文件结构。
@@ -740,7 +733,7 @@ function writeTakeover(root: string, items: TakeoverItem[]): void {
 /**
  * 接管某片（`shard` 为空 = 整个任务根）。
  *
- * 接管只改变监工行为：下次 轮调度起该片不再自动重派、也不再自动验收。它不终止已运行中的
+ * 接管只改变监工行为：下一轮调度起该片不再自动重派、也不再自动验收。它不终止已运行中的
  * 进程，要停进程用 {@link stopWorker}。重复接管同一片时更新原因与时间，不叠加条目，
  * 否则 release 一次会留下一条仍在生效的残留。
  *
@@ -817,7 +810,6 @@ export function isHeld(root: string, shard?: string | null): boolean {
   return Boolean(shard) && v.shards.includes(String(shard));
 }
 
-
 export interface StopWorkerResult {
   id: string;
   pid: number;
@@ -877,7 +869,6 @@ export function stopWorker(root: string, id: string, opts: StopWorkerOptions = {
 
   return { id, pid: rec.pid, killed, alreadyTerminal, dispatch: d ? d.id : null };
 }
-
 
 export interface CloseTaskResult {
   dispatch: string;

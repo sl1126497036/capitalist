@@ -9,7 +9,7 @@ export const TENCENT_MODEL_POLICY = {
    * 与宿主 `--model` 清单冲突，面板选定后会被静默换回默认档。
    * 判定改由宿主承担：传过去能用就使用，不能用时由 `model_fallback` 的回退链路处理。
    *
-   * `fast-model` 一类路由别名不在此处拦截：它本意就是让宿主自行决定档位。
+   * `fast-model` 一类路由别名不在此处拦截：其设计意图是让宿主自行决定档位。
    */
   deny: [] as string[],
 } as const;

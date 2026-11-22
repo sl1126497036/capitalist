@@ -58,7 +58,7 @@ function numOrNull(v: unknown): number | null {
 
 function load(root: string): CreditFile {
   const p = creditLedgerPath(root);
-  /* 一次请求里这条被查十几遍；缓存 stat 后只碰一次盘。 */
+  /* 一次请求里这条会被查询十几次；缓存 stat 后只读一次盘。 */
   const st = statCached(p);
   const hit = st ? cache.get(root) : undefined;
   if (st && hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.file;

@@ -120,7 +120,7 @@ export interface InstallFacet {
  * 三十分钟的任务被中断三次，就等于把项目读了三遍。
  */
 export interface WorkerSession {
-  /** 稳定会话 id，按 阶段/分片 派生，重派之间不变。 */
+  /** 稳定会话 id，按阶段/分片派生，重派之间不变。 */
   id: string;
   /** true = 续接已有会话；false = 新开。要求变过时必须新开：续上会带着旧要求。 */
   resume: boolean;
@@ -206,7 +206,7 @@ export interface WorkerFacet {
 
 /** 开工前把目录变成可写（首次进入要人工确认的那类前置条件）。 */
 export interface WorkspaceFacet {
-  /** 幂等、只追加不覆盖用户配置；失败不阻断启动但要说清原因。 */
+  /** 幂等、只追加不覆盖用户配置；失败不阻断启动但须说明原因。 */
   prepare(root: string): { ok: boolean; added: boolean; message: string };
 }
 

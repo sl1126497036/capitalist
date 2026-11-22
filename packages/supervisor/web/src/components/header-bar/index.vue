@@ -116,7 +116,7 @@ const abnormalText = computed(() => {
   /* 连接故障时优先显示该状态：此时无法取得监工状态，不沿用上一次的值。 */
   if (connBad.value) return connText.value;
   if (!props.online) return nodeText.value;
-  if (pausedOnline.value) return t("已暂停调度");
+  if (pausedOnline.value) return t("调度暂停中");
   return connText.value;
 });
 /** 红点仅标记连接故障；暂停用黄点。 */

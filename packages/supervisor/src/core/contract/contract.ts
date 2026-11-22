@@ -708,7 +708,7 @@ export function isLastStage(contract: Contract, id: string): boolean {
 /**
  * 该红线的“正确做法”。
  *
- * @returns 红线 `fix` 字段的文本；该红线不存在或未写 `fix` 时返回中性说明，不编造领域话术。
+ * @returns 红线 `fix` 字段的文本；该红线不存在或未写 `fix` 时返回中性说明，不臆造领域表述。
  */
 export function redlineFix(contract: Contract, id: string): string {
   const r = contract.redlines.find((x) => x.id === id);
@@ -737,7 +737,7 @@ export interface InstanceLease {
   heartbeat_at: string;
   /** 最近一次心跳（epoch 秒），判活用它。 */
   heartbeat_ts: number;
-  /** 判活窗口（秒）。租约自带窗口，读取方不必再猜 调度周期配置。 */
+  /** 判活窗口（秒）。租约自带窗口，读取方不必再依赖调度周期配置。 */
   stale_sec: number;
   status: "running" | "superseded" | "released";
   /** 被接管时间（ISO），仅 superseded 时存在。 */
@@ -785,7 +785,7 @@ export function leasePath(root: string, task: string): string {
  * 造一条本进程的租约。
  *
  * @param pid 持有者进程号。
- * @param staleSec 判活窗口（秒），下限 30，吸收 调度抖动。
+ * @param staleSec 判活窗口（秒），下限 30，容纳调度抖动、避免将调度抖动误判为失效。
  * @param instanceId 实例 id；省略时按时间与随机数生成。
  */
 export function newInstanceLease(

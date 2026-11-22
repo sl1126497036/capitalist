@@ -400,7 +400,8 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
     supervisor_model_effective: supervisorModelEffective(root),
     next_model: readNextModel(root),
     effort: String(capitalist?.effort ?? "").trim(),
-    paused: readPause(root) !== null,
+    /* 排空式停止的门闩不算暂停：监工正在退出，指标条不该给出“恢复调度”。 */
+    paused: readPause(root) !== null && readPause(root)?.drain !== true,
     activity,
   };
 

@@ -1,14 +1,14 @@
 /**
- * 取号临界区锁：跨进程排他、进程内可重入、到期自动接管、取不到即失败。
+ * 取号临界区锁：跨进程排他、进程内可重入、到期自动接管、获取失败即报错。
  *
  * 只服务编号发行（任务号、派单序、进程序），不用于文件互斥；文件互斥见 `fileLock.ts`。
  *
  * 三条硬约束：
  * 1. **不嵌套**：同一调用链不得同时持有两把不同 key 的锁，检测到直接抛 `NoLockNestingError`。
- *    取号流程一律「拿一把、做完、放掉、再拿下一把」，因此不存在环路等待，不会死锁。
+ *    取号流程一律「获取一把、执行、释放、再获取下一把」，因此不存在环路等待，不会死锁。
  * 2. **到期自动释放**：锁文件写 `expires_at`。持有进程已退出，或到期且持有者不响应，后来者
  *    可以直接接管，不需要人工清锁。
- * 3. **取不到就失败**：重试次数用尽抛 `NoLockTimeoutError`，由调用方把「创单失败」如实报给用户，
+ * 3. **获取失败即报错**：重试次数用尽抛 `NoLockTimeoutError`，由调用方把「创单失败」如实报给用户，
  *    不静默降级、不自行推算一个可能撞号的编号。
  */
 
@@ -116,7 +116,7 @@ function tryCreate(path: string, key: string, token: string, ttlMs: number): boo
       try {
         closeSync(fd);
       } catch {
-        /* 已关闭或写失败：后面的归档兜底。 */
+        /* 已关闭或写失败：由后面的归档步骤处理。 */
       }
       /* 建文件后写失败：把半成品移出主路径，避免下一位读到空内容。 */
       park(path);
@@ -148,7 +148,7 @@ function staleReason(path: string, holder: LockHolder | null, ttlMs: number): st
 /**
  * 接管失效锁。
  *
- * 先把当前文件原子改名到唯一临时名，再核对改名后拿到的是不是刚才判定失效的那把：
+ * 先把当前文件原子改名到唯一临时名，再核对改名后得到的是否为刚才判定失效的那把：
  * - 是，删除，调用方重新创建；
  * - 不是（中间被别的进程换成了新锁），原样放回，放弃本次接管。
  *
@@ -199,7 +199,7 @@ function park(path: string): boolean {
     renameSync(path, dest);
     return true;
   } catch {
-    /* 归档目录不可写时退回删除；删除被策略拦也不影响正确性，TTL 会兜底。 */
+    /* 归档目录不可写时退回删除；删除被策略拦也不影响正确性，TTL 机制会作最后处理。 */
   }
   try {
     unlinkSync(path);
@@ -221,7 +221,7 @@ function release(path: string, token: string): void {
  *
  * @param key 锁键。任务号发行用 `task-no`；派单序用 `dispatch-<任务号>`；
  *   进程序用 `worker-<任务号>`。键里带任务号，保证不同任务的派单、进程互不排队。
- * @param fn 临界区。必须是同步代码：Node 单线程下同步段不会被打断，跨进程由锁文件挡住。
+ * @param fn 临界区。必须是同步代码：Node 单线程下同步段不会被打断，跨进程由锁文件保证互斥。
  * @throws {NoLockNestingError} 已持有其它 key 时再次申请。
  * @throws {NoLockTimeoutError} 重试用尽仍被占用。
  */

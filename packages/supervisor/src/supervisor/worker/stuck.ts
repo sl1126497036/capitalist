@@ -172,28 +172,28 @@ function firstMatch(lines: readonly string[], re: RegExp): string {
  * @param idleSec 日志距最后一次写入的秒数；未知时传 -1。
  */
 export function stuckGuidance(ev: StuckEvidence, idleSec: number): string {
-  const silent = idleSec >= 0 ? `日志已 ${idleSec} 秒没有新增。` : "日志没有新增。";
+  const silent = idleSec >= 0 ? `日志已 ${idleSec} 秒未增长。` : "日志未增长。";
   switch (ev.kind) {
     case "external":
       return (
-        "跳出办法：当前卡在需要人解除的外部条件，重复同一请求不会通过。" +
-        "停止重试该操作，用 `capitalist block <类型> \"<卡在哪>\"` 上报后停手；" +
-        "其余不依赖该条件的工作先做完，并把已经做过的改动留在任务根内。"
+        "解除办法：当前因需要人工解除的外部条件受阻，重复同一请求不会通过。" +
+        "停止重试该操作，用 `capitalist block <类型> \"<受阻原因>\"` 上报后停止；" +
+        "其余不依赖该条件的工作先完成，并把已经做过的改动留在任务根内。"
       );
     case "retry":
       return (
-        "跳出办法：同一操作已经重复多次且结果没有变化，继续重复不会得到不同结果。" +
+        "解除办法：同一操作已经重复多次且结果没有变化，继续重复不会得到不同结果。" +
         "停止重复该操作；把失败点、已经试过的路径写进 `capitalist notify stuck`，" +
-        "换一条能走通的路径或改用更小的验证步骤，再继续原任务。"
+        "改用一条可行的路径或更小的验证步骤，再继续原任务。"
       );
     case "error_loop":
       return (
-        "跳出办法：同一段报错在反复出现。先停下重复调用，读报错原文定位根因（输入、路径、权限、参数）；" +
-        "只改一处再验证，不要整段重跑；两轮后仍相同，用 `capitalist notify stuck` 写清报错与已试手段。"
+        "解除办法：同一段报错在反复出现。先停下重复调用，读报错原文定位根因（输入、路径、权限、参数）；" +
+        "只改一处再验证，不要整段重复执行；两轮后仍相同，用 `capitalist notify stuck` 写清报错与已试手段。"
       );
     default:
       return (
-        `跳出办法：${silent}先确认是不是在等一个不会来的输入（交互确认、权限弹窗、目录信任）。` +
+        `解除办法：${silent}先确认是否在等待一项不会到达的输入（交互确认、权限弹窗、目录信任）。` +
         "若在等，改为用 `capitalist block` 上报并停手；若不是，先做下一个不依赖它的步骤，并在 `capitalist notify progress` 里写清当前进度。"
       );
   }

@@ -28,7 +28,7 @@ export interface UpdateStatus {
   local: string;
   latest: string;
   outdated: boolean;
-  /** ISO 时间串，说明这条结论是什么时候拿到的 */
+  /** ISO 时间串，说明这条结论的取得时间 */
   checkedAt: string;
 }
 

@@ -121,7 +121,13 @@ export type ThreadRole = "supervisor" | "worker" | "user";
 export type ThreadKind = "dispatch" | "verdict" | "output" | "tool" | "say" | "thinking" | "engine" | "notice";
 
 export interface ThreadMessage {
-  /** 消息 id 必须与时间戳解耦，取派单 id、工作进程输出块序号、事件内容指纹等来源标识。 */
+  /**
+   * 消息 id。
+   *
+   * 真实消息取消息编号（`任务号-方向-时间戳`，见 core/message/msgId.ts）；视图块（思考、
+   * 工具聚合、输出分块、引擎日志）取 `viewId()` 的 `~` 形态。视图块不是消息，不带编号、
+   * 不可引用，{@link view} 为 true 时界面不得显示编号。
+   */
   id: string;
   at: string;
   role: ThreadRole;
@@ -134,7 +140,7 @@ export interface ThreadMessage {
   no?: string;
   duration_sec?: number;
   idle_sec?: number;
-  lines?: number;  /** 这一块里被过滤掉的引擎调试行数（页面上要说明“已隐藏 N 行”，不能静默丢弃） */
+  lines?: number;  /** 这一块里被过滤掉的引擎调试行数（页面上要说明“已隐藏 N 行”，不能无提示地丢弃） */
   hidden?: number;
   debug?: string[];
   event?: string;
@@ -160,6 +166,8 @@ export interface ThreadMessage {
   unhandled?: boolean;
   quote?: string;
   quote_text?: string;
+  /** 视图块标记：真相是日志切片或聚合结果，不是一条消息。界面不显示编号、不提供引用。 */
+  view?: boolean;
 }
 
 export interface ThreadSummary {
@@ -169,6 +177,7 @@ export interface ThreadSummary {
   lineage?: string;
   stage: string;
   status: string;
+  bucket?: "run" | "queue" | "paused" | "bad" | "done" | "canceled" | "closed"; /* 由 taskBucket 算定，前端直接读 */
   settled?: boolean;
   queued_reason?: string;
   model: string;
@@ -206,8 +215,27 @@ export interface ThreadSummary {
   usage: UsageFigures;
 }
 
-export const FEED_EVENTS = new Set([
-  "dispatch_open",
+/**
+ * 上屏后需要能引用的裁决类事件：对申报的正式答复与流程结论。进程启停、心跳这类
+ * 状态播报不在其中，它们没有可引用的内容。两条消息流共用这份清单。
+ */
+export const REFUNDABLE_EVENTS = new Set([
+  "mq_triage",
+  "dispatch_done",
+  "dispatch_failed",
+  "dispatch_closed",
+  "dispatch_retry",
+  "dispatch_orphan",
+  "dispatch_reaped",
+  "stuck_detected",
+  "stuck_cleared",
+  "stuck_killed",
+  "stuck_guidance_delivered",
+  "supervisor_advance",
+  "supervisor_done",
+]);
+
+export const FEED_EVENTS = new Set([  "dispatch_open",
   "dispatch_done",
   "dispatch_failed",
   "dispatch_closed",
@@ -356,13 +384,13 @@ export function describeEvent(
     case "direct_deliver":
       /*
        * 未开监工介入时的普通对话，投递结果由消息旁的“已送达”标签表达，这里不再单列一条
-       * 记录：同一条消息出现两处回执，会让人以为监工参与过这条对话。
+       * 记录：同一条消息出现两处回执，会使人误以为监工参与过这条对话。
        */
       return "";
     case "supervisor_advance": {
       const from = String(e.from ?? "");
       const to = String(e.to ?? "");
-      /* 起止相同不是推进：界面出现 X -> X 只会让人以为流程在动。 */
+      /* 起止相同不是推进：界面出现 X -> X 只会使人误以为流程在推进。 */
       if (!from || !to || from === to) return "";
       if (!custom) return "进入下一步";
       return `阶段推进 ${from} 到 ${to}`;
@@ -626,11 +654,8 @@ export function ledgerOnlyRoot(root: string): boolean {
 }
 
 /**
- * 对外的阶段读数。默认任务列表下全部置空。
- *
- * 接口与界面拿到阶段号就会显示，显示就要读者反查“S0 是什么”。默认任务列表是引擎的流程壳子，
- * 一张单落在哪一步不影响用户要看的结果，因此阶段号、阶段名、进度都不递出去。
- * 两处快照（`buildSnapshot` 与状态视图）共用这一处口径，避免一处改了另一处还写着 S0。
+ * 对外的阶段读数。默认任务列表下全部置空：阶段号会让读者反查“S0 是什么”，
+ * 而一张单落在哪一步不影响用户要看的结果。两处快照共用这一处口径。
  */
 export function stageViewOf(
   contractName: string,
@@ -652,7 +677,7 @@ export interface DiagnoseInput {
   workers: BoardWorker[];
   dispatches: BoardDispatch[];
   blockers: number;
-  /** 阻塞原因，与终端状态行同源；只用于把“卡在哪”写清楚。 */
+  /** 阻塞原因，与终端状态行同源；只用于把“阻塞在哪”写清楚。 */
   blockerReasons?: string[];
   hasActive: boolean;
   lastLogTail: string;
@@ -708,7 +733,7 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
       return {
         level: "bad",
         title: "宿主会话一建立就结束",
-        detail: `worker ${last.id}（${last.host}）拿到 session 后立刻 ended，通常是该宿主没有可用模型或凭据。`,
+        detail: `worker ${last.id}（${last.host}）获取 session 后立刻 ended，通常是该宿主没有可用模型或凭据。`,
         fix: "先在同机用该宿主的非交互入口执行一次验证，确认它能独立完成一轮",
       };
     }
@@ -729,7 +754,7 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
   }
 
   if (i.blockers > 0) {
-    /* 与终端状态行同口径：同类阻塞合并计数，说清有几条、卡在哪。 */
+    /* 与终端状态行同口径：同类阻塞合并计数，写明有几条、阻塞在哪。 */
     const counts = new Map<string, number>();
     for (const x of i.blockerReasons ?? []) {
       const key = String(x ?? "").trim() || "未写原因";
@@ -751,7 +776,7 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
     return {
       level: "warn",
       title: "监工不自动拉起 worker",
-      detail: "以 --no-spawn 运行：只派单，等另一个会话 capitalist next 领走。",
+      detail: "以 --no-spawn 运行：只派单，由另一个会话执行 capitalist next 接收。",
       fix: "另开一个会话跑 capitalist next，做完 capitalist report <派单id> done",
     };
   }

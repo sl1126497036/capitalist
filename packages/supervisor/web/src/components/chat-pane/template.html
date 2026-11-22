@@ -216,6 +216,7 @@
         :paused="paused"
         @pause="$emit('pause', $event)"
         @refresh="$emit('refresh')"
+        @new-session="$emit('new-session')"
       >
         <template #end>
           <span
@@ -352,7 +353,7 @@
       </div>
 
       <div v-if="isSupervisor && paused" class="pausecard" role="status">
-        <span class="pctitle">{{ t("调度已暂停") }}</span>
+        <span class="pctitle">{{ t("调度暂停中") }}</span>
         <span class="pcdesc">{{ t("点击右上角“恢复调度”继续") }}</span>
       </div>
 
@@ -379,7 +380,7 @@
             {{ t("展开更早的消息") }}
           </button>
 
-          <template v-for="v in rows" :key="v.ref">
+          <template v-for="v in rows" :key="v.key">
             <div v-if="v.seam" class="seam" role="separator" :aria-label="v.seam">
               <span>{{ v.seam }}</span>
             </div>
@@ -500,6 +501,7 @@
                   {{ t("查看任务") }}
                 </button>
                 <button
+                  v-if="v.refable"
                   class="mact"
                   type="button"
                   :aria-label="t('引用到输入框')"
@@ -508,6 +510,7 @@
                   <NumberOutlined aria-hidden="true"/>
                 </button>
                 <button
+                  v-if="v.refable"
                   class="mact"
                   type="button"
                   :class="{ done: copied[v.ref] }"
@@ -653,15 +656,16 @@
                     >{{ stat(v) }}</span>
                     <span class="bacts">
                     <button
-                      v-if="v.m.quote || sentQuotes[v.m.text]"
+                      v-if="v.quoteLabel"
                       class="qref"
                       type="button"
-                      @click="jumpTo(v.m.quote || sentQuotes[v.m.text])"
+                      @click="jumpTo(v.m.quote)"
                     >
                       <LinkOutlined aria-hidden="true"/>
-                      <span>#{{ v.m.quote || sentQuotes[v.m.text] }}</span>
+                      <span>{{ v.quoteLabel }}</span>
                     </button>
                     <button
+                      v-if="v.refable"
                       class="mact"
                       type="button"
                       :aria-label="t('引用到输入框')"
@@ -670,6 +674,7 @@
                       <NumberOutlined aria-hidden="true"/>
                     </button>
                     <button
+                      v-if="v.refable"
                       class="mact"
                       type="button"
                       :class="{ done: copied[v.ref] }"
@@ -775,7 +780,7 @@
       />
       <div v-if="quote" class="qbar">
         <span class="qlabel">{{ t("引用") }}</span>
-        <span class="qid">#{{ quote.ref }}</span>
+        <span v-if="quoteLabel" class="qid">{{ quoteLabel }}</span>
         <span class="qtext">{{ quote.text }}</span>
         <button class="xclose" type="button" :aria-label="t('取消引用')" @click="clearQuote">×</button>
       </div>
@@ -1055,7 +1060,7 @@
     <div v-if="pauseAsk" class="veil" @click.self="pauseAskCancel">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pauseAskTitle">
         <h2 id="pauseAskTitle">{{ t("下发派单") }}</h2>
-        <p class="warn">{{ t("已暂停调度") }}</p>
+        <p class="warn">{{ t("调度暂停中") }}</p>
         <div class="macts">
           <button class="mcancel" type="button" @click="pauseAskCancel">{{ t("取消") }}</button>
           <button class="mok" type="button" @click="pauseAskConfirm">{{ t("确认下发") }}</button>

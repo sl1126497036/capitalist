@@ -6,7 +6,7 @@
  * 参数取值统一走 `args.ts`，输出统一走 `output.ts`。
  *
  * hook 是另一个进程（host/main.ts），与本文件共享 `core/` 但不共享生命周期：hook 在工作
- * 进程内按事件调用，必须快且不能抛；本文件是交互式命令，出错必须说清楚。
+ * 进程内按事件调用，必须快且不能抛；本文件是交互式命令，出错必须说明原因。
  */
 
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
@@ -31,7 +31,7 @@ import {
 import { enterStage, newState } from "../core/contract/init";
 import { INBOX_LEDGER, readInbox } from "../core/dispatch/inbox";
 import { appendJsonl, readJsonl, writeJson } from "../core/record/json";
-import { type PauseFile, pausePath, readPause } from "../core/record/pause";
+import { pauseAll, pausePath, readPause, resumeAll } from "../core/record/pause";
 import { recordEvent, recordViolation } from "../core/record/ledger";
 import { findRoot, isInside, supervisorDir } from "../core/record/paths";
 import { rootDir, inbox as inboxLoc } from "../core/record/locations";
@@ -470,7 +470,7 @@ function cmdStatus(p: Parsed): number {
   // 看板地址只在监工在线时给：已停的监工没有在监听的端口，印出来等于引导用户点一个空地址。
   if (boardUrl) write(t(`Board: ${boardUrl}\n`, `看板：${boardUrl}\n`));
 
-  if (pause) write(t(`Paused since ${pause.at}; reason: ${pause.reason} (no new dispatches, workers stopped; resume with capitalist resume)\n`, `已暂停 · 自 ${pause.at} · 原因：${pause.reason}（不派新单、进程已停；恢复：capitalist resume）\n`));
+  if (pause) write(t(`Paused since ${pause.at}; reason: ${pause.reason} (no new dispatches, workers stopped; resume with capitalist resume)\n`, `调度暂停中 · 自 ${pause.at} · 原因：${pause.reason}（不派新单、进程已停；恢复：capitalist resume）\n`));
 
   /* 暂停单来自上次中断，与新派单互不阻塞；单独一行列出唤醒方式。 */
   const pausedRows = pausedDispatches(root);
@@ -526,13 +526,13 @@ function cmdBrief(p: Parsed): number {
   const stage = stageById(contract, state.stage);
   const check = runCheck(stage?.done as Record<string, unknown> | undefined, root);
   let text = `${buildBrief({ root, state, contract, mode, missing: check.missing })}\n`;
-  // 暂停期间必须抑制“下一步”：执行侧照常拿到 next_action，会误以为可以继续开工。
+  // 暂停期间必须抑制“下一步”：执行侧照常取得 next_action，会误以为可以继续执行。
   const pause = readPause(root);
   if (pause) {
     text += t(
       `\n▸ Task paused (since ${pause.at}; reason: ${pause.reason}). Dispatching is suspended; the "Next" above is on hold.\n` +
         `  Waiting for capitalist resume. Do not start work before it.\n`,
-      `\n▸ 任务已暂停（自 ${pause.at}，原因：${pause.reason}）：监工暂停派单，上面的“下一步”暂不执行。\n` +
+      `\n▸ 调度暂停中（自 ${pause.at}，原因：${pause.reason}）：监工不派单，上面的“下一步”暂不执行。\n` +
         `  等待操作者执行 capitalist resume；恢复之前不要继续开工。\n`,
     );
   }
@@ -626,7 +626,7 @@ function cmdSay(p: Parsed): number {
   return 0;
 }
 
-/** 一条“说给某一单”的话落在哪个阶段。 */
+/** 一条针对某一派单的消息落在哪个阶段。 */
 function stageOfTarget(root: string, target: string): string {
   const rows = readDispatches(root);
   const byId = rows.find((d) => String(d.id) === target);
@@ -679,26 +679,25 @@ function cmdRelease(p: Parsed): number {
   return 0;
 }
 
-
-/** 手动暂停派单。 */
+/** 手动暂停派单；没有未结派单时不写暂停文件。 */
 function cmdPause(p: Parsed): number {
   const root = rootOrDie(p);
   loadOrDie(root);
   const reason = (flagString(p, "reason") ?? positionalText(p) ?? "").trim();
-  const rec: PauseFile = { at: new Date().toISOString(), reason: reason || "未填写原因", by: "user" };
+  let rec;
   try {
-    writeJson(pausePath(root), rec);
+    rec = pauseAll(root, "user", reason);
   } catch (err) {
     die(t(`Failed to write the pause file: ${err instanceof Error ? err.message : String(err)}`, `暂停状态写入失败：${err instanceof Error ? err.message : String(err)}`));
   }
-  recordEvent(root, "pause_set", { reason: rec.reason, by: rec.by });
   write(
-    t(`Paused (since ${rec.at}; reason: ${rec.reason}).\n` +
-      `From the next round no new dispatches; running workers stop and their dispatches requeue, restoring in order after resume.\n` +
-      `Old paused dispatches stay paused after resume; wake them with capitalist wake --user. Resume: capitalist resume\n`,
-    `已暂停（自 ${rec.at}，原因：${rec.reason}）。\n` +
-      `监工从下一轮调度起不再派新单；运行中的进程停止，对应派单退回排队，恢复后按原顺序重派。\n` +
-      `已暂停的旧派单不随恢复调度解除暂停，需通过 capitalist wake --user 单独唤醒。恢复调度：capitalist resume\n`),
+    rec.written
+      ? t(`Paused (since ${rec.at}; reason: ${rec.reason}).\n` +
+          `From the next round no new dispatches; running workers stop and all unfinished dispatches show paused.\n` +
+          `Resuming continues them in their original states. Resume: capitalist resume\n`,
+        `调度暂停中（自 ${rec.at}，原因：${rec.reason}）。\n` +
+          `监工从下一轮调度起不再派新单；运行中的进程停止，全部未结派单显示暂停中。恢复调度后按原状态继续。\n`)
+      : t("No unfinished dispatches; nothing to pause. Later dispatches run right away.\n", "当前没有未完成的派单，未写暂停文件；之后派入的单直接参与调度。\n"),
   );
   return 0;
 }
@@ -712,8 +711,7 @@ function cmdPause(p: Parsed): number {
 function cmdResume(p: Parsed): number {
   const root = rootOrDie(p);
   loadOrDie(root);
-  const file = pausePath(root);
-  if (!existsSync(file)) {
+  if (!existsSync(pausePath(root))) {
     write(t("Nothing is paused; nothing to resume.\n", "当前没有处于暂停状态，无需恢复。\n"));
     return 0;
   }
@@ -732,19 +730,19 @@ function cmdResume(p: Parsed): number {
     );
     return 1;
   }
-  try {
-    rmSync(file);
-  } catch (err) {
-    die(t(`Failed to remove the pause file: ${err instanceof Error ? err.message : String(err)}`, `暂停状态删除失败：${err instanceof Error ? err.message : String(err)}`));
+  const outcome = resumeAll(root, byUser ? "user(--user)" : "user(tty)");
+  if (!outcome.ok) {
+    die(t(`Failed to remove the pause file: ${outcome.error ?? ""}`, `暂停状态删除失败：${outcome.error ?? ""}`));
   }
-  clearStopFlag(root);
-  recordEvent(root, "pause_cleared", { by: byUser ? "user(--user)" : "user(tty)" });
   write(
     t(
       "Resumed: from the next round dispatching starts again; only manually created dispatches run, none are auto-created from the contract.\n" +
-        "Old paused dispatches still need capitalist wake --user.\n",
-      "已恢复：监工从下一轮调度起恢复派单，只执行派入的派单，不按契约自动建单。" +
-        "被暂停的旧派单仍需通过 capitalist wake --user 唤醒。\n",
+        `Unfinished dispatches continue in their original states (${outcome.cleared} released).\n` + (outcome.kept.length ? `${outcome.kept.length} stayed paused because their processes are still running; stop them, then resume again.\n` : ""),
+      `已恢复：监工从下一轮调度起恢复派单，只执行派入的派单，不按契约自动建单。\n` +
+        `未完成的派单按原状态继续（${outcome.cleared} 张）。\n` +
+        (outcome.kept.length
+          ? `另有 ${outcome.kept.length} 张进程未退出，保持暂停；先中断进程再恢复。\n`
+          : ""),
     ),
   );
   return 0;
@@ -1242,7 +1240,7 @@ async function main(): Promise<number> {
      * 内部命令：由监工在启动时自己拉起（见 supervisor/guard.ts 的 ensureGuard），
      * 不进 help、也不需要用户手动跑。
      *
-     * 它的唯一职责是“监工被硬杀之后，把它拉起的 worker 收掉”。硬杀（taskkill /F、
+     * 它的唯一职责是“监工被强制终止之后，清理其启动的 worker”。强制终止（taskkill /F、
      * 任务管理器结束进程）不执行任何信号处理器，所以监工自己没机会清理，只能靠这个
      * 独立进程盯着监工的 pid。
      */

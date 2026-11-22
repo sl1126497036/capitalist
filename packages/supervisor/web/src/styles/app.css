@@ -67,10 +67,16 @@ body {
   background: var(--glow-4);
 }
 
-/* 滚动条悬停才显形；两栏留固定 gutter 避免滚动条出现时宽度抖动（见 App.vue）。 */
+/*
+ * 滚动条尺寸的唯一来源：8px 在高分屏上偏粗，全站按 6px 统一。
+ * 各滚动容器不要再写 `::-webkit-scrollbar { width }`，需要更细的滚动条时先改这里，
+ * 由 test/web-scrollbar.test.js 守住。
+ *
+ * 悬停才显形；两栏留固定 gutter 避免滚动条出现时宽度抖动（见 App.vue）。
+ */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -271,4 +277,62 @@ body {
 }
 .md-a:hover {
   color: var(--accent-2);
+}
+
+/*
+ * 确认框：遮罩铺满视口，卡片之外的指针事件全部落在遮罩上，打开期间点不到背后的控件。
+ * 看板各处的确认框共用这一套，不在组件里各写一份，避免改一处漏一处。
+ */
+.askwrap {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.askbox {
+  width: min(420px, calc(100vw - 48px));
+  padding: var(--s16);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-block);
+  background: var(--surface-3);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  color: var(--t2);
+  font-family: var(--font);
+}
+
+.askhd {
+  font-size: var(--f-body);
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.askbd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  margin-top: var(--s10);
+  font-size: var(--f-meta);
+  line-height: 1.6;
+  color: var(--t5);
+}
+.askbd p {
+  margin: 0;
+}
+.askbd b {
+  color: var(--t2);
+  font-variant-numeric: tabular-nums;
+}
+.askwarn {
+  color: var(--warn);
+}
+
+.askacts {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s8);
+  margin-top: var(--s16);
 }

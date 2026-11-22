@@ -1,5 +1,5 @@
 /**
- * 看板文本渲染：把日志事件、消息、派单记录压成单行或短段落。
+ * 看板文本渲染：把日志事件、消息、派单记录压缩为单行或短段落。
  *
  * 只做字符串加工，不读盘、不发请求、不持有状态，便于被各视图层共用。
  */
@@ -195,7 +195,12 @@ function maskWorkerIds(text: string): string {
  * 前一位成了 `-`，反而躲开匹配。
  */
 export function maskBoardText(text: string, nos?: Map<string, string>): string {
-  return maskDispatchIds(maskWorkerIds(text), nos);
+  /*
+   * 老派单正文里的 `[@行号]` 标记已停用：插话编号统一为消息编号，历史正文里的这段不再上屏。
+   * 只抹方括号包着的行号，不碰 `PARENT: @1` 这类结构指令写法。
+   */
+  const clean = String(text ?? "").replace(/\[@\d+\]\s*/g, "");
+  return maskDispatchIds(maskWorkerIds(clean), nos);
 }
 
 /**

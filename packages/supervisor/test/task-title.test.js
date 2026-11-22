@@ -18,7 +18,8 @@ const { tmpdir } = require("node:os");
 const { join, resolve, dirname } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { SHARD_TITLES, shardTitle, summarizeTitle, taskTitle } = require(join(PKG, "dist/supervisor/usage/taskTitle.js"));
+const { SHARD_TITLES, TITLE_MAX_CHARS, shardTitle, summarizeTitle, taskTitle } = require(join(PKG, "dist/supervisor/usage/taskTitle.js"));
+const { parseReply } = require(join(PKG, "dist/supervisor/channel/parseReply.js"));
 const capitalist = require(join(PKG, "dist/core/record/supervisor.js"));
 const { loadState } = require(join(PKG, "dist/core/record/state.js"));
 const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
@@ -92,7 +93,12 @@ test("前端摘要算法取自服务端，不在 web 侧另写一份", () => {
   assert.ok(imported, "web/src/lib/taskTitle.js 未从服务端导入 summarizeTitle");
   assert.match(imported[1], /usage\/taskTitle(\.ts)?$/, `摘要来源不是服务端模块：${imported[1]}`);
 
-  assert.match(src, /summarizeTitle\s+as\s+\w+/, "服务端 summarizeTitle 应别名导入：前端只在原算法上加显示字数上限");
+  /*
+   * 前端不再加显示字数上限：标题由派单方按 `TITLE:` 行给出，服务端已定过长度。
+   * 前端再切一刀会把英文标识切成半个（`校验 componen`），同一批单又出现同名。
+   */
+  assert.doesNotMatch(src, /MAX_TITLE_CHARS/, "前端不应再按字数截断，显示宽度交给 CSS");
+  assert.doesNotMatch(src, /\.slice\(\s*0\s*,/, "前端不应再对标题做 slice 截断");
   assert.doesNotMatch(src, /const\s+CJK\s*=/, "web/src/lib/taskTitle.js 自带汉字正则，说明又在本地实现了一遍摘要");
 });
 
@@ -105,7 +111,7 @@ test("标题取值顺序：契约 title -> 分片映射 -> 正文摘要，不回
   assert.strictEqual(taskTitle({ shard: "no-such-shard", action: "Only modify the left column" }), "");
 });
 
-test("正文摘要只留中文，保留整句不再按字数截断", () => {
+test("正文摘要取首个含中文的句读段，不按字数截断短标题", () => {
   assert.strictEqual(summarizeTitle("改 packages/supervisor/web/src/components/ChatPane.vue，做这几条："), "做这几条");
   const long = summarizeTitle("这一句话特别长需要被截断到十个汉字以内才行");
   assert.strictEqual(long, "这一句话特别长需要被截断到十个汉字以内才行");
@@ -115,27 +121,83 @@ test("正文摘要只留中文，保留整句不再按字数截断", () => {
   assert.strictEqual(taskTitle({ shard: "", action: "撤掉看板聊天区的未建单标记按钮" }), "撤掉看板聊天区的未建单标记按钮");
 });
 
-test("正文摘要保留数字，但剥掉行首的列表序号", () => {
+test("正文摘要保留原文，只剥行首列表序号", () => {
   /*
    * 线上实例（2026-11-20）：派单写“2. 校验第 1 张单产出的文案问题与改法清单”，
    * 任务卡标题成了“校验第张单产出的文案问题与改法清单”。数字被当成非中文删掉，
    * “第几张单”这个指代直接消失，而且从标题上看不出被删过。
+   * 现在只去格式，不动词：数字、小数点、百分比、英文标识都留在标题里。
    */
   assert.strictEqual(
     summarizeTitle("2. 校验第 1 张单产出的文案问题与改法清单：逐条核对"),
-    "校验第1张单产出的文案问题与改法清单",
+    "校验第 1 张单产出的文案问题与改法清单",
   );
   /* 行首序号是书写格式，不该进标题；紧跟着的数字是内容，要留。 */
   assert.strictEqual(
     summarizeTitle("1. 按 wording-guard 技能规范逐文件盘点项目代码中的中文文案，找出口水话"),
-    "按技能规范逐文件盘点项目代码中的中文文案",
+    "按 wording-guard 技能规范逐文件盘点项目代码中的中文文案",
   );
-  assert.strictEqual(summarizeTitle("把 3 个模块拆开，其余不动"), "把3个模块拆开");
+  assert.strictEqual(summarizeTitle("把 3 个模块拆开，其余不动"), "把 3 个模块拆开");
   /* 按逗号切段后取第一段：`%` 保留，后半句不并入标题。 */
-  assert.strictEqual(summarizeTitle("阈值从 4 调到 5%，观察一周"), "阈值从4调到5%");
-  assert.strictEqual(summarizeTitle("v57.22 的阈值校准"), "57.22的阈值校准");
+  assert.strictEqual(summarizeTitle("阈值从 4 调到 5%，观察一周"), "阈值从 4 调到 5%");
+  assert.strictEqual(summarizeTitle("v57.22 的阈值校准"), "v57.22 的阈值校准");
 });
 
+test("顿号不是句读边界，路径与并列项原样保留", () => {
+  /*
+   * 线上实例：并发派单里覆盖多个目录的那一单，正文写成
+   * “盘点 packages/…/test、packages/…/scripts、.github 下所有含中文的文件”，
+   * 顿号连接的是并列项，不是句子边界；路径也不能删，它是这一单唯一的处理对象。
+   */
+  const listed = summarizeTitle(
+    "3. 盘点 packages/supervisor/test、packages/supervisor/scripts、.github 下所有含中文的文件（测试用例名等），按技能规范核对",
+  );
+  /* 路径与顿号都在标题里，只是整体超过落盘上限时截断，读者仍能看出处理对象。 */
+  assert.ok(listed.startsWith("盘点 packages/supervisor/test、packages/supervisor/scripts"), listed);
+  assert.ok(listed.endsWith("…"), "超长标题截断并留省略号，不静默变短");
+
+  const withSkill = summarizeTitle(
+    "用 code-craft 技能盘点 packages/supervisor/test、packages/scripts 下所有含中文的文件",
+  );
+  assert.ok(withSkill.startsWith("用 code-craft 技能盘点 packages/supervisor/test"), withSkill);
+
+  assert.strictEqual(summarizeTitle("盘点 .github 下的中文文件"), "盘点 .github 下的中文文件");
+});
+
+test("不判断从句是前提还是本体，首段即标题", () => {
+  /*
+   * 判断依据只有词面：“按…”“依据…”既可能是条件从句，也可能是任务本体。
+   * 猜错的代价高于标题多带几个字，这类判断交给派单方在 `TITLE:` 行给出。
+   */
+  assert.strictEqual(
+    summarizeTitle("按第 3 单的审查结论，逐处修改项目代码中的中文文案。只替换文字"),
+    "按第 3 单的审查结论",
+  );
+  assert.strictEqual(
+    summarizeTitle("按前面各轮已验收的盘点清单以及第 14 单的校验报告里列出的文案问题，逐处修改"),
+    "按前面各轮已验收的盘点清单以及第 14 单的校验报告里列出的文案问题",
+  );
+  assert.strictEqual(summarizeTitle("按第 3 单的结论，改文案"), "按第 3 单的结论");
+});
+
+test("单号与 # 原样保留", () => {
+  assert.strictEqual(summarizeTitle("对照 #14 的清单逐处替换中文文案"), "对照 #14 的清单逐处替换中文文案");
+});
+
+
+/**
+ * 清理临时任务根。
+ *
+ * 本机安全策略会拦 `rmSync` 的删除动作并抛 EPERM。清理发生在断言之后，
+ * 失败不影响结论，因此不冒泡成测试失败；残留目录交给系统临时目录回收。
+ */
+function cleanup(root) {
+  try {
+    rmSync(root, { recursive: true, force: true });
+  } catch {
+    /* 删除被安全策略拦截，忽略。 */
+  }
+}
 
 /** 标题只在派单第一次登记时生成：之后的追加、合并、重派一律沿用。 */
 function titleSandbox() {
@@ -155,10 +217,69 @@ async function runDirectives(root) {
   });
 }
 
+test("TITLE 行：标题按派单取值，不从正文摘要推测", async () => {
+  /*
+   * 线上实例（2026-11-21）：13 张单的正文都以“加载 code-craft 技能”开头，
+   * 摘要取首从句并删掉英文与路径，13 张单全部叫“加载技能”。标题是派单方最清楚的信息，
+   * 由它在 `TITLE:` 行给出，摘要只作兜底。
+   */
+  const root = titleSandbox();
+  try {
+    appendSupervisorDirective(root, {
+      action: "dispatch",
+      arg: "加载 code-craft 技能，按其文案规范校验 packages/supervisor/src/cli 下的中文文案",
+      title: "校验 cli 目录的中文文案",
+    });
+    await runDirectives(root);
+
+    const d = capitalist.readDispatches(root).find((x) => x.source === "adhoc");
+    assert.ok(d, "派单已建");
+    assert.strictEqual(d.title, "校验 cli 目录的中文文案", "标题取 TITLE 行，不取正文摘要");
+    assert.ok(String(d.action).startsWith("加载 code-craft 技能"), "正文原样下发，标题不改正文");
+  } finally {
+    cleanup(root);
+  }
+});
+
+test("TITLE 行按 DO 归属，一条消息多单各取各的标题", () => {
+  const r = parseReply(
+    ["DO: dispatch [a] 甲", "TITLE: 甲的对象", "DO: dispatch [b] 乙", "TITLE: 乙的对象"].join("\n"),
+  );
+  assert.deepStrictEqual(
+    r.acts.map((a) => a.title),
+    ["甲的对象", "乙的对象"],
+  );
+  /* 多动作时顶层不给标题：整条消息共用一个标题会让读者以为两单是同一件事。 */
+  assert.strictEqual(r.title, undefined);
+  /* 未写 TITLE 时不落字段，建单侧据 undefined 走摘要兜底。 */
+  assert.strictEqual(parseReply("DO: dispatch 甲").title, undefined);
+});
+
+test("TITLE 行写的是空值或纯符号时按未写处理", () => {
+  const r = parseReply(["DO: dispatch 甲", "TITLE: none"].join("\n"));
+  assert.strictEqual(r.title, undefined);
+});
+
+test("标题落盘：略超建议字数原样保留，异常长文按上限截断", async () => {
+  /* 31 字、35 字都是正常标题，不按字数砍；上限只拦把整段正文塞进标题的写法。 */
+  const root = titleSandbox();
+  try {
+    const long = "校验".padEnd(TITLE_MAX_CHARS + 10, "文");
+    appendSupervisorDirective(root, { action: "dispatch", arg: "正文", title: long });
+    await runDirectives(root);
+    const d = capitalist.readDispatches(root).find((x) => x.source === "adhoc");
+    assert.ok(d, "派单已建");
+    assert.strictEqual(Array.from(String(d.title)).length, TITLE_MAX_CHARS + 1, "截断到上限并加省略号");
+    assert.ok(String(d.title).endsWith("…"), "被截断时留标记，读者能看出不是原文结尾");
+  } finally {
+    cleanup(root);
+  }
+});
+
 test("新建派单：标题落库保留完整语句，不按字数截断", async () => {
-  /* 自成一体：直接指到仓库里现存的 generic 契约，不依赖 tests 沙箱用的 minimal。 */
+  /* 契约取版本库里已有的那份：指向未入库的文件时，干净检出跑不通。 */
   const root = mkdtempSync(join(tmpdir(), "capitalist-title-full-"));
-  createTaskRoot({ target: "标题完整", contractSpec: join(PKG, "contracts/generic.contract.json"), root });
+  createTaskRoot({ target: "标题完整", contractSpec: join(PKG, "contracts/minimal.contract.json"), root });
   try {
     const body = "撤掉看板聊天区的未建单标记按钮";
     appendSupervisorDirective(root, { action: "dispatch", arg: body });
@@ -169,7 +290,7 @@ test("新建派单：标题落库保留完整语句，不按字数截断", async
     assert.strictEqual(d.title, body, "派单记录里的标题是完整语句");
     assert.ok(String(d.action).includes(body), "正文未被改动");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });
 
@@ -191,7 +312,7 @@ test("同类合并追加内容：沿用原单标题，不改成“批次”", as
     assert.strictEqual(rows[0].title, before, "合并只加内容，不改标题");
     assert.ok(String(rows[0].action).includes("补一条要求"), "追加内容进了正文");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });
 
@@ -208,6 +329,6 @@ test("重派建新单：沿用这一片第一次登记时的标题，契约改�
     assert.strictEqual(rows[0].title, "核心层整改");
     assert.strictEqual(rows[1].title, rows[0].title, "重派沿用原单标题，不按新契约重算");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanup(root);
   }
 });

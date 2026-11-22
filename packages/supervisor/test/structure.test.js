@@ -180,3 +180,26 @@ test("规则8：用户消息方向只有一个判定入口", () => {
   );
 });
 
+test("规则9：消息身份不手拼视图 id", () => {
+  /*
+   * 视图块（思考、工具聚合、输出分块、引擎日志）不是消息，不该有消息编号。
+   * 早先这些块直接写 `id: `${worker.id}#think-0``，前端把这个 id 当引用编号显示，
+   * 引用框里就出现 `#19-P3#think-0`、`#19-P4#16`，引用出去还回查不到原文。
+   *
+   * 现统一走 board/viewId.ts 的 viewId()，形态是 `归属~类型~序号`，界面据此不显示编号。
+   */
+  const dir = join(SRC, "supervisor", "board");
+  const offenders = [];
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".ts")) continue;
+    const text = readFileSync(join(dir, name), "utf8");
+    if (/id:\s*`[^`]*\}#/.test(text)) offenders.push(`board/${name}`);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `消息身份在手拼视图 id：\n${offenders.join("\n")}\n` +
+      "请改用 board/viewId.ts 的 viewId()；视图块在 ThreadMessage 上标 view: true。",
+  );
+});
+

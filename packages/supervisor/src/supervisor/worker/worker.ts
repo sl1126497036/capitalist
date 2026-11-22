@@ -293,7 +293,7 @@ export function resolveSession(root: string, dispatch: Dispatch): WorkerSession 
  */
 export const ACTION_TAIL_MARKERS = [
   "\n\n【用户插话 · 只对本次派单生效】",
-  "\n\n【验收清单 · 还没打勾的",
+  "\n\n【验收清单 · 未勾选的",
   "\n\n【上一轮卡点",
 ];
 
@@ -310,7 +310,7 @@ export function actionTail(action: string): string {
  * 重派与续跑共用的卡点段：旧正文原样重发，仅在末尾追加一条不超过 {@link BLOCKER_MAX_CHARS} 字的短消息。
  * 两处入口共用同一成文函数，口径一致。
  */
-export const BLOCKER_MARKER = "【上一轮卡点 · 不是新要求，别重做】";
+export const BLOCKER_MARKER = "【上一轮卡点 · 不是新要求，无需重做】";
 /** 追加段字数上限。 */
 export const BLOCKER_MAX_CHARS = 300;
 
@@ -404,9 +404,9 @@ export function buildAcceptBlock(d: Dispatch): string[] {
   if (!accept) return [];
   return [
     "",
-    "【本次验收 · 上一轮没过的地方优先，其余按原验收清单，不降低标准】",
+    "【本次验收 · 上一轮未通过项优先，其余按原验收清单，不降低标准】",
     accept,
-    "报告时逐条说明这一条现在怎么满足的；未做到的如实写，不写“已优化”这类无法核对的说法。",
+    "报告时逐条说明该项当前如何满足；未做到的如实说明，不写“已优化”这类无法核对的说法。",
     "核对方式按下面的结束口径：以代码证据与相关单元测试为准。",
   ];
 }
@@ -424,12 +424,12 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
   const at = preflightAtOf(d);
   return [
     heading,
-    "  派单正文是建单时的快照，现状可能已变化。动手前依次核对：",
-    "  1. 读目标文件当前内容与最近改动痕迹（mtime、git 记录），同时了解相关模块现在怎么做的、",
-    "     接口怎么调的、界面现在什么样；不把派单正文当独立任务执行，先了解上下文。",
+    "  派单正文是建单时的快照，现状可能已变化。执行前依次核对：",
+    "  1. 读目标文件当前内容与最近改动痕迹（mtime、git 记录），同时了解相关模块的当前实现方式、",
+    "     接口调用方式与界面现状；不把派单正文当独立任务执行，先了解上下文。",
     "  2. 派单要求的事情若已经实现，不要重做：在报告里指出实现位置（文件 + 行号）与差异；",
     "     只做了一半的只补缺，不整体重做。",
-    "  3. 本单要求若与已验收的做法相反（要恢复一个已被撤掉的东西），先读 `.capitalist/ledger/tasks.jsonl` 里",
+    "  3. 本单要求若与已验收的做法相反（要恢复一项已被撤销的改动），先读 `.capitalist/ledger/tasks.jsonl` 里",
     "     同一线程已结束任务的 `note`（裁决结论写着当时定的口径），按本单最新要求做，",
     "     并在报告里写明推翻了哪一条，不留两套实现。",
     at
@@ -447,15 +447,15 @@ function buildBoundaryBlock(id: string): string[] {
   return [
     "【三、边界】",
     `  1. 只认这一单：需要复查要求时读 .capitalist/workers/${id}/brief.md；不读 .capitalist/ledger/tasks.jsonl、`,
-    "     .capitalist/inbox/*.jsonl、别的 .capitalist/workers/* 或别的 brief。这些属于其他派单。",
-    "     别人的日志、别人的报告都不算证据；不把“上一轮同口径的单已经实现过”当作本单产出，",
+    "     .capitalist/inbox/*.jsonl、其他 .capitalist/workers/* 或其他 brief。这些属于其他派单。",
+    "     其他进程的日志与报告都不算证据；不把“上一轮同口径的单已经实现过”当作本单产出，",
     "     本单未做即未完成。",
     "  2. 台账里 done / closed 的派单是历史，不是待办：读台账、日志排查时，不要按历史派单的描述",
     "     “恢复”或“实现”任何东西。界面现状以代码为准，不以截图、旧日志、旧派单正文为准；",
     "     历史描述与本单冲突时以本单为准，并在报告里写明冲突点。",
     "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
     "     那三项属于监工，工作进程代为执行会使执行与验收职责不分。",
-    `  4. 卡在外部条件（验证码、账号、授权）：capitalist block <类型> "<卡在哪>" 后停手。`,
+    `  4. 因外部条件受阻（验证码、账号、授权）：capitalist block <类型> "<受阻原因>" 后停手。`,
     /*
      * 界面只发行任务号与派单号，进程号属于调度内部标识。此条为软约束：模型仍可能
      * 在叙述中包含编号，看板出口另设统一改写作为兜底（见 board/render 的
@@ -471,8 +471,8 @@ function buildBoundaryBlock(id: string): string[] {
  */
 function buildHelpBlock(dispatchId: string): string[] {
   return [
-    "【六、卡住了怎么申报】申报后不停手，继续执行：",
-    `  capitalist notify stuck "<卡在哪、已经试过什么>"        同一件事连续失败两次、找不到入口、报错无法理解`,
+    "【六、受阻时如何申报】申报后继续执行剩余部分：",
+    `  capitalist notify stuck "<受阻原因、已经试过什么>"        同一件事连续失败两次、找不到执行入口、报错含义不明`,
     `  capitalist notify question "<问题>" --needs decision   要求自相矛盾、不知道优先级、不知道该不该动`,
     `  capitalist notify risk "<为什么觉得越界>"               可能越界：删数据、改发布配置、修改他人负责的文件`,
     `  capitalist notify quality "<哪部分没做实>"              能交但质量不足，先如实申报`,
@@ -482,7 +482,7 @@ function buildHelpBlock(dispatchId: string): string[] {
     "",
     "【七、完成或失败】",
     `  完成：capitalist report ${dispatchId} done --note "<做了什么>" --evidence "<改了哪几处 / 跑了什么 / 结果>"`,
-    `  做不成：capitalist report ${dispatchId} failed --note "<卡在哪>"`,
+    `  无法完成：capitalist report ${dispatchId} failed --note "<受阻原因>"`,
     `  执行中收到用户追加的消息、你判断属于这一单：报告里加 --added "<新增/更正了什么>"。`,
     `  这只是回报；要求是否成立由判定层确认，报告不改变本单要求。`,
   ];
@@ -491,7 +491,7 @@ function buildHelpBlock(dispatchId: string): string[] {
 /** “改完必须生效”约束：改动须重启承载进程才会生效。工作进程不直接结束监工，走既有安全流程（确认空闲 -> 外部拉起 / `capitalist reload` + 外部重起）。 */
 export function buildApplyBlock(): string[] {
   return [
-    "【五、改完要生效】只改文件、不重启承载进程，等于没有交付：",
+    "【五、改完要生效】只改文件、不重启承载进程，不构成有效交付：",
     "  1. 改动涉及前端界面：构建后重启面板服务（只重启面板，不动监工），重启后确认页面加载的是新构建产物。",
     "  2. 改动涉及监工主进程逻辑（调度、派单、提示词等）：先确认没有运行中的任务，再按现有安全流程重启监工使其生效。",
     "     工作进程不直接终止监工进程：走外部拉起，或先 capitalist reload 落盘再由外部重起；重启后用新的进程号与启动时间核对。",
@@ -513,12 +513,12 @@ export function dispatchHead(d: Dispatch, title: string): string {
 
 /**
  * 续跑提示词必须自包含：宿主换会话、上下文压缩或进程重启后仍可独立执行。
- * 本单要求原样重发，补上上一轮卡点与本次验收；只有“改过的文件不要重做”这类续跑语义依赖会话。
+ * 本单要求原样重发，补上上一轮卡点与本次验收；只有“已改动文件无需重做”这类续跑语义依赖会话。
  */
 export function buildResumePrompt(opts: { root: string; target: string; id: string; dispatch: Dispatch }): string {
   const d = opts.dispatch;
   const raw = String(d.action ?? "");
-  /* 正文与追加段分开：追加段各自带标题，混在一起会使引导语与“不是新要求，别重做”自相矛盾。 */
+  /* 正文与追加段分开：追加段各自带标题，混在一起会使引导语与“不是新要求，无需重做”自相矛盾。 */
   const tailText = actionTail(raw);
   const fullTail = tailText.trim();
   const baseAction = (tailText ? raw.slice(0, raw.length - tailText.length) : raw).trim();
@@ -544,12 +544,12 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
     "本提示词自包含：会话上下文丢失或压缩后，仍可凭以下正文与约束继续执行。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
-    `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；不要读别的单的说明与台账）`,
+    `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；不要读其他单的说明与台账）`,
     "",
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
     `${dispatchHead(d, title)}这一单的要求原文如下，原样重发，不重写。`,
-    baseAction || "(这一单没有留下正文，按下面的验收清单与卡点判断要做什么；无法判断时使用 capitalist ask)",
+    baseAction || "(这一单没有留下正文，按下面的验收清单与卡点确定任务；无法判断时使用 capitalist ask)",
     "继续完成剩余部分；已改过的文件不重做，开始前先核对当前状态。",
     ...(tail
       ? [
@@ -574,7 +574,7 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
 }
 
 /**
- * 诊断 / 修复进程的派单说明，与业务单分两套提示词：两者职责几乎不重叠，混写会让模型两头都做不好。
+ * 诊断 / 修复进程的派单说明，与业务单分两套提示词：两者职责几乎不重叠，混写会使模型无法兼顾两者。
  */
 function buildRepairPrompt(opts: { root: string; target: string; id: string; dispatch: Dispatch }, role: string): string {
   const d = opts.dispatch;
@@ -594,11 +594,11 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     `任务根：${opts.root}`,
     ``,
     `【一、卡点】`,
-    baseAction || "(这一单没有留下卡点描述；按下面只做一件事的范围自己定位)",
+    baseAction || "(这一单没有留下卡点描述；按下面“只做一件事”的范围自行定位)",
     ...(extra
       ? [
           "",
-          "  这一段是业务单后来的追加要求，一并作为卡点的上下文（不是新任务）：",
+          "  以下内容为业务单后来的追加要求，一并作为卡点的上下文（不是新任务）：",
           /* 缩进两格：追加段自带的【用户插话】【上一轮卡点】标题与顶层区块同级，不缩进会被读成新的一节。 */
           ...extra.split("\n").map((l) => (l.trim() ? `  ${l}` : l)),
         ]
@@ -606,27 +606,27 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     ``,
     `【二、这一单只做一件事】`,
     readonly
-      ? "查明卡点：停滞在哪一步、原因是什么、证据是什么。给出结论与修复建议。不改任何代码。"
+      ? "查明卡点：停滞的步骤、原因与对应证据。给出结论与修复建议。不改任何代码。"
       : "查明卡点并修复：先定位根因，再改代码，再验证。",
     ``,
-    /* 修复单也要先核对现状：卡点描述可能已过时，根因或许已被其它改动一并修复。 */
+    /* 修复单也要先核对现状：卡点描述可能已过时，根因或许已被其他改动一并修复。 */
     ...(readonly ? [] : [...buildGroundingBlock(d, "【三、动手前先核对现状】"), ``]),
     `【${readonly ? "三" : "四"}、怎么查】`,
-    /* 修复单只读本单的说明与日志，全局文件按本单 id 取相关行，避免读到别人的单而带偏结论。 */
+    /* 修复单只读本单的说明与日志，全局文件按本单 id 取相关行，避免读到其他单的内容而带偏结论。 */
     `  1. 先看事实，不推断。派单说明：.capitalist/workers/${opts.id}/brief.md；工作进程日志：.capitalist/workers/${opts.id}/output.log。`,
     `     全局文件（.capitalist/runtime/state.json、.capitalist/runtime/supervisor.json、.capitalist/ledger/events.jsonl）只按本单 id（${d.id}）取相关行；`,
-    `     不要读 .capitalist/ledger/tasks.jsonl、.capitalist/inbox/*.jsonl 里别人的单，也不要读别的工作进程的日志与会话。`,
-    `  2. 再看代码：走真正执行的那条调用链，不依据注释中的设计（注释可能已过期）。`,
-    `  3. 能复现的必须复现一次（跑那条命令或脚本），把真实输出留下。`,
+    `     不要读 .capitalist/ledger/tasks.jsonl、.capitalist/inbox/*.jsonl 里其他单的记录，也不要读其他工作进程的日志与会话。`,
+    `  2. 再看代码：沿运行时实际生效的那条调用链，不依据注释中的设计（注释可能已过期）。`,
+    `  3. 能复现的必须复现一次（执行该命令或脚本），保留真实输出。`,
     `  4. 根因须能解释问题的必然性；只描述现象不算根因。`,
     ``,
     `【${CN[n]}、边界】`,
     `  1. 不执行 capitalist advance / capitalist adopt / capitalist supervise，也不手改 .capitalist/ 下的台账；`,
-    `     台账只按本单 id 取自己的行，别人的单不读。`,
+    `     台账只按本单 id 取本单的行，其他单不读。`,
     `  2. 不重启监工：那是监工自己的动作，重启会终止正在执行这条修复的进程。`,
     readonly
       ? "  3. 只读：代码、配置、台账均不改。"
-      : "  3. 可以改代码，但只改与这个卡点直接相关的地方；不连带重构，不做其它单的任务。",
+      : "  3. 可以改代码，但只改与这个卡点直接相关的地方；不连带重构，不做其他单的任务。",
     ``,
     /* 修复单同样按业务单的结束口径验收：不要求执行全部测试或提供截图，证据为改动点及与卡点直接相关的复现/测试。 */
     ...buildCloseOutRules(`【${CN[n + 1]}、怎么算做完】`),
@@ -643,7 +643,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
 /**
  * 派单正文是否点名该技能。
  *
- * 按整词匹配，避免正文里的常见短词与目录名冲突；名字过短的一律不认，防止短词误命中。
+ * 按整词匹配，避免正文里的常见短词与目录名冲突；名字过短的一律排除，防止短词误命中。
  */
 function mentionsSkill(text: string, name: string): boolean {
   if (name.length < 4) return false;
@@ -655,7 +655,7 @@ function mentionsSkill(text: string, name: string): boolean {
  * 技能块：只附派单正文点名的技能（用户指定）的完整路径，供工作进程需要时自取。
  *
  * 监工已把本单涉及的技能重点整理进派单描述；正文未点名的技能一律不出现，更不列全量清单。
- * 这里只给路径：重点在描述里，工作进程觉得不够时按路径读完整 SKILL.md。
+ * 这里只给路径：重点在描述里，工作进程需要更多细节时按路径读完整 SKILL.md。
  */
 function buildSkillsBlock(root: string, actionText: string): string[] {
   const skills = listSkills(root);
@@ -703,7 +703,7 @@ export function buildPrompt(opts: {
   /* 卡点段只在发车时拼进提示词，不写入 action（见 `retry_context` 字段说明）；放在正文之后、执行要求之前。 */
   const retryCtx = retryContextOf(d);
   /*
-   * 提示词分七块，顺序即工作进程的执行顺序：一 做什么 -> 二 动手前核对 -> 三 边界 -> 四 怎么算做完 -> 五 改完要生效 -> 六 卡住怎么申报 -> 七 完成/失败。
+   * 提示词分七块，顺序即工作进程的执行顺序：一、做什么；二、动手前核对；三、边界；四、怎么算做完；五、改完要生效；六、受阻申报；七、完成/失败。
    * 每块只出现一次，块内编号从 1 起，块外用中文序号标识阅读路径。
    */
   const accept = buildAcceptBlock(d);
@@ -711,7 +711,7 @@ export function buildPrompt(opts: {
     "你是独立的工作进程，不是监工。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
-    `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；内容与下面正文一致，需要复查时读它）`,
+    `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；内容与下面正文一致，需要复查时读取该文件）`,
     ``,
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
@@ -751,13 +751,13 @@ function writeWorkerBrief(root: string, workerId: string, text: string): void {
     mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, text, "utf8");
   } catch {
-    /* 写不出来不影响启动：正文已经内联在提示词里 */
+    /* 写入失败不影响启动：正文已经内联在提示词里 */
   }
 }
 
 /**
  * 拉起一个工作进程，输出直接落到 `workers/<id>.log`。
- * 监工不解析工作进程的自然语言输出，只认写回 `.capitalist/` 的结构化结果（report / ask / block）；解析 stdout 会把判定绑到措辞上。
+ * 监工不解析工作进程的自然语言输出，只接受写回 `.capitalist/` 的结构化结果（report / ask / block）；解析 stdout 会把判定绑到措辞上。
  */
 export function launchWorker(opts: LaunchOptions): Launched {
   const id = opts.id ?? newWorkerId(opts.root, opts.dispatch.id);
@@ -779,7 +779,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
 
   /*
    * 每单一份说明，落成 `.capitalist/workers/<workerId>/brief.md`；提示词指向它，工作进程复查只读这一份，不查共用流水。
-   * 写不出来不影响启动，正文已内联在 prompt 里。
+   * 写入失败不影响启动，正文已内联在 prompt 里。
    */
   writeWorkerBrief(opts.root, id, prompt);
 
@@ -805,7 +805,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
     bin = process.execPath;
   }
 
-  // Windows 上 .cmd 必须经 shell。prompt 一律走 stdin：写入 argv 会让 CLI 在多参数组合下静默无响应，而 stdin 是其明确支持的管道写法。
+  // Windows 上 .cmd 必须经 shell。prompt 统一经 stdin 传递：写入 argv 会让 CLI 在多参数组合下静默无响应，而 stdin 是其明确支持的管道写法。
   const shell = needsShell(bin, opts.host);
   const stdinArgs = custom ? null : buildArgsStdin(opts.host, opts.model, session, opts.effort);
   const viaStdin = stdinArgs !== null;
@@ -851,7 +851,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
   try {
     bytesAtLaunch = statSync(log).size;
   } catch {
-    /* 取不到大小就按 0 计，自检会把整份 banner 当成正文，偏保守 */
+    /* 读取失败时按 0 计，自检会把整份 banner 视为正文，结果偏保守 */
   }
 
   // 工作进程的 stdout/stderr 经管道回到父进程再写入日志：宿主持有日志 fd 时不写输出，故不能把 fd 直接交给它。
@@ -863,20 +863,20 @@ export function launchWorker(opts: LaunchOptions): Launched {
     shell,
     // Windows 上不带这一项会弹出控制台窗口，工作进程是后台进程，不需要窗口。
     windowsHide: true,
-    // stdin 必须是管道：有的宿主首次进入目录会交互式询问是否信任文件，非交互模式没有 TTY 时会持续等待、零输出。
+    // stdin 必须是管道：部分宿主首次进入目录会交互式询问是否信任文件，非交互模式没有 TTY 时会持续等待、零输出。
     stdio: ["pipe", "pipe", "pipe"],
     // 不另起进程组：Windows 上 detached 会分配新控制台并弹窗。孤儿回收走 orphanGuard 的自查，不依赖进程组关系。
     detached: false,
   });
 
-  // prompt 走 stdin 时，这里写入的是完整派单；否则仅写入一个回车，用于确认目录信任。
+  // prompt 经 stdin 传递时，这里写入的是完整派单；否则仅写入一个回车，用于确认目录信任。
   if (child.stdin) {
     try {
       if (viaStdin) {
         child.stdin.write(prompt.endsWith("\n") ? prompt : `${prompt}\n`);
       } else if (workerImpl(opts.host)?.workspace) {
         // 声明了 workspace 的宿主会先问“是否信任这些文件”，非交互模式没有 TTY，
-        // 一个回车就是默认确认；否则进程会一直等。
+        // 一次回车即默认确认；否则进程会持续等待。
         child.stdin.write("\n");
       }
       child.stdin.end();
@@ -991,7 +991,7 @@ function watchSilentStart(
 ): void {
   const delayMs = silentStartProbeMs();
   const timer = setTimeout(() => {
-    if (logGrowth(log, baseline) > 0) return; // 已有正文，CLI 进了会话
+    if (logGrowth(log, baseline) > 0) return; // 已有正文，CLI 已进入会话
 
     const pid = child.pid ?? 0;
     const argvChars = args.reduce((n, a) => n + a.length, 0);
@@ -1000,7 +1000,7 @@ function watchSilentStart(
 
     const lines = [
       `[silent] 拉起后${Math.round(delayMs / 1000)}秒日志仍无正文，工作进程没有进入会话`,
-      /* `child.pid` 缺失时 pid 为 0，判活按“已退出”处理：没有取到 pid 就说明没有启动。 */
+      /* `child.pid` 缺失时 pid 为 0，判活按“已退出”处理：未取得 pid 即表示未启动。 */
       `[silent] 进程${pid}${pidAlive(pid) ? "仍存活" : "已退出"}，日志增量 0 字节`,
       `[silent] 参数${args.length}项、共${argvChars}字符，${multiline ? "含换行" : "不含换行"}`,
       `[silent] 令牌变量${hasToken ? "已注入" : "未注入"}`,
@@ -1012,7 +1012,7 @@ function watchSilentStart(
       /* 日志写不进去时不影响工作进程 */
     }
   }, delayMs);
-  // 自检不该拖住监工退出。
+  // 自检不阻塞监工退出。
   if (typeof timer.unref === "function") timer.unref();
 }
 
@@ -1026,7 +1026,7 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
   // 整个函数依赖 cmd.exe、.cmd 脚本、chcp 与 pause，没有跨平台实现。
   // 调用方（loop.ts）已按平台回落，这里直接 throw，比 spawn 出 ENOENT、只留一条 error 事件更好定位。
   if (process.platform !== "win32") {
-    throw new Error("可见窗口模式依赖 cmd.exe，仅 Windows 可用；其它平台用后台模式。");
+    throw new Error("可见窗口模式依赖 cmd.exe，仅 Windows 可用；其他平台用后台模式。");
   }
   const id = opts.id ?? newWorkerId(opts.root, opts.dispatch.id);
   const log = workerLogPath(opts.root, id);
@@ -1074,7 +1074,7 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
   const firstMessage = `读取 ${promptFile} 并严格按其中内容执行，这是该派单的说明。`;
 
   // 启动过程写成脚本文件，不把整串命令直接拼进 cmd /k：命令串里有中文、引号与 &&，
-  // 直接拼接会受 cmd 代码页与引号剥离规则影响，出错时窗口一闪即关。脚本加 pause 让报错留在窗口内可读。
+  // 直接拼接会受 cmd 代码页与引号剥离规则影响，出错时窗口随即关闭。脚本加 pause 让报错留在窗口内可读。
   const scriptPath = join(dirname(log), `${id}.launch.cmd`);
   const script = [
     "@echo off",
@@ -1098,9 +1098,9 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
     throw new Error(`启动脚本写入失败：${String((err as Error).message ?? err)}`);
   }
 
-  // 以 detached 方式拉起新控制台跑启动脚本：
+  // 以 detached 方式启动新控制台执行启动脚本：
   // - detached + stdio ignore 让工作进程脱离父控制台，Windows 为其分配独立控制台（即新窗口）；
-  // - 不用 `start`：其标题参数必须带引号，argv 转义会破坏它，且无控制台的父进程里 start 会一直等待；
+  // - 不用 `start`：其标题参数必须带引号，argv 转义会破坏它，且无控制台的父进程里 start 会持续等待；
   // 不开 /MAX：工作进程窗口只用于查看卡点，不占满屏幕。
   const child = spawn("cmd.exe", ["/k", `${id}.launch.cmd`], {
     cwd: dirname(log),

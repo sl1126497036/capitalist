@@ -63,7 +63,7 @@ export function noteSupervisorModelUsed(root: string, model: string): void {
     if (String(cur?.model ?? "") === m) return;
     writeJson(supervisorModelUsedFile(root), { model: m, at: new Date().toISOString() });
   } catch {
-    /* 记不住不影响这一轮对话本身。 */
+    /* 记录失败不影响这一轮对话本身。 */
   }
 }
 

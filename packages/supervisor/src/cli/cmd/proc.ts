@@ -36,7 +36,7 @@ import {
   workerLogPath,
 } from "../../core/record/supervisor";
 import { writeJsonl } from "../../core/record/json";
-/* 手领单与监工派单用同一份“动手前先核对现状”：两个入口各写一套，worker 拿到的口径就不一样。 */
+/* 手领单与监工派单用同一份“动手前先核对现状”：两个入口各写一套，worker 得到的口径便不一致。 */
 import { buildGroundingBlock } from "../../supervisor/worker/worker";
 import { releaseAll } from "../../core/record/fileLock";
 /* “这一单是不是要求重启监工”的判据，与收工闸共用一份。 */
@@ -281,14 +281,14 @@ export async function cmdReport(p: Parsed): Promise<number> {
       });
       if (!mine) return false;
       /*
-       * 送达太久尚无结论：不再拿它挡收工。
+       * 送达太久尚无结论：不再以其阻断收工。
        *
        * 新语义多了一条死锁路径（收到不回报 -> 永远报不了完成）。留这个窗口放行，
        * 让单能结出去；缺的那几条由验收判定在材料里点出来，不由收工闸拦截。
        */
       const dAt = Date.parse(String((x as { delivered_at?: string }).delivered_at ?? ""));
       if (Number.isFinite(dAt) && Date.now() - dAt >= DIRECTIVE_OUTCOME_GUARD_MS) return false;
-      /** 只挡“刚登记、还有机会被下一次派单带走”的。 */
+      /** 只拦截“刚登记、仍可能被下一次派单接收”的。 */
       const at = Date.parse(String((x as { at?: string }).at ?? ""));
       return !Number.isFinite(at) || Date.now() - at < DIRECTIVE_STALE_MS;
     });
@@ -298,8 +298,8 @@ export async function cmdReport(p: Parsed): Promise<number> {
        * 直接把命令行拼好。
        *
        * 这道闸挡的是“没回报”，不是“没做”，挡回一次就该让 worker 能一次补齐。
-       * 只列原文不列命令的话，它会按自己的理解重写一遍格式，再被挡一次，重复几次就
-       * 变成新的卡点（此前出现过整夜卡住的情况）。
+       * 只列原文不列命令时，模型会自行改写一遍格式，再次被拦截，反复几次就
+       * 形成新的卡点（此前出现过整夜阻塞的情况）。
        */
       const args: string[] = [];
       for (const x of pending) {
@@ -393,7 +393,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
         text: String(note ?? "").trim() || "（工作进程未写说明）",
         ...(evidence ? { evidence } : {}),
       });
-      /* 等监工裁决：要等它发出去（不等的话 CLI 退出会把请求带走）。 */
+      /* 等监工裁决：须等待其发出（若不等待，CLI 退出会丢弃请求）。 */
       await wakeSupervisor(root).catch(() => false);
     } catch {
       /* 队列写不进去不影响结束流程：审查是增强，不是前置条件 */
@@ -423,7 +423,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       return 0;
     }
     write(t("No verdict yet (the supervisor is busy). Do not re-report; keep working on what remains.\n", "裁决未出（监工正忙）。不要重报同一份，继续完成剩余部分；\n"));
-    write(t("Blocked: capitalist ask \"<what blocks it>\" and stop. Finished: wait for the verdict; do not redo the same work.\n", "确实卡住：capitalist ask \"<卡在哪>\" 后停手；确实做完：等监工结论，不要重复改同一处。\n"));
+    write(t("Blocked: capitalist ask \"<what blocks it>\" and stop. Finished: wait for the verdict; do not redo the same work.\n", "确实受阻：capitalist ask \"<卡在哪>\" 后停止；确实完成：等待监工结论，不要重复修改同一处。\n"));
     return 1;
   }
 
@@ -471,7 +471,7 @@ export function cmdNext(p: Parsed): number {
 
   const session = flagString(p, "session") ?? newWorkerId(root, d.id);
   const claimed = claimDispatch(root, d.id, session, session);
-  if (!claimed) die(t("Another worker just claimed it. Run capitalist next again.", "这张单刚被别的 worker 领走，重新 capitalist next"));
+  if (!claimed) die(t("Another worker just claimed it. Run capitalist next again.", "这张单刚被其他 worker 领取，请重新执行 capitalist next"));
 
   const now = new Date().toISOString();
   registerWorker(root, {
@@ -494,7 +494,7 @@ export function cmdNext(p: Parsed): number {
       `${claimed.action}\n\n` +
       `${buildGroundingBlock(claimed).join("\n")}\n\n` +
       t(`When done: capitalist report ${claimed.id} done --note "<what was done>" --evidence "<changes / tests / result>"\n`, `完成后：capitalist report ${claimed.id} done --note "<做了什么>" --evidence "<改了哪几处 / 跑了什么 / 结果>"\n`) +
-      t(`Blocked: capitalist ask "<question>" or capitalist block <type> "<what blocks it>"\n`, `卡住：capitalist ask "<问题>" 或 capitalist block <类型> "<卡在哪>"\n`),
+      t(`Blocked: capitalist ask "<question>" or capitalist block <type> "<what blocks it>"\n`, `受阻：capitalist ask "<问题>" 或 capitalist block <类型> "<卡在哪>"\n`),
   );
   return 0;
 }
@@ -559,7 +559,7 @@ export function cmdWake(p: Parsed): number {
       by: "user",
     });
   }
-  write(t(`${lines.length} dispatch(es) woken; they join the queue from the next round.\n`, `已唤醒 ${lines.length} 张派单，下一轮调度起按队列顺序参与。\n`));
+  write(t(`${lines.length} dispatch(es) woken; they join the queue from the next round.\n`, `已唤醒 ${lines.length} 张派单，随后按队列顺序参与调度。\n`));
   for (const line of lines) write(`  ${line}\n`);
   if (existsSync(runtimeLoc.pause(root))) {
     write(t("Global pause is still in effect (.capitalist/runtime/pause.json); run capitalist resume before dispatching.\n", "全局暂停仍有效（.capitalist/runtime/pause.json），执行 capitalist resume 后才会派单。\n"));
@@ -628,12 +628,12 @@ export function cmdStopWorker(p: Parsed): number {
     t(`Worker ${r.id} (pid ${r.pid}) stopped${termNote}.\n`, `已中断工作进程 ${r.id}（pid ${r.pid}）${termNote}。\n`) +
       (r.dispatch
         ? requeue
-          ? t(`Dispatch ${r.dispatch} requeued; it restarts next round.\n`, `派单 ${r.dispatch} 已退回待派，下一轮调度重新拉起。\n`)
+          ? t(`Dispatch ${r.dispatch} requeued; it restarts next round.\n`, `派单 ${r.dispatch} 已退回待派，随后重新启动。\n`)
           : t(`Dispatch ${r.dispatch} closed as failed.\n`, `派单 ${r.dispatch} 已按失败结束（不残留占位记录）。\n`)
         : t("This worker had no open dispatch.\n", "该 worker 没有在途派单。\n")) +
       (requeue
-        ? t("Effect: the dispatch is re-dispatched next round; the session continues on the same lane with history intact.\n", "后果：下一轮调度重派这一单，会话按同一 lane 续接，历史不丢失。\n")
-        : t("Effect: the dispatch is re-dispatched next round unless the shard is taken over (capitalist takeover) or blocked (capitalist block).\n", "后果：下一轮调度会重派这一单，除非该片被接管（capitalist takeover）或登记了阻塞（capitalist block）。\n")),
+        ? t("Effect: the dispatch is re-dispatched next round; the session continues on the same lane with history intact.\n", "后果：该派单随后重派，会话按同一 lane 续接，历史不丢失。\n")
+        : t("Effect: the dispatch is re-dispatched next round unless the shard is taken over (capitalist takeover) or blocked (capitalist block).\n", "后果：该派单会重派，除非该片被接管（capitalist takeover）或登记了阻塞（capitalist block）。\n")),
   );
   return 0;
 }
@@ -662,7 +662,7 @@ export function cmdClose(p: Parsed): number {
    * 结束任务即终止该单的追加投递。
    *
    * 否则每轮调度都会看到“未消费的追加且目标已结束”，把刚结束的单重新置为 open 补投递，
-   * 用户看到的就是取消后立刻变回“待重派”。用户手动结束是明确意图，优先级高于补投递。
+   * 用户看到的是取消后立即恢复为“待重派”。用户手动结束是明确意图，优先级高于补投递。
    */
   const dropped = dropDirectivesFor(
     root,
@@ -716,8 +716,8 @@ export function cmdPromote(p: Parsed): number {
       (r.behind
         ? t(`An immediate-run dispatch (${r.behind}) is running; this one waits at the front and starts when it finishes.\n`, `立即执行 ${r.behind} 已运行中，这一单按置顶排队；它结束后按队列顺序派发。\n`)
         : live < cap
-          ? t(`${live}/${cap} slots free; the process starts next round (within 5 s).\n`, `当前 ${live}/${cap} 个槽有空，下一轮（5 秒内）拉起进程。\n`)
-          : t(`${live}/${cap} slots busy: the supervisor suspends one running task to free a slot (shown as “yielded”); it resumes in order afterwards.\n`, `当前 ${live}/${cap} 个槽均已占用：监工下一轮挂起一个运行中的任务腾出槽位，该任务显示“已让位”，结束后按原顺序恢复。\n`)) +
+          ? t(`${live}/${cap} slots free; the process starts next round (within 5 s).\n`, `当前 ${live}/${cap} 个槽有空，即将启动进程。\n`)
+          : t(`${live}/${cap} slots busy: the supervisor suspends one running task to free a slot (shown as “yielded”); it resumes in order afterwards.\n`, `当前 ${live}/${cap} 个槽均已占用：监工将挂起一个运行中的任务释放槽位，该任务显示“已让位”，结束后按原顺序恢复。\n`)) +
       t("Record: urgent / promoted_at / promoted_by written to .capitalist/inbox/dispatch.jsonl; event dispatch_promoted recorded.\n", "记录：.capitalist/inbox/dispatch.jsonl 写 urgent / promoted_at / promoted_by，事件 dispatch_promoted 已写入。\n"),
   );
   return 0;

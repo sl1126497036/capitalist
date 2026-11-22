@@ -591,7 +591,7 @@ function skillManualSource(): string | null {
  * 将手册投放至各宿主的 skills 目录，并清理旧版本目录。
  *
  * 落点与 `capitalist uninstall` 删除的是同一个路径：`<configDir>/skills/capitalist/SKILL.md`。
- * 只投给已经装了的宿主，没装的宿主连 configDir 都没有，写进去只会留垃圾。
+ * 只投给已经装了的宿主，没装的宿主连 configDir 都没有，写进去只会产生无效配置。
  *
  * @returns placed 为投放的路径，cleaned 为已清理的旧目录，failed 为失败项。
  */

@@ -375,7 +375,7 @@ export function applyRebuild(root: string, plan: RebuildPlan, by = "rebuild"): {
   /*
    * 任务池是派单的投影，重建改了状态就必须同步。
    * 不同步的后果很直接：“已验收 10 / 失败待重试 11 / 未完成 11”会原地不动，
-   * 用户看着面板以为重建没生效，面板上还能看见旧数字，就是没做完。
+   * 用户看着面板以为重建没生效，面板上还能看见旧数字，即视为未完成。
    */
   for (const n of changed) syncTaskForDispatch(root, n);
   return { closed, reopened };

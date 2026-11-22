@@ -10,7 +10,7 @@
  * 避免组记录与派单记录的成员数不一致。组的树位置同样由成员父节点推导，
  * 组记录不存 `parent`。
  *
- * 组号 `G1` 不属于任务号 / 派单号 / 进程号三套编号：不发行任务号、不占派单序、不拉起进程。
+ * 组号 `G1` 不属于任务号 / 派单号 / 进程号三套编号：不发行任务号、不占派单序、不启动进程。
  * 落盘不带 `#`，显示经 {@link groupNoLabel} 统一补零。
  */
 
@@ -93,7 +93,7 @@ export function readGroups(root: string): Group[] {
   return rows.slice();
 }
 
-/** 整份覆盖写。只用于改状态（解散）；新建一律走 {@link appendGroup}。 */
+/** 整份覆盖写。只用于改状态（解散）；新建一律使用 {@link appendGroup}。 */
 export function writeGroups(root: string, rows: readonly Group[]): void {
   writeJsonl(groupsPath(root), rows);
   groupsCache = null;

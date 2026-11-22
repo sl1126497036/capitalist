@@ -15,7 +15,7 @@ import { dirname } from "node:path";
 import { findRoot } from "../../core/record/paths";
 import { loadSupervisor } from "../../core/record/supervisor";
 import { byId } from "../../agent/registry";
-import { looksLikeAuth, looksLikeQuota } from "../../supervisor/channel/llm";
+import { judgeFault } from "../../supervisor/channel/fault";
 import { officialAccessToken, officialTokenSource } from "../../supervisor/channel/officialToken";
 import { detectWorkerHost, findBin, workerEnv, type WorkerHost } from "../../supervisor/worker/worker";
 import { flagBool, flagString, type Parsed } from "../args";
@@ -72,8 +72,13 @@ function probeHost(host: WorkerHost): ProbeResult {
   const raw = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
   const brief = raw.slice(0, RAW_LIMIT);
   if (r.error && (r.error as NodeJS.ErrnoException).code === "ETIMEDOUT") return { kind: "timeout", raw: brief };
-  if (looksLikeAuth(raw)) return { kind: "auth", raw: brief };
-  if (looksLikeQuota(raw)) return { kind: "quota", raw: brief };
+  /*
+   * 探测输出是诊断，按 `diag` 作用域交给唯一入口判定，命中即给出结论。
+   * 两者都不命中时再看退出码与正文，避免把限流说明误报成探测失败原因。
+   */
+  const fault = judgeFault("diag", raw);
+  if (fault === "auth") return { kind: "auth", raw: brief };
+  if (fault === "quota") return { kind: "quota", raw: brief };
   if (r.status === 0 && String(r.stdout ?? "").trim().length > 0) return { kind: "ok", raw: "" };
   return { kind: "error", raw: brief || `退出码 ${String(r.status ?? "-")}` };
 }
@@ -88,12 +93,12 @@ function verdictOfAuth(tokenHeld: boolean): { verdict: string; action: string } 
   if (tokenHeld) {
     return {
       verdict: "宿主拒绝认证：令牌无效或已过期。",
-      action: "在宿主中重新登录，然后重启监工。",
+      action: "在宿主中重新登录，随后重启监工。",
     };
   }
   return {
     verdict: "宿主未认证：未取得访问令牌。",
-    action: "在宿主 CLI 中完成登录，然后重启监工。",
+    action: "在宿主 CLI 中完成登录，随后重启监工。",
   };
 }
 
@@ -140,9 +145,9 @@ function verdictOfProbe(
 
 const KIND_LABEL: Record<ProbeKind, string> = {
   ok: "通过",
-  auth: "失败 · Authentication required",
-  quota: "失败 · 额度耗尽",
-  timeout: "失败 · 超时",
+  auth: "失败：Authentication required",
+  quota: "失败：额度耗尽",
+  timeout: "失败：超时",
   error: "失败",
   missing: "未找到可执行文件",
   skipped: "跳过（--no-probe）",

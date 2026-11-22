@@ -175,7 +175,7 @@ export function dispatchOfThreadNo(
     if (["open", "claimed", "reported", "review"].includes(s)) return true;
     /*
      * 重开要的是已经结束的单，而“结束”有三种终态：done、closed（用户结束）、failed。
-     * 只认 done 会让用户点“重开”时拿到“没有编号 #NN”，而那张单就在看板上。
+     * 仅依据 done 会让用户点“重开”时得到“没有编号 #NN”，而那张单就在看板上。
      */
     return opts.includeDone === true && ["done", "closed", "failed"].includes(s);
   };
@@ -293,7 +293,7 @@ export function threadNoTable(root: string): Record<string, number> {
  * 全系统编号的落盘/下发口径统一为不带 `#`，`#` 只在显示层经
  * {@link idMap.dispatchNoLabel} 等统一入口补，任何消费点都不得自行拼 `#` 或自行去 `#`。
  *
- * 只查不建，取不到时返回空串；整表一次读完返回 Map。
+ * 只查不建，读取失败时返回空串；整表一次读完返回 Map。
  */
 export function dispatchNoTable(root: string): Map<string, string> {
   const out = new Map<string, string>();

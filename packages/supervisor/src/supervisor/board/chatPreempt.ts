@@ -3,7 +3,7 @@
  *
  * 用户追加新内容时，正在提交的回执或报告不该继续占用通道：新消息必须立刻被处理。
  * 这里把两件事放在一起：终止正在执行的那一轮，并把被打断的要求留给下一轮。
- * 只做前者，用户连发时先提出的那条就会静默消失。
+ * 只做前者，用户连发时先提出的那条就会在无提示的情况下丢失。
  */
 
 import { recordEvent } from "../../core/record/ledger";
@@ -39,7 +39,7 @@ export function takePreemptedAsks(root: string): string[] {
 /**
  * 提示词里的一节：上一条被本消息打断、尚未执行的要求。
  *
- * 不写这条提醒，监工会当作没发生过，用户却以为两条都收到了。
+ * 不写这条提醒，监工会视为未发生，用户却以为两条都已收到。
  */
 export function preemptedPromptLines(root: string): string[] {
   const list = takePreemptedAsks(root);
@@ -56,7 +56,7 @@ export function preemptedPromptLines(root: string): string[] {
  * 被新消息抢占时的统一收尾。
  *
  * 记为 `answered_only` 而不是 `amended`：本轮没有产出回复、也没有改派单，要求确实没被执行。
- * `answered_only` 在命中要求特征时会进入待处理清单，用户连发时先提出的那条才不会静默丢失。
+ * `answered_only` 在命中要求特征时会进入待处理清单，用户连发时先提出的那条才不会在无提示的情况下丢失。
  */
 export function replyPreempted(
   ctx: BoardCtx,
@@ -86,7 +86,7 @@ export function replyPreempted(
     thread: args.thread,
     from: args.from,
     preempted: true,
-    msg_id: msgId(msgTaskNo(args.msgId) || "S0", "S"),
+    msg_id: msgId(msgTaskNo(args.msgId) || "S0", "S2U"),
   });
   args.sse({ kind: "preempted", text: reason, applied: reason });
   ctx.res.end();

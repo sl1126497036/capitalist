@@ -106,7 +106,6 @@ export interface SupervisorRecord {
 }
 
 /** 派单状态。`claimed` 表示已被某个 worker 认领且尚未结束。 */
-/** 派单状态。 */
 export type DispatchStatus = "open" | "claimed" | "reported" | "review" | "done" | "failed" | "closed";
 
 /** 一张派单。写入 `.capitalist/inbox/dispatch.jsonl`。 */
@@ -169,10 +168,24 @@ export interface Dispatch {
    * 暂停是用户的意图，只能由 `capitalist wake --user`（或看板唤醒）解除。
    */
   paused_at?: string;
-  /** 暂停来源：`startup`（上次退出时未完成，启动时统一暂停）或 `user`。 */
+  /** 暂停来源：`startup`（启动冻结）、`board`、`user`、`supervisor`。 */
   paused_by?: string;
   /** 暂停原因，供看板与命令行原样展示。 */
   paused_reason?: string;
+  /**
+   * 暂停前所处的执行态，恢复调度时据此还原。
+   *
+   * `running` 的派单在暂停时被退回 `open`（进程已停，留着 `claimed` 会被回收判定成进程丢失），
+   * 只有这个字段还记着它原本在跑。界面不展示本字段，`cancel` 与 `wake` 会清掉它。
+   */
+  paused_from?: "running" | "retry" | "queued" | "review";
+  /**
+   * 最近一次被点名唤醒的时刻（ISO）。
+   *
+   * 全局暂停期间，监工每轮补暂停标记时跳过它：用户已单独解除这一张，再标回去会让
+   * 唤醒回执与界面互相矛盾。阶段推进的作废宽限期同样读这个字段。
+   */
+  wake_at?: string;
   /**
    * 同一分片的第几次派发，从 1 起。失败重派时递增，调度层据此计算退避间隔。
    */
@@ -182,7 +195,6 @@ export interface Dispatch {
    * 到点无人确认即自动结束。
    */
   review_until?: string;
-  /** worker 报完成时写的说明，确认后转成正式结束 note。 */
   /** 树边：父派单 id。做完父节点，本单才允许启动（多节点结构，见 {@link dispatchForest}）。 */
   parent?: string;
   parent_reason?: string;
@@ -196,12 +208,22 @@ export interface Dispatch {
    */
   group?: string;
 
+  /**
+   * 接替的目标派单 id（`SUPERSEDE:` 落盘）。
+   *
+   * 语义是“本单顶替那一件事”，不是新增一项。组判定把它与被接替的单合并成同一事项
+   * （见 `core/dispatch/groupGraph.ts` 的 `groupItemsOf`），因此补单不会撑大组的成员数。
+   * 建单时校验同组、目标已了结；重派与重开继承该字段。
+   */
+  supersedes?: string;
+
   retry_accept?: string;
 
   retry_context?: string;
 
   /** 上报时刻（`markReported` 写）：监工据此判断“上报后多久尚未裁决”。 */
   reported_at?: string;
+  /** worker 报完成时写的说明，确认后转成正式结束 note。 */
   review_note?: string;
   /** 手动结束的时刻（ISO）。只有 `status === "closed"` 时有值。 */
   closed_at?: string;
@@ -256,7 +278,7 @@ export type WorkerStatus = "starting" | "running" | "suspended" | "exited" | "fa
 /**
  * 卡点类型。
  *
- * 四类对应四种不同的跳出办法，混成一句“卡住了”对处理没有帮助：
+ * 四类对应四种不同的处理办法，笼统归为“卡住”不利于处理：
  *
  *   idle       空闲等待：没有新的工具调用，也没有新的输出；在等一个不会出现的条件。
  *   retry      重复无效重试：同一条命令/同一个改动反复做，结果没有变化。
@@ -599,7 +621,7 @@ export function newWorkerId(root: string, dispatchId: string): string {
       return id;
     });
   }
-  /* 拿不到任务号（旧 `D-` 单）时退回旧的自增 id，仅兜底。 */
+  /* 拿不到任务号（旧 `D-` 单）时退回旧的自增 id，仅作为后备方案。 */
   const file = meta.workerNo(root);
   const data = readJson<{ next?: number }>(file, {});
   let n = Math.max(1, Number(data?.next ?? 1) || 1);
@@ -952,8 +974,8 @@ export function dispatchPaused(d: Pick<Dispatch, "paused_at"> | null | undefined
 /**
  * 暂停一张派单。
  *
- * 幂等：已有标记时保留原时刻与来源。重复启动不改写暂停时间。看板上的
- * “暂停于”保留首次暂停的时刻。
+ * 幂等：已有标记时保留原时刻与来源。只写标记，`claimed` 不退回 `open`：需要同时改状态的
+ * 批量暂停走 `core/record/pause.ts` 的 `pauseLiveDispatches`，那里才判断原执行态。
  *
  * @returns 本次是否新写入标记。
  */
@@ -973,34 +995,6 @@ export function holdDispatch(root: string, id: string, by: string, reason: strin
   return true;
 }
 
-/**
- * 批量暂停一组派单，一次写盘。
- *
- * 启动时可能有上百张遗留单，逐张调用 `holdDispatch` 会把整份台账重写上百次。
- *
- * @returns 本次新写入标记的张数。
- */
-export function holdDispatches(
-  root: string,
-  ids: readonly string[],
-  by: string,
-  reason: string,
-): number {
-  const want = new Set(ids);
-  if (want.size === 0) return 0;
-  const rows = readDispatches(root);
-  const at = new Date().toISOString();
-  let changed = 0;
-  for (let i = 0; i < rows.length; i += 1) {
-    const cur = rows[i] as Dispatch;
-    if (!want.has(cur.id) || dispatchPaused(cur)) continue;
-    rows[i] = { ...cur, paused_at: at, paused_by: by, paused_reason: reason } as Dispatch;
-    changed += 1;
-  }
-  if (changed > 0) writeJsonl(dispatchPath(root), rows);
-  return changed;
-}
-
 /** 唤醒结果：`from` 为唤醒前状态，`to` 为唤醒后状态。 */
 export interface WakeResult {
   id: string;
@@ -1014,6 +1008,8 @@ export interface WakeResult {
  * 只解除暂停标记。失败单退回 `open` 并清除终止字段：否则重派闸按 `retry_verdict` /
  * `done_at` 拦截该派单，唤醒后不会重新执行。`done` / `closed` 是终态，不唤醒。
  *
+ * 写 `wake_at`：全局暂停仍在时，监工每轮补标记会跳过它，不再把这一张标回去。
+ *
  * @returns 未找到、未暂停或已结束时返回 null。
  */
 export function wakeDispatch(root: string, id: string): WakeResult | null {
@@ -1025,10 +1021,11 @@ export function wakeDispatch(root: string, id: string): WakeResult | null {
   if (!dispatchPaused(cur)) return null;
   if (from === "done" || from === "closed") return null;
 
-  const next: Dispatch = { ...cur };
+  const next: Dispatch = { ...cur, wake_at: new Date().toISOString() } as Dispatch;
   delete next.paused_at;
   delete next.paused_by;
   delete next.paused_reason;
+  delete next.paused_from;
   let to = from;
   if (from === "failed") {
     next.status = "open";
@@ -1095,8 +1092,7 @@ export function activeDispatches(root: string): Dispatch[] {
   );
 }
 
-/** 工作进程上报完成：只写事实，不改结论。 */
-/** 标记“已上报，等裁决”。 */
+/** 工作进程上报完成：只写事实，不改结论；标记“已上报，等裁决”。 */
 export function markReported(
   root: string,
   id: string,
@@ -1130,6 +1126,8 @@ export function sweepReported(root: string, maxAgeMs = 10 * 60_000): Dispatch[] 
   const hit: Dispatch[] = [];
   for (const d of rows) {
     if (d.status !== "reported") continue;
+    /* 暂停把时间也冻住：暂停期间退回重派，会让“暂停前在等裁决”的单在恢复后变成待重派。 */
+    if (dispatchPaused(d)) continue;
     const at = Date.parse(String(d.reported_at ?? ""));
     /* 没有上报时刻的老记录（本字段加上之前写的）：按已超时处理，一次清掉积压。 */
     const age = Number.isFinite(at) ? now - at : Number.POSITIVE_INFINITY;
@@ -1677,6 +1675,11 @@ export function closeDispatch(root: string, id: string, note?: string, by = "use
     closed_by: by,
     ...(note ? { note } : {}),
   };
+  /* 取消是终态：暂停标记留着会让“已取消”仍显示为暂停中，恢复调度时还会被再清一次。 */
+  delete next.paused_at;
+  delete next.paused_by;
+  delete next.paused_reason;
+  delete next.paused_from;
   rows[idx] = next;
   writeJsonl(dispatchPath(root), rows);
   syncTaskForDispatch(root, next);
@@ -1740,6 +1743,8 @@ export function sweepReviews(root: string): Dispatch[] {
   for (let i = 0; i < rows.length; i += 1) {
     const d = rows[i] as Dispatch;
     if (d.status !== "review") continue;
+    /* 暂停期间不结算：到点自动结束会让暂停前“等确认”的单变成已完成，恢复不回来。 */
+    if (dispatchPaused(d)) continue;
     const until = Date.parse(String(d.review_until ?? ""));
     if (!Number.isFinite(until) || until > now) continue;
     const next: Dispatch = {

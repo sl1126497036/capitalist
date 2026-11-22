@@ -145,12 +145,12 @@ function withTableLock<T>(root: string, fn: () => T): T {
     try {
       if (fd >= 0) closeSync(fd);
     } catch {
-      /* ignore */
+      /* 关闭失败不影响释放：以删除锁文件为准 */
     }
     try {
       rmSync(mp, { force: true });
     } catch {
-      /* ignore */
+      /* 锁文件删除失败时不阻断释放，残留由下次加锁覆盖 */
     }
   }
 }
@@ -182,7 +182,7 @@ function writeTable(root: string, table: LockTable): void {
     try {
       rmSync(tmp, { force: true });
     } catch {
-      /* ignore */
+      /* 临时文件删不掉就留下，由启动清理处理 */
     }
   }
 }
@@ -549,7 +549,7 @@ function recentWriter(root: string, path: string, holder: string): string {
       if (w && w !== holder && fp && lockKey(fp) === key && /write/i.test(String(e.tool ?? ""))) return w;
     }
   } catch {
-    /* ignore */
+    /* 读记录失败时不判占用者，返回空串交由调用方处理 */
   }
   return "";
 }

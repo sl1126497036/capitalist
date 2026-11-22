@@ -3,7 +3,7 @@
  *
  * 整份写入走临时文件加 rename。多个进程会同时写同一个任务根（每次工具调用一个 hook
  * 进程、监工、CLI），写到一半的文件解析为非法 JSON，调用方会当作“文件缺失”处理，
- * 静默丢弃状态。JSONL 只追加，不需要这一套。
+ * 静默丢弃状态。JSONL 只追加，无需此机制。
  */
 
 import {
@@ -28,12 +28,6 @@ const TMP_DIRNAME = ".tmp";
 /** 一次启动最多清多少个历史残留。 */
 const PRUNE_MAX_PER_RUN = 400;
 
-/**
- * 读 JSON。
- *
- * @param fallback 文件缺失、内容损坏或不是合法 JSON 时返回的值。
- * @returns 解析结果；解析失败一律返回 `fallback`，不抛。
- */
 /** 小文件读缓存有效期：轮询间隔 2 秒，200ms 不会让界面看起来滞后。 */
 const READ_CACHE_TTL_MS = 300;
 const readCache = new Map<string, { at: number; value: unknown }>();
@@ -48,6 +42,17 @@ const readCache = new Map<string, { at: number; value: unknown }>();
  * 积分台账），每次都是一次同步读盘；这里按路径缓存解析结果，写路径统一
  * 走 {@link writeJson} 会立即失效，所以“写完马上读”仍看到新值。
  */
+/**
+ * 丢弃一个文件的读缓存。
+ *
+ * 只对“不经过 {@link writeJson} 的删除”必要：直接 `unlink` 之后缓存仍在有效期内，
+ * 读到的是旧值。暂停文件就是这么删的，恢复调度若命中旧值，调度侧会当自己仍暂停，
+ * 把刚清掉的标记重新打回去。
+ */
+export function forgetJson(file: string): void {
+  readCache.delete(file);
+}
+
 export function readJson<T>(file: string, fallback: T): T {
   const hit = readCache.get(file);
   if (hit && Date.now() - hit.at < READ_CACHE_TTL_MS) return hit.value as T;

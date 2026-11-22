@@ -12,9 +12,8 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const loop = require(join(PKG, "dist/supervisor/loop.js"));
-const { AUTH_REQUIRED_TEXT, QUOTA_EXHAUSTED_TEXT, looksLikeAuth } = require(
-  join(PKG, "dist/supervisor/channel/llm.js"),
-);
+const { AUTH_REQUIRED_TEXT, QUOTA_EXHAUSTED_TEXT } = require(join(PKG, "dist/supervisor/channel/llm.js"));
+const { judgeFault } = require(join(PKG, "dist/supervisor/channel/fault.js"));
 
 function scratch() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-authblocked-"));
@@ -39,9 +38,9 @@ function readDispatch(root) {
 }
 
 test("登录态文案命中识别，额度文案不误判", () => {
-  assert.equal(looksLikeAuth("Authentication required. Please use /login command"), true);
-  assert.equal(looksLikeAuth("未登录"), true);
-  assert.equal(looksLikeAuth("额度已耗尽"), false, "额度与登录态分开识别");
+  assert.equal(judgeFault("diag", "Authentication required. Please use /login command"), "auth");
+  assert.equal(judgeFault("diag", "未登录"), "auth");
+  assert.equal(judgeFault("diag", "额度已耗尽"), "quota", "额度与登录态分开识别");
 });
 
 test("worker 日志含登录态文案时给出结论，不含时仍按退出码描述", () => {

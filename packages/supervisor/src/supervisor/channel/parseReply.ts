@@ -17,6 +17,8 @@ import {
   PARENT_LINE,
   PARENT_REASON_LINE,
   REVOKE_LINE,
+  SUPERSEDE_LINE,
+  TITLE_LINE,
   parseInsert,
   parseInsertMode,
   type InsertRef,
@@ -41,10 +43,20 @@ const DO_LINE = /^\s*DO:\s*([a-zA-Z-]+)\s*([\s\S]*)$/;
  * 很容易只加到其中一处，表现是“解析出来了但没落库”，且不会报错。
  */
 export interface TreeFieldBag {
+  /**
+   * 派单标题（`TITLE:` 行）。
+   *
+   * 不是树字段，但归属规则与树字段相同（跟着最近的 `DO:`），且要与 ATT / PARENT 一起
+   * 从解析结果传递到指令记录，所以放在同一个包里，由 {@link treeDirectiveFields} 统一带出。
+   * 优先级高于正文摘要：摘要判断不出哪一段是任务本体。
+   */
+  title?: string;
   parent?: string;
   parentReason?: string;
   after?: string[];
   group?: string;
+  /** 接替声明（`SUPERSEDE:` 行）原话。建单时换算成台账 id 并校验同组。 */
+  supersede?: string;
   insert?: InsertRef;
   insertMode?: "halt" | "keep" | "drop";
 }
@@ -80,6 +92,11 @@ export interface ParsedReply {
   /** 全部动作，按出现顺序保留；一条消息中的多件事各成一单，不合并。 */
   acts: ParsedAction[];
   /**
+   * 模型写的标题（`TITLE:` 行）。undefined 表示未写，建单时按正文摘要兜底。
+   * 多动作时每单的标题在 `acts` 里，这里只保留单动作消息的那一份。
+   */
+  title?: string;
+  /**
    * 模型写的依赖编号（`AFTER:` 行）。undefined 表示未写（无依赖）。
    * 只有 `DO: dispatch` 使用它：建单时翻译成台账上的 `after` 字段。
    */
@@ -93,6 +110,12 @@ export interface ParsedReply {
   parentReason?: string;
   /** 分组声明（`GROUP:` 行）原话：`new <标题>` / `#G1`。由调用方解析并落成结构。 */
   group?: string;
+  /**
+   * 接替声明（`SUPERSEDE:` 行）原话：被顶替事项的编号或派单 id。
+   *
+   * 建单时换算成台账 id 并校验同组、目标已了结；判定时与被接替事项合并为同一事项。
+   */
+  supersede?: string;
   /** 插入声明（`INSERT:` 行）：把本单插到锚点之前或之后。 */
   insert?: InsertRef;
   /** 在途处置（`INSERT_MODE:` 行）：`halt` 退回重做 / `keep` 不中断 / `drop` 作废。 */
@@ -206,6 +229,19 @@ export function parseReply(raw: string): ParsedReply {
       if (t && !/^(none|no|无|-|—)$/i.test(t)) treeBag().group = t;
       continue;
     }
+    const supM = SUPERSEDE_LINE.exec(line);
+    if (supM) {
+      const t = String(supM[1] ?? "").trim();
+      if (t && !/^(none|no|无|-|—)$/i.test(t)) treeBag().supersede = t;
+      continue;
+    }
+    /* 标题行与 ATT / PARENT 同一套归属：写到哪个 `DO:` 之后，就属于哪一单。 */
+    const titleM = TITLE_LINE.exec(line);
+    if (titleM) {
+      const t = String(titleM[1] ?? "").trim();
+      if (t && !/^(none|无|-|—)$/i.test(t)) treeBag().title = t;
+      continue;
+    }
     const insM = INSERT_LINE.exec(line);
     if (insM) {
       const parsed = parseInsert(String(insM[1] ?? ""));
@@ -244,10 +280,12 @@ export function parseReply(raw: string): ParsedReply {
     acts,
     /* `shots` 为兼容字段：单动作时取首单的 ATT；未写 ATT 由调用方按消息自带图处理。 */
     ...(attSeen ? { shots: firstShots ?? leadShots ?? [] } : {}),
+    ...(solo.title ? { title: solo.title } : {}),
     ...(solo.after ? { after: solo.after } : {}),
     ...(solo.parent ? { parent: solo.parent } : {}),
     ...(solo.parentReason ? { parentReason: solo.parentReason } : {}),
     ...(solo.group ? { group: solo.group } : {}),
+    ...(solo.supersede ? { supersede: solo.supersede } : {}),
     ...(solo.insert ? { insert: solo.insert } : {}),
     ...(solo.insertMode ? { insertMode: solo.insertMode } : {}),
   };
@@ -260,18 +298,22 @@ export function parseReply(raw: string): ParsedReply {
  * 有对应的记录字段名。分散在调用方拼接会导致字段已解析却未传递，且不会报错。
  */
 export function treeDirectiveFields(p: TreeFieldBag): {
+  title?: string;
   parent?: string;
   parent_reason?: string;
   after?: string[];
   group?: string;
+  supersede?: string;
   insert?: string;
   insert_mode?: "halt" | "keep" | "drop";
 } {
   return {
+    ...(p.title ? { title: p.title } : {}),
     ...(p.parent ? { parent: p.parent } : {}),
     ...(p.parentReason ? { parent_reason: p.parentReason } : {}),
     ...(p.after ? { after: p.after } : {}),
     ...(p.group ? { group: p.group } : {}),
+    ...(p.supersede ? { supersede: p.supersede } : {}),
     ...(p.insert ? { insert: `${p.insert.where} ${p.insert.anchor}${p.insert.now ? " now" : ""}` } : {}),
     ...(p.insertMode ? { insert_mode: p.insertMode } : {}),
   };

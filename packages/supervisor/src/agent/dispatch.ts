@@ -65,9 +65,9 @@ const INJECT_HEAD: Record<BriefLang, string> = {
   en: "【capitalist active】(state injected below — do not repeat it to the user)",
 };
 
-/** 推理过程用哪门语言写：跟用户说话的语言走，界面会把推理原样展开。 */
+/** 推理过程用哪门语言写：与用户交流所用语言一致，界面会将推理原样展示。 */
 const THINK_LANG: Record<BriefLang, string> = {
-  zh: "思考过程用用户语言写：界面会把推理原样展开给用户看。",
+  zh: "思考过程用用户语言写：界面会将推理原样展示给用户。",
   en: "Write your reasoning in the user's language: the board shows it verbatim.",
 };
 
@@ -140,8 +140,8 @@ const CHAT_SESSION_RX = /^capitalist-chat\b/;
 /**
  * 对话层不许执行的动作：只保留改状态机的两个。
  *
- * 禁动作是治症状：真正的问题是“一张单都没有就把阶段往下走”，那由 `advanceStage` 的派单
- * 判据解决，与对话层能跑什么命令无关。禁得太多会挡住用户口述的需求（登记、派单、结束、
+ * 禁用动作只是权宜之计：根本问题是“一张单都没有就把阶段往下走”，那由 `advanceStage` 的派单
+ * 判据解决，与对话层能跑什么命令无关。禁用过多会阻断用户口述的需求（登记、派单、结束、
  * 唤醒都是对话层该执行的），所以名单只留 `advance` 与 `adopt`。
  */
 const CHAT_WRITE_RX = /(^|[\s;&|/])capitalist(\.js)?\s+(advance|adopt)\b/;
@@ -314,8 +314,8 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
   }
 
   /*
-   * 删除一律先申请：任务根内的删除同样要上报。目标不明确（通配符、没给目标）直接拒，
-   * 说不清删哪就无法核对影响。
+   * 删除一律先申请：任务根内的删除同样要上报。目标不明确（通配符、没给目标）直接拒绝，
+   * 无法说明删除目标就无法核对影响。
    */
   if (act === "delete") return deleteGate(guardBase(ctx, event, hook, offline), cmd);
 
@@ -378,7 +378,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
     });
     return hook.deny(
       `【需当次授权】${hit.map((h) => h.label).join("；")}\n` +
-        "说清要做哪个动作 / 影响面 / 怎么回滚，等用户回话；未获授权不得执行。" +
+        "说明拟执行的动作、影响范围与回滚方式，等待用户答复；未获授权不得执行。" +
         escalation(v.nth),
       event.point,
       event.sessionId,
@@ -425,16 +425,16 @@ function shellWriteTargets(cmd: string, root: string): string[] {
 }
 
 /**
- * 文件锁守卫：执行前拿锁、写前校验版本。
+ * 文件锁守卫：执行前获取锁、写前校验版本。
  *
  * 挂在 on_action 上，这是唯一能在执行前拦住的位置。行为分三种：
  *
  *   读：只登记“谁在哪个版本读的”（默认不加锁，多读天然并发）；
- *   写：拿排他锁 + 校验“我读到的版本还是不是现在这个”；
- *   人（没有 CAPITALIST_WORKER_ID）：不参与锁，否则会把用户自己的操作挡住。
+ *   写：获取排他锁，并校验所读版本是否仍为当前版本；
+ *   人（没有 CAPITALIST_WORKER_ID）：不参与锁，否则会阻断用户自身的操作。
  *
  * 被拒时给的是可执行的三步，不是“失败了”，worker 是通用 agent，它需要知道
- * 现在该干什么才不会死等（用户明确提过“否则会死等”）。
+ * 明确下一步动作才不会无限等待（用户曾明确提过“否则会无限等待”）。
  */
 function guardFileLock(
   hook: HookFacet,
@@ -448,7 +448,7 @@ function guardFileLock(
   const mode = act === "write" ? "write" : "read";
 
   if (!holder) {
-    /* 人自己敲的命令 / 看板会话：读要留版本痕迹，好让 worker 知道自己读的东西被改过。 */
+    /* 用户手工输入的命令 / 看板会话：读要留版本痕迹，以便 worker 知晓所读内容已被修改。 */
     if (mode === "read") for (const p of paths) noteRead(ctx.root, "user", p);
     return hook.passthrough();
   }
@@ -460,7 +460,7 @@ function guardFileLock(
     return hook.passthrough();
   }
 
-  /* 排序后依次申请：两个 worker 哪怕目标集合相同，拿锁顺序也一致，不会形成反向持有的环。 */
+  /* 排序后依次申请：两个 worker 哪怕目标集合相同，获取锁的顺序也一致，不会形成反向持有的环。 */
   const ordered = [...new Set(paths)].sort();
   const got: string[] = [];
   const releaseGot = () => {
@@ -473,7 +473,7 @@ function guardFileLock(
   try {
     wpid = loadWorker(ctx.root, holder)?.pid ?? 0;
   } catch {
-    /* 记录读不到就给 0，落盘时会回落到 hook 进程号 */
+    /* 记录读取失败时取 0，落盘时会回落到 hook 进程号 */
   }
 
   for (const p of ordered) {
@@ -505,7 +505,7 @@ function guardFileLock(
   }
 
   /*
-   * 写之前校验版本。必须在拿到锁之后：等锁的这段时间里，上一个持有者完全可能
+   * 写之前校验版本。必须在获取锁之后：等锁的这段时间里，上一个持有者完全可能
    * already 表示目标已变更，写入会用旧内容覆盖新改动，需拦截。
    */
   if (mode === "write") {
@@ -516,7 +516,7 @@ function guardFileLock(
       recordEvent(ctx, event, { lock: "stale", path: p, by: st.by ?? "" });
       return hook.deny(
         [
-          `【文件已被改】${p} 在读取之后被${st.by ? ` ${st.by} ` : "别人"}改过了。`,
+          `【文件已被改】${p} 在读取之后被${st.by ? ` ${st.by} ` : "他人"}修改。`,
           st.why ? `· ${st.why}` : "",
           "",
           "先重新 Read 这个文件，基于新内容再改；不要用旧内容覆盖他人的改动。",
@@ -615,11 +615,11 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
 
   const wid = workerId();
   if (wid) {
-    // 工作进程的存活由监工按心跳判定，不续写心跳时长任务会被当作死进程回收。
+    // 工作进程的存活由监工按心跳判定，不续写心跳时长任务会被当作失效进程回收。
     touchWorker(ctx.root, wid, { status: "running", stage: ctx.state.stage });
     /*
      * 工作进程上下文只含“这一单”，不注入全局简报。全局阶段状态、门槛、下一步属于监工视角，
-     * 灌进工作进程会与派单正文里的任务说明混在一起，形成“上面是监工、下面又是工作进程”的杂糅。
+     * 注入工作进程会与派单正文里的任务说明混杂，形成“上面是监工、下面又是工作进程”的杂糅。
      * 派单正文由 worker 启动 argv 的 buildPrompt 生成，与本处注入互不相干。
      *
      * 身份标头只报派单号、不报进程号：进程号是实现细节，报给工作进程会让它在回复里复述，
@@ -654,7 +654,7 @@ function workerId(): string {
 }
 
 /**
- * 当前会话之外是否有监工在运行，且手上有存活的工作进程。
+ * 当前会话之外是否有监工在运行，且存在存活的工作进程。
  *
  * 两个条件同时成立时，本会话按监控方处理，收工闸放行。阶段闸只约束执行侧。
  */
@@ -670,7 +670,7 @@ function executionElsewhere(root: string): boolean {
  *   0. 会话已退役，不再执行，放行
  *   1. 本阶段登记的提问，合法停顿，放行
  *   2. 登记阻塞，合法停顿，放行
- *   3. 同一问题第 3 次，拦
+ *   3. 同一问题第 3 次：拦截
  *   4. 阶段闸，末阶段看不达标，中间阶段看有没有该推进却没推进
  *
  * 第 1 步按阶段过滤：登记在旧阶段的提问只豁免该阶段，不影响后续阶段。
@@ -729,7 +729,7 @@ function onStop(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
   if (check.ok) {
     recordEvent(ctx, event, { decision: "STAGE_NOT_ADVANCED", stage: sid }, "stop");
     return hook.deny(
-      `【阶段闸】${sid} ${stage?.name ?? ""} 已达标。先 capitalist advance 推进，不要停在这里。`,
+      `【阶段闸】${sid} ${stage?.name ?? ""} 已达标。请先执行 capitalist advance 推进，不要在此停止。`,
       event.point,
       event.sessionId,
     );

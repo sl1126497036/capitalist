@@ -48,7 +48,7 @@ import { dedupeMessages, isBlankMessage } from "../../lib/msgDedup.js";
 import {toneOf} from "../../lib/msgTone.js";
 import {isLog, logRowsOf} from "../../lib/msgNoise.js";
 import {numberQueue} from "../../lib/shortId.js";
-import { noLabel, bareNoLabel, stripHash } from "../../lib/no.js";
+import { noLabel, bareNoLabel, stripHash, refNo, refableOf } from "../../lib/no.js";
 /* 结束态判定与左栏队列卡共用 lib/status.js。 */
 import {endedWord} from "../../lib/status.js";
 import {taskTitle} from "../../lib/taskTitle.js";
@@ -110,7 +110,7 @@ const props = defineProps({
    */
   guardQueue: {type: Array, default: () => []},
 });
-const emit = defineEmits(["send", "capitalist", "handback", "interject", "pick", "toggleQueue", "close", "loadOlder", "refresh", "pause", "locate", "guardDecision"]);
+const emit = defineEmits(["send", "capitalist", "handback", "interject", "pick", "toggleQueue", "close", "loadOlder", "refresh", "pause", "locate", "guardDecision", "new-session"]);
 
 /* 会话标题取任务根目录最后一段；根不可用时退回“监工”，不拼出“-监工”。 */
 const supervisorTitle = computed(() => {
@@ -196,8 +196,8 @@ const scrollMemo = new Map();
 
 /* 引用条：{ ref, text } */
 const quote = ref(null);
-/** 服务端不一定回填引用 ref，本地记住自己刚发出的话与 ref 的对应关系。 */
-const sentQuotes = reactive({});
+/* 引用条上的编号：只有合法的消息编号才显示，派单号与视图块 id 不补 `#`。 */
+const quoteLabel = computed(() => refNo(quote.value?.ref || ""));
 
 const stopOpen = ref(false);
 const alsoBlock = ref(false);
@@ -256,6 +256,8 @@ function isNoise(m) {
   if (!m || m.role === "user") return false;
   const kind = String(m.kind || "");
   if (kind === "debug" || kind === "trace" || kind === "log") return true;
+  /* 引擎调试块是日志没能解析成正文时唯一的原文落点，按痕迹字段丢弃等于让解析失败不可见。 */
+  if (kind === "engine") return false;
   const t = String(m.text || "").trim();
   if (!t) return false;
   if (t.length > 40 && /^[[{]/.test(t) && TRACE_FIELD.test(t)) return true;
@@ -516,6 +518,8 @@ const view = computed(() => {
           tone: "",
           note: "",
           ref: `RD-${msgRef(items[0])}`,
+          /* 列表 key 带上类别：历史台账里监工正文与用户原话可能同编号，只按编号做 key 会撞。 */
+          key: `RD-${msgRef(items[0])}`,
           fold: false,
           huge: false,
           full: true,
@@ -540,9 +544,11 @@ const view = computed(() => {
       /* link 同值出现两次以上才算归属确认；带 action 的按指令卡配色。 */
       const lk = String(m.link || "");
       const paired = Boolean(lk) && (linkCount.get(lk) || 0) >= 2;
-      /* 归属标识优先用服务端下发的任务编号 no；历史消息查不到时才回落指令 id 尾段。 */
-      const assocId = paired ? lk.slice(-6) : "";
-      const assoc = paired ? (String(m.no || "") ? noLabel(m.no) : assocId) : "";
+      /*
+       * 同一派单角标只认服务端下发的任务编号 no。早先缺 no 时回落 `link` 末六位，
+       * 那是从任意身份串尾部截出来的片段，会显示成 `#810523` 这类不存在的号。
+       */
+      const assoc = paired && String(m.no || "") !== "" ? noLabel(m.no) : "";
       const card = paired && String(m.action || "") !== "";
       /* 颜色取 toneOf 的三档：bad 红、warn 琥珀、空为中性。 */
       const {tone, note} = toneOf(m);
@@ -552,6 +558,8 @@ const view = computed(() => {
         tone,
         note,
         ref: msgRef(m),
+        /* 列表 key 带上类别：历史台账里监工正文与用户原话可能同编号，只按编号做 key 会撞。 */
+        key: `${msgRef(m)}|${c}`,
         fold,
         huge,
         full,
@@ -560,7 +568,16 @@ const view = computed(() => {
         /* 随带的技能：气泡按标签展示，取值来自消息流里的 skills 字段。 */
         skills: Array.isArray(m.skills) ? m.skills : [],
         assoc,
-        assocId,
+        /* 引用角标：只显示合法消息编号，非消息（视图块、老记录）不给号。 */
+        quoteLabel: refNo(m.quote),
+        /*
+         * 只有带合法消息编号的卡片提供引用与复制。
+         *
+         * 派单卡代表一张单（身份是派单号），视图块代表一段日志（身份是 `归属~类型~序号`），
+         * 本地回显在落库前只有临时身份，三者都没有消息编号。给出按钮只会让引用落一个
+         * 内容指纹，引用条上没有编号，提示词里还会多出一个体系外编号。
+         */
+        refable: refableOf(m),
         card,
         /* 带任务编号的派单卡与监工回执卡可跳转；编号缺失或归属不明时保持普通卡片。 */
         jump: c === "supervisorsay" && String(m.no || "") !== "",
@@ -787,7 +804,7 @@ const stateRowBase = computed(() => {
   /* 排队态不占用状态条；仅在进程运行中或异常时显示。 */
   if (s === "queued") return null;
   /* 暂停态与左栏任务卡共用同一词条：暂停单既未运行也未退出，气泡显示等待唤醒状态。 */
-  if (s === "paused") return {text: tr("已暂停"), bad: false, warn: true, dots: false};
+  if (s === "paused") return {text: tr("暂停中"), bad: false, warn: true, dots: false};
   /* 会话结束后发起的新提问仍在等待回执，状态条保持生成中。 */
   if (props.talkBusy.has(props.sel)) {
     return {text: tr("正在生成回复"), bad: false, warn: false, run: true, dots: true};
@@ -1386,7 +1403,7 @@ function threadScope() {
 }
 
 /* 刚写入的窗口：服务端读数回来前先用它做分母，避免蒙版撤掉后指标还停在旧档位。
-   只对写入时的那个作用域生效，切到别的线程不会串用。 */
+   只对写入时的那个作用域生效，切换到其他线程不会串用。 */
 const ctxWinLocal = ref(0);
 const ctxWinScope = ref("");
 watch(
@@ -2245,6 +2262,11 @@ async function copyMsg(v, ref) {
 }
 
 function quoteOf(m, ref) {
+  /*
+   * 按钮已按编号可见性隐藏，这里再挡一次：没有合法消息编号的引用目标一律不接，
+   * 否则引用条上没有编号，提交后提示词会多出一个内容指纹。
+   */
+  if (!refableOf(m) || !refNo(ref)) return;
   const first = String(m.text || "").split("\n").filter(Boolean)[0] || "";
   quote.value = {ref, text: first.slice(0, 160)};
   nextTick(() => inputEl.value?.focus());
@@ -2506,7 +2528,6 @@ function submit() {
   const fire = () => {
     /* 提交介入动作时立即亮“介入中”；仅本会话进程存活才交给监工，已退出时不亮该状态。 */
     if (meta.via === "capitalist" && ["running", "starting"].includes(String(props.thread?.status || ""))) supervisorActBegin();
-    if (ref) sentQuotes[payload] = ref;
     emit("send", payload, quoteOut, meta);
     draft.value = "";
     attachments.value = [];
@@ -2555,7 +2576,6 @@ function openStop() {
 function doStop() {
   stopOpen.value = false;
   const text = draft.value.trim();
-  if (text && quote.value) sentQuotes[text] = quote.value.ref;
   emit("interject", {
     text,
     alsoBlock: alsoBlock.value,
@@ -2612,7 +2632,7 @@ const THREAD_WORD = {
   queued: "排队",
   failed: "异常",
   orphan: "异常",
-  paused: "已暂停",
+  paused: "暂停中",
   held: "接管中",
 };
 

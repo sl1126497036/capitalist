@@ -42,3 +42,30 @@ test("标题行样式：动作按钮不缩，前置元素依次让位", () => {
   /* 监工面板的指标条与按钮排布不归本单一管，不许在这里被改成可缩。 */
   assert.match(block(".hmetrics"), /flex:\s*0 1 auto/);
 });
+
+/**
+ * 引用与复制按钮只跟着消息编号走。
+ *
+ * 引用条上的编号就是被引消息的编号；没有编号的卡片（派单卡、思考块、输出分块、
+ * 进程提醒）一旦也能点引用，引用出去只能落一个内容指纹，模型会照抄成 `#hhs87c`
+ * 这种体系外编号回流到界面。判据在前端 `lib/no.js` 的 `refableOf`，模板负责执行。
+ */
+test("引用与复制按钮：逐卡片都要有编号判据，不得无条件渲染", () => {
+  const buttons = [...tpl.matchAll(/<button\b[\s\S]*?<\/button>/g)].map((m) => m[0]);
+  const quoteBtns = buttons.filter((b) => b.includes("quoteOf("));
+  assert.ok(quoteBtns.length >= 2, `引用按钮应覆盖气泡与块两类卡片，实际 ${quoteBtns.length} 个`);
+  for (const b of quoteBtns) {
+    assert.match(b, /v-if="v\.refable"/, `引用按钮缺少编号判据：\n${b}`);
+  }
+
+  const copyBtns = buttons.filter((b) => b.includes("复制这一段") || b.includes("复制这条"));
+  assert.ok(copyBtns.length >= 2, `复制按钮应覆盖气泡与块两类卡片，实际 ${copyBtns.length} 个`);
+  for (const b of copyBtns) {
+    assert.match(b, /v-if="v\.refable"/, `复制按钮缺少编号判据：\n${b}`);
+  }
+
+  /* 引擎调试全文的复制不是消息引用，保留无条件；此处只钉住它别被误加判据。 */
+  const dbgCopy = buttons.filter((b) => b.includes("复制引擎调试全文"));
+  assert.equal(dbgCopy.length, 1, "引擎调试全文复制按钮应有且只有一个");
+  assert.doesNotMatch(dbgCopy[0], /v-if="v\.refable"/, "引擎调试卡没有消息编号，不套引用判据");
+});

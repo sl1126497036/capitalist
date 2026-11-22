@@ -43,7 +43,7 @@ export const EVENT_ZH: Readonly<Record<string, string>> = Object.freeze({
   supervisor_cmd: "指令回执",
   supervisor_answer: "回答",
   supervisor_chat_ask: "用户指令",
-  supervisor_reply: "监工回话",
+  supervisor_reply: "监工回复",
   /* 上下文压缩：重载（source=reload）与读数推断（source=inferred）共用同一标签。 */
   context_compacted: "已压缩",
   /* 任务根的会话记录缺失：判定为新的生命周期，换新会话。 */
@@ -108,7 +108,7 @@ export const STATUS_ZH: Readonly<Record<string, string>> = Object.freeze({
   gone: "已退出",
   exited: "已退出",
   finished: "已完成",
-  paused: "已暂停",
+  paused: "暂停中",
   held: "接管中",
 });
 

@@ -10,7 +10,7 @@ import { withFileLock } from "../../core/dispatch/commands";
 import { appendJsonl, readJsonl, writeJsonl } from "../../core/record/json";
 import { recordEvent } from "../../core/record/ledger";
 import { ledger as ledgerLoc } from "../../core/record/locations";
-import { msgId } from "../../core/message/msgId";
+import { isUserMsgDirection, msgDirection, msgId, userMsgDirectionOf } from "../../core/message/msgId";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { parseGroupSpec } from "../../core/dispatch/groupOps";
 import { parseInsert, parseInsertMode } from "./treeLines";
@@ -36,6 +36,8 @@ export const CAPITALIST_ACTIONS = [
   "promote",
   /* 插到排队队首，不抢占槽位；与 promote 的立即执行不同。 */
   "queue",
+  /* 单张恢复：只解除这一张的暂停，不解除全局暂停（`DO: wake #03`）。 */
+  "wake",
   /* 作废一张单：结束该单、结束进程且不再重派（`DO: cancel #65`）。 */
   "cancel",
   "skip",
@@ -71,6 +73,12 @@ export interface SupervisorDirective {
   action: SupervisorAction | "";
   arg: string;
   /**
+   * 派单标题（`TITLE:` 行），仅 `dispatch` 消费，建单时写入台账 `title` 字段。
+   *
+   * 标题由派单方给出，不从正文摘要推测。缺字段的记录按未写处理，建单侧走摘要兜底。
+   */
+  title?: string;
+  /**
    * 指令来源消息标识与组单时选中的附件。`dispatch` 造单优先用 `atts`；
    * `msg_id` 仅在无 `atts` 时用于回查该消息的附件。
    */
@@ -104,6 +112,12 @@ export interface SupervisorDirective {
    */
   group?: { mode: "new"; title: string } | { mode: "join"; id: string };
   /**
+   * 接替声明（`SUPERSEDE:` 行）原话，仅 `dispatch` 消费。
+   *
+   * 存原话而不在此换算：换算要用台账与组索引，属于建单校验，放在 `supersede.ts` 一处完成。
+   */
+  supersede?: string;
+  /**
    * 插入声明（`INSERT:` 行），仅 `dispatch` 消费：把本单插到锚点之前或之后。
    * `now` 表示建单后立即执行，建单与置顶在同一事务里完成。
    */
@@ -127,10 +141,17 @@ export function supervisorDirectPath(root: string): string {
   return ledgerLoc.supervisorDirect(root);
 }
 
-function newId(target: string): string {
-  /* 监工指令由监工发出，方向 `S`；归属任务号从目标派单号反解。 */
+function newId(target: string, fromUser: boolean): string {
+  /*
+   * 方向段按发起方取，不按记录类型取。
+   *
+   * 这张台账存的是调度指令，但其中一部分是用户在界面上说的话（`via` 缺省或 `user`）。
+   * 那些记录会以“我：”气泡显示，身份必须是用户消息编号（`U2S`）；早先一律按指令性质
+   * 记成 `S`，界面上就出现“用户说的话带着监工方向”，引用条也跟着复述错号。
+   * 监工对话层自己生成的指令才是 `S2W`：这条台账的内容是发给工作进程的。
+   */
   const no = taskNoOfDispatchId(String(target ?? "")) || "S0";
-  return msgId(no, "S");
+  return msgId(no, fromUser ? userMsgDirectionOf("supervisor") : "S2W");
 }
 
 /**
@@ -206,7 +227,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
   if ((action === "diagnose" || action === "fix") && !rest) {
     return {
       error:
-        `${action} 缺少内容：写成 ${action} <卡在哪>。` +
+        `${action} 缺少内容：写成 ${action} <受阻原因>。` +
         "diagnose 只查不改（只读诊断），fix 查完直接修；两者都用全新进程、不占业务槽位。",
     };
   }
@@ -236,6 +257,8 @@ export function appendSupervisorDirective(
     atts?: string[];
     /** 作用在哪一单上（只有 amend 用）。 */
     target?: string;
+    /** 派单标题（只有 dispatch 用，来自 `TITLE:` 行）。超长与空值在建单侧统一处理。 */
+    title?: string;
     /** 前置派单编号 / id（只有 dispatch 用，来自 `AFTER:` 行）。 */
     after?: string[];
     /** 父派单编号 / id 与挂边理由（只有 dispatch 用，来自 `PARENT:` / `PARENT_REASON:` 行）。 */
@@ -243,6 +266,8 @@ export function appendSupervisorDirective(
     parent_reason?: string;
     /** 分组声明原话（只有 dispatch 用，来自 `GROUP:` 行）。 */
     group?: string;
+    /** 接替声明原话（只有 dispatch 用，来自 `SUPERSEDE:` 行）。 */
+    supersede?: string;
     /** 插入声明原话（只有 dispatch 用，来自 `INSERT:` / `INSERT_MODE:` 行）。 */
     insert?: string;
     insert_mode?: string;
@@ -274,7 +299,7 @@ export function appendSupervisorDirective(
   if (text.length > 500) return { ok: false, error: "指令过长（上限 500 字）" };
 
   const rec: SupervisorDirective = {
-    id: newId(String(input.target ?? "")),
+    id: newId(String(input.target ?? ""), String(input.via ?? "") !== "capitalist"),
     at: new Date().toISOString(),
     at_ts: Date.now() / 1000,
     text: text || [action, arg].filter(Boolean).join(" "),
@@ -291,6 +316,9 @@ export function appendSupervisorDirective(
    */
   if (input.msg_id) rec.msg_id = String(input.msg_id);
   if (input.target) rec.target = String(input.target);
+  /* 标题只存原文，长度与可用性由建单侧 `declaredTitle` 统一判定。 */
+  const declared = String(input.title ?? "").trim();
+  if (declared) rec.title = declared;
   /* `PARENT: none` 等价于未写，不落字段；`parent_reason` 单独保存，标出建立该树边的依据。 */
   const parentRef = String(input.parent ?? "").trim();
   if (parentRef && !/^(none|no|无|-|—)$/i.test(parentRef)) {
@@ -306,6 +334,9 @@ export function appendSupervisorDirective(
     const spec = parseGroupSpec(input.group);
     if (spec && spec.mode !== "none") rec.group = spec;
   }
+  /* 接替：只存原话，换算与校验在建单时完成，避免两处各解析一遍。 */
+  const supRef = String(input.supersede ?? "").trim();
+  if (supRef && !/^(none|no|无|-|—)$/i.test(supRef)) rec.supersede = supRef;
   /* 插入：无法识别插入位置时不落字段，由建单侧按未写处理，避免把派单插到推测的层级。 */
   if (input.insert) {
     const ins = parseInsert(input.insert);
@@ -337,8 +368,15 @@ export function appendSupervisorDirective(
     rejected: Boolean(rejected),
   });
   if (rejected) {
+    /*
+     * 拒绝回执由监工产生，发给用户看，方向 `S2U`；触发它的用户消息号记在 `msg_id`。
+     * 复用 `rec.id` 会让拒绝回执与用户原话同号，引用回执时引用条显示用户方向号。
+     */
+    const triggerNo =
+      [String(rec.msg_id ?? ""), String(rec.id ?? "")].find((x) => isUserMsgDirection(msgDirection(x))) || "";
     recordEvent(root, "supervisor_cmd", {
-      id: rec.id,
+      id: msgId(taskNoOfDispatchId(String(rec.target ?? "")) || "S0", "S2U"),
+      ...(triggerNo ? { msg_id: triggerNo } : {}),
       action: rec.action || "",
       arg: rec.arg,
       ok: false,
@@ -364,7 +402,7 @@ export function pendingSupervisorDirectives(root: string): SupervisorDirective[]
 
 /**
  * 标记指令已消费并写入结果。读改写必须带锁：看板进程与监工循环并发写入，不加锁会丢失指令。
- * 拿不到锁返回 false，下一轮重试；同一轮调度内的去重由调用方按 id 负责。
+ * 获取锁失败返回 false，下一轮重试；同一轮调度内的去重由调用方按 id 负责。
  */
 export function markSupervisorDirective(root: string, id: string, result: SupervisorResult): boolean {
   const file = supervisorDirectPath(root);

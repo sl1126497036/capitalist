@@ -163,11 +163,24 @@
   color: var(--t5);
 }
 
+/*
+ * 树的边框只包住自身宽度，横向超出的卡片会画到边框之外。
+ * 组内成员已按列换行，但窄窗口或深层缩进仍可能超出可用宽度，故在此裁剪并横向滚动：
+ * 溢出留在树内，不越出边框。
+ * 同时作为容器查询的参照，组按树宽选择每行列数。
+ *
+ * `flex: 0 0 auto` 不能省：`overflow-x: auto` 把树变成滚动容器后，纵向 overflow 一并成 auto，
+ * flex 子项的自动最小高度随之归零。树多时森林区高度不够，每棵树都会被压扁到只剩标题行，
+ * 内容被裁掉。固定按内容高度由森林区纵向滚动，才是预期表现。
+ */
 .fv-tree {
   border: 1px solid var(--line);
   border-radius: var(--r-row);
   background: var(--surface-2);
   padding: var(--s10) var(--s10) var(--s16);
+  overflow-x: auto;
+  container-type: inline-size;
+  flex: 0 0 auto;
 }
 .fv-tree.dead {
   background: var(--surface-3);

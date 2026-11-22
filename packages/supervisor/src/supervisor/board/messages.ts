@@ -1,14 +1,17 @@
 import { hasCustomContract } from "../../core/contract/customContract";
 import { loadState } from "../../core/record/state";
 import { listDirectives } from "../../core/dispatch/commands";
+import { isMsgNo, msgId, msgTaskNo } from "../../core/message/msgId";
+import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { mqPath } from "../../core/dispatch/mq";
 import { Dispatch, WorkerRecord } from "../../core/record/supervisor";
 import { dispatchNoTable } from "../usage/threadNo";
 import { readWorkerEvents, FRESH_LOG_SEC, logIdleSec, chunkWorkerLines, readJsonlFromTail } from "./logs";
 import { fingerprint, maskThreadMessage, toolSummary, verdictText } from "./render";
-import { ThreadMessage } from "./snapshot";
+import { REFUNDABLE_EVENTS, ThreadMessage } from "./snapshot";
 import { BOARD_READ_TTL_MS, atTs, attachmentsOf, eventsFile, listWorkersBoard, readDispatchesBoard } from "./sources";
 import { taskKeyOf } from "./state";
+import { viewId } from "./viewId";
 import { statSync } from "node:fs";
 
 /**
@@ -208,6 +211,10 @@ export function threadMessages(
     const dur = d.done_at ? Math.max(0, atTs(d.done_at) - atTs(d.at)) : undefined;
     const dAtts = attachmentsOf({ atts: d.atts, text: d.action });
     const dNo = ctx.nos.get(d.id) ?? "";
+    /*
+     * 派单卡的身份是派单 id（`19-1`），不是消息编号：它代表一张单，不代表一条消息。
+     * 没有消息号就不提供引用与复制，由前端按 `isMsgNo` 判定，这里不伪造消息号。
+     */
     msgs.push({
       id: String(d.id),
       at: d.at,
@@ -228,6 +235,8 @@ export function threadMessages(
     const events = readWorkerEvents(worker.log, opts.logTailBytes);
     const lines = events.text;
     const relatedDispatch = dispatches.find((d) => d.id === worker.dispatch);
+    /* 视图块的身份前缀：优先派单 id，进程号只在没有派单时退用，且不上屏。 */
+    const viewBase = String(worker.dispatch ?? "") || String(worker.id ?? "");
     const t0 = atTs(worker.started_at) || atTs(relatedDispatch?.at) || Date.now() / 1000;
     const logTouched = ((): number => {
       try {
@@ -248,7 +257,8 @@ export function threadMessages(
       const idle = logIdleSec(worker.log);
       const fresh = Number.isFinite(idle) && idle < FRESH_LOG_SEC;
       msgs.push({
-        id: `${worker.id}#empty`,
+        id: viewId(viewBase, "empty"),
+        view: true,
         at: new Date(t1 * 1000).toISOString(),
         role: "worker",
         kind: "tool",
@@ -267,7 +277,8 @@ export function threadMessages(
 
     if (events.tools.length > 0) {
       msgs.push({
-        id: `${worker.id}#tools`,
+        id: viewId(viewBase, "tools"),
+        view: true,
         at: new Date(t1 * 1000).toISOString(),
         role: "worker",
         kind: "tool",
@@ -310,21 +321,28 @@ export function threadMessages(
       .sort((a, b) => a - b);
 
     if (events.thinking.length > 0) {
-      const blocks: { at: number; body: string[] }[] = [];
+      const blocks: { at: number; body: string[]; times: number[] }[] = [];
       events.thinking.forEach((body, i) => {
         const at = t0 + (span * (i + 1)) / (events.thinking.length + 1);
         /* 已经越过几次插话，就属于第几块。 */
         const idx = thinkSayTimes.filter((t) => t < at).length;
-        while (blocks.length <= idx) blocks.push({ at, body: [] });
+        while (blocks.length <= idx) blocks.push({ at, body: [], times: [] });
         const block = blocks[idx]!;
         if (block.body.length === 0) block.at = at;
         block.body.push(body);
+        block.times.push(events.thinkingTimes[i] || 0);
       });
       blocks.forEach((block, i) => {
         if (block.body.length === 0) return;
         const body = block.body.join("\n");
+        /*
+         * 思考块按创建时刻取号：块首段日志自带的事件时间，取不到时退回进程启动时刻。
+         * 不用块上插值出来的 `at`，那个值随日志长度变化，会让同一块在每次重建时换号。
+         */
+        const bornMs = block.times[0] || Math.round(t0 * 1000);
         msgs.push({
-          id: `${worker.id}#think-${i}`,
+          id: msgId(taskNoOfDispatchId(viewBase) || "S0", "W2U", bornMs),
+          view: true,
           at: new Date(block.at * 1000).toISOString(),
           role: "worker",
           kind: "thinking",
@@ -358,7 +376,8 @@ export function threadMessages(
         const at = Math.max(lastSay, lastAt + 0.001);
         const text = live ? "插话已送达，正在重新思考" : "插话已送达，下一轮派单时生效";
         msgs.push({
-          id: `${worker.id}#think-pending`,
+          id: viewId(viewBase, "think-pending"),
+          view: true,
           at: new Date(at * 1000).toISOString(),
           role: "worker",
           kind: "notice",
@@ -377,8 +396,11 @@ export function threadMessages(
     for (let ci = 0; ci < chunks.length; ci++) {
       const block = chunks[ci] ?? [];
       const at = t0 + (span * (offset + block.length)) / (lines.length + 1);
+      /* 编号取块首行的创建时刻，与思考块同一口径；插值出的 `at` 会随日志长度变化，不能用来取号。 */
+      const bornMs = events.textTimes[offset] || Math.round(t0 * 1000);
       msgs.push({
-        id: `${worker.id}#${offset}`,
+        id: msgId(taskNoOfDispatchId(viewBase) || "S0", "W2U", bornMs),
+        view: true,
         at: new Date(at * 1000).toISOString(),
         role: "worker",
         kind: "output",
@@ -393,7 +415,8 @@ export function threadMessages(
     }
     if (events.debug.length > 0) {
       msgs.push({
-        id: `${worker.id}#engine`,
+        id: viewId(viewBase, "engine"),
+        view: true,
         at: new Date(t1 * 1000).toISOString(),
         role: "worker",
         kind: "engine",
@@ -408,8 +431,21 @@ export function threadMessages(
     }
   }
 
-  const picked = new Set<Record<string, unknown>>();
-  for (const id of related) {
+  /**
+   * 事件归属任务号：申报回执按被答复的那条申报取，其余按事件上的派单或本线程的派单取。
+   */
+  const eventTaskNoOf = (e: Record<string, unknown>): string => {
+    const fromMsg = msgTaskNo(String(e.msg ?? ""));
+    if (fromMsg) return fromMsg;
+    const d = String(e.dispatch ?? e.target ?? "");
+    const byNo = ctx.nos.get(d);
+    if (byNo) return String(byNo);
+    const direct = taskNoOfDispatchId(d);
+    if (direct) return String(direct);
+    return String(taskNoOfDispatchId(String(worker?.dispatch ?? "")) || "S0");
+  };
+
+  const picked = new Set<Record<string, unknown>>();  for (const id of related) {
     for (const e of ctx.eventsByDispatch.get(id) ?? []) picked.add(e);
   }
   if (worker) {
@@ -420,7 +456,8 @@ export function threadMessages(
     if (name === "tool") {
       const t = toolSummary(e);
       msgs.push({
-        id: String(fingerprint(e)),
+        id: viewId(tid, "tool", fingerprint(e)),
+        view: true,
         at: String(e.at ?? ""),
         role: "worker",
         kind: "tool",
@@ -435,9 +472,25 @@ export function threadMessages(
     if (name === "dispatch_open") continue;
     const text = verdictText(e, ctx.mqById, ctx.nos, { customContract });
     if (!text.trim()) continue;
-    const evMsgId = String((e as { msg_id?: unknown }).msg_id ?? "").trim();
+    /* 事件身份：优先 `msg_id`，申报类事件把消息号直接写在 `id` 上（`mq_message`）。 */
+    const evMsgId = String(
+      (e as { msg_id?: unknown }).msg_id ?? (e as { id?: unknown }).id ?? "",
+    ).trim();
+    const evIsMsg = isMsgNo(evMsgId);
+    /*
+     * 裁决与回执要能引用：它们是监工对某条申报或某个流程的正式结论，出问题时要能指着说。
+     * 进程启停、心跳这类状态播报不给号，它们没有可引用的内容。
+     */
+    const refundable = REFUNDABLE_EVENTS.has(name);
+    const evDir = name === "mq_triage" ? "S2W" : "S2U";
+    const evBorn = Math.round(atTs(String(e.at ?? "")) * 1000) || Date.now();
     msgs.push({
-      id: evMsgId || String(fingerprint(e)),
+      id: evIsMsg
+        ? evMsgId
+        : refundable
+          ? msgId(eventTaskNoOf(e), evDir, evBorn)
+          : viewId(tid, "event", fingerprint(e)),
+      ...(evIsMsg || refundable ? {} : { view: true }),
       at: String(e.at ?? ""),
       role: "supervisor",
       kind: "verdict",
@@ -498,10 +551,20 @@ export function threadMessages(
      */
     const toWorker = r.audience === "worker";
     const body = String(r.text ?? "");
-    /* 插话 id 优先用落盘的 msg_id；老记录没有时回落到指纹。 */
-    const dirMsgId = String((r as { msg_id?: unknown }).msg_id ?? "").trim();
+    /*
+     * 身份按来源取：监工记录用自身编号（`id`，方向 `S`），用户发言用触发它的用户消息编号
+     * （`msg_id`，方向 `U2W` / `U2S`）。两者都必须是消息编号形态；老记录两者都不合规时
+     * 按视图块处理，界面不显示编号、不提供引用，避免拿一串哈希当消息号。
+     */
+    const dirMsgId = [String(r.id ?? "").trim(), String(r.msg_id ?? "").trim()].find((x) => isMsgNo(x)) ?? "";
+    const dirQuote = String((r as { quote?: unknown }).quote ?? "").trim();
     msgs.push({
-      id: dirMsgId || String(fingerprint(r)),
+      id: dirMsgId || viewId(tid, "say", fingerprint(r)),
+      ...(dirMsgId ? {} : { view: true }),
+      ...(dirQuote ? { quote: dirQuote } : {}),
+      ...(dirQuote && String((r as { quote_text?: unknown }).quote_text ?? "").trim()
+        ? { quote_text: String((r as { quote_text?: unknown }).quote_text).trim() }
+        : {}),
       at: String(r.at ?? ""),
       role: (r as { via?: unknown }).via === "capitalist" ? "supervisor" : "user",
       kind: "say",
@@ -511,7 +574,7 @@ export function threadMessages(
       status: r.consumed
         ? (() => {
             const via = String((r as { consumed_via?: unknown }).consumed_via ?? "");
-            /* 无进程领走的记录不能显示成“已并入派单”，否则用户会以为内容已进入执行。 */
+            /* 无进程接收的记录不能显示成“已并入派单”，否则用户会误以为内容已进入执行。 */
             if (via === "dropped") return "未投递 · 所属单已随阶段推进作废";
             const viaHook = via === "hook";
             const base = viaHook ? "已送达执行中的进程" : "已并入派单";
@@ -566,7 +629,7 @@ export function threadMessages(
   const sinceTs = opts.since !== undefined && Number.isFinite(opts.since) && opts.since > 0 ? opts.since : 0;
   /*
    * 思考块的 `at` 是按段序号在 `t0..t1` 之间插值出来的，不是真实时刻。新块生成后它的时间
-   * 常常早于游标，用 `> since` 过滤会让它永远进不了增量结果：界面上表现为“这一段一直
+   * 常常早于游标，用 `> since` 过滤会使它始终无法进入增量结果：界面上表现为“这一段一直
    * 没有思考过程，只有工具行”，刷新页面才会出现。思考块数量受插话次数约束（通常 1–3 块），
    * 每轮全量带上代价可控；前端按消息 id 合并，重复下发不会多出气泡。
    */

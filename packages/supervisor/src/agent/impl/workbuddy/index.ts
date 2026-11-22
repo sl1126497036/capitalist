@@ -73,7 +73,7 @@ export const impl: HostImpl = {
     authEnvVar: "CODEBUDDY_AUTH_TOKEN",
     /*
      * `ACC_PRODUCT_CONFIG_PATH` 是宿主启动子进程时带下来的产品身份，子进程读到它即按桌面端
-     * 身份认证。桌面端凭证与桌面进程绑定、不能转交，子进程只会拿到 Authentication required。
+     * 身份认证。桌面端凭证与桌面进程绑定、不能转交，子进程只会收到 Authentication required。
      * 剔除后 CLI 回到自身身份，用 CodeBuddy 的独立凭证认证。重新登录不能解决这个问题。
      */
     envDropPrefixes: ["SERVER__", "ACC_PRODUCT_CONFIG"],
@@ -86,7 +86,7 @@ export const impl: HostImpl = {
   },
 
   // 用户级信任写入 `.codebuddy`，与本 impl 的 `configDir`（`.workbuddy`）不同：同族宿主读
-  // 同一份 `trustedDirectories`，移动位置会让已准备过的目录重新变回未信任。
+  // 同一份 `trustedDirectories`，移动位置会让已准备过的目录重新变为未信任状态。
   // 项目级权限不写：WorkBuddy 在任务根见到 `.codebuddy` 就转受限模式，不执行终端命令。
   workspace: createWorkspaceFacet({
     configDir: ".codebuddy",

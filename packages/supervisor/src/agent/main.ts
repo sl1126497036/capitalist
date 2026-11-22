@@ -57,7 +57,7 @@ interface Args {
   selftest: boolean;
 }
 
-/** 解析命令行：事件名、`--agent` 取值、是否自检。无法识别的参数按事件名收进 `event`。 */
+/** 解析命令行：事件名、`--agent` 取值、是否自检。无法识别的参数按事件名归入 `event`。 */
 function parseArgs(argv: string[]): Args {
   const rest: string[] = [];
   let hostArg: string | null = null;
@@ -85,7 +85,7 @@ function parseArgs(argv: string[]): Args {
  *
  * 宿主调 hook 时会把事件写成 JSON 从 stdin 传入。读取必须带超时：`-p` 模式下
  * 宿主的管道不保证在 hook 退出前关闭，同步读到 EOF 会一直等到宿主超时，
- * 宿主又在等 hook 返回，于是双方互等，整条命令表现为卡住。
+ * 宿主又在等 hook 返回，于是双方互相等待，整条命令表现为阻塞。
  */
 const STDIN_WAIT_MS = 800;
 
@@ -94,7 +94,7 @@ const STDIN_WAIT_MS = 800;
  *
  * TTY（手工执行）时直接给空对象。非 TTY 时最多等 {@link STDIN_WAIT_MS}：
  * 收齐后立即返回，超时则用已收到的部分，没收到就返回空对象。
- * 拿不到完整事件时按空事件处理，走放行，不阻断宿主。
+ * 未取得完整事件时按空事件处理，走放行，不阻断宿主。
  */
 function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return Promise.resolve("{}");
@@ -192,7 +192,7 @@ async function main(): Promise<number> {
   /*
    * 状态注入只在工作进程内有意义：它把监工状态与待处理插话送进模型上下文。
    * 监工探测与用户手工打开的一次性会话走同一条启动路径，却不需要这段注入；
-   * 该路径上宿主要等 hook 返回，整条命令会表现为卡住。
+   * 该路径上宿主要等 hook 返回，整条命令会表现为阻塞。
    * 判据沿用 hook 体系既有约定：工作进程带 CAPITALIST_WORKER_ID。
    */
   if (mapped === "on_idle" && !process.env.CAPITALIST_WORKER_ID) return 0;

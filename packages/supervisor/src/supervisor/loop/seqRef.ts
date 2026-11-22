@@ -7,7 +7,7 @@
  *
  * `@N` 只查「同一 `msg_id` 下第 N 个 `dispatch` 指令建出的单」，不猜语义、不做推断：
  * 那条单没建成（被拒、还在排队）就返回 undefined，由调用方给出明确拒绝，
- * 而不是静默降级成根节点。
+ * 而不是在无提示的情况下降级成根节点。
  */
 
 import { readDispatches, type Dispatch } from "../../core/record/supervisor";

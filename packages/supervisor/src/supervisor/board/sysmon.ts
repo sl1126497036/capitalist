@@ -246,7 +246,7 @@ async function sampleWindows(): Promise<ProcSnapshot> {
    *
    * CIM 查询要起一个 powershell 进程，看板每 5 秒跑一次，宿主的命令通道会跟着
    * 每隔几秒闪一次控制台窗口。整机 CPU 与内存由 os.cpus / os.freemem 直接算，不受影响；
-   * 只有“每个 node 进程占多少”这一项缺失。需要时设 CAPITALIST_BOARD_PROC_SAMPLE=1。
+   * 只有“每个 node 进程的资源占用”这一项缺失。需要时设 CAPITALIST_BOARD_PROC_SAMPLE=1。
    */
   if (String(process.env.CAPITALIST_BOARD_PROC_SAMPLE ?? "").trim() !== "1") {
     return {
@@ -393,7 +393,7 @@ export const SYS_SOURCE = "os.cpus() 差分 + 系统内存压力（整机口径�
 
 export function resourceSample(): ResourceSampleView {
   ensureProcSampler();
-  /** CPU 与内存都在 sysSnap 这一份整机采样里；per-pid 清单只在拿得到时补充。 */
+  /** CPU 与内存都在 sysSnap 这一份整机采样里；per-pid 清单仅在可用时补充。 */
   const sysFresh = Date.now() - sysSnap.at < SAMPLER_INTERVAL_MS * 4;
   const procFresh = Date.now() - procSnap.at < SAMPLER_INTERVAL_MS * 4;
   const at = Math.max(sysSnap.at, procSnap.at);

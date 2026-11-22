@@ -104,7 +104,7 @@
 }
 
 .macts {
-  /* 关停、重启、停止调度不参与收缩：窗口再窄也要点得到。 */
+  /* 关停、重启、暂停调度不参与收缩：窗口再窄也要点得到。 */
   flex: 0 0 auto;
   flex-shrink: 0;
   display: inline-flex;
@@ -330,27 +330,6 @@
   font-size: var(--f-tiny);
   color: var(--t7);
   white-space: normal;
-}
-
-.mpick.confirm {
-  left: 50%;
-  top: 22%;
-  transform: translateX(-50%);
-  width: 340px;
-  max-height: none;
-}
-.mpick.confirm .mptext {
-  padding: var(--s10) var(--s10) var(--s8);
-  font-size: var(--f-meta);
-  line-height: 1.65;
-  color: var(--t4);
-  white-space: normal;
-}
-.mpick.confirm .mpacts {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--s6);
-  padding: 0 var(--s10) var(--s10);
 }
 
 .mcell .mval {

@@ -26,9 +26,9 @@ export interface UsageFigures {
   cache_write_tokens: number | null;
   /** 输入 + 输出；缓存命中是输入的一部分，不重复加 */
   total_tokens: number | null;
-  /** 宿主报的美元成本；`total_cost_usd` 为 0 表示该模型不走美元计价 */
+  /** 宿主报的美元成本；`total_cost_usd` 为 0 表示该模型不采用美元计价 */
   cost_usd: number | null;
-  /** 该次运行的计费方式，前端据此决定显示 金额 / tokens / 积分 */
+  /** 该次运行的计费方式，前端据此决定显示金额 / tokens / 积分 */
   billing_unit: BillingUnit;
   /** 积分消耗（积分台账按时间窗分摊；无分摊记录时为 null，界面改用 token 显示） */
   credit: number | null;
@@ -124,7 +124,7 @@ export const SCAN_RULES: readonly string[] = [
   "R5 模型取 message.model；版本取 id 的厂商后段（CLI 只给模型 id，没有单独构建号）。",
   "R6 上下文已用优先取 _meta 里以 /contextUsed 结尾的键；宿主没报时按本会话消息文本估算（含工具结果与 thinking，中文 3 字符/token、其余 4 字符/token），估算值标 context_estimate、界面加 ≈；已用一律夹到生效上限，超过时按上限显示并标 context_over。上限取 modelUsage[model].contextWindow，宿主没报或只报 300k 占位值时按模型默认表补（deepseek-v4.1-flash 为 600k），宿主报更大的值时以宿主为准。",
   "R7 时长优先 result.duration_ms；没有则用 started_at->结束时刻，结束时刻取 result 时间戳、最后一条带时间戳的行、派单 done_at 依次取用。",
-  "R8 金额取 total_cost_usd；为 0 表示该模型不走美元计价，billing_unit=token，界面按 token 显示。",
+  "R8 金额取 total_cost_usd；为 0 表示该模型不采用美元计价，billing_unit=token，界面按 token 显示。",
   "R9 逐次运行的积分日志里没有：credit 取积分台账（.capitalist/ledger/credits.json，把计费接口账号级已用积分的增量按时间窗分摊给窗口内活跃的工作进程；账号级读数含同账号宿主侧对话与监工自身调用）；无活跃进程期间的增量记入 capitalist 独立行（不属于任何工作进程），台账没有该工作进程的分摊记录（面板未打开、未取得快照）时为 null，界面改用 token 显示，不以 0 代替。",
   `R10 模型读数不露路由别名：${FAST_MODEL_ALIAS} 在日志里出现具体模型后改显具体模型，一次都未记录时展示层标注它实际对应的两个模型（${FAST_MODEL_TARGETS.join(" / ")}）。`,
 ];
@@ -592,7 +592,7 @@ export function workerUsage(w: WorkerRecord, dispatches: readonly Dispatch[] = [
     cache_write_tokens: cacheWrite,
     total_tokens: input + output,
     cost_usd: costUsd,
-    // R8：金额为 0 / 缺失 -> 不走美元计价；有积分分摊读数 -> 按积分计费。
+    // R8：金额为 0 / 缺失 -> 不采用美元计价；有积分分摊读数 -> 按积分计费。
     billing_unit: credit !== null ? "credit" : costUsd !== null && costUsd > 0 ? "usd" : "token",
     credit,
     credit_unit: credit !== null ? creditUnitStr || "积分" : "",
@@ -627,7 +627,7 @@ function firstWindow(models: Record<string, ModelUsage>): number | null {
   return null;
 }
 
-/** 时长：官方毫秒优先；否则起止时间差；两者都拿不到为 null（不写 0）。 */
+/** 时长：官方毫秒优先；否则起止时间差；两者均不可用时为 null（不写 0）。 */
 function durationFrom(startedAt: string, endedAt: string, fromResult: number | null): number | null {
   if (fromResult !== null && fromResult >= 0) return Math.round(fromResult);
   const a = atSec(startedAt);
@@ -889,7 +889,7 @@ export function buildContextView(root: string): ContextView {
   const live = workers.filter((w) => w.status === "running" || w.status === "starting");
   const rows = rowsOf(live).length ? rowsOf(live) : rowsOf(workers);
   const top = rows[0];
-  /* 运行中日志不含 `modelUsage.contextWindow` 时，从同模型的其它读数取窗口；取不到则留 null。 */
+  /* 运行中日志不含 `modelUsage.contextWindow` 时，从同模型的其他读数取窗口；不可用则留 null。 */
   const windowOf = (model: string): number | null => {
     if (!model) return null;
     for (const r of [...rows, ...rowsOf(workers)]) {

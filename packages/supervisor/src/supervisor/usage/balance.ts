@@ -10,7 +10,7 @@
 
 /** 余额视图。字段名固定，看板顶栏与 `/api/usage` 共用。 */
 export interface BalanceView {
-  /** 是否拿到了真实读数 */
+  /** 是否取得了真实读数 */
   available: boolean;
   /** 余额（积分） */
   credit: number | null;

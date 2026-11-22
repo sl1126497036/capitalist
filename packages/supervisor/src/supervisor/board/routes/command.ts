@@ -332,7 +332,7 @@ const restartAt = new Map<string, number>();
  * 请求进来时（index.ts 的写请求钩子）已经清过一次，但命令本身可能持续数百毫秒，
  * 期间看板轮询会把命令前的台账重新写入缓存。最要紧的是 `cachedView`：
  * `/api/threads` 的视图缓存 TTL 是 4000ms，不清它，前端命令后的第一次刷新
- * 仍会拿到旧列表，看起来就是“蒙版撤了、列表过几秒才变”。
+ * 仍会返回旧列表，看起来就是“蒙版撤了、列表过几秒才变”。
  */
 function invalidateAfterCommand(ctx: BoardCtx): void {
   ctx.cachedView.clear();

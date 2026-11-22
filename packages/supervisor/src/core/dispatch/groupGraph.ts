@@ -10,14 +10,17 @@
  *   - {@link groupSettled}：挂在该组下的下游能不能放行（给调度）；
  *   - {@link ancestorsOf}：从某个节点一路上溯（给成环检测，派单与组共用）。
  *
- * 成员按 `lineage` 聚合：同一件事重派多次时，只要有一次完成，这个成员就算完成；
- * 只有“失败且判定不再重试”才算断链。这条规则与派单侧的前置判定一致，
- * 差别只在作用域：放宽只对单个成员有效，不扩展为“组里有一份完成就算整组完成”。
+ * 成员按 `lineage` 聚合成“事项”再计完成：同一件事重派多次只算一项，否则重派会把
+ * 完成数分母撑大（实测一轮重试把 11 项撑成 26 项）。事项是组的计数与判定单位，
+ * {@link groupItemsOf} 是唯一聚合入口。
+ *
+ * 接替单（`supersedes`）与被接替事项合并为同一事项：补单顶替失败成员时，组的成员数
+ * 不变，完成情况以接替单为准。
  */
 
 import type { Dispatch } from "../record/supervisor";
 import { parentOf } from "../record/supervisor";
-import { isFailed, isSettled } from "../record/dispatchState";
+import { isFailed } from "../record/dispatchState";
 import { normalizeGroupId } from "../record/idMap";
 import type { GroupIndex } from "../record/groups";
 
@@ -55,51 +58,118 @@ export function groupStateWord(s: GroupState): string {
 export interface GroupStatus {
   id: string;
   state: GroupState;
-  /** 成员总数。 */
+  /** 事项总数：同一件事重派多次只算一项，接替的单与被接替事项算一项。 */
   total: number;
-  /** 已完成的成员数（`done`；人工结束的 `closed` 不计入，但阻塞放行时按已了结算）。 */
+  /** 已完成的事项数（`done`；人工结束的 `closed` 不计入，但阻塞放行时按已了结算）。 */
   done: number;
-  /** 还没到终态的成员（含待重试的失败）。 */
+  /** 还没到终态的事项，取各自代表单的 id（含待重试的失败）。 */
   pending: string[];
-  /** 判定为不再重试的失败成员。 */
+  /** 判定为不再重试的失败事项，取各自代表单的 id。 */
   failed: string[];
-  /** 断链位置：第一个不再重试的失败成员；未断链为空串。 */
+  /** 断链位置：第一个不再重试的失败事项的代表单；未断链为空串。 */
   brokenAt: string;
 }
 
-/** 一条派生链（同一件事）的完成情况。 */
-interface LineageState {
-  done: boolean;
-  closed: boolean;
-  dead: boolean;
+/** 组内一件事：同一 lineage 的全部派单，加上接替过来的链。 */
+export interface GroupItem {
+  /** 事项键：被接替事项的 lineage；没有接替时就是该事项自身的 lineage。 */
+  key: string;
+  /** 该事项的全部派单 id，按台账顺序。 */
+  ids: string[];
+  /** 代表单：台账里最新的一张，用于显示与按号操作。 */
+  head: string;
+  /** 合并后的状态。 */
+  state: "done" | "closed" | "dead" | "pending";
 }
 
-function lineageKey(d: Dispatch): string {
+/** 一条派生链（同一件事）的键。 */
+export function lineageOf(d: Dispatch): string {
   return String((d as { lineage?: unknown }).lineage ?? d.id);
 }
 
 /**
- * 汇总每一件事的完成情况。
+ * 一件事的合并状态。
  *
  * `dead` 只认“失败且不再重试”：`retry_verdict === "give_up"`，或该单被级联判定
- * 失败（`cascade_at` 有值）。可重试的失败不计为终态，它还在等重派。
+ * 失败（`cascade_at` 有值）。可重试的失败不算终态，它还在等重派。
+ * 优先级与旧口径一致：完成 > 人工结束 > 断链 > 等待。
  */
-function lineageStates(rows: readonly Dispatch[]): Map<string, LineageState> {
-  const out = new Map<string, LineageState>();
+function itemStateOf(rows: readonly Dispatch[]): GroupItem["state"] {
+  let closed = false;
+  let dead = false;
   for (const d of rows) {
-    const key = lineageKey(d);
-    const cur = out.get(key) ?? { done: false, closed: false, dead: false };
     const status = String(d.status ?? "");
-    if (status === "done") cur.done = true;
-    else if (status === "closed") cur.closed = true;
-    else if (isFailed(status)) {
-      const verdict = String((d as { retry_verdict?: unknown }).retry_verdict ?? "");
-      const cascaded = Boolean(String((d as { cascade_at?: unknown }).cascade_at ?? ""));
-      if (verdict === "give_up" || cascaded) cur.dead = true;
+    if (status === "done") return "done";
+    if (status === "closed") {
+      closed = true;
+      continue;
     }
-    out.set(key, cur);
+    if (!isFailed(status)) continue;
+    const verdict = String((d as { retry_verdict?: unknown }).retry_verdict ?? "");
+    const cascaded = Boolean(String((d as { cascade_at?: unknown }).cascade_at ?? ""));
+    if (verdict === "give_up" || cascaded) dead = true;
   }
-  return out;
+  if (closed) return "closed";
+  if (dead) return "dead";
+  return "pending";
+}
+
+/**
+ * 把一个组的成员聚合成事项。组的计数、判定、展示都从这里取，不另写推导。
+ *
+ * 两步：先按 `supersedes` 把接替单与被接替事项并到同一集合（并查集，键取被接替者的
+ * lineage，保证事项键在接替前后不变），再按集合汇总状态。目标已归档或不在本组时跳过
+ * 合并，不抛错：建单时已校验，归档是后续变化。
+ */
+export function groupItemsOf(gid: string, rows: readonly Dispatch[], idx: GroupIndex): GroupItem[] {
+  const key = normalizeGroupId(gid);
+  if (!key) return [];
+  const memberIds = idx.members.get(key) ?? [];
+  if (memberIds.length === 0) return [];
+  const byId = new Map(rows.map((d) => [String(d.id), d] as const));
+  const memberSet = new Set(memberIds);
+
+  const up = new Map<string, string>();
+  const find = (x: string): string => {
+    let cur = x;
+    while (up.has(cur) && up.get(cur) !== cur) cur = up.get(cur) as string;
+    if (cur !== x) up.set(x, cur);
+    return cur;
+  };
+  /** 让接替单所在的集合指向被接替事项，合并后事项键仍是原来的 lineage。 */
+  const union = (target: string, superseder: string): void => {
+    const a = find(target);
+    const b = find(superseder);
+    if (a !== b) up.set(b, a);
+  };
+
+  for (const id of memberIds) {
+    const d = byId.get(id);
+    const sup = String((d as { supersedes?: unknown } | undefined)?.supersedes ?? "").trim();
+    if (!d || !sup || !memberSet.has(sup)) continue;
+    const target = byId.get(sup);
+    if (!target) continue;
+    union(lineageOf(target), lineageOf(d));
+  }
+
+  const buckets = new Map<string, { ids: string[]; rows: Dispatch[] }>();
+  for (const id of memberIds) {
+    const d = byId.get(id);
+    /* 成员记录已不在台账（归档或手动删除）：按已了结处理，不占分母，也不计完成。 */
+    if (!d) continue;
+    const root = find(lineageOf(d));
+    const cur = buckets.get(root) ?? { ids: [], rows: [] };
+    cur.ids.push(String(d.id));
+    cur.rows.push(d);
+    buckets.set(root, cur);
+  }
+
+  return [...buckets.entries()].map(([k, v]) => ({
+    key: k,
+    ids: v.ids,
+    head: v.ids[v.ids.length - 1] ?? k,
+    state: itemStateOf(v.rows),
+  }));
 }
 
 /** 派生一个组的状态。组不存在时返回 `null`。 */
@@ -112,9 +182,8 @@ export function groupStatusOf(
   const group = key ? idx.byId.get(key) : undefined;
   if (!key || !group) return null;
 
-  const memberIds = idx.members.get(key) ?? [];
+  const items = groupItemsOf(key, rows, idx);
   const byId = new Map(rows.map((d) => [String(d.id), d] as const));
-  const lineages = lineageStates(rows);
 
   let done = 0;
   const pending: string[] = [];
@@ -123,37 +192,26 @@ export function groupStatusOf(
   let review = false;
   let waiting = false;
 
-  for (const id of memberIds) {
-    const d = byId.get(id);
-    /* 成员记录已不在台账（归档或手动删除）：按已了结处理，不阻塞放行，也不计入完成数。 */
-    if (!d) continue;
-    const st = String(d.status ?? "");
-    const lin = lineages.get(lineageKey(d));
-
-    if (isSettled(st)) {
-      if (st === "done") done += 1;
+  for (const item of items) {
+    if (item.state === "done") {
+      done += 1;
       continue;
     }
-    if (isFailed(st)) {
-      if (lin?.done || lin?.closed) {
-        /* 同一件事已有一次完成，本次失败属于重试过程，不阻塞。 */
-        continue;
-      }
-      if (lin?.dead) {
-        failed.push(id);
-        continue;
-      }
-      /* 可重试的失败：尚未到终态，等待重派。整组因此处于等待，不显示成排队。 */
-      pending.push(id);
-      waiting = true;
+    /* 人工结束的事项按已了结处理：不阻塞放行，也不计入完成数。 */
+    if (item.state === "closed") continue;
+    if (item.state === "dead") {
+      failed.push(item.head);
       continue;
     }
-    pending.push(id);
+    pending.push(item.head);
+    const st = String(byId.get(item.head)?.status ?? "");
     if (st === "claimed") running = true;
     else if (st === "reported" || st === "review") review = true;
+    /* 可重试的失败：尚未到终态，等待重派。整组因此处于等待，不显示成排队。 */
+    else if (isFailed(st)) waiting = true;
     /*
-     * `open` 归 queued：该成员自己的前置是否满足，由派单侧判定（`deps` / 森林视图），
-     * 组这一层看不到成员之间的依赖关系，不重复推导。组的 waiting 只表示“等待重派”。
+     * `open` 归 queued：该事项自己的前置是否满足，由派单侧判定（`deps` / 森林视图），
+     * 组这一层看不到事项之间的依赖关系，不重复推导。组的 waiting 只表示“等待重派”。
      */
   }
 
@@ -167,7 +225,7 @@ export function groupStatusOf(
   else if (pending.length === 0) state = "done";
   else state = "queued";
 
-  return { id: key, state, total: memberIds.length, done, pending, failed, brokenAt };
+  return { id: key, state, total: items.length, done, pending, failed, brokenAt };
 }
 
 /**

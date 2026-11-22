@@ -80,7 +80,8 @@ export function numberAttachmentLines(text: string): string {
   );
 }
 
-/** 把附件行从正文里摘掉，剩下的才是给人读的话。 */export function stripAttachments(text: string): string {
+/** 把附件行从正文里摘掉，剩下的才是供人阅读的正文。 */
+export function stripAttachments(text: string): string {
   const kept: string[] = [];
   for (const line of String(text ?? "").split(/\r?\n/)) {
     if (ATT_LINE.test(line)) continue;
@@ -98,14 +99,14 @@ export function numberAttachmentLines(text: string): string {
 }
 
 /**
- * 在话术末尾补上附件行，已有的不重复加。
+ * 在消息正文末尾补上附件行，已有的不重复加。
  *
  * 一行一张：拼接方（spliceDirectives / 重派继承）都要求“一行一个路径”，
  * 压成一行会让第三张图之后的路径全挤在同一个字符串里，worker 按行读就只能读到第一张。
  *
- * @param text  原有话术
+ * @param text 原有消息正文
  * @param paths 需包含在其中的附件路径
- * @returns 补齐后的话术；一条都没补时原样返回（调用方据此判断“有没有变化”）
+ * @returns 补齐后的消息正文；一条都没补时原样返回（调用方据此判断“有没有变化”）
  */
 export function withAttachmentLines(text: string, paths: string[]): string {
   const src = String(text ?? "");
@@ -117,7 +118,7 @@ export function withAttachmentLines(text: string, paths: string[]): string {
 }
 
 
-/** 按“这一单的图”重建话术里的附件行。 */
+/** 按“这一单的图”重建消息正文里的附件行。 */
 export function bindAttachments(text: string, own: string[]): { text: string; kept: string[] } {
   const src = String(text ?? "");
   const kept = [...new Set(own.map((p) => String(p ?? "").trim()).filter(Boolean))];
@@ -157,7 +158,7 @@ export function bindAttachments(text: string, own: string[]): { text: string; ke
 }
 
 /**
- * 解析话术里的附件行，原样保留。
+ * 解析消息正文里的附件行，原样保留。
  *
  * 过去这里还会把超出的部分裁掉并补一句“另有 N 张未带入”。上限取消后（见文件里
  * “附件张数不设上限”那段），裁剪分支恒不触发，函数退化成“解析”，保留名字与返回

@@ -24,11 +24,11 @@ export interface ReapedWorker {
   via: "cmdline" | "ppid";
 }
 
-/** 进程的外部身份。取不到时字段为空。 */
+/** 进程的外部身份。读取失败时字段为空。 */
 interface ProcIdentity {
-  /** 完整命令行；取不到为空串。 */
+  /** 完整命令行；读取失败为空串。 */
   cmdline: string;
-  /** 父进程号；取不到为 0。 */
+  /** 父进程号；读取失败为 0。 */
   ppid: number;
 }
 
@@ -59,7 +59,7 @@ function identityFromProc(pid: number): ProcIdentity | null {
   }
 }
 
-/** Windows：一条 CIM 查询同时拿到 ParentProcessId 与 CommandLine，结果按 UTF-8 base64 返回。 */
+/** Windows：一条 CIM 查询同时读取 ParentProcessId 与 CommandLine，结果按 UTF-8 base64 返回。 */
 function identityFromCim(pid: number): ProcIdentity | null {
   const script = [
     "$ErrorActionPreference='Stop'",
@@ -119,7 +119,7 @@ function identityOf(
 }
 
 /**
- * 在 调度循环之前调用一次，先回收再派单；返回被回收的记录供启动日志汇总。
+ * 在调度循环之前调用一次，先回收再派单；返回被回收的记录供启动日志汇总。
  *
  * 只处理后台模式。`opts.onlySupervisorPid` 限定只回收该监工 pid 拉起的记录，避免监工重启后误收新起的进程。
  */
@@ -135,7 +135,7 @@ export function reapOrphans(
     if (w.status !== "running" && w.status !== "starting") continue;
     if (w.mode === "visible") continue;
     if (only != null && w.supervisor_pid !== only) continue;
-    // 本进程拉起的记录不归这一层处理。
+    // 本进程启动的记录不属于这一层处理。
     if (w.supervisor_pid === process.pid) continue;
     if (!pidAlive(w.pid)) continue; // 进程已不在：交给调度轮次中的 reap 结束
 

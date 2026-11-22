@@ -50,9 +50,9 @@ function cursorPath(root: string): string {
 }
 
 function newId(dispatch: string): string {
-  /* 申报由 Worker 发出，方向 `W`；归属任务号从派单号反解。 */
+  /* 申报由工作进程发给监工，方向 `W2S`；归属任务号从派单号反解。 */
   const no = taskNoOfDispatchId(dispatch) || "S0";
-  return msgId(no, "W");
+  return msgId(no, "W2S");
 }
 
 /** 追加一条申报。返回落库后的完整记录。 */
@@ -102,6 +102,7 @@ export function commitCursor(root: string, offset: number): void {
     mkdirSync(mqDir(root), { recursive: true });
     writeFileSync(cursorPath(root), JSON.stringify({ offset, at: new Date().toISOString() }));
   } catch {
+    /* 游标写不进去可忽略：下次消费会从 readCursor 读到的旧位置重放，不影响正确性 */
   }
 }
 

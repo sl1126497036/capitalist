@@ -8,9 +8,12 @@ import { shardTitle } from "../usage/taskTitle";
 import { dispatchNoTable } from "../usage/threadNo";
 import { readJsonlFromTail } from "./logs";
 import { MQ_KIND_LABEL, fingerprint, maskThreadMessage } from "./render";
-import { ThreadRole, ThreadMessage, describeEvent, ledgerOnlyRoot } from "./snapshot";
+import { REFUNDABLE_EVENTS, ThreadRole, ThreadMessage, describeEvent, ledgerOnlyRoot } from "./snapshot";
 import { atTs, attachmentsOf, eventsFile, readDispatchesBoard } from "./sources";
 import { taskKeyOf } from "./state";
+import { viewId } from "./viewId";
+import { isMsgNo, msgId, msgTaskNo } from "../../core/message/msgId";
+import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { loadState } from "../../core/record/state";
 import { hasCustomContract } from "../../core/contract/customContract";
 
@@ -215,6 +218,22 @@ function supervisorEventText(
 /** /api/capitalist-events 结果缓存键含文件指纹、参数与 root，避免多根切换串数据。 */
 let supervisorLogCache: { root: string; key: string; value: ReturnType<typeof buildSupervisorLog> } | null = null;
 
+/**
+ * 最后一条新建会话事件的时间（秒）；没有则返回 0。
+ *
+ * 新建会话动作写一条 `chat_session_new`，监工流以它为下界，只返回本代会话的消息。
+ * 取最后一条而不是第一条：同一台账可以经历多次新建会话。
+ */
+function lastSessionBoundary(rows: Array<Record<string, unknown>>): number {
+  let at = 0;
+  for (const e of rows) {
+    if (String(e.event ?? e.kind ?? "") !== "chat_session_new") continue;
+    const ts = atTs(String(e.at ?? "")) || 0;
+    if (ts > at) at = ts;
+  }
+  return at;
+}
+
 export function buildSupervisorLog(
   root: string,
   opts: { limit?: number; hours?: number } = {},
@@ -232,7 +251,6 @@ export function buildSupervisorLog(
   /** 时间窗过滤事件年龄，历史上发过的指令不重放。 */
   const hours = Number.isFinite(opts.hours) && (opts.hours as number) >= 0 ? (opts.hours as number) : 6;
   const cutTs = hours > 0 ? Date.now() / 1000 - hours * 3600 : 0;
-  const fresh = (at: unknown): boolean => cutTs <= 0 || (atTs(String(at ?? "")) || 0) >= cutTs;
 
   /**
    * 结果缓存键用 5 秒时间桶。
@@ -253,6 +271,22 @@ export function buildSupervisorLog(
   }
 
   const rows = readJsonlFromTail(eventsFile(root), 2_000_000);
+  /**
+   * 会话下界取最后一条新建会话事件的时间。
+   *
+   * 新建会话之前的消息属于上一轮对话，不再上屏；没有该事件的历史台账按不限处理，
+   * 与加入本事件之前的行为一致。时间窗与会话下界取较大值，事件、派单卡、指令三处
+   * 共用这一个下界，不各自判一次。
+   */
+  const sessionFloor = lastSessionBoundary(rows);
+  const floorTs = Math.max(cutTs, sessionFloor);
+  const fresh = (at: unknown): boolean => floorTs <= 0 || (atTs(String(at ?? "")) || 0) >= floorTs;
+  /** 时间窗之外、但仍属于当前会话的记录；只有这类才提供“展开更早”。 */
+  const olderThanWindow = (at: unknown): boolean => {
+    if (cutTs <= 0) return false;
+    const ts = atTs(String(at ?? "")) || 0;
+    return ts >= floorTs && ts < cutTs;
+  };
   const msgs: ThreadMessage[] = [];
   /** 单阶段契约没有结束时刻，supervisor_done 整类不上屏，台账照旧保留。 */
   const ledgerOnly = ledgerOnlyRoot(root);
@@ -321,10 +355,28 @@ export function buildSupervisorLog(
     }
     const bad = CAPITALIST_BAD_EVENTS.has(name) || (name === "supervisor_cmd" && e.ok === false);
     const tier = supervisorTierOf(name, e);
-    /* 消息 id 优先用落盘的 msg_id（携带毫秒时间戳，天然顺序）；无 msg_id 的事件回落到指纹。 */
-    const msgIdOf = String((e as { msg_id?: unknown }).msg_id ?? "").trim();
+    /* 身份：优先 `msg_id`，申报类事件把消息号写在 `id` 上；两者都不合法时按视图块处理。 */
+    const msgIdOf = String(
+      (e as { msg_id?: unknown }).msg_id ?? (e as { id?: unknown }).id ?? "",
+    ).trim();
+    const hasMsgNo = isMsgNo(msgIdOf);
+    /*
+     * 裁决与回执要能引用：它们是监工对某条申报或某个流程的正式结论。
+     * 编号取事件落盘时间，事件写入时就有这个时刻，重建得到同一个号。
+     */
+    const refundable = !hasMsgNo && REFUNDABLE_EVENTS.has(name);
+    const bornMs = Math.round(atTs(String(e.at ?? "")) * 1000) || Date.now();
+    const refundableNo = refundable
+      ? msgId(
+          msgTaskNo(String((e as { msg?: unknown }).msg ?? "")) ||
+            String(taskNoOfDispatchId(String((e as { dispatch?: unknown }).dispatch ?? "")) || "S0"),
+          name === "mq_triage" ? "S2W" : "S2U",
+          bornMs,
+        )
+      : "";
     const item: ThreadMessage = {
-      id: msgIdOf || String(fingerprint(e)),
+      id: hasMsgNo ? msgIdOf : refundableNo || viewId(CAPITALIST_THREAD_ID, "event", fingerprint(e)),
+      ...(hasMsgNo || refundable ? {} : { view: true }),
       at: String(e.at ?? ""),
       role:
         ((e as { from?: unknown }).from as ThreadRole) || (name === "supervisor_chat_ask" ? "user" : "supervisor"),
@@ -415,6 +467,7 @@ export function buildSupervisorLog(
     if (!text.trim()) continue;
     const atts = attachmentsOf({ atts: d.atts, text });
     const no = nos.get(d.id) ?? "";
+    /* 派单卡的身份是派单 id，不是消息编号；没有消息号就不提供引用，见前端 isMsgNo 判定。 */
     msgs.push({
       id: String(d.id),
       at: String(d.at ?? ""),
@@ -463,8 +516,12 @@ export function buildSupervisorLog(
     })();
     const scNo = scTarget ? nos.get(scTarget) ?? "" : "";
     const scExtra = narrationLeftover.get(String(r.id ?? "")) ?? "";
+    /* 指令身份必须是消息编号：用户下发的是 `U2S`，监工自己生成的是 `S`。老记录不合形态时按视图块处理。 */
+    const scMsgId = String(r.id ?? "").trim();
+    const scHasMsg = isMsgNo(scMsgId);
     msgs.push({
-      id: String(r.id),
+      id: scHasMsg ? scMsgId : viewId(CAPITALIST_THREAD_ID, "say", fingerprint(r)),
+      ...(scHasMsg ? {} : { view: true }),
       at: r.at,
       role: fromSupervisor ? "supervisor" : "user",
       kind: "say",
@@ -499,14 +556,13 @@ export function buildSupervisorLog(
     main,
     log: msgs.length - main,
     /*
-     * “还有更早的”只有两种来源：窗口内被 limit 截断，或时间窗之外仍有事件。
-     * hours=0 时 cutTs 为 0，第二个条件恒为假，仅保留 limit 截断，符合“已经展开到不限”的语义。
+     * “还有更早的”只有两种来源：窗口内被 limit 截断，或时间窗之外仍有本会话的事件。
+     * 会话下界之前的记录属于上一轮对话，不提供展开：那里没有当前会话的内容。
      */
     has_older:
       msgs.length > limit ||
-      (cutTs > 0 &&
-        (rows.some((e) => (atTs(String((e as { at?: unknown }).at ?? "")) || 0) < cutTs) ||
-          dispatchRows.some((d) => (atTs(String(d.at ?? "")) || 0) < cutTs))),
+      rows.some((e) => olderThanWindow((e as { at?: unknown }).at)) ||
+      dispatchRows.some((d) => olderThanWindow(d.at)),
     /* 与线程消息同一出口：字段级改写只在 maskThreadMessage 一处维护。 */
     messages: msgs.slice(Math.max(0, msgs.length - limit)).map((m) => maskThreadMessage(m, nos)),
   };

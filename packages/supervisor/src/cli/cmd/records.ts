@@ -1,8 +1,8 @@
 /**
  * 记录类命令：裁决回填、违规纠正、会话、复核、就绪标记、台账。
  *
- * 与 `main.ts` 分开是因为这些命令只读写 `.capitalist/` 下的记录，不做判定，也不碰 hook 热路径。
- * 放在一起会让入口文件混两种节奏：判定要快且不能抛，命令出错必须说清楚。
+ * 与 `main.ts` 分开是因为这些命令只读写 `.capitalist/` 下的记录，不做判定，也不触及 hook 热路径。
+ * 放在一起会让入口文件混两种节奏：判定要快且不能抛，命令出错必须说明原因。
  *
  * 字段与 Python 引擎保持一致（`inbox/qa.jsonl`、`violations.jsonl`、
  * `review.jsonl`、`sessions.json`、`ledger.jsonl`）。两边读同一份目录，字段漂移等于换个
@@ -87,8 +87,8 @@ export function cmdAnswer(p: Parsed): number {
   if (!res.ok) throw new Error(`没找到问题 ${id}（capitalist inbox 看当前待裁决）`);
   const hitText = res.text;
 
-  // 重派上限这类 ask，裁决本身就是“放行该片”：把那批失败划到线下。不划的话重派计数
-  // 仍超上限时，监工下一轮调度会重新登记同一条 ask，答复未登记即视为未答复，阶段持续卡住。
+  // 重派上限这类 ask，裁决本身就是“放行该片”：将该批失败排除在统计外。不排除的话重派计数
+  // 仍超上限时，监工下一轮调度会重新登记同一条 ask，答复未登记即视为未答复，阶段持续停滞。
   const capLabel = /重派上限\s+([^\s：:，,]+)/.exec(hitText)?.[1] ?? null;
   if (capLabel) {
     updateState(root, (s) => {
@@ -103,7 +103,7 @@ export function cmdAnswer(p: Parsed): number {
     throw new Error("状态写入冲突，指导已回填但下一步没更新：请重试 capitalist answer");
   }
 
-  process.stdout.write(`已回填 问${id}：${guidance}\n下一步已更新，执行侧下一轮读取。\n`);
+  process.stdout.write(`已回填 问${id}：${guidance}\n下一步已更新，执行侧随后读取。\n`);
   return 0;
 }
 

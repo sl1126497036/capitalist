@@ -63,7 +63,8 @@ export { buildThreads, buildThreadsPage, taskBucket, taskCounts, taskCountsOf } 
 
 export { buildThreadMessages } from "./messages";
 export type { CommandResult } from "./cmdArgs";
-export { clearRuntimeLedger, runCommand } from "./commands";
+export { clearRuntimeLedger } from "./clearByBucket";
+export { runCommand } from "./commands";
 export { CAPITALIST_THREAD_ID, buildSupervisorLog } from "./supervisorLog";
 export type { BoardOverview } from "./overview";
 export { buildOverview } from "./overview";
@@ -174,7 +175,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
    * 视图缓存把构建结果按 key 存 1～4 秒，写动作必须能立刻作废它。
    *
    * `/api/threads` 的 TTL 是 4000ms：命令结束后前端立刻重新拉列表时，
-   * 若不清这里，仍会拿到命令前的页面，表现为“蒙版撤了、列表过几秒才变”。
+   * 若不清这里，仍会返回命令前的页面，表现为“蒙版已撤除但列表延迟刷新”。
    */
   const cachedView = Object.assign(
     <T,>(key: string, ttlMs: number, build: () => T): T => {
@@ -223,16 +224,23 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
     const doneSent = new Set<string>();
     const known = new Set<string>();
     const streamModes = new Map<string, boolean>();
-    const modeOf = (rec: WorkerRecord): boolean => {
-      const caused = streamModes.get(rec.id);
-      if (caused !== undefined) return caused;
+    /**
+     * 推流侧的模式判定，同样只升不降。
+     *
+     * 只在增量里出现事件行起点时才判一次：启动横幅先落盘的第一帧判不出事件，
+     * 若把 false 缓存下来，此后每帧的增量都按纯文本过滤，正文永远推不出去。
+     * 已判为 stream 的直接返回，纯文本宿主的增量不含 `{` 时不重复解析。
+     */
+    const modeOf = (rec: WorkerRecord, delta: string): boolean => {
+      if (streamModes.get(rec.id) === true) return true;
+      if (!delta.includes("{")) return false;
       let mode = false;
       try {
         mode = parseWorkerLog(tailLines(rec.log, 65_536)).stream;
       } catch {
         mode = false;
       }
-      streamModes.set(rec.id, mode);
+      if (mode) streamModes.set(rec.id, true);
       return mode;
     };
     for (const w of workersNow(opts.root)) {
@@ -261,7 +269,7 @@ export async function serveBoard(opts: ServeOptions): Promise<Served> {
           const r = readDelta(w.log, from, 8192);
           logOffsets.set(w.id, r.next);
           if (r.text) {
-            const text = meaningfulLines(r.text.split("\n"), modeOf(w)).join("\n");
+            const text = meaningfulLines(r.text.split("\n"), modeOf(w, r.text)).join("\n");
             if (text !== "") {
               send("output", {
                 worker: w.id,

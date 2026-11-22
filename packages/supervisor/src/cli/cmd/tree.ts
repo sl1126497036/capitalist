@@ -43,9 +43,9 @@ function listTrees(root: string, all = false): number {
 
   const { totals } = view;
   process.stdout.write(
-    `多节点：${view.trees.length} 棵树 · ${totals.total} 单` +
+    `多节点：${view.trees.length} 棵树 | ${totals.total} 单` +
       `（成 ${totals.done} / 败 ${totals.failed} / 跑 ${totals.running} / 排 ${totals.queued} / 等 ${totals.waiting} / 关 ${totals.closed}）` +
-      `· 堵 ${totals.blocked}\n`,
+      ` | 堵 ${totals.blocked}\n`,
   );
   if (view.degraded) process.stdout.write(`降级信息：${view.degraded}\n`);
   process.stdout.write("\n");
@@ -75,7 +75,7 @@ function listTrees(root: string, all = false): number {
     process.stdout.write(`\n另有 ${done} 棵树已全部收尾（历史，加 --all 展开）\n`);
   }
 
-  /* 根节点一览：重建前后最容易看的就是“未完工的根有几个”。 */
+  /* 根节点一览：重建前后最直观的指标是“未完工的根有几个”。 */
   const roots = shown.filter((t) => !t.cycle).map((t) => t.rootId);
   process.stdout.write(`\n未完工的根 ${roots.length} 个：${roots.join(" ") || "（无）"}\n`);
   return 0;
@@ -154,7 +154,7 @@ export function cmdTree(p: Parsed): number {
       .filter((d) => !dispatchPaused(d))
       .filter((d) => isReady(d, rows, gidx));
     if (q.length === 0) {
-      process.stdout.write("下一轮没有可拉起的单（都在等前置，或被接管/暂停）。\n");
+      process.stdout.write("当前没有可启动的单（都在等前置，或被接管/暂停）。\n");
     } else {
       for (const d of q) {
         const why = parentOf(d) ? `父 ${parentOf(d)}` : "根";
@@ -163,7 +163,7 @@ export function cmdTree(p: Parsed): number {
     }
     const paused = pausedDispatches(root).length;
     if (paused > 0) {
-      process.stdout.write(`\n另有 ${paused} 张暂停单，唤醒后才参与调度：capitalist wake --user\n`);
+      process.stdout.write(`\n另有 ${paused} 张暂停单，恢复调度后按原状态参与：capitalist resume\n`);
     }
     return 0;
   }

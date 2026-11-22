@@ -13,7 +13,7 @@ import { acceptanceFacts } from "./closeOut";
 export type TriageDecision =
   | "continue" /* 不影响推进，仅记录 */
   | "nudge" /* 方向或做法偏了：给出纠正说明，工作进程继续执行 */
-  | "requeue" /* 做法走不通：重开并改用其它做法 */
+  | "requeue" /* 做法不可行：重开并改用其他做法 */
   | "pause_shard" /* 暂停该分片 */
   | "escalate" /* 需人工裁决：红线、权限、需求冲突 */
   | "accept" /* 报告审查通过 */
@@ -37,7 +37,7 @@ export interface TriageInput {
   contract: Contract;
   state: TaskState;
   msg: MqMessage;
-  /** 这一单原本要做什么（派单 action），供判断偏航。 */
+  /** 这一单的原始任务（派单 action），供判断偏航。 */
   action: string;
   /** 同一片/同一单最近的失败次数。 */
   failures: number;
@@ -64,9 +64,9 @@ export interface TriageInput {
 function buildPrompt(input: TriageInput): string {
   const m = input.msg;
   return [
-    "你是 capitalist 监工的判定层。工作进程刚发来一条申报，你要决定监工怎么处理。",
+    "你是 capitalist 监工的判定层。工作进程发来一条申报，你要决定监工怎么处理。",
     "",
-    "【这一单原本要做什么】",
+    "【这一单的原始任务】",
     String(input.action || "（未记录）").slice(0, 900),
     "",
     "【工作进程申报了什么】",
@@ -76,31 +76,31 @@ function buildPrompt(input: TriageInput): string {
     "",
     "【当前局面】",
     `阶段：${input.state.stage} ｜ 运行中 ${input.live}/${input.capacity} 个进程 ｜ 这一片已失败 ${input.failures} 次`,
-    `门槛还缺：${input.gateMissing.length ? input.gateMissing.join("；") : "(无)"}`,
+    `缺少的门槛：${input.gateMissing.length ? input.gateMissing.join("；") : "(无)"}`,
     ...(input.recent.length ? ["最近失败：", ...input.recent.slice(-3).map((x) => `  - ${x}`)] : []),
     "",
     "【可选动作，只能选一个】",
     "continue    不影响推进（误报、已知问题、可自行解决）",
     "nudge       方向或做法有偏差，无需重开：给出简要纠正，继续执行",
-    "requeue     这一单的做法走不通，需要重开（问题出在“要求本身做不到”时，",
+    "requeue     这一单的做法不可行，需要重开（问题出在“要求本身做不到”时，",
     "            选 escalate，重开无法解决该问题）",
-    "pause_shard 继续做下去代价更大（正在改错地方、正在扩大破坏面），先暂停这一片",
+    "pause_shard 继续做下去代价更大（正在改动错误位置、正在扩大破坏面），先暂停这一片",
     "escalate    需人工裁决：红线风险、权限、需求自相矛盾、代价不可逆",
     "accept      只用于类型 done：报告与证据足以结束",
     "reject      只用于类型 done：报告不足以结束（无证据、仅完成表面工作、与要求不符）",
     "",
     "【判断要求】",
     "- 以证据为准，不只看申报内容。申报“已全部完成”但证据无产出的，判 reject。",
-    "- 申报卡住的，先区分“不会做”还是“要求有问题”：前者 nudge，后者 escalate 或 requeue。",
+    "- 申报受阻的，先区分是执行方能力不足还是要求本身有问题：前者 nudge，后者 escalate 或 requeue。",
     "- 申报类型为 progress（只是告知）的，通常判 continue。",
     "- 不需要干预时不干预：nudge 误判会使工作进程做无效工作。",
     "- 不写进程编号（形如 6-P1）：SAY 与 WHY 都是界面可读文字，要指代执行方时写“工作进程”，",
     "  要标明归属时写任务号（#06）或派单号（#06-2）。",
     "",
-    "【输出格式，三行，一行都不能少】",
+    "【输出格式：三行，缺一不可】",
     "DECISION: <上面七选一>",
-    "WHY: <一句话说清凭什么>",
-    "SAY: <要发给工作进程的话，二十字以内；没有就写 —>",
+    "WHY: <一句话说明依据>",
+    "SAY: <要发给工作进程的话，二十字以内；没有则写 —>",
   ].join("\n");
 }
 
@@ -128,7 +128,7 @@ export function parseVerdict(raw: string): TriageVerdict | null {
 export async function triage(input: TriageInput): Promise<TriageVerdict> {
   const m = input.msg;
   const facts: string[] = [
-    `这一单原本要做什么：${String(input.action || "（未记录）").replace(/\s+/g, " ").slice(0, 700)}`,
+    `这一单的原始任务：${String(input.action || "（未记录）").replace(/\s+/g, " ").slice(0, 700)}`,
     `工作进程申报的类型：${m.kind}（自报严重度 ${m.severity}，是否需要监工：${m.needs}）`,
     `工作进程的表述：${String(m.text || "").replace(/\s+/g, " ").slice(0, 900)}`,
   ];
@@ -158,13 +158,13 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
   }
   facts.push(
     `当前阶段 ${input.state.stage}：运行中 ${input.live}/${input.capacity} 个进程；这一片已失败 ${input.failures} 次`,
-    `门槛还缺：${input.gateMissing.length ? input.gateMissing.join("；") : "（无）"}`,
+    `缺少的门槛：${input.gateMissing.length ? input.gateMissing.join("；") : "（无）"}`,
   );
   for (const r of input.recent.slice(-3)) facts.push(`最近一次失败：${r}`);
   /* 两种“不合格”处置不同：能继续做的打回继续做，做不到的转用户决策。 */
   facts.push(
     "不合格分两种：报告不足但工作可继续（缺证据、仅完成表面工作、与新要求不符）-> reject，退回后同一单继续执行；",
-    "任务本身无法继续（缺权限或凭据、需求自相矛盾、外部依赖不可用、代价不可逆）-> escalate，该单转为等用户决策。",
+    "任务本身无法继续（缺权限或凭据、需求自相矛盾、外部依赖不可用、代价不可逆）-> escalate，该单转为等待用户决策。",
   );
   /* 验收标准随判定下发，口径与 closeOut.ts 共用，使执行侧与审查侧一致。 */
   facts.push("", ...acceptanceFacts());
@@ -172,19 +172,19 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
 
   const r = await decide({
     root: input.root,
-    question: "一个工作进程发来这条申报，监工该怎么做？",
+    question: "一个工作进程发来这条申报，监工应如何处理？",
     facts,
     actions: [
       { name: "continue", desc: "无需干预：误报、已知问题、可自行解决" },
-      { name: "nudge", desc: "方向或做法偏了但不用重开：参数里写明纠正内容（二十字以内）" },
+      { name: "nudge", desc: "方向或做法有偏差但无需重开：参数里写明纠正内容（二十字以内）" },
       {
         name: "requeue",
-        desc: "这一单的做法走不通要重开（要求本身做不到时选 escalate）",
+        desc: "这一单的做法不可行要重开（要求本身不可行时选 escalate）",
       },
-      { name: "pause_shard", desc: "继续执行代价更大（正在改错地方、在扩大破坏面），先停这一片" },
+      { name: "pause_shard", desc: "继续执行代价更大（正在改动错误位置、在扩大破坏面），先停这一片" },
       {
         name: "escalate",
-        desc: "需人工裁决，任务无法继续：缺权限或凭据、需求自相矛盾、外部依赖不可用、代价不可逆。该单转为等用户决策，不再重派",
+        desc: "需人工裁决，任务无法继续：缺权限或凭据、需求自相矛盾、外部依赖不可用、代价不可逆。该单转为等待用户决策，不再重派",
       },
       {
         name: "accept",
@@ -192,7 +192,7 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
       },
       {
         name: "reject",
-        desc: "只用于工作进程报完成：报告还不足但事情能继续做（无代码证据、仅完成表面工作、行为与最新要求不符）。退回后同一单重新执行；全量测试、界面截图按情况退回（例如：耗时长、测试难度大等可放宽）",
+        desc: "只用于工作进程报完成：报告还不足但工作可以继续（无代码证据、仅完成表面工作、行为与最新要求不符）。退回后同一单重新执行；全量测试与界面截图视耗时与测试难度酌情要求",
       },
     ],
     session: "capitalist-brain-triage",

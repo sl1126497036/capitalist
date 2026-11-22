@@ -840,7 +840,7 @@ export interface ReloadContextResult {
 }
 
 /**
- * 把快照压成一段可进提示词的简报。
+ * 把快照压缩为一段可进提示词的简报。
  * 丢弃心跳、`supervisor_tick`、已完成条目的详情与 `tool` 类流水；保留需求原文、未完成项、决策结论、待复验清单与文件边界。
  * 已完成条目只留标题与依据。
  */
@@ -870,7 +870,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
       "）。",
   );
   L.push("> 它们不是“现在要立刻做的事”：当前要做的活以派单台账为准。与下面的“未完成”冲突时，以派单为准；");
-  L.push("> 台账里 done / closed 的派单是历史，不要按它们恢复任何东西。");
+  L.push("> 台账里 done / closed 的派单是历史，不要依据它们恢复任何实现。");
   L.push("");
   if (snap.requirements.length === 0) L.push("（无）");
   for (const r of snap.requirements) {
@@ -1011,7 +1011,7 @@ function reverifyAction(item: ResumeReverifyItem): string {
     `复验（不是重做）：${item.stage}/${item.shard || "整阶段"} ${item.title}`,
     `上一轮已报完成，但没有可核对的确认（${item.why}），不能直接当完成。`,
     "做三件事：1) 按下面的原要求逐条核对是否真的做到；2) 每条给出证据（命令输出、文件与行号、截图路径），结论用 capitalist ledger add 入账；",
-    "3) 成立就在回报里写“已验证”，不重写已经通过的实现，不动别的分片的文件；不成立就说清缺哪条。",
+    "3) 成立就在回报里写“已验证”，不重写已经通过的实现，不改动其他分片的文件；不成立就写明缺少哪条。",
     `原要求：${clipText(oneLine(item.action), 1200)}`,
   ].join("\n");
 }
@@ -1353,7 +1353,7 @@ export function supervisorContextModel(root: string, rec: SupervisorContextRecor
 
 /**
  * 当前模型的上下文窗口（生效值，经 {@link resolveContextWindow}）。
- * 取窗口的顺序：监工读数、同模型工作进程读数、默认表；均借不到返回 0，界面只显示已用。
+ * 取窗口的顺序：监工读数、同模型工作进程读数、默认表；均不可用时返回 0，界面只显示已用。
  * 工作进程读数的 `context_window` 已在 usage.ts 校正；`capitalist-ctx.json` 可能存有升级前的宿主原值 300k，这里再校正一次。
  */
 export function supervisorContextModelWindow(
@@ -1807,7 +1807,7 @@ export function severeSupervisorEventLines(root: string, max = 8): string[] {
 
 /**
  * 把用户最近几条指令原文写入监工上下文。
- * 只取 `supervisor_chat_ask` 且 from=user 的指令，压成一行、截断，最多 {@link max} 条；附件行不进本段，路径由截图段单独给出。
+ * 只取 `supervisor_chat_ask` 且 from=user 的指令，压缩为一行、截断，最多 {@link max} 条；附件行不进本段，路径由截图段单独给出。
  */
 export function recentUserLines(root: string, max = 6): string[] {
   const rows = tailJsonRows(ledgerLoc.events(root), 262_144);
@@ -1873,13 +1873,13 @@ export function reloadBrief(root: string, maxChars = 12000): string {
       continue;
     }
     if (room > 400) {
-      kept.push(`${s.body.slice(0, room)}\n…（这一段超出配额，截断；全文在 .capitalist/reload/context.md）`);
+      kept.push(`${s.body.slice(0, room)}\n…（该段超出配额，截断；全文在 .capitalist/reload/context.md）`);
       budget -= room;
     } else {
       dropped.push(s.title.replace(/^#+\s*/, ""));
     }
   }
-  /* 保住的按原文顺序回排，读起来才连贯。 */
+  /* 保留的段落按原文顺序回排，保证阅读连贯。 */
   kept.sort((a, b) => text.indexOf(a) - text.indexOf(b));
   const tail = dropped.length ? `\n\n（因上限未纳入的段落：${dropped.join("、")}；完整内容在 .capitalist/reload/context.md）` : "";
   return `${head}\n${kept.join("\n")}${tail}`;

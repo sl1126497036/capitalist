@@ -45,20 +45,16 @@ const supervisorTitle = computed(() => {
 
 
 /* 暂停档不提供清空：暂停单的处置为唤醒或关闭，归档会使该派单离开待办队列，语义与“清空列表”不同。 */
-/* 已结束档同样不清空：这些单已终止，归档只影响回查。 */
-const canClear = computed(
-  () =>
-    filter.value !== "paused" &&
-    filter.value !== "closed" &&
-    (counts.value[filter.value] || 0) > 0,
-);
+const canClear = computed(() => filter.value !== "paused" && (counts.value[filter.value] || 0) > 0);
 const clearAsk = ref(false);
 
-/** 清空只归档记录，不结束运行中进程。 */
+/** 清空只归档记录，不结束运行中进程；数量按任务卡算，与后端回执同口径。 */
 const clearBody = computed(() => {
   const n = counts.value[filter.value] || 0;
-  const base = tr("将清空 {n} 项：进程记录与派单移进归档目录，列表里不再出现。", { n });
-  if (filter.value === "all") return `${base}${tr("运行中的进程不会结束，完成后会重新出现在列表。")}`;
+  const base = tr("将清空 {n} 个任务卡：派单与进程记录移进归档目录，列表不再显示。", { n });
+  if (filter.value === "all") {
+    return `${base}${tr("任务台账一并归档，阶段进度回到首阶段；运行中的进程不会结束。")}`;
+  }
   if (filter.value === "run") return tr("这 {n} 个进程不会结束，记录移出列表，完成后会重新出现。", { n });
   if (filter.value === "queue") return tr("这 {n} 张排队中的派单会从队列撤下，监工不再派发。", { n });
   if (filter.value === "bad") return `${base}${tr("这些进程的日志将移至归档目录。")}`;
@@ -67,8 +63,10 @@ const clearBody = computed(() => {
 
 function doClear() {
   clearAsk.value = false;
-  /* 已取消档按 done 归档。 */
-  emit("clear", filter.value === "canceled" ? "done" : filter.value);
+  /* 先按当前档取范围再下发，档名不在前端改写。 */
+  emit("clear", filter.value);
+  /* 清空一律回到“全部”：原档可能已被清空甚至因计数归零而从菜单消失，留在原档只会看到空列表。 */
+  filter.value = "all";
 }
 
 const q = ref("");
@@ -77,22 +75,14 @@ const menuOpen = ref(false);
 const fbox = ref(null);
 
 
-/** 状态分档与后端 taskBucket 一致。 */
-function bucket(x) {
-  const s = typeof x === "string" ? x : String(x?.status || "");
-  const t = typeof x === "string" ? null : x;
-  if (s === "running" || s === "starting" || s === "claimed") return "run";
-  if (s === "queued" || s === "open") return "queue";
-  if (s === "suspended") return "queue";
-  /* 暂停单独成档：该状态等待用户唤醒，与等待槽位的排队状态不同。 */
-  if (s === "paused") return "paused";
-  if (s === "done" || s === "finished") return "done";
-  if (s === "exited") return settled(t) ? "done" : "queue";
-  if (s === "canceled") return "canceled";
-  /* 作废与结束单单独成档，与后端 taskBucket 同口径。 */
-  if (s === "closed" || s === "superseded") return "closed";
-  /* 未知状态按异常归类，与后端一致。 */
-  return "bad";
+/**
+ * 状态档只读服务端下发的 `bucket`，前端不按 status 推导。
+ *
+ * 分档涉及 `exited` 的两种结局与取消单的 `closed_by` 判定，前端拿不到台账，
+ * 自行推导会与计数、清空范围出现第三套口径。缺失字段按异常档兜底，让问题可见。
+ */
+function bucketOf(t) {
+  return String(t?.bucket || "bad");
 }
 function cell(t) {
   const s = String(t?.status || "");
@@ -132,7 +122,7 @@ function cell(t) {
     }
     return { tone: "bad", kind: "word", text: tr("异常") };
   }
-  if (s === "paused") return { tone: "warn", kind: "word", text: tr("已暂停") };
+  if (s === "paused") return { tone: "warn", kind: "word", text: tr("暂停中") };
   if (s === "held") return { tone: "warn", kind: "word", text: tr("接管中") };
   return { tone: "idle", kind: "word", text: tr("待调度") };
 }
@@ -253,7 +243,7 @@ const FILTERS = computed(() => {
     { key: "run", label: tr("运行中"), tone: "run" },
     { key: "queue", label: tr("排队"), tone: "warn" },
     /* 暂停档在启动后固定列出，与队列状态无关。 */
-    { key: "paused", label: tr("已暂停"), tone: "warn" },
+    { key: "paused", label: tr("暂停中"), tone: "warn" },
     { key: "bad", label: tr("异常"), tone: "bad" },
     { key: "done", label: tr("已完成"), tone: "done" },
   ];
@@ -280,7 +270,7 @@ function visible(t) {
 }
 
 function matchThread(t) {
-  if (filter.value !== "all" && bucket(t) !== filter.value) return false;
+  if (filter.value !== "all" && bucketOf(t) !== filter.value) return false;
   return searchMatch(t);
 }
 
@@ -288,7 +278,7 @@ const base = computed(() => props.threads.filter(searchMatch).filter(visible));
 
 const list = computed(() =>
   base.value
-    .filter((t) => filter.value === "all" || bucket(t) === filter.value)
+    .filter((t) => filter.value === "all" || bucketOf(t) === filter.value)
     .slice()
     .sort(queueCompare),
 );
@@ -313,6 +303,20 @@ watch(
   counts,
   (v) => emit("stats", { ...v }),
   { immediate: true, deep: true },
+);
+
+/*
+ * 已取消与已结束档按计数出现。清空后该档计数归零、菜单项消失，筛选必须跟着回到“全部”：
+ * 留在旧档名上会让列表按一个已不存在的档过滤，标签显示“全部”而内容为空。
+ *
+ * 本 watch 必须放在 counts 之后：watch 注册时同步求值一次 getter，提前注册会读到尚未
+ * 初始化的 counts，setup 直接抛错，整个左栏空白。
+ */
+watch(
+  () => FILTERS.value.map((f) => f.key),
+  (keys) => {
+    if (!keys.includes(filter.value)) filter.value = "all";
+  },
 );
 
 const STALE_MS = 3 * 60 * 60 * 1000;
@@ -395,7 +399,7 @@ function rowOf(t, history) {
     model: modelOf(t?.usage?.model || t?.model),
     stuck: t?.stuck || null,
     /* 未读只判有无新回复、界面不显示数字；排队档尚无回复，不画未读点。 */
-    unreadDot: (Number(t?.unread) || 0) > 0 && bucket(t) !== "queue",
+    unreadDot: (Number(t?.unread) || 0) > 0 && bucketOf(t) !== "queue",
     tip: tipOf(t),
   };
 }
@@ -446,7 +450,7 @@ const closing = ref("");
 /* 后端 closeTask 仅拦截 done/closed 终态，运行、排队、暂停、exited 未结与回执档均可关闭；异常档执行清除。 */
 function canClose(t) {
   /* 已结束、已取消与异常档只提供清除：同一张卡同时给出关闭与清除，会让人以为还要再关一次。 */
-  const b = bucket(t);
+  const b = bucketOf(t);
   if (b === "done" || b === "canceled" || b === "bad") return false;
   const s = String(t?.status || "");
   if (s === "running" || s === "starting" || s === "claimed" || s === "queued" || s === "open") return true;
@@ -523,14 +527,14 @@ function closeConfirm(r) {
 
 /* 清除只写标记让卡离开列表，历史台账保留；异常档先结束再打标记，运行中与排队不提供清除。 */
 function canClearCard(t) {
-  const b = bucket(t);
+  const b = bucketOf(t);
   return b === "done" || b === "canceled" || b === "bad";
 }
 
 const clearing = ref("");
 
 function clearTip(t) {
-  return bucket(t) === "bad"
+  return bucketOf(t) === "bad"
     ? tr("结束并停止重派，记录保留")
     : tr("移出列表，记录保留");
 }

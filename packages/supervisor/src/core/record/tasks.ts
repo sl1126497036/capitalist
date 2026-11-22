@@ -186,7 +186,7 @@ export function resolveDispatchNo(
       /*
        * 派发序取“派单台账与占位记录的最大序”与“任务项 attempts”两者的较大值：
        *   - 台账与占位是权威（号一旦发行就计入，不会因 attempts 未同步而回退或重复）；
-       *   - attempts 兜底（任务项已登记但号尚未落盘的窗口内，仍能正确递增）。
+       *   - attempts 作为后备（任务项已登记但号尚未落盘的窗口内，仍能正确递增）。
        */
       const task = rows.find((t) => Number(t.no) === originNo);
       const attempt = Math.max(maxDispatchSeqOf(root, originNo), task?.attempts ?? 0) + 1;

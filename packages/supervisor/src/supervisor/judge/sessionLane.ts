@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { dirs } from "../../agent/registry";
+import { existingDirs } from "../../agent/registry";
 import { recordEvent } from "../../core/record/ledger";
 import { sessions } from "../../core/record/locations";
 import { resolveContextWindow } from "../../core/guard/limits";
@@ -127,12 +127,26 @@ function usedLaneIds(root: string): Set<string> {
   return out;
 }
 
+/**
+ * 宿主项目目录：会话文件落在 `<项目目录>/<会话 id>.jsonl`。
+ *
+ * 默认取已安装宿主的 `projects` 目录。环境变量 `CAPITALIST_HOST_PROJECTS`（冒号分隔）
+ * 覆盖默认值，供测试与非常规布局使用。判定存在性要扫这些目录，不猜具体的项目子目录名。
+ */
+function hostProjectRoots(): string[] {
+  const custom = String(process.env.CAPITALIST_HOST_PROJECTS ?? "")
+    .split(":")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (custom.length > 0) return custom;
+  return existingDirs().map((d) => join(homedir(), d.dir, "projects"));
+}
+
 /** 查 codebuddy / claude 等宿主配置目录下是否已有该会话文件（防清理 .capitalist 后残留文件撞名）。 */
 function hostSessionExists(sessionId: string): boolean {
   const id = String(sessionId ?? "").trim();
   if (!id) return false;
-  for (const d of dirs()) {
-    const base = join(homedir(), d.dir, "projects");
+  for (const base of hostProjectRoots()) {
     if (!existsSync(base)) continue;
     let projects: string[] = [];
     try {
@@ -234,6 +248,23 @@ export function laneStale(st: LaneState | null, nowMs = Date.now()): boolean {
   return Number.isFinite(at) && nowMs - at > CTX_MAX_AGE_MS;
 }
 
+/**
+ * 会话是否仍可用：宿主侧是否已有这一代会话的文件。
+ *
+ * 只在“从未产出用量读数、且已经续接过一次”时校验。首次续接不查：会话刚分配，
+ * 宿主可能还没来得及落盘。已经续接过一次仍然没有文件，说明宿主从未创建这条会话，
+ * 再续接必然失败。有读数的会话说明宿主确实跑过，文件暂缺可能只是布局差异，不换。
+ *
+ * 实测事故：首派被额度挡住，宿主从未创建会话文件，此后每次重派都续接一条不存在的会话，
+ * 进程立即退出，失败被诊断为不可识别原因，重派一直被压住。
+ */
+export function laneUsable(st: LaneState | null): boolean {
+  if (!st) return false;
+  if (st.ctx_used !== null) return true;
+  if ((st.resumes ?? 0) < 1) return true;
+  return hostSessionExists(st.current);
+}
+
 /** `busy` 由调用方提供；本模块不读工作进程台账，`worker.ts` 与看板各自判定会话占用。 */
 export function pickLane(
   root: string,
@@ -267,13 +298,17 @@ export function pickLane(
     return { id: current, resume: false };
   }
 
-  /* 占用未满、未知续接次数未达上限、未闲置过久、无进程占用四道闸门全通过才续接，否则换代；与 action 指纹无关。sig 更新为最新指纹供回查。 */
-  /* 占用判定读取会话文件的实时读数：`loop.ts` 的 `refreshLaneUsage` 每轮按日志增量刷新，不等进程退出。 */
+  /*
+   * 占用未满、未知续接次数未达上限、未闲置过久、无进程占用、宿主会话仍在，五道闸门全通过才续接，
+   * 否则换代。最后一道只对从未产出读数的会话生效，判定见 `laneUsable`。
+   * 占用判定读取会话文件的实时读数：`loop.ts` 的 `refreshLaneUsage` 每轮按日志增量刷新，不等进程退出。
+   */
   const tooFull = laneTooFull(st);
   const unknownSpent = laneUnknownSpent(st);
   const stale = laneStale(st);
   const occupied = busy(st.current);
-  if (!tooFull && !unknownSpent && !stale && !occupied) {
+  const missing = !laneUsable(st);
+  if (!tooFull && !unknownSpent && !stale && !occupied && !missing) {
     writeLane(root, {
       ...st,
       sig,
@@ -283,19 +318,40 @@ export function pickLane(
     });
     return { id: st.current, resume: true };
   }
+  const why = tooFull
+    ? "ctx_full"
+    : unknownSpent
+      ? "ctx_unknown"
+      : stale
+        ? "ctx_stale"
+        : occupied
+          ? "occupied"
+          : "session_missing";
+  const next = rotateLane(root, st, why, sig);
+  return { id: next.current, resume: false };
+}
+
+/**
+ * 把一条派单会话换到下一代。
+ *
+ * 自动换代（上下文满、占用未知续接到上限、闲置过久、被占用）与用户手动新建会话共用本函数，
+ * 换代口径只有一份：代次 +1、重新生成会话 id、占用读数清零、续接计数归零。
+ *
+ * `sig` 由调用方给：自动换代写入最新 action 指纹，手动换代沿用原指纹，不改派单记录。
+ */
+function rotateLane(root: string, st: LaneState, why: string, sig = st.sig): LaneState {
   const gen = st.gen + 1;
-  const current = uniqueLaneId(root, `${base}-g${gen}`);
-  const why = tooFull ? "ctx_full" : unknownSpent ? "ctx_unknown" : stale ? "ctx_stale" : "occupied";
+  const current = uniqueLaneId(root, `${st.base}-g${gen}`);
   recordEvent(root, "lane_rotated", {
-    base,
+    base: st.base,
     from_gen: st.gen,
     to_gen: gen,
     ctx_used: st.ctx_used,
     limit: laneLimit(st),
     why,
   });
-  writeLane(root, {
-    base,
+  const next: LaneState = {
+    base: st.base,
     current,
     gen,
     sig,
@@ -305,8 +361,34 @@ export function pickLane(
     ctx_model: st.ctx_model ?? "",
     resumes: 0,
     at: new Date().toISOString(),
-  });
-  return { id: current, resume: false };
+  };
+  writeLane(root, next);
+  return next;
+}
+
+/**
+ * 把该任务根下已登记的派单会话整体换到下一代。
+ *
+ * 用户新建会话时调用：任务卡不动，此后的续接一律走新会话，不再带旧上下文。
+ * 在途进程仍持有旧会话；`recordLaneUsage` 只写当前代，旧代的读数不会覆盖新代。
+ */
+export function rotateAllLanes(root: string, why = "user_new_session"): number {
+  const dir = sessionsDir(root);
+  let names: string[] = [];
+  try {
+    names = readdirSync(dir).filter((name) => name.endsWith(".json"));
+  } catch {
+    /* 目录不存在表示还没有派单会话，无事可做。 */
+    return 0;
+  }
+  let rotated = 0;
+  for (const name of names) {
+    const st = readLane(root, name.slice(0, -".json".length));
+    if (!st) continue;
+    rotateLane(root, st, why);
+    rotated += 1;
+  }
+  return rotated;
 }
 
 /**
