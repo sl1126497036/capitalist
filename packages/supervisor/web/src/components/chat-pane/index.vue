@@ -1,5 +1,5 @@
 <script setup>
-import {computed, nextTick, onMounted, onUnmounted, reactive, ref, watch} from "vue";
+import {computed, inject, nextTick, onMounted, onUnmounted, reactive, ref, watch} from "vue";
 import {Bubble, XProvider} from "ant-design-x-vue";
 import theme from "ant-design-vue/es/theme";
 import {
@@ -28,6 +28,8 @@ import { loadModels, setNextModel, setWorkerModel } from "../../lib/models.js";
 import { lang, t } from "../../lib/i18n.js";
 /* 局部形参 t 会遮蔽模块级文案函数，取文案统一走 tr。 */
 const tr = t;
+/* 页顶浮层由 App 统一提供：命令失败一律走同一个出口，不再写进弹层里的小字。 */
+const notify = inject("notify", () => {});
 import {
   BLANK_LABEL,
   blockParts,
@@ -1971,16 +1973,19 @@ async function pickModel(m) {
   if (modelBusy.value !== null) return;
   modelBusy.value = val;
   try {
-    await setWorkerModel(props.root, props.sel, val);
+    const res = await setWorkerModel(props.root, props.sel, val);
+    modelNote.value = "";
     /* 先让所选值上屏，再关面板：蒙版撤掉时标题行已经是新模型。 */
     modelPending.value = val;
     modelOpen.value = false;
+    /* 后端给出生效范围：有进程时这一轮仍用原模型，用户必须知道，不能只看按钮已变。 */
+    notify(res.effective || tr("模型已切换"), false);
     /* 两分钟后放开在途态，回到真实观测值，避免重派未发生时按钮一直停在所选值。 */
     setTimeout(() => {
       if (modelPending.value === val) modelPending.value = null;
     }, 120_000);
   } catch (e) {
-    modelNote.value = e instanceof Error ? e.message : String(e);
+    notify(`${tr("切换模型失败")}：${e instanceof Error ? e.message : String(e)}`, true);
   } finally {
     modelBusy.value = null;
   }
@@ -2036,13 +2041,14 @@ async function pickNext(m) {
   nextBusy.value = val;
   nextModelPending.value = val;
   try {
-    await setNextModel(props.root, val);
+    const res = await setNextModel(props.root, val);
     nextModel.value = val;
     nextOpen.value = false;
+    notify(res.effective || tr("已设定派单模型"), false);
   } catch (e) {
     /* 回显始终对不上时放开待回显值，跟随服务端真实读数。 */
     nextModelPending.value = null;
-    modelNote.value = e instanceof Error ? e.message : String(e);
+    notify(`${tr("设定派单模型失败")}：${e instanceof Error ? e.message : String(e)}`, true);
   } finally {
     nextBusy.value = null;
   }

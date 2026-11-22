@@ -88,6 +88,7 @@ export interface LocalGuardConfig {
   allow_roots?: string[];
   sensitive_paths?: string[];
   sensitive_names?: string[];
+  /** 敏感文件名通配。与 `sensitive_names` 共用同一份 glob 匹配，`*` 匹配任意串。 */
   sensitive_globs?: string[];
   never_delete_outside_task_root?: boolean;
   justify_ttl_sec?: number;

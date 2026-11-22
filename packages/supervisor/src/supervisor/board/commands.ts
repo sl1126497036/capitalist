@@ -1,9 +1,9 @@
 
-import { listWorkers, loadWorker, loadSupervisor, readDispatches, setWorkerModel, wakeDispatch, workerModelPath } from "../../core/record/supervisor";
+import { clearWorkerModel, listWorkers, loadWorker, loadSupervisor, patchDispatch, readDispatches, wakeDispatch } from "../../core/record/supervisor";
 import { isWorkerRef, promoteTask, stopWorker } from "../../core/dispatch/commands";
+import { isTerminal } from "../../core/record/dispatchState";
 import { recordEvent } from "../../core/record/ledger";
 import type { ShotRef } from "../../core/message/messages";
-import { unlinkSync } from "node:fs";
 
 import { resolveModel } from "../judge/modelPolicy";
 import { laneBaseId } from "../judge/sessionLane";
@@ -541,42 +541,66 @@ export function runCommand(root: string, raw: unknown): CommandResult {
     case "worker-model": {
       if (!thread && !shard) return cBad("id 必填");
       const model = String(body.model ?? "").trim();
-      const wid = workerOfThread(root, thread, shard);
-      if (!wid) {
-        return { status: 409, body: { error: "该线程当前没有运行中的进程，无法切换模型", action, thread } };
-      }
-      const rec = loadWorker(root, wid);
-      const sh = String(rec?.shard ?? shard ?? "").trim();
-      const pick = resolveModel({
-        root,
-        host: String(loadSupervisor(root)?.worker_host ?? ""),
-        wanted: model,
-      });
-      if (model && pick.denied) {
-        return cBad(`${model} 在禁用名单里（${pick.why}）`);
-      }
-      if (pick.model) {
-        setWorkerModel(root, sh, pick.model);
+      /*
+       * 换模型与有没有运行中的进程无关：模型记在这张单上，该单下一轮拉起时用它。
+       * 入参可能是线程键、派单 id 或工作进程 id，三者都要换算到同一张单。
+       */
+      const t = thread ? buildThreads(root).find((x) => x.id === thread) : undefined;
+      /* 工作进程 id 也可能作为入参（与中断按钮同源），进程已退出时仍要能反查到那张单。 */
+      const byWorker = thread ? listWorkers(root).find((w) => String(w.id) === thread) : undefined;
+      const liveWorker = workerOfThread(root, thread, shard);
+      const wantId = String(t?.dispatch || byWorker?.dispatch || thread || "");
+      const d = readDispatches(root).find((x) => String(x.id) === wantId);
+      if (!d) return { status: 404, body: { error: "找不到这一单：刷新后重试", action, thread } };
+
+      if (model) {
+        const pick = resolveModel({
+          root,
+          host: String(loadSupervisor(root)?.worker_host ?? ""),
+          wanted: model,
+        });
+        if (pick.denied) return cBad(`${model} 在禁用名单里（${pick.why}）`);
+        /*
+         * 写在这张单上：原单重派、重开与追问都领同一张单，模型随之沿用。
+         * `model_by` 让同一线程后续补派也用它，别的线程与新派单不受影响。
+         * 旧的回退档一并清掉，否则拉起失败时会退回上一轮的模型。
+         */
+        patchDispatch(root, d.id, {
+          model: pick.model ?? model,
+          model_by: "user",
+          model_fallback: undefined,
+          model_fallback_used: undefined,
+        });
       } else {
-        /** 选“默认”即不再指定，回到契约或启动参数里的模型。 */
-        try {
-          unlinkSync(workerModelPath(root));
-        } catch {
-        }
+        patchDispatch(root, d.id, {
+          model: undefined,
+          model_by: "user",
+          model_fallback: undefined,
+          model_fallback_used: undefined,
+        });
       }
-      const stopped = stopWorker(root, wid, { requeue: true, reason: "换模型重启" });
-      if (!stopped) return { status: 400, body: { error: "该进程记录已不存在，切换失败", action } };
+      /* 旧版本把换模型请求写成按分片消费的文件，拉起时优先于单上的值：清掉本分片残留，避免盖掉刚写下的。 */
+      clearWorkerModel(root, String(d.shard ?? ""));
+
+      const what = model ? `已切到 ${model}` : "已切回默认模型";
+      /*
+       * 正在跑的这一轮不打断：进程启动时就定了模型，改启动参数只影响下一次拉起。
+       * 三档文案分别对应会话仍在跑、单已结束、单在途等待。
+       */
+      const effective = liveWorker
+        ? `${what}：当前这一轮仍用原模型，结束后这一单的后续轮次使用新模型`
+        : isTerminal(d.status)
+          ? `${what}：这一单已结束，重开或追问时使用新模型`
+          : `${what}：这一单下次拉起时使用新模型`;
       return {
         status: 200,
         body: {
           ok: true,
           action,
-          worker: wid,
+          worker: liveWorker,
           model,
-          dispatch: stopped.dispatch,
-          effective: model
-            ? `已切到 ${model}：当前进程随即结束，下一轮用新模型继续这一单，会话历史保留`
-            : "已切回默认模型：当前进程随即结束，下一轮继续这一单",
+          dispatch: d.id,
+          effective,
         },
       };
     }

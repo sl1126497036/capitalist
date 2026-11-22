@@ -17,7 +17,6 @@ import { appendMq, wakeSupervisor } from "../../core/dispatch/mq";
 import { DIRECTIVE_STALE_MS, DIRECTIVE_OUTCOME_GUARD_MS } from "../../core/guard/limits";
 import {
   claimDispatch,
-  dispatchPath,
   finishDispatch,
   firstOpenDispatch,
   isSupervisorAlive,
@@ -29,13 +28,13 @@ import {
   pausedDispatches,
   pidAlive,
   readDispatches,
+  patchDispatch,
   registerWorker,
   requestSupervisorStop,
   saveWorker,
   wakeDispatch,
   workerLogPath,
 } from "../../core/record/supervisor";
-import { writeJsonl } from "../../core/record/json";
 /* 手领单与监工派单用同一份“动手前先核对现状”：两个入口各写一套，worker 得到的口径便不一致。 */
 import { buildGroundingBlock } from "../../supervisor/worker/worker";
 import { releaseAll } from "../../core/record/fileLock";
@@ -100,15 +99,6 @@ export function cmdSuperviseStop(p: Parsed): number {
       : t(`Stop requested (pid ${rec.pid}). No new dispatches; exits after running ones finish.\n`, `已请求停止监工（pid ${rec.pid}）：停止派发新派单，在途派单结束后退出。\n`),
   );
   return 0;
-}
-
-/** 就地改某条派单的字段（与 loop.ts 的同名逻辑一致：读-改-写整份台账）。 */
-function patchDispatchRow(root: string, id: string, patch: Partial<Dispatch>): void {
-  const rows = readDispatches(root);
-  const idx = rows.findIndex((d) => d.id === id);
-  if (idx < 0) return;
-  rows[idx] = { ...rows[idx], ...patch } as Dispatch;
-  writeJsonl(dispatchPath(root), rows);
 }
 
 /** 从派单台账取这张单的阶段/分片/派生链，收工闸靠它判断“哪些插话属于这一片”。 */
@@ -362,7 +352,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
         .split(/\r?\n/)
         .map((s) => s.trim())
         .filter(Boolean);
-      patchDispatchRow(root, id, { added_reqs: lines } as Partial<Dispatch>);
+      patchDispatch(root, id, { added_reqs: lines });
       recordEvent(root, "dispatch_added_reqs", {
         dispatch: id,
         stage: rv.stage,

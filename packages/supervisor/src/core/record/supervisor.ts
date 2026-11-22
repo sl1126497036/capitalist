@@ -1627,6 +1627,38 @@ export function takeWorkerModel(root: string, shard: string): string {
   }
 }
 
+/**
+ * 清掉待生效的换模型请求，只清本分片的。
+ *
+ * 拉起进程时该请求优先于派单上的模型，旧版本写下的残留会盖掉用户刚切的值；
+ * 别的分片的设定属于别的线程，不动。
+ *
+ * 删除失败时退回“写空 model”：拉起只认非空值，空值同样让这条请求失效。
+ * 某些受限环境不允许删除文件，不能因此让旧值继续生效。
+ */
+export function clearWorkerModel(root: string, shard: string): boolean {
+  const p = workerModelPath(root);
+  let want = "";
+  try {
+    if (!existsSync(p)) return false;
+    want = String(readJson<WorkerModelRequest>(p, { shard: "", model: "", at: "" })?.shard ?? "");
+  } catch {
+    return false;
+  }
+  if (want && want !== String(shard || "")) return false;
+  try {
+    unlinkSync(p);
+    return true;
+  } catch {
+    try {
+      writeJson(p, { shard: String(shard || ""), model: "", at: new Date().toISOString() });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 
 export const DEFAULT_MODEL_ROTATION: readonly string[] = ["deepseek-v4.1-flash", "glm-5.3-flash"];
 
@@ -1684,6 +1716,24 @@ export function closeDispatch(root: string, id: string, note?: string, by = "use
   writeJsonl(dispatchPath(root), rows);
   syncTaskForDispatch(root, next);
   return next;
+}
+
+/**
+ * 就地改某条派单的字段：读-改-写整份台账。
+ *
+ * 派单字段改写的唯一入口。此前 `loop.ts` 与 `cli/cmd/proc.ts` 各有一份逐字相同的实现，
+ * 新增字段时只改一处，另一处静默落后。
+ *
+ * @param patch 要改的字段；值为 `undefined` 的键在落盘时被丢弃，用于清除字段（如切回默认模型）。
+ * @returns 该单是否存在并已写入。
+ */
+export function patchDispatch(root: string, id: string, patch: Record<string, unknown>): boolean {
+  const rows = readDispatches(root);
+  const idx = rows.findIndex((d) => String(d.id) === String(id));
+  if (idx < 0) return false;
+  rows[idx] = { ...rows[idx], ...patch } as Dispatch;
+  writeJsonl(dispatchPath(root), rows);
+  return true;
 }
 
 export function requeueDispatch(root: string, id: string, note?: string): Dispatch | null {

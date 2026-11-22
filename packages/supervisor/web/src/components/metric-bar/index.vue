@@ -3,7 +3,7 @@
  * 监工指标条：运行 / 排队 / 异常 / 已验收与并行分子读 /api/supervisor.tasks 的聚合，与左栏、顶栏同源。
  * 接口缺项显示“—”，不按 0 处理。
  */
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { fmtTokens, modelLabel } from "../../lib/usage.js";
 import { t } from "../../lib/i18n.js";
 import { loadModels, setSupervisorModel, setConcurrency } from "../../lib/models.js";
@@ -18,6 +18,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["pause", "refresh", "new-session"]);
+/* 页顶浮层由 App 统一提供：模型切换失败走同一个出口，弹层里不再留会被覆盖的错误小字。 */
+const notify = inject("notify", () => {});
 
 const busy = ref(false);
 const note = ref("");
@@ -222,7 +224,7 @@ async function pickSupervisorModel(m) {
     }, 120_000);
     flash(res.effective || t("模型已切换"), false);
   } catch (e) {
-    modelNote.value = e instanceof Error ? e.message : String(e);
+    notify(`${t("切换模型失败")}：${e instanceof Error ? e.message : String(e)}`, true);
   } finally {
     modelBusy.value = null;
   }

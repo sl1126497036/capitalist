@@ -147,6 +147,9 @@ const EN = {
   "待裁决": "Needs decision",
   "指令已登记，下一轮调度生效": "Command recorded; takes effect on the next scheduling round",
   "模型已切换": "Model switched",
+  "切换模型失败": "Switch model failed",
+  "已设定派单模型": "Dispatch model set",
+  "设定派单模型失败": "Set dispatch model failed",
   "已派出、还未领取的派单数（与左栏“排队”同一份统计）":
     "Dispatched but not yet claimed (same count as “Queued” in the left column)",
   "失败、丢失、孤立或已消失的线程数（与左栏“异常”同一份统计）":

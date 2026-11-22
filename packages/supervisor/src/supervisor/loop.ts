@@ -124,6 +124,7 @@ import { findBusyDuplicate } from "./loop/dedupe";
 import { resolveDispatchRef, resolveParentTokens } from "./loop/refs";
 import { resolveSupersede } from "./loop/supersede";
 import { isReady } from "../core/dispatch/deps";
+import { pinnedModelOf } from "../core/dispatch/pinModel";
 import {
   allDirs,
   workers as workersLoc,
@@ -161,6 +162,7 @@ import {
   pidAlive,
   prerequisitesOf,
   pruneWorkers,
+  patchDispatch,
   readDispatches,
   wakeDispatch,
   releaseWorkerNo,
@@ -5234,7 +5236,9 @@ function dispatch(
 
   if (shards.length > 0) {
     for (const s of shards) {
-      const model = defaultDispatchModel(root, resolveShardModel(s, contract, wopts.model));
+      /* 用户在这一片切过的模型优先于契约与派单模型设定，见 pinnedModelOf。 */
+      const pinned = pinnedModelOf(root, fresh.stage, s.id);
+      const model = pinned || defaultDispatchModel(root, resolveShardModel(s, contract, wopts.model));
       const fb = resolveShardModelFallback(s, contract, wopts.model);
       const issued = issueDispatchId(root, fresh.stage, s.id);
       if (!issued.id) {
@@ -5266,6 +5270,7 @@ function dispatch(
         source,
         attempt,
         model: model ?? undefined,
+        modelBy: pinned ? "user" : undefined,
         modelFallback: fb ?? undefined,
       });
       commitDispatch(root, d);
@@ -5301,8 +5306,9 @@ function dispatch(
     lane: laneKeyOf({ stage: fresh.stage, shard: "", lineage: id }),
   });
   const action = withAcceptance(root, spliceDirectives(pickAction(stageById(contract, fresh.stage), fresh), taken));
-  /* 整阶段单同样按 defaultDispatchModel 取常驻派单模型。 */
-  const model = defaultDispatchModel(root, wopts.model);
+  /* 整阶段单同样按 defaultDispatchModel 取常驻派单模型；用户在这条线程切过则优先用切后的值。 */
+  const pinned = pinnedModelOf(root, fresh.stage, "");
+  const model = pinned || defaultDispatchModel(root, wopts.model);
   const d = composeDispatch({
     id,
     stage: fresh.stage,
@@ -5325,6 +5331,7 @@ function dispatch(
     source,
     attempt,
     model: model ?? undefined,
+    modelBy: pinned ? "user" : undefined,
   });
   commitDispatch(root, d);
   recordEvent(root, "dispatch_open", {
@@ -5360,7 +5367,12 @@ function createOpenShardDispatch(
   out: (s: string) => void,
   attempt = 1,
 ): boolean {
-  const model = defaultDispatchModel(root, resolveShardModel(shard, contract, wopts.model));
+  /*
+   * 用户在这一片显式切过的模型优先：切换只作用于这条线程，补派属于同一线程的续跑，
+   * 若不沿用，用户会看到“切了模型但下一轮又变回去”。
+   */
+  const pinned = pinnedModelOf(root, state.stage, shard.id);
+  const model = pinned || defaultDispatchModel(root, resolveShardModel(shard, contract, wopts.model));
   const fb = resolveShardModelFallback(shard, contract, wopts.model);
   /* 分片重派（attempt > 1）沿用该分片最近一次派单的任务号，派发序 +1，而不是发行新任务号。 */
   const prevId = attempt > 1
@@ -5416,6 +5428,7 @@ function createOpenShardDispatch(
     source: "requeue",
     attempt,
     model: model ?? undefined,
+    modelBy: pinned ? "user" : undefined,
     modelFallback: fb ?? undefined,
     retryAccept: accept,
   });
@@ -5730,13 +5743,7 @@ function launch(
   return true;
 }
 
-function patchDispatch(root: string, id: string, patch: Partial<Dispatch>): void {
-  const rows = readDispatches(root);
-  const idx = rows.findIndex((d) => d.id === id);
-  if (idx < 0) return;
-  rows[idx] = { ...rows[idx], ...patch } as Dispatch;
-  writeJsonl(dispatchPath(root), rows);
-}
+
 
 /**
  * 把目标单已终结的未消费追加翻回 open：判据为插话未消费、明确指向某张单、该单不在途。

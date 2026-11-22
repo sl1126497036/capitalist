@@ -6,7 +6,7 @@ const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const { extractLocalPaths, localCheck, extractDeleteArgs, detectAction } = require("../dist/core/guard/localGuard");
+const { extractLocalPaths, localCheck, extractDeleteArgs, detectAction, normLocal } = require("../dist/core/guard/localGuard");
 const { evaluate, loadContract, nextStageId, isLastStage, stageIds } = require("../dist/core/contract/contract");
 const { runCheck } = require("../dist/core/contract/checks");
 const { writeJson } = require("../dist/core/record/json");
@@ -72,8 +72,29 @@ test("任务根以内放行，根外要理由", () => {
   const inside = localCheck(minimal, ROOT, [join(ROOT, "docs", "a.md")], "read");
   assert.equal(inside.decision, "allow");
 
-  const outside = localCheck(minimal, ROOT, [join(ROOT, "..", "elsewhere", "a.md")], "read");
+  // 命令原文里的 .. 不会经过 path.join，这里用字符串拼接还原真实输入形态
+  const outside = localCheck(minimal, ROOT, [`${ROOT}/../elsewhere/a.md`], "read");
   assert.equal(outside.decision, "justify");
+});
+
+test("含 .. 的绝对路径按消点后的位置判定，不能靠字符串前缀蒙过边界", () => {
+  const escape = `${ROOT}/../../../etc/passwd`;
+  const hit = localCheck(minimal, ROOT, [escape], "read");
+  assert.notEqual(hit.decision, "allow", "穿越到任务根以外必须拦截");
+  assert.ok(!normLocal(escape, ROOT).includes(".."), "归一后不应残留 ..");
+
+  const stay = localCheck(minimal, ROOT, [`${ROOT}/docs/../a.md`], "read");
+  assert.equal(stay.decision, "allow", "消点不能把根内路径误判成越界");
+});
+
+test("sensitive_globs 生效：通配的凭据类型按文件名判定", () => {
+  // minimal 的 local_guard 把 *.pem / *.key 写在 sensitive_globs，两处判定同源
+  const outside = localCheck(minimal, ROOT, ["/tmp/x/server.pem"], "read");
+  assert.equal(outside.decision, "deny");
+  assert.ok(outside.hits.some((h) => h.why.includes("*.pem")));
+
+  const inside = localCheck(minimal, ROOT, [join(ROOT, "server.pem")], "read");
+  assert.equal(inside.decision, "justify", "根内凭据转申请，不直接拒");
 });
 
 test("根外删除转申请，不直接拒绝也不直接批准", () => {

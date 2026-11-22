@@ -1,6 +1,6 @@
 <script setup>
 /* 结构与消息分两条通道：结构按周期轮询、各接口单独处理失败；消息由 /stream 信号触发拉取，推流连续两次断开后降级为轮询。 */
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import HeaderBar from "./components/header-bar";
 import QueuePane from "./components/queue-pane";
 import ChatPane from "./components/chat-pane";
@@ -1354,6 +1354,15 @@ function showToast(text, bad = false) {
   }, bad ? 6000 : 4000);
 }
 onUnmounted(() => clearTimeout(toastTimer));
+
+/*
+ * 页顶浮层的唯一出口：子组件通过 inject("notify") 报告操作结果与失败原因。
+ * 此前换模型失败只写进弹层里的小字，弹层一关或清单一刷新就消失，用户看不到。
+ */
+provide("notify", (text, bad = false) => {
+  const msg = String(text ?? "").trim();
+  if (msg) showToast(msg, bad);
+});
 
 /* 清除单卡由后端先结束该单（异常单）再写入标记，不删除记录；结果只经 showToast 显示。
    忙碌键复用上面那个统一的 cardBusy。 */

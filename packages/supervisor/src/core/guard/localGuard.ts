@@ -30,11 +30,57 @@ export function justifyPath(root: string): string {
 }
 
 /**
+ * 消除 `.` 与 `..` 段，`..` 不越过根。
+ *
+ * 边界判定全部建立在字符串前缀比较上，未消点的路径会让 `任务根/../../../etc/passwd`
+ * 以任务根开头而被判成根内。相对路径由 `resolve` 消点，绝对路径必须在这里消。
+ * 只做字符串运算，不访问文件系统，因此不存在“与实际文件不一致”的中间态。
+ *
+ * @returns 消点后的路径；输入为空时返回空串。
+ */
+function collapseDots(s: string): string {
+  /* UNC 与盘符的根段长度不同，先切出来，其余按段处理。 */
+  const unc = /^\/\/[^/]+\/[^/]+\/?/.exec(s);
+  const drive = /^([A-Za-z]:)\/?/.exec(s);
+
+  let root = "";
+  let rest = s;
+  if (unc) {
+    root = unc[0].replace(/\/+$/, "");
+    rest = s.slice(unc[0].length);
+  } else if (drive) {
+    root = `${drive[1]}/`;
+    rest = s.slice(drive[0].length);
+  } else if (s.startsWith("/")) {
+    root = "/";
+    rest = s.slice(1);
+  }
+
+  const out: string[] = [];
+  for (const seg of rest.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") {
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+
+  const joined = out.join("/");
+  if (!joined) return root;
+  if (!root) return joined;
+  return root.endsWith("/") ? `${root}${joined}` : `${root}/${joined}`;
+}
+
+/**
  * 规范成小写正斜杠的绝对路径，供比较使用。
  *
- * 处理三种输入形态：Git Bash 的 `/d/work`、`~` 开头、相对路径（按任务根解析）。
- * Git Bash 形态必须还原成 `d:/work`，否则永远和契约里写的 `D:/...` 对不上，
- * 这是 Windows 上最容易出现的一类“判定该拦却没拦”。
+ * 处理四种输入形态：Git Bash 的 `/d/work`、`~` 开头、相对路径（按任务根解析）、
+ * 含 `.` 或 `..` 的绝对路径。Git Bash 形态必须还原成 `d:/work`，否则永远和契约里
+ * 写的 `D:/...` 对不上，这是 Windows 上最容易出现的一类“判定该拦却没拦”。
+ *
+ * 本函数是所有路径归属判定的唯一归一入口：判定方各自调 `isInside` 比较，比较的
+ * 两个串都由这里产出，因此消点只需在此处做一次。
  *
  * @param base 相对路径的解析基准，默认取当前工作目录。
  * @returns 归一后的路径；输入为空时返回空串。
@@ -51,7 +97,7 @@ export function normLocal(p: string, base?: string | null): string {
   } else if (!s.startsWith("/") && !/^[A-Za-z]:\//.test(s)) {
     s = resolve(base ?? process.cwd(), s).replace(/\\/g, "/");
   }
-  return normalizeForCompare(s);
+  return normalizeForCompare(collapseDots(s));
 }
 
 /**
@@ -129,6 +175,65 @@ function insideSkillPackage(np: string, cacheRoots: string[]): boolean {
 const HARD_SECRET_RX =
   /^(?:\.env(?:\.[\w.-]+)?|\.netrc|\.npmrc|\.pgpass|id_[rd]sa|id_ecdsa|id_ed25519|credentials(?:\.json)?|.*\.(?:pem|key|p12|pfx|keystore|jks))$/i;
 
+/** 取路径末段作为文件名。 */
+function baseNameOf(np: string): string {
+  return np.split("/").pop() ?? "";
+}
+
+/**
+ * 文件名 glob 匹配：`*` 匹配任意串，`?` 匹配单个字符。
+ *
+ * `sensitive_names` 与 `sensitive_globs` 共用这一份实现。早先名字列表里只对 `*.`
+ * 前缀做后缀特例，globs 列表则完全没人读，同一类配置出现两种口径且其中一种不生效。
+ * 契约里两类写法都按 glob 解释，精确名就是不含通配符的 glob。
+ */
+function matchName(base: string, pattern: string): boolean {
+  const p = String(pattern ?? "").trim();
+  if (!p || !base) return false;
+  const body = p
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".");
+  return new RegExp(`^${body}$`, "i").test(base);
+}
+
+/** 敏感名判定结果：`deny` 不可申请，`soft` 需说明用途。 */
+interface SensitiveVerdict {
+  kind: "deny" | "soft";
+  why: string;
+}
+
+/**
+ * 敏感路径与敏感文件名判定。
+ *
+ * 敏感路径无论在哪都拒。敏感文件名分两种：任务根内的属于项目自身凭据，转申请；
+ * 根外的一律拒。判定顺序与拒绝文案在这一处决定，调用方只按 kind 分派。
+ *
+ * @param np 已由 `normLocal` 归一的路径。
+ * @param inRoot 该路径是否落在任务根内。
+ * @param sensPaths 已归一的敏感路径。
+ * @param namePatterns 敏感文件名与 glob，两类已合并。
+ */
+function sensitiveHitOf(
+  np: string,
+  inRoot: boolean,
+  sensPaths: string[],
+  namePatterns: string[],
+): SensitiveVerdict | null {
+  for (const sp of sensPaths) {
+    if (sp && isInside(np, sp)) return { kind: "deny", why: `命中敏感路径 ${sp}` };
+  }
+
+  const base = baseNameOf(np);
+  for (const pat of namePatterns) {
+    if (!matchName(base, pat)) continue;
+    if (inRoot) return { kind: "soft", why: `项目内凭据 ${pat}，需要说明用途` };
+    const word = /[*?]/.test(pat) ? "敏感文件类型" : "敏感文件名";
+    return { kind: "deny", why: `${word} ${pat}` };
+  }
+  return null;
+}
+
 /**
  * 只读白名单判定：技能目录与显式放行路径。
  *
@@ -139,7 +244,7 @@ function inReadAllowlist(
   cfg: { skillRoots: string[]; skillCacheRoots: string[]; paths: string[] },
 ): boolean {
   /* 凭据文件先挡：显式放行路径也要过这一关。 */
-  const base = np.split("/").pop() ?? "";
+  const base = baseNameOf(np);
   if (HARD_SECRET_RX.test(base)) return false;
   if (cfg.paths.some((p) => isInside(np, p))) return true;
   if (cfg.skillRoots.some((p) => isInside(np, p))) return true;
@@ -172,7 +277,10 @@ export function localCheck(
 
   const allowRoots = (cfg.allow_roots ?? []).map((x) => normLocal(x));
   const sensPaths = (cfg.sensitive_paths ?? []).map((x) => normLocal(x));
-  const sensNames = (cfg.sensitive_names ?? []).map((x) => String(x).toLowerCase());
+  /* 精确名与通配两类写法合并，交给同一份 glob 匹配，避免两种口径。 */
+  const namePatterns = [...(cfg.sensitive_names ?? []), ...(cfg.sensitive_globs ?? [])].map((x) =>
+    String(x).trim(),
+  );
   const taskRoot = root ? normLocal(root) : "";
 
   /* 根内命中的敏感文件名：不拒绝，转为需要申请。 */
@@ -180,34 +288,13 @@ export function localCheck(
 
   for (const p of paths) {
     const np = normLocal(p, root);
-    for (const sp of sensPaths) {
-      if (sp && isInside(np, sp)) {
-        return {
-          decision: "deny",
-          hits: [{ kind: "sensitive", path: p, why: `命中敏感路径 ${sp}` }],
-        };
-      }
-    }
-    const base = np.split("/").pop() ?? "";
     const inRoot = taskRoot !== "" && isInside(np, taskRoot);
-    for (const sn of sensNames) {
-      const named = sn.startsWith("*.") ? base.endsWith(sn.slice(1)) : base === sn;
-      if (!named) continue;
-      if (inRoot) {
-        soft.push({ kind: "sensitive", path: p, why: `项目内凭据 ${sn}，需要说明用途` });
-        break;
-      }
-      return {
-        decision: "deny",
-        hits: [
-          {
-            kind: "sensitive",
-            path: p,
-            why: sn.startsWith("*.") ? `敏感文件类型 ${sn}` : `敏感文件名 ${sn}`,
-          },
-        ],
-      };
+    const hit = sensitiveHitOf(np, inRoot, sensPaths, namePatterns);
+    if (!hit) continue;
+    if (hit.kind === "deny") {
+      return { decision: "deny", hits: [{ kind: "sensitive", path: p, why: hit.why }] };
     }
+    soft.push({ kind: "sensitive", path: p, why: hit.why });
   }
 
   /*

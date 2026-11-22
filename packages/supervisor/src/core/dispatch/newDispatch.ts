@@ -24,6 +24,8 @@ export interface ComposedDispatch extends Dispatch {
   /** 中文标题；建单时写入，老记录读侧按分片映射补齐。 */
   title?: string;
   model?: string;
+  /** 模型是谁定的：`user` 表示看板上显式切换过，补派与重派沿用该值。 */
+  model_by?: "user";
   model_fallback?: string;
   model_fallback_used?: boolean;
   required?: boolean;
@@ -85,6 +87,8 @@ export interface ComposeInput {
   /** 接替的目标派单 id（落盘 `supersedes`）。 */
   supersedes?: string | undefined;
   model?: string | undefined;
+  /** 标记模型由用户显式指定；后续补派按该值沿用，不再回到契约分片模型。 */
+  modelBy?: "user" | undefined;
   modelFallback?: string | undefined;
   /** 附件路径。传空数组表示显式无附件。 */
   atts?: string[] | undefined;
@@ -135,6 +139,14 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
   );
   const after = picked(input.after, Array.isArray(afterSrc?.after) ? afterSrc.after : undefined);
   const model = picked(input.model, nonEmpty((modelSrc as { model?: string } | undefined)?.model) || undefined);
+  /*
+   * `model_by` 与 `model` 是一对：显式改了 model 就不继承标记（那是本次新定的口径），
+   * 只有原样继承 model 时才连标记一起带过来，否则补派会误认为用户切过。
+   */
+  const modelBy = picked(
+    input.modelBy,
+    input.model === undefined ? (modelSrc as { model_by?: "user" } | undefined)?.model_by : undefined,
+  );
   const modelFallback = picked(
     input.modelFallback,
     nonEmpty((modelSrc as { model_fallback?: string } | undefined)?.model_fallback) || undefined,
@@ -166,6 +178,7 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
   if (nonEmpty(group)) d.group = String(group);
   if (nonEmpty(supersedes)) d.supersedes = String(supersedes);
   if (nonEmpty(model)) d.model = String(model);
+  if (modelBy === "user") d.model_by = "user";
   if (nonEmpty(modelFallback)) d.model_fallback = String(modelFallback);
   if (input.atts !== undefined) d.atts = [...input.atts];
   if (role) d.role = role;
