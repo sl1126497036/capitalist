@@ -417,7 +417,7 @@ export function reap(root: string): { reclaimed: { path: string; holder: string;
     for (const [k, e] of Object.entries(table.locks)) {
       if (!expired(e, now)) continue;
       if (pidAlive(e.pid)) continue;
-      out.push({ path: e.path, holder: e.holder, why: `心跳超时且进程 ${e.pid} 已不在` });
+      out.push({ path: e.path, holder: e.holder, why: `心跳超时且进程号 ${e.pid} 已退出` });
       delete table.locks[k];
     }
     if (out.length > 0) {
@@ -524,7 +524,7 @@ export function checkStale(root: string, holder: string, path: string): StaleRes
     const other = recentWriter(root, path, holder);
     return {
       stale: true,
-      why: `已读取 ${mark.at} 的版本，之后文件被改过（mtime ${new Date(mark.mtime).toLocaleTimeString("zh-CN", { hour12: false })} -> ${new Date(st.mtimeMs).toLocaleTimeString("zh-CN", { hour12: false })}）`,
+      why: `已读取 ${mark.at} 的版本，之后文件已被修改（mtime ${new Date(mark.mtime).toLocaleTimeString("zh-CN", { hour12: false })} -> ${new Date(st.mtimeMs).toLocaleTimeString("zh-CN", { hour12: false })}）`,
       ...(other ? { by: other } : {}),
     };
   } catch {

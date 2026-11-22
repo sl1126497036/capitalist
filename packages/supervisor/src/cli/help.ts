@@ -140,7 +140,7 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       { cmd: "inbox [id]", brief: ["查看待裁决问题"] },
       { cmd: 'answer <id> "<指导>"', brief: ["关闭问题，并把指导写入下一步"] },
-      { cmd: 'block <类型> "<卡在哪>"', brief: ["登记阻塞（验证码 / 账号 / 授权），收工闸放行"] },
+      { cmd: 'block <类型> "<受阻原因>"', brief: ["登记阻塞（验证码 / 账号 / 授权），收工闸放行"] },
       {
         cmd: "unblock",
         brief: ["清除阻塞，继续执行"],
@@ -251,7 +251,7 @@ const HELP_GROUPS: HelpGroup[] = [
           "启动等同一次暂停调度：未完成的派单全部显示暂停中，暂停期间新派入的单",
           "同样等待恢复。看板点“恢复调度”后按原状态继续，也可用 capitalist resume。",
           "监工不自行生成派单：阶段门槛通过只推进状态，不建单。",
-          "派单入口：看板、capitalist dispatch、capitalist say（追加要求）。",
+          "派单入口：看板；追加要求用 capitalist say。",
           "看板默认随监工启动（127.0.0.1:7788，端口占用时顺延），启动时输出地址。",
           "令牌缺省不下发，工作进程与对话通道使用宿主 CLI 登录态；",
           "置 CAPITALIST_TOKEN_INJECT=1 时读取一次宿主登录态并注入子进程，",
@@ -401,7 +401,7 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       {
         cmd: "promote <派单id|worker-id|分片>",
-        brief: ["手动插队：将排队中的派单提到队首，下一次填槽时最先启动", "（有空槽时立即启动；不越过并行度与暂停状态，不新建派单）"],
+        brief: ["手动插队：将排队中的派单提到队首，下一次分配并发名额时最先启动", "（有并发名额空闲时立即启动；不越过并行度与暂停状态，不新建派单）"],
       },
     ],
   },
@@ -602,7 +602,7 @@ export const COMMAND_HELP: Record<string, string> = {
   reload: `capitalist reload [--status] [--hold <秒>] [--json]
 监工上下文重载：从事件台账提取进度，切换会话后继续执行。
   - 写入 .capitalist/reload/snapshot.json（+ history/ 副本）：当前阶段、已达标的验收项、
-    每片的最后状态与未完成条目、用户未处理的插话、未裁决提问、重派计数
+    各分片的最后状态与未完成条目、用户未处理的插话、未裁决提问、重派计数
   - 压缩成 .capitalist/reload/context.md：移除心跳 / 重复调度轮次 / 已完成条目详情 / 一次性调试输出；
     保留需求原文、未完成项、决策结论、待复验清单
   - 切换监工对话会话，原会话中的工具输出不再读取

@@ -59,7 +59,7 @@ export function recordUserMessage(
   const direction = String(input.direction ?? "").trim();
   if (!isUserMsgDirection(direction)) {
     throw new Error(
-      `recordUserMessage 的 direction 必填，取 core/message/msgId.ts 的 userMsgDirectionOf；收到 "${direction}"`,
+      `用户消息缺少方向：工作进程承接写 U2W，监工承接写 U2S（收到 "${direction}"）。`,
     );
   }
   const id = newMessageId(input.taskNo ?? "S0", direction);

@@ -21,16 +21,16 @@ export const EVENT_ZH: Readonly<Record<string, string>> = Object.freeze({
   worker_gone: "进程退出",
   worker_killed: "中断进程",
   worker_looping_killed: "循环中断",
-  worker_heartbeat_rescued: "心跳恢复",
+  worker_heartbeat_rescued: "状态检查恢复",
   worker_reaped: "回收进程",
   worker_launch_failed: "进程启动失败",
   gate_eval: "门槛评估",
   supervisor_advance: "阶段推进",
-  supervisor_done: "收工",
+  supervisor_done: "任务完成",
   stage_skipped: "跳过阶段",
   stage_fallback: "跳过阶段",
   stage_stalled: "阶段停滞",
-  contract_reload: "任务列表热加载",
+  contract_reload: "任务列表重载",
   contract_change: "任务列表变更",
   contract_error: "任务列表解析失败",
   contract_refused: "任务列表被拒",
@@ -55,8 +55,8 @@ export const EVENT_ZH: Readonly<Record<string, string>> = Object.freeze({
   direct_inject: "插话登记",
   hook_error: "钩子异常",
   tool: "工具调用",
-  supervisor_tick: "心跳",
-  tick_window: "心跳稀疏",
+  supervisor_tick: "状态检查",
+  tick_window: "状态检查间隔过长",
   tree_rebuilt: "重建派单树",
 });
 
@@ -103,7 +103,7 @@ export const STATUS_ZH: Readonly<Record<string, string>> = Object.freeze({
   done: "已完成",
   failed: "失败",
   closed: "已结束",
-  orphan: "孤儿",
+  orphan: "已失联",
   missing: "缺失",
   gone: "已退出",
   exited: "已退出",
@@ -117,7 +117,7 @@ export const STATUS_ZH_FALLBACK = "未知状态";
 
 /** 任务列表被拒的原因 -> 中文。 */
 export const CONTRACT_KIND_ZH: Readonly<Record<string, string>> = Object.freeze({
-  requirement_violation: "需求层被删除或降低标准",
+  requirement_violation: "需求被删除或降低标准",
 });
 
 /** 语言无关的技术词：只在正文里出现时统一替换，不改变字段与标识符本身。 */

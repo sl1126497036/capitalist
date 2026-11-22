@@ -351,7 +351,7 @@ export function cmdUpdate(p: Parsed): number {
   /** `--clear` 删字段，而不是写空串。 */
   const clear = flagBool(p, "clear");
   if (!file || !id || !field || (value === "" && !clear)) {
-    throw new Error('用法：capitalist update <名> <id> <字段> <值> [--key id] ｜ 删字段用 --clear');
+    throw new Error('用法：capitalist update <名> <id> <字段> <值> [--key id] | 删字段用 --clear');
   }
 
   const { root } = ctxOrDie(p);
@@ -504,7 +504,7 @@ export async function cmdNotify(p: Parsed): Promise<number> {
   });
 
   process.stdout.write(
-    `已申报 申报${msg.id}（${kind} · ${severity}${needs === "none" ? "" : ` · 需要${needs === "decision" ? "裁决" : "干预"}`}）\n`,
+    `已登记 申报${msg.id}（${kind} | ${severity}${needs === "none" ? "" : `，需要${needs === "decision" ? "裁决" : "干预"}`}）\n`,
   );
   if (needs === "none") process.stdout.write("继续执行，不必等待回复。\n");
   else process.stdout.write("申报已登记，监工正在判断；可先行处理与它无关的部分。\n");
@@ -526,7 +526,7 @@ function loadWorkerSafe(root: string, id: string): { stage?: string; shard?: str
 export function cmdBlock(p: Parsed): number {
   const type = p.positional[0];
   const reason = p.positional.slice(1).join(" ") || flagString(p, "reason");
-  if (!type || !reason) throw new Error('用法：capitalist block <类型> "<卡在哪>"');
+  if (!type || !reason) throw new Error('用法：capitalist block <类型> "<受阻原因>"');
 
   const { root } = ctxOrDie(p);
   const ok = updateState(root, (s) => {

@@ -88,7 +88,7 @@ export function joinGroup(
   input: { parentId: string; rows: readonly Dispatch[]; idx?: GroupIndex | undefined },
 ): { ok: true; id: string } | { ok: false; error: string } {
   const id = normalizeGroupId(ref);
-  if (!id) return { ok: false, error: `“${ref}”不是组号：写成 #G1 或 GROUP: new <组标题>` };
+  if (!id) return { ok: false, error: `“${ref}”不是组号：写成 #G01 或 GROUP: new <组标题>` };
   const group = resolveGroupRef(root, id);
   if (!group) {
     return {
@@ -100,7 +100,7 @@ export function joinGroup(
   if (String(group.state ?? "") === "closed") {
     return {
       ok: false,
-      error: `分组 ${id} 已解散：不能作为前置。新建一个组后重试。`,
+      error: `分组 ${id} 已解散：不能作为前置。改挂仍在推进的前置，或新建一个组后重试。`,
     };
   }
   const idx = input.idx ?? groupIndexFrom(root, input.rows);
@@ -226,18 +226,18 @@ export function checkGroupPrerequisite(
   ref: string,
 ): { ok: true; id: string } | { ok: false; error: string } {
   const id = normalizeGroupId(ref);
-  if (!id) return { ok: false, error: `“${ref}”不是组号` };
+  if (!id) return { ok: false, error: `“${ref}”不是组号：写成 #G01 或 GROUP: new <组标题>` };
   const group = resolveGroupRef(root, id);
   if (!group) {
     return {
       ok: false,
-      error: `PARENT 里的分组 ${id} 不存在：先建组，或核对组号后重发。`,
+      error: `PARENT 里的分组 ${id} 不存在：先建组（GROUP: new <组标题>），或核对组号后重发。`,
     };
   }
   if (String(group.state ?? "") === "closed") {
     return {
       ok: false,
-      error: `分组 ${id} 已解散：请改挂仍在推进的前置。`,
+      error: `分组 ${id} 已解散：不能作为前置。改挂仍在推进的前置，或新建一个组后重试。`,
     };
   }
   return { ok: true, id };

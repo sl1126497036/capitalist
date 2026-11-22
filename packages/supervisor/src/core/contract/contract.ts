@@ -458,19 +458,19 @@ export function detectRequirementViolation(prev: ContractData, next: ContractDat
   for (const ps of prevStages) {
     const ns = nextById.get(ps.id);
     if (!ns) {
-      out.push({ kind: "delete_stage", stage: ps.id, detail: `需求条目 stage ${ps.id} 被删除` });
+      out.push({ kind: "delete_stage", stage: ps.id, detail: `需求条目阶段 ${ps.id} 被删除` });
       continue;
     }
     const pa = (ps as unknown as Record<string, unknown>).acceptance;
     const na = (ns as unknown as Record<string, unknown>).acceptance;
     if (pa != null && (na == null || na === "")) {
-      out.push({ kind: "lower_acceptance", stage: ps.id, detail: `stage ${ps.id} 验收标准被删除（降低）` });
+      out.push({ kind: "lower_acceptance", stage: ps.id, detail: `阶段 ${ps.id} 的验收标准被删除（降低）` });
     } else if (typeof pa === "string" && typeof na === "string") {
       if (na.length < pa.length * 0.5 && pa.length > 20) {
         out.push({
           kind: "lower_acceptance",
           stage: ps.id,
-          detail: `stage ${ps.id} 验收标准被大幅削弱（由 ${pa.length} 字减为 ${na.length} 字）`,
+          detail: `阶段 ${ps.id} 的验收标准被大幅削弱（由 ${pa.length} 字减为 ${na.length} 字）`,
         });
       }
     }

@@ -1745,7 +1745,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         detail(
           t(
             "[supervisor] guard daemon not started (entry path unknown): if this process is force killed, workers can only be reaped on the next startup",
-            "[监工] 守护进程未启动（取不到入口路径）：强制终止本进程后工作进程只能等下次启动清理孤儿",
+            "[监工] 守护进程未启动（未取得入口路径）：强制终止本进程后工作进程只能等下次启动清理孤儿。",
           ),
         );
       }
@@ -3194,7 +3194,7 @@ async function applyOneDirective(
   if (action === "wake") {
     if (!arg) return reject("wake 缺少单号：写成 wake #12");
     const hit = resolveDispatchRef(root, readDispatches(root), arg);
-    if (!hit) return reject(`找不到派单“${arg}”：确认任务编号后重试`);
+    if (!hit) return reject(`未找到派单“${arg}”：确认任务编号后重试`);
     const r = wakeDispatch(root, hit.id);
     if (!r) return reject(`派单 ${hit.id} 无法唤醒：已完成、已关闭或不在暂停状态`);
     recordEvent(root, "dispatch_wake", {
@@ -3415,7 +3415,7 @@ async function applyOneDirective(
       const hit = resolveDispatchRef(root, afterRows, tok);
       if (!hit) {
         return reject(
-          `AFTER 里的前置单“${tok}”在台账里找不到：依赖关系不落数据就不生效。先派前面的单，或核对编号后重发。`,
+          `AFTER 里的前置单“${tok}”不在台账中：依赖关系不落数据就不生效。先派前面的单，或核对编号后重发。`,
         );
       }
       afterIds.push(String(hit.id));
@@ -3716,7 +3716,7 @@ async function applyOneDirective(
     const qNo = /^\s*#\s*(\d{1,4})\b/.exec(arg);
     const qByNo = qNo ? dispatchOfThreadNo(root, Number(qNo[1])) : undefined;
     if (qNo && !qByNo) {
-      return reject(`找不到 #${qNo[1]} 对应的在途派单：可能已结束或尚未建单`);
+      return reject(`未找到 #${qNo[1]} 对应的在途派单：可能已结束或尚未建单`);
     }
     const qTarget = qByNo ? String(qByNo.id) : arg;
     const q = frontDispatch(root, qTarget, "supervisor");
@@ -3735,12 +3735,12 @@ async function applyOneDirective(
     const byNo = noM ? dispatchOfThreadNo(root, Number(noM[1])) : undefined;
     if (noM && !byNo) {
       return reject(
-        `找不到 #${noM[1]} 对应的在途派单：可能已结束或尚未建单`,
+        `未找到 #${noM[1]} 对应的在途派单：可能已结束或尚未建单`,
       );
     }
     const target = byNo ? String(byNo.id) : arg;
     const r = promoteTask(root, target, { by: "supervisor" });
-    if (!r) return reject(`找不到排队中的派单“${arg}”：确认它在【任务编号表】中且尚未开始`);
+    if (!r) return reject(`未找到排队中的派单“${arg}”：确认它在【任务编号表】中且尚未开始`);
     if (!r.ok) return reject(r.reason);
     const bits = [r.preempt ? "已腾槽，下一轮立即执行" : "已置顶，下一轮拉起"];
     if (r.behind) bits.push(`立即执行派单 ${r.behind} 仍在运行，本单排在其后`);
@@ -3866,7 +3866,7 @@ async function applyOneDirective(
     }
     const nid = nextStageId(contract, state.stage);
     const next = nid ? stageById(contract, nid) : undefined;
-    if (!next) return reject("找不到下一阶段，skip 未执行");
+    if (!next) return reject("未找到下一阶段，skip 未执行");
 
     // 跳过的阶段记待补项、不标达标，终审清算时仍会出现。
     const moved = updateState(root, (s) => enterStage(s, next));
@@ -3963,7 +3963,7 @@ async function applyOneDirective(
     return { ok: true, reason: "", detail: "已回答，见监工流" };
   }
 
-  return reject(`未知动作“${action || d.text || "（空）"}”。可用动作：${CAPITALIST_ACTIONS.join(" / ")}`);
+  return reject(`未知动作“${action || d.text || "（空）"}”：指令未执行，正确写法见帮助。`);
 }
 
 /**
@@ -5128,7 +5128,7 @@ function fillSlots(
         });
         detail(
           `[监工] ${cand.id} 的目标文件 ${blocked.path} 被 ${blocked.holder} 占用已 ${Math.round(waited / 1000)}s，` +
-            "不等待：照常派发，由工作进程自行竞争文件锁（拿不到锁会收到处理指引）",
+            "不等待：照常派发，由工作进程自行竞争文件锁（未取得锁会收到处理指引）",
         );
         d = cand;
         break;
@@ -6224,7 +6224,7 @@ async function consumeMq(args: {
       evidence: msg.evidence ? String(msg.evidence).slice(0, 600) : "",
     });
     detail(
-      `[监工] 申报 ${msg.from || "?"} · ${msg.kind}（${msg.severity}）：` +
+      `[监工] 申报 ${msg.from || "?"} - ${msg.kind}（${msg.severity}）：` +
         `${String(msg.text ?? "").slice(0, 70)}`,
     );
 

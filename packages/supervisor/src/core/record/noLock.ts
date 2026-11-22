@@ -27,7 +27,7 @@ export class NoLockTimeoutError extends Error {
     /** 从首次尝试到放弃共等待的毫秒数。 */
     readonly waitedMs: number,
   ) {
-    super(`取号锁 ${key} 在 ${waitedMs}ms 内未取得，本次创单失败`);
+    super(`取号锁 ${key} 在 ${waitedMs}ms 内未取得，本次创单失败；稍后重试`);
     this.name = "NoLockTimeoutError";
   }
 }

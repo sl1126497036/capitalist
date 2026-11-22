@@ -103,7 +103,7 @@ function markPausedRow(root: string, cur: Dispatch, at: string, by: string, reas
   };
   if (String(cur.status ?? "") === "claimed") {
     next.status = "open";
-    next.note = "调度暂停：进程已停，恢复后继续执行";
+    next.note = "调度暂停：进程已停止，恢复后继续执行";
   }
   return next;
 }

@@ -157,7 +157,7 @@ export async function checkUpdate(
 
   const latest = await fetchLatestVersion(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   if (latest === null) {
-    return { ok: false, message: `连不上 npm 注册表（超时 ${opts.timeoutMs ?? DEFAULT_TIMEOUT_MS} ms 或网络不可用），本次不判断版本` };
+    return { ok: false, message: `无法连接 npm 注册表（超时 ${opts.timeoutMs ?? DEFAULT_TIMEOUT_MS} ms 或网络不可用），本次不判断版本` };
   }
   if (latest === "") {
     return { ok: false, message: `npm 上还没有 ${PACKAGE_NAME} 这个包，无法比较版本` };

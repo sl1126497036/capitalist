@@ -133,11 +133,11 @@ export function reopenDispatch(root: string, thread: string, shard = ""): { ok: 
     last.status !== "failed" &&
     last.status !== "review" &&
     last.status !== "closed"
-  ) {    return { ok: false, reason: `该派单当前状态为 ${last.status}，无法重派` };
+  ) {    return { ok: false, reason: "该派单当前状态不允许重派" };
   }
   const r = runCli(["update", "inbox/dispatch", String(last.id), "status", "open", "--root", root]);
   if (r.code !== 0) {
-    return { ok: false, reason: (r.stderr || "").slice(0, 120) || "update 没返回原因" };
+    return { ok: false, reason: (r.stderr || "").slice(0, 120) || "update 未返回原因" };
   }
   /** 唤醒要盖时间戳，否则阶段推进时 supersedeStaleDispatches 会在下一轮作废在途单。 */
   runCli(["update", "inbox/dispatch", String(last.id), "wake_at", new Date().toISOString(), "--root", root]);

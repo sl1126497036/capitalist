@@ -118,7 +118,7 @@ function progress(t) {
   if (s.waiting) left.push(tr("{n} 等父节点", { n: s.waiting }));
   if (s.review) left.push(tr("{n} 待验收", { n: s.review }));
   if (s.failed) left.push(tr("{n} 失败", { n: s.failed }));
-  if (left.length) parts.push(tr("还差 {list}", { list: left.join(" / ") }));
+  if (left.length) parts.push(left.join(" / "));
   /* 已有结束计数时不补“全部完成”，避免同一行重复。 */
   else if (!s.closed) parts.push(tr("全部完成"));
   return parts.join(" ");

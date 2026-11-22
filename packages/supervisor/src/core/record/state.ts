@@ -139,7 +139,7 @@ export function supervisorDisplayState(root: string): SupervisorDisplayInfo {
     return {
       state: "stopped",
       pid: rec.pid,
-      detail: `进程已消失（pid ${rec.pid}），心跳 ${age}s 未更新`,
+      detail: `进程已退出（进程号 ${rec.pid}），心跳 ${age}s 未更新`,
       heartbeat_age_sec: age,
     };
   }
@@ -153,7 +153,7 @@ export function supervisorDisplayState(root: string): SupervisorDisplayInfo {
   return {
     state: "timeout",
     pid: rec.pid,
-    detail: `进程还在（pid ${rec.pid}）但心跳已 ${age}s 未更新，可能已卡死或无响应`,
+    detail: `进程仍在（进程号 ${rec.pid}），心跳 ${age}s 未更新`,
     heartbeat_age_sec: age,
   };
 }

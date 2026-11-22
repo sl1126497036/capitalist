@@ -103,7 +103,7 @@ export function readModels(host: string): ModelsView {
       /* 宿主配置的默认模型，用于“宿主默认”一行。 */
       default_model: configured,
       at,
-      reason: parsed.length ? "" : "未解析出宿主模型清单，以下为回退清单，可手填",
+      reason: parsed.length ? "" : "未解析出宿主模型清单，以下为回退清单，可手动填写",
     };
   }
   return {

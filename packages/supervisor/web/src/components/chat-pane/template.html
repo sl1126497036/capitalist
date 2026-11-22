@@ -322,7 +322,7 @@
             <div class="accgate" :class="accGate.length ? 'bad' : 'ok'">
               <i class="gdot" :class="accGate.length ? 'bad' : 'done'"/>
               <span v-if="accGate.length">{{ t("验收清单还有未完成的检查项：") }}{{ accGate.join(t("；")) }}</span>
-              <span v-else>这一单没有待验收的检查项，验收清单为空{{ accReport ? ` ${accReport}` : "" }}</span>
+              <span v-else>这一单没有待验收的检查项{{ accReport ? ` ${accReport}` : "" }}</span>
             </div>
           </div>
         </section>
@@ -1009,7 +1009,7 @@
           <FileImageOutlined aria-hidden="true"/>
           <p class="zerr-t">{{ t("图片加载失败") }}</p>
           <p class="zerr-p">{{ zoomItem?.path || zoomItem?.name }}</p>
-          <p class="zerr-h">{{ t("附件可能已被清理，或取图接口出错。") }}</p>
+          <p class="zerr-h">{{ t("附件可能已被清理，或暂时无法读取。") }}</p>
           <button class="zretry" type="button" @click.stop="retryZoom">{{ t("重试") }}</button>
         </div>
         <img

@@ -788,7 +788,7 @@ const stateRowBase = computed(() => {
     const why = diedText();
     const normal = /exit\s*0\b|supervisor:exit0|被用户中断|SIGTERM|已收工/i.test(why);
     return normal
-      ? {text: tr("本轮进程已退出，等待下一轮派发（{why}）", { why }), bad: false, warn: true, dots: false}
+      ? {text: tr("本轮进程已退出，待派单（{why}）", { why }), bad: false, warn: true, dots: false}
       /* 异常条显示状态；`why` 为工作进程末行消息。 */
       : {text: tr("进程异常"), bad: true, warn: false, dots: true};
   }
@@ -953,7 +953,7 @@ function stat(v) {
   }
   if (v.m.event === "supervisor_cmd") return evtReceipt(v.m);
   const s = String(v.m.status || "");
-  if (s === "pending") return tr("等待下一轮调度");
+  if (s === "pending") return tr("待调度");
   if (s === "executed") return v.m.no ? tr("已执行 #{no}", { no: bareNoLabel(v.m.no) }) : tr("已执行");
   /* 失败尾标按 reason 优先、回落 detail，两者皆空只显示“失败”；字段由 supervisor_cmd 事件与 SC- 指令卡下发。 */
   if (s === "rejected") {
@@ -1631,7 +1631,7 @@ const FEATURE_HINTS = [
   "发消息可指定技能，作用于下一张派单，如“下一条派单加上 caveman 技能”",
   "消息卡片上的“#”可引用该条信息，引用随下一条消息一起发出",
   "点击“中断”可结束当前进程并重派；“中断”时勾选“同时登记阻塞”则不再重派",
-  "连续失败达到上限会停下等用户裁决，不再自动重派",
+  "连续失败达到上限会停止并等待用户裁决，不再自动重派",
 ];
 const HINT_INTERVAL_MS = 15000;
 const hintIdx = ref(0);
@@ -2317,7 +2317,7 @@ function jumpTo(ref) {
   const el = box.querySelector(`[data-mref="${safe}"]`);
   if (!el) {
     /* 引用失败只表示消息不在当前窗口，显示提示，不按异常上报。 */
-    pushLive(tr("原消息不在当前窗口内，待确认"), "warn");
+    pushLive(tr("原消息不在当前窗口，可展开更早的消息查找"), "warn");
     return;
   }
   el.scrollIntoView({block: "center"});

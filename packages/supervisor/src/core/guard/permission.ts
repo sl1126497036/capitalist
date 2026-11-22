@@ -25,16 +25,16 @@ interface ModeSpec {
 
 /** 全部档位定义。键序即 {@link modeNames} 的返回顺序。 */
 export const MODES: Record<Mode, ModeSpec> = {
-  plan: { cap: "deny", enforce: true, desc: "只读：写与删一律拒，读不设限" },
-  default: { cap: "allow", enforce: true, desc: "默认：红线按自身强度生效，越界要理由" },
-  accept_edits: { cap: "allow", enforce: true, desc: "接受编辑：文件写入跳过 ask，命令类不变" },
+  plan: { cap: "deny", enforce: true, desc: "只读：写入与删除一律拒绝，读取不受限制" },
+  default: { cap: "allow", enforce: true, desc: "默认：红线按自身强度生效，越界需说明理由" },
+  accept_edits: { cap: "allow", enforce: true, desc: "接受编辑：文件写入跳过询问，命令类不变" },
   bypass: {
     cap: "allow",
     enforce: false,
     // 只停用档位层。红线在 `dispatch` 里于任何档位生效之前就已执行，
     // 因此 bypass 下的 BLOCK 仍然拦下，此处若写“不拦任何东西”，
     // 此为代码并不兑现的承诺。
-    desc: "不拦档位与本机边界，但仍记账；任务列表红线照旧生效",
+    desc: "不拦截档位与本机边界，但仍记录；任务列表红线照旧生效",
   },
 };
 

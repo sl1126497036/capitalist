@@ -34,7 +34,7 @@ export async function cmdReload(p: Parsed): Promise<number> {
     if (plan) {
       const done = Object.values(plan.state).filter((s) => s.state === "verified").length;
       process.stdout.write(
-        `恢复计划：不复验 ${plan.skip.length}｜待复验 ${plan.reverify.length}（已成立 ${done}）｜继续 ${plan.pending.length}\n`,
+        `恢复计划：不复验 ${plan.skip.length} | 待复验 ${plan.reverify.length}（已成立 ${done}） | 继续 ${plan.pending.length}\n`,
       );
     }
     return 0;

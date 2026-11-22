@@ -347,7 +347,7 @@ export function describeEvent(
     case "dispatch_closed":
       return `手动结束 ${d}（原状态 ${zh.status(e.from) || "未知状态"}${e.worker ? "，执行中" : "，排队中"}${e.killed ? "，已中断" : ""}）：${String(e.reason ?? "")}`;
     case "dispatch_wake":
-      return `消息唤醒 ${d}（原状态 ${zh.status(e.from) || "未知状态"}）：会话新消息将该派单重新置为待执行，沿用原上下文续跑`;
+      return `消息唤醒 ${d}（原状态 ${zh.status(e.from) || "未知状态"}）`;
     case "dispatch_retry": {
       const attempt = Number(e.attempt) || 1;
       const failed = Number(e.previous_failures) || 0;
@@ -448,7 +448,7 @@ export function describeEvent(
     }
     case "attachment_unbound": {
       const n = Number(e.count);
-      return `这条追加带着 ${Number.isFinite(n) && n > 0 ? n : "几"} 张图，但没有归属，未带入派单：${String(e.text ?? "")}`;
+      return `这条追加含 ${Number.isFinite(n) && n > 0 ? n : "几"} 张图，但没有归属，未带入派单：${String(e.text ?? "")}`;
     }
     default: {
       /** 只用记录自带文本，事件名与默认标签都不作正文；无可读文本返回空串。 */
@@ -710,7 +710,7 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
       level: "warn",
       title: "监工已停",
       detail:
-        `最后一次心跳 ${ageSec(i.supervisor.heartbeat_ts)}s 前，进程 pid ${i.supervisor.pid} 不运行中。` +
+        `最后一次心跳 ${ageSec(i.supervisor.heartbeat_ts)} 秒前，进程已不运行。` +
         (last ? ` 最近的工作进程 ${last.id} 为 ${last.status}；重启监工后该状态会重复出现。` : ""),
       fix: "capitalist supervise --force 重新接管（会清掉熔断计数）",
     };
@@ -725,15 +725,15 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
       return {
         level: "bad",
         title: "工作进程缺认证",
-        detail: `worker ${last.id} 以“需要登录”退出。`,
-        fix: "在宿主 CLI 里登录后再派单；工作进程沿用宿主登录态，项目不注入令牌",
+        detail: `工作进程 ${last.id} 因缺少登录态退出。`,
+        fix: "在宿主 CLI 里登录后再派单。",
       };
     }
     if (/session ended/i.test(log)) {
       return {
         level: "bad",
         title: "宿主会话一建立就结束",
-        detail: `worker ${last.id}（${last.host}）获取 session 后立刻 ended，通常是该宿主没有可用模型或凭据。`,
+        detail: `工作进程 ${last.id}（${last.host}）建立会话后立即结束，通常是该宿主没有可用模型或凭据。`,
         fix: "先在同机用该宿主的非交互入口执行一次验证，确认它能独立完成一轮",
       };
     }
@@ -741,15 +741,15 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
       return {
         level: "bad",
         title: "工作进程零输出退出",
-        detail: `worker ${last.id}（${last.host}）只写了启动 banner 就结束，没有报错也没有回答。`,
+        detail: `工作进程 ${last.id}（${last.host}）只写了启动日志就结束，没有报错也没有回答。`,
         fix: "手动跑一次该宿主的 -p 入口并加超时，确认是认证、模型名还是端口占用",
       };
     }
     return {
       level: "warn",
-      title: `最近一个 worker ${last.status}`,
+      title: `最近一个工作进程状态为 ${last.status}`,
       detail: `${last.id}（${last.host}）退出，退出码 ${last.note || "未知"}。`,
-      fix: "展开该 worker 的日志看最后几十行",
+      fix: "展开该工作进程的日志，查看最后几十行",
     };
   }
 
@@ -775,7 +775,7 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
   if (i.supervisor.max_workers === 0) {
     return {
       level: "warn",
-      title: "监工不自动拉起 worker",
+      title: "监工不自动拉起工作进程",
       detail: "以 --no-spawn 运行：只派单，由另一个会话执行 capitalist next 接收。",
       fix: "另开一个会话跑 capitalist next，做完 capitalist report <派单id> done",
     };
@@ -784,8 +784,8 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
   if (live.length > 0) {
     return {
       level: "ok",
-      title: `${live.length} 个 worker 运行中`,
-      detail: `宿主 ${i.supervisor.worker_host}，并行度 ${i.supervisor.max_workers}。`,
+      title: `${live.length} 个工作进程运行中`,
+      detail: `宿主 ${i.supervisor.worker_host}，最多 ${i.supervisor.max_workers} 个工作进程。`,
       fix: "",
     };
   }
@@ -793,7 +793,7 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
   return {
     level: "ok",
     title: "监工在线，当前空闲",
-    detail: i.hasActive ? "有一张单在途，等 worker 领。" : "等下一轮 tick 派单。",
+    detail: i.hasActive ? "有一张单在途，等工作进程领取。" : "等待下一次派单。",
     fix: "",
   };
 }

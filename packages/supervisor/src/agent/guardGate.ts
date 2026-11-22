@@ -159,7 +159,7 @@ export function deleteGate(base: GuardBase, cmd: string): HookDecision {
     note(base.root, event, { cmd: cmd.slice(0, 400), decision: "BLOCK", reason: "delete_unclear" });
     return hook.deny(
       "【删除未执行】删除目标不是具体路径，无法核对影响。\n" +
-        "把要删的路径逐个写出来，不要用通配符或变量；否则改用不删的做法。",
+        "把要删除的路径逐个写出来，不要用通配符或变量；否则改用其他做法。",
       event.point,
       event.sessionId,
     );
@@ -171,7 +171,7 @@ export function deleteGate(base: GuardBase, cmd: string): HookDecision {
     const why = sens.hits.map((h) => `${h.path}（${h.why}）`).join("；");
     const v = base.violate({ rule: "LOCAL-DELETE", label: "删除敏感区", evidence: why, decision: "BLOCK" });
     return hook.deny(
-      `【删除拦截】这些位置不允许删：${why}\n凭据与系统目录不提供申请通道。` + escalation(v.nth),
+      `【删除拦截】这些位置不允许删除：${why}\n凭据与系统目录不提供申请通道。` + escalation(v.nth),
       event.point,
       event.sessionId,
     );

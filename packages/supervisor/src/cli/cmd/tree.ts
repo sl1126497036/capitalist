@@ -37,7 +37,7 @@ const STATE_MARK: Record<string, string> = {
 function listTrees(root: string, all = false): number {
   const view = buildForestView(root);
   if (view.empty) {
-    process.stdout.write("台账是空的，没有树。\n");
+    process.stdout.write("台账为空，没有树，先在看板派单。\n");
     return 0;
   }
 

@@ -191,17 +191,17 @@ export function runGuard(root: string, supervisorPid: number): void {
 
     done = true;
     clearInterval(timer);
-    log(`[guard] ${new Date().toISOString()} 监工 pid ${supervisorPid} 连续 ${miss} 次不在，开始收它拉起的进程`);
+    log(`[guard] ${new Date().toISOString()} 监工 pid ${supervisorPid} 连续 ${miss} 次不在，开始回收该监工拉起的工作进程`);
 
     try {
       const reaped = reapOrphans(root, log, { onlySupervisorPid: supervisorPid });
       log(
         reaped.length > 0
-          ? `[guard] 已回收 ${reaped.length} 个 worker：${reaped.map((r) => r.id).join("、")}`
-          : "[guard] 没有需要收的 worker",
+          ? `[guard] 已回收 ${reaped.length} 个工作进程：${reaped.map((r) => r.id).join("、")}`
+          : "[guard] 没有需要回收的工作进程",
       );
     } catch (err) {
-      log(`[guard] 收进程失败：${err instanceof Error ? err.message : String(err)}`);
+      log(`[guard] 回收工作进程失败：${err instanceof Error ? err.message : String(err)}`);
     }
 
     clearGuard(root, process.pid);

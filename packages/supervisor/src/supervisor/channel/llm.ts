@@ -335,7 +335,7 @@ export function contextUsedOfAssistantMessage(o: unknown): number | null {
  * 与 {@link QUOTA_EXHAUSTED_TEXT} 分开：静默退出只是“没有任何诊断信息”，不等于额度耗尽。
  * 两者混用会让一次误判被写进 quota.json，而该状态不按时间过期，后续调用会直接短路。
  */
-export const NO_OUTPUT_TEXT = "模型进程无输出（code 0）：可能是登录失效、通道中断或上游拒绝";
+export const NO_OUTPUT_TEXT = "模型没有返回内容：请重试；若持续失败，请检查登录状态";
 
 /** stderr 过长时取尾部：失败原因通常出现在末尾。 */
 function tailOf(s: string, n = 600): string {
@@ -359,8 +359,8 @@ export function emptyExitReason(err: string, code: number | null, signal: NodeJS
    * 不再请求模型。额度判定只认含额度字样或 429 的情形（见 judgeFault）。
    */
   if (!tail && (code === 0 || (code === null && signal === null))) return NO_OUTPUT_TEXT;
-  if (tail) return "模型进程已退出，未输出正文（stderr 有诊断输出）";
-  return `模型进程退出（code ${code === null ? "null" : code}${signal ? `，${signal}` : ""}）`;
+  if (tail) return "模型已退出，没有返回内容：请重试或查看诊断信息";
+  return "模型已退出，没有返回内容";
 }
 
 /**
@@ -421,7 +421,7 @@ export async function askModel(opts: AskModelOptions): Promise<AskModelResult> {
   if (!argv) {
     return {
       ok: false,
-      text: "宿主入口只能经 shell 启动，提示词含换行时无法传递，调用已中止",
+      text: "无法传递带换行的提示词，本次调用已中止：请将内容放在单行内",
     };
   }
 
@@ -469,12 +469,10 @@ export async function askModel(opts: AskModelOptions): Promise<AskModelResult> {
         } catch {
           /* 已经退了 */
         }
-        const silent = !out.trim() && !err.trim();
         done({
           ok: false,
           text:
-            `模型连续 ${Math.round(idleMs / 1000)}s 没有任何输出（含启动与思考），判定为卡住` +
-            (silent ? "：全程无输出；常见原因为本地端口被占用或宿主 CLI 启动未完成，与登录态无关" : ""),
+            `模型连续 ${Math.round(idleMs / 1000)}s 没有响应，已中止：请重试`,
         });
       }, idleMs);
     };
@@ -574,7 +572,7 @@ export async function askModelStream(
   if (!argv) {
     return {
       ok: false,
-      text: "宿主入口只能经 shell 启动，提示词含换行时无法传递，调用已中止",
+      text: "无法传递带换行的提示词，本次调用已中止：请将内容放在单行内",
     };
   }
 
@@ -676,8 +674,7 @@ export async function askModelStream(
           ok: false,
           text:
             text ||
-            `模型连续 ${Math.round(idleMs / 1000)}s 没有任何输出，判定为卡住` +
-              (!err.trim() ? "：全程无输出；常见原因为本地端口被占用或宿主 CLI 启动未完成，与登录态无关" : ""),
+            `模型连续 ${Math.round(idleMs / 1000)}s 没有响应，已中止：请重试`,
         });
       }, idleMs);
     };

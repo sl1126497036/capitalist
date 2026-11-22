@@ -404,9 +404,9 @@ export function runCommand(root: string, raw: unknown): CommandResult {
           ...(woke ? { woke } : {}),
           // 生效时机由服务端给定；工作进程是一次性进程，追加的消息只对下一次派单生效。
           effective: woke
-            ? `已唤醒原派单 ${woke} · 下一轮携带本条消息继续执行（保留原上下文）`
+            ? `已唤醒原派单 ${woke} | 本条消息随该单继续执行`
             : target
-              ? `下一次 ${target} 分片派单`
+              ? `待 ${target} 分片下次派单时带入`
               : "下一次任意派单",
           detail,
         },
@@ -458,10 +458,10 @@ export function runCommand(root: string, raw: unknown): CommandResult {
           ...(r.behind ? { behind: r.behind } : {}),
           detail: `越过 ${r.ahead} 张排队单${r.already ? "（重复置顶，已刷新到队首）" : ""}`,
           effective: r.behind
-            ? `已置顶 · 立即执行单 ${r.behind} 仍运行中，这一单排在它之后`
+            ? `已置顶，立即执行单 ${r.behind} 仍运行中，这一单排在它之后`
             : willRun
-              ? `已置顶：当前 ${live}/${cap} 槽有空，即将启动`
-              : `已置顶：挂起一个运行中的任务释放槽位；被让位的任务显示“已让位”，这一单结束后按原顺序恢复`,
+              ? `已置顶，有空闲并发名额，即将启动`
+              : `已置顶，挂起一个运行中的任务以让出并发名额；被让位的任务显示“已让位”，这一单结束后按原顺序恢复`,
         },
       };
     }
@@ -591,7 +591,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
         ? `${what}：当前这一轮仍用原模型，结束后这一单的后续轮次使用新模型`
         : isTerminal(d.status)
           ? `${what}：这一单已结束，重开或追问时使用新模型`
-          : `${what}：这一单下次拉起时使用新模型`;
+          : `${what}：这一单下次启动时使用新模型`;
       return {
         status: 200,
         body: {

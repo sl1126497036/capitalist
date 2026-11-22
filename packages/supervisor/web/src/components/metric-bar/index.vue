@@ -115,7 +115,7 @@ async function post(action) {
   busy.value = true;
   try {
     const d = await command(action);
-    flash(d.effective || t("指令已登记，下一轮调度生效"), false);
+    flash(d.effective || t("已登记待调度"), false);
   } catch (e) {
     flash(t("操作未生效：{m}", { m: e instanceof Error ? e.message : String(e) }), true);
   } finally {
@@ -133,7 +133,7 @@ async function togglePause() {
     const d = await command(action);
     emit("pause", action === "pause");
     emit("refresh");
-    flash(d.effective || t("指令已登记，下一轮调度生效"), false);
+    flash(d.effective || t("已登记待调度"), false);
   } catch (e) {
     flash(t("操作未生效：{m}", { m: e instanceof Error ? e.message : String(e) }), true);
   } finally {

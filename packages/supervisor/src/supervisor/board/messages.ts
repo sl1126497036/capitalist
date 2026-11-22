@@ -267,9 +267,9 @@ export function threadMessages(
         kind: "tool",
         text: live
           ? fresh
-            ? "进程运行中 · 正在输出"
-            : `进程运行中 · 日志 ${Math.round(idle)}s 前更新`
-          : "进程已结束 · 无输出文本 · 日志仅含宿主运行记录",
+            ? "进程运行中，正在输出"
+            : `进程运行中，日志 ${Math.round(idle)} 秒前更新`
+          : "进程已结束，无输出文本，日志仅含宿主运行记录",
         tool: "",
         cmd: "",
         status: worker.status,
@@ -533,19 +533,19 @@ export function threadMessages(
         ? (() => {
             const via = String((r as { consumed_via?: unknown }).consumed_via ?? "");
             /* 无进程接收的记录不能显示成“已并入派单”，否则用户会误以为内容已进入执行。 */
-            if (via === "dropped") return "未投递 · 所属单已随阶段推进作废";
+            if (via === "dropped") return "未投递，所属派单已随阶段推进作废";
             const viaHook = via === "hook";
             const base = viaHook ? "已送达执行中的进程" : "已并入派单";
             const outcome = String((r as { outcome?: unknown }).outcome ?? "");
             const tail =
               outcome === "done"
-                ? " · 已落实"
+                ? " | 已执行"
                 : outcome === "not_mine"
-                  ? " · 判为不属本单"
+                  ? " | 不属于本任务"
                   : outcome === "blocked"
-                    ? " · 卡住"
+                    ? " | 卡住"
                     : (r as { delivered?: unknown }).delivered === true
-                      ? " · 待结论"
+                      ? " | 待完结"
                       : "";
             return base + tail;
           })()

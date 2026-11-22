@@ -4,7 +4,7 @@ import type { Parsed } from "../args";
 import { rootOrDie } from "./context";
 
 const USAGE =
-  '用法：capitalist lock status [<路径>] ｜ capitalist lock release <路径> [--force] ｜ capitalist lock reap';
+  '用法：capitalist lock status [<路径>] | capitalist lock release <路径> [--force] | capitalist lock reap';
 
 function say(s: string): void {
   process.stdout.write(`${s}\n`);

@@ -158,7 +158,7 @@ export async function generateContract(opts: {
       next: String(s.next ?? ""),
       done: s.done,
     }));
-  if (stages.length === 0) return { ok: false, path, why: "返回里没有可用的阶段（id/name/done 缺失）", stages: [] };
+  if (stages.length === 0) return { ok: false, path, why: "模型返回的任务列表没有可用的阶段（缺少阶段编号、名称或完成条件）。", stages: [] };
 
   const contract = {
     name: typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : `${basename(opts.root)}-generated`,

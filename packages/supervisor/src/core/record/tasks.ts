@@ -382,8 +382,8 @@ export function createTask(
 /** 一行摘要，给 `capitalist status` / 看板直接贴。 */
 export function summaryLine(s: TaskSummary): string {
   return (
-    `任务池 ${s.total} 项 ｜ 已派 ${s.dispatched} ｜ 待确认 ${s.submitted} ｜ ` +
-    `已验收 ${s.accepted} ｜ 失败待重试 ${s.failed} ｜ 已关闭 ${s.voided} ｜ 未完成 ${s.remaining}`
+    `任务池 ${s.total} 项 | 已派 ${s.dispatched} | 待确认 ${s.submitted} | ` +
+    `已验收 ${s.accepted} | 失败待重试 ${s.failed} | 已关闭 ${s.voided} | 未完成 ${s.remaining}`
   );
 }
 

@@ -205,7 +205,7 @@
               role="button"
               tabindex="0"
               :aria-label="`${t('唤醒')} ${r.title}`"
-              :data-tip="t('只解除这一张；全局暂停解除后参与调度')"
+              :data-tip="t('只解除这一张，转为待调度')"
               @click.stop="wakeTap(r)"
               @keydown.enter.stop.prevent="wakeTap(r)"
             >

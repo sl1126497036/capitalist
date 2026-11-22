@@ -492,7 +492,7 @@ export function isSafeWorkerId(id: string): boolean {
  */
 export function workerPath(root: string, id: string): string {
   if (!isSafeWorkerId(id)) {
-    throw new Error(`worker id 非法：${JSON.stringify(id)}；只允许字母、数字与 - _ . ，且不得含 ..`);
+    throw new Error(`进程号非法：${JSON.stringify(id)}；只允许字母、数字与 - _ .，且不得含 ..`);
   }
   return workers.record(root, id);
 }
@@ -505,7 +505,7 @@ export function workerPath(root: string, id: string): string {
  */
 export function workerLogPath(root: string, id: string): string {
   if (!isSafeWorkerId(id)) {
-    throw new Error(`worker id 非法：${JSON.stringify(id)}；只允许字母、数字与 - _ . ，且不得含 ..`);
+    throw new Error(`进程号非法：${JSON.stringify(id)}；只允许字母、数字与 - _ .，且不得含 ..`);
   }
   return workers.output(root, id);
 }
@@ -1133,7 +1133,7 @@ export function sweepReported(root: string, maxAgeMs = 10 * 60_000): Dispatch[] 
     const age = Number.isFinite(at) ? now - at : Number.POSITIVE_INFINITY;
     if (age < maxAgeMs) continue;
     d.status = "open";
-    d.note = "上报后一直没人裁决，退回重派";
+    d.note = "上报后长时间无人裁决，退回排队";
     hit.push(d);
   }
   if (hit.length > 0) writeJsonl(dispatchPath(root), rows);
@@ -1500,7 +1500,7 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
   const p = String(parentId ?? "").trim();
   if (!p) return { ok: true, code: "", reason: "" };
   if (childId && p === childId) {
-    return { ok: false, code: "self_parent", reason: `父节点不能是本单自己（${p}）` };
+    return { ok: false, code: "self_parent", reason: `父节点不能是本单（${p}）` };
   }
   if (!String(reason ?? "").trim()) {
     return {
@@ -1515,14 +1515,14 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
     return {
       ok: false,
       code: "missing_parent",
-      reason: `父派单“${p}”在台账里找不到：先派父节点，或核对编号后重发（依赖不落数据就不生效）`,
+      reason: `父节点“${p}”在台账里找不到：先建该节点，或核对编号后重发`,
     };
   }
   if (parent.status === "closed") {
     return {
       ok: false,
       code: "closed_parent",
-      reason: `父派单 ${p} 已被结束（closed），不会再有产出：本单不挂父节点重发，或改挂仍会产出的前置`,
+      reason: `父节点 ${p} 已关闭，不会再有产出：本单不挂父节点重发，或改挂仍会产出的前置`,
     };
   }
   if (parent.status === "failed" && String((parent as { retry_verdict?: string }).retry_verdict ?? "") === "give_up") {
@@ -1530,8 +1530,8 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
       ok: false,
       code: "dead_parent",
       reason:
-        `父派单 ${p} 已判定失败且不再重试（${String(parent.note ?? "").slice(0, 60) || "无备注"}）：` +
-        `挂上去只会永久等待。要么先 capitalist retry ${p} 让它重新可跑，要么本单不挂父节点`,
+        `父节点 ${p} 已判定失败且不再重试（${String(parent.note ?? "").slice(0, 60) || "无备注"}）：` +
+        `挂上它将永久等待；要么先执行 capitalist retry ${p} 使其可重新派发，要么本单不挂父节点`,
     };
   }
   /* 上溯：父节点自己已经挂在环里，或者（改挂时）绕回本单，都是成环。 */

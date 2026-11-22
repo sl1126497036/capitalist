@@ -53,7 +53,7 @@ export function assignGroup(root: string, ids: readonly string[], groupId: strin
     const group = resolveGroupRef(root, want);
     if (!group) return fail([{ id: want, reason: `分组 ${want} 不存在：先执行 capitalist tree group new <标题> 建组` }]);
     if (String(group.state ?? "") === "closed") {
-      return fail([{ id: want, reason: `分组 ${want} 已解散：新建一个组后重试` }]);
+      return fail([{ id: want, reason: `分组 ${want} 已解散：不能作为前置。改挂仍在推进的前置，或新建一个组后重试。` }]);
     }
   }
 
@@ -137,9 +137,9 @@ export function reassignParent(
     const gid = normalizeGroupId(parent);
     if (gid) {
       const group = resolveGroupRef(root, gid);
-      if (!group) return fail([{ id: gid, reason: `分组 ${gid} 不存在` }]);
+      if (!group) return fail([{ id: gid, reason: `分组 ${gid} 不存在：先执行 capitalist tree group new <标题> 建组` }]);
       if (String(group.state ?? "") === "closed") {
-        return fail([{ id: gid, reason: `分组 ${gid} 已解散` }]);
+        return fail([{ id: gid, reason: `分组 ${gid} 已解散：不能作为前置。改挂仍在推进的前置，或新建一个组后重试。` }]);
       }
     } else if (!byId.has(parent)) {
       return fail([{ id: parent, reason: `父节点 ${parent} 不在台账里` }]);
@@ -157,7 +157,7 @@ export function reassignParent(
       if (up.has(id)) errors.push({ id, reason: `改挂到 ${parent} 会成环：${parent} 已在 ${id} 的下游` });
     }
   }
-  for (const id of ids_) if (!byId.has(id)) errors.push({ id, reason: "派单不在台账里" });
+  for (const id of ids_) if (!byId.has(id)) errors.push({ id, reason: "派单不在台账里（可能已归档）：先核对编号" });
   if (errors.length > 0) return fail(errors);
 
   const next = rows.map((d) => {
@@ -179,10 +179,10 @@ export function reassignParent(
 /** 解散组：下游按已收尾放行。不改成员记录，成员的 `group` 字段保留供追溯。 */
 export function closeGroup(root: string, groupId: string, note: string): TreeChangeResult {
   const id = normalizeGroupId(groupId);
-  if (!id) return fail([{ id: String(groupId), reason: "不是组号" }]);
+  if (!id) return fail([{ id: String(groupId), reason: "不是组号：写成 #G01 或 GROUP: new <组标题>" }]);
   const groups = readGroups(root);
   const hit = groups.find((g) => g.id === id);
-  if (!hit) return fail([{ id, reason: `分组 ${id} 不存在` }]);
+  if (!hit) return fail([{ id, reason: `分组 ${id} 不存在：先执行 capitalist tree group new <标题> 建组` }]);
   const next = groups.map((g) =>
     g.id === id
       ? { ...g, state: "closed" as const, ...(note ? { note } : {}) }

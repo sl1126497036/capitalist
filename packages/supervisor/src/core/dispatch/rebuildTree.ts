@@ -248,7 +248,7 @@ export function planRebuild(root: string): RebuildPlan {
   });
   const forest = dispatchForest(fake);
   for (const cyc of forest.cycles) {
-    warnings.push(`重建会造出环（${cyc.join(" ↔ ")}）：已放弃这些边，保持为根`);
+    warnings.push(`重建会造出环（${cyc.join(" - ")}）：已放弃这些边，保持为根`);
     for (const id of cyc) {
       const it = items.find((x) => x.id === id);
       if (it) {

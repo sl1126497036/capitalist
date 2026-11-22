@@ -123,9 +123,9 @@ export function sayStatus(s, no, reason, detail) {
     const why = rejectTail(reason, detail);
     return (why ? `${t("失败")}：${why}` : t("失败")) + tail;
   }
-  if (head === "pending") return t("等待下一轮调度") + tail;
+  if (head === "pending") return t("待调度") + tail;
   if (head === "已并入派单") {
-    const base = b ? t("已并入派单 #{no}；随该单启动生效", { no: b }) : t("已并入派单；随该单启动生效");
+    const base = b ? t("已并入派单 #{no}", { no: b }) : t("已并入派单");
     return base + tail;
   }
   if (head === "已送达执行中的进程") {
@@ -134,8 +134,8 @@ export function sayStatus(s, no, reason, detail) {
   }
   if (head === "未投递") return t("未投递") + tail;
   if (head === "随派单启动带入") return t("随派单启动带入");
-  if (head === "已登记，进程下一次动作间隙送达") return t("已登记，进程下一次动作间隙送达");
-  if (head === "已登记，随归属单带入") return t("已登记，随归属单带入");
+  if (head === "已登记，进程下一次动作间隙送达") return t("已登记待送达");
+  if (head === "已登记，随归属单带入") return t("已登记待带入");
   if (head === "待补投递") return t("待补投递");
   return "";
 }

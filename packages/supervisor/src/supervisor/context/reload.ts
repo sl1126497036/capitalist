@@ -1088,11 +1088,11 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
       id,
       stage: item.stage,
       shard: item.shard,
-      title: `复验 · ${clipText(item.title, 40)}`,
+      title: `复验：${clipText(item.title, 40)}`,
       action: reverifyAction(item),
       source: "reverify",
       attempt: 1,
-      note: `重载 gen ${plan.gen} 派出的复验单：${item.why}`,
+      note: `第 ${plan.gen} 次重载派出的复验单：${item.why}`,
     });
     appendDispatch(root, d);
     recordEvent(root, "dispatch_reverify", {
@@ -1938,8 +1938,8 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
   const running = reloadStatus(root);
   if (running.active) {
     throw new Error(
-      `已有重载在进行中（gen ${running.gen}，阶段 ${running.phase}，已 ${running.age_sec}s）。等它结束再重载；` +
-        `进程若已崩，${Math.round(RELOAD_STALE_MS / 60000)} 分钟后标记自动失效。`,
+      `已有重载在进行中（第 ${running.gen} 次，阶段 ${running.phase}，已 ${running.age_sec} 秒）。等它结束再重载。` +
+        `进程若已退出，${Math.round(RELOAD_STALE_MS / 60000)} 分钟后标记自动失效。`,
     );
   }
 
@@ -2036,8 +2036,8 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
   }
 
   out(
-    `[监工] 重载完成 gen ${gen}：快照 ${snap.items.length} 片｜` +
-      `${doCompress ? `上下文 ${snap.metrics.before_chars} -> ${afterChars} 字（移除 ${snap.metrics.events_dropped} 条心跳/tick/已完成明细）` : "未压缩（交给宿主）"}｜` +
+    `[监工] 第 ${gen} 次重载完成：快照 ${snap.items.length} 片｜` +
+      `${doCompress ? `上下文 ${snap.metrics.before_chars} 至 ${afterChars} 字（移除 ${snap.metrics.events_dropped} 条状态检查与已完成明细）` : "未压缩（交给宿主）"}｜` +
       `不重派 ${plan.skip.length}｜待复验 ${plan.reverify.length}` +
       (plan.deferred.length ? `｜只记录 ${plan.deferred.length}` : "") +
       `｜继续 ${plan.pending.length}`,

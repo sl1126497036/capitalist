@@ -617,8 +617,8 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
 
   const parts: string[] = [];
   if (forest.cycles.length > 0) {
-    const groupText = forest.cycles.map((g) => g.map((id) => id).join(" ↔ ")).join("；");
-    parts.push(`台账存在成环的父节点关系（${groupText}），这些节点收进“脏数据”树，调度侧不会推动它们。`);
+    const groupText = forest.cycles.map((g) => g.map((id) => id).join(" - ")).join("；");
+    parts.push(`任务记录存在成环的父子关系（${groupText}）。这些节点归入异常树，调度不会推动它们。`);
   }
   if (forest.orphans.length > 0) parts.push(`${forest.orphans.length} 个节点的父节点不在台账里，按独立树处理。`);
 

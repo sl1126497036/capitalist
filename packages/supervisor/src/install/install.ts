@@ -161,7 +161,7 @@ function readSettings(file: string): Record<string, unknown> {
   try {
     parsed = JSON.parse(readFileSync(file, "utf8"));
   } catch {
-    throw new Error(`${file} 不是合法 JSON，拒绝覆盖。请先手工修复或备份后重试。`);
+    throw new Error(`${file} 不是合法 JSON，拒绝覆盖。请先手动修复或备份后重试。`);
   }
   return parsed && typeof parsed === "object" && !Array.isArray(parsed)
     ? (parsed as Record<string, unknown>)
@@ -213,8 +213,8 @@ function ensureWatchConfig(dryRun: boolean): string | null {
   if (existsSync(file)) return null;
   const template = {
     _说明:
-      "自动纳管规则：cwd 的路径段连续匹配 match 时，把匹配段之后的第一级目录作为任务根。"
-      + "在该目录（或它的子目录）里第一次发话就会建根，之后不需要 capitalist start。",
+      "自动纳管规则：当前工作目录的路径段连续匹配 match 时，把匹配段之后的第一级目录作为任务根。"
+      + "在该目录（或它的子目录）里第一次发送消息就会建立任务根，之后不需要 capitalist start。",
     _示例: { match: ["projects", "web"], contract: "minimal", exclude: ["node_modules", "dist"] },
     rules: [],
   };
@@ -230,13 +230,13 @@ export function runUninstall(opts: UninstallOptions): number {
   const { impls, unknown } = resolveHosts(opts.hosts);
   if (unknown.length > 0) {
     process.stderr.write(
-      `✗ 未知的 agent：${unknown.join(" / ")}\n  可用：${all().map((impl) => impl.id).join(" | ")}\n`,
+      `✗ 未知的宿主：${unknown.join(" / ")}\n  可用：${all().map((impl) => impl.id).join(" | ")}\n`,
     );
     return 1;
   }
   if (impls.length === 0) {
     process.stderr.write(
-      "✗ 没有检测到可卸载的 agent\n" +
+      "✗ 没有检测到可卸载的宿主\n" +
         `  用 --agent 指定：${all().map((impl) => impl.id).join(" | ")}\n`,
     );
     return 1;
@@ -315,17 +315,17 @@ export function runUninstall(opts: UninstallOptions): number {
   }
 
   if (done.length > 0) {
-    process.stdout.write(`✓ 卸载成功 · ${done.map((impl) => impl.label).join("、")}\n`);
+    process.stdout.write(`✓ 卸载成功：${done.map((impl) => impl.label).join("、")}\n`);
     process.stdout.write("  宿主重启后 hook 才停止加载\n");
     process.stdout.write("  任务数据已保留；移除包本体：npm uninstall -g capitalist\n");
   }
   for (const f of failed) {
-    process.stderr.write(`✗ 卸载失败 · ${f.label}\n`);
+    process.stderr.write(`✗ 卸载失败：${f.label}\n`);
     for (const line of f.reasons) process.stderr.write(`  ${line}\n`);
   }
   if (opts.verbose === true && details.length > 0) {
     process.stdout.write("\n");
-    for (const line of details) process.stdout.write(`  · ${line}\n`);
+    for (const line of details) process.stdout.write(`  - ${line}\n`);
   }
   return failed.length > 0 ? 1 : 0;
 }
@@ -454,7 +454,7 @@ export async function runInstall(opts: InstallOptions): Promise<number> {
   const { impls, unknown } = resolveHosts(opts.hosts);
   if (unknown.length > 0) {
     process.stderr.write(
-      `✗ 未知的 agent：${unknown.join(" / ")}\n  可用：${all().map((impl) => impl.id).join(" | ")}\n`,
+      `✗ 未知的宿主：${unknown.join(" / ")}\n  可用：${all().map((impl) => impl.id).join(" | ")}\n`,
     );
     return 1;
   }
@@ -462,7 +462,7 @@ export async function runInstall(opts: InstallOptions): Promise<number> {
   const installable = impls.filter((impl) => impl.install);
   if (installable.length === 0) {
     process.stderr.write(
-      "✗ 没有检测到可安装的 agent\n" +
+      "✗ 没有检测到可安装的宿主\n" +
         `  用 --agent 指定：${all().map((impl) => impl.id).join(" | ")}\n`,
     );
     return 1;
@@ -550,21 +550,21 @@ export async function runInstall(opts: InstallOptions): Promise<number> {
 
   if (done.length > 0) {
     const label = done.map((impl) => impl.label).join("、");
-    process.stdout.write(dryRun ? `（dry-run）将安装 · ${label}\n` : `✓ 安装成功 · ${label}\n`);
+    process.stdout.write(dryRun ? `（dry-run）将安装：${label}\n` : `✓ 安装成功：${label}\n`);
     if (!dryRun) process.stdout.write("  重启宿主后生效\n");
   } else if (failed.length === 0) {
-    process.stderr.write("✗ 没有可安装的 agent\n");
+    process.stderr.write("✗ 没有可安装的宿主\n");
     for (const line of notes) process.stderr.write(`  ${line}\n`);
     return 1;
   }
   for (const f of failed) {
-    process.stderr.write(`✗ 安装失败 · ${f.label}\n`);
+    process.stderr.write(`✗ 安装失败：${f.label}\n`);
     for (const line of f.reasons) process.stderr.write(`  ${line}\n`);
   }
   if (verbose && (details.length > 0 || notes.length > 0)) {
     process.stdout.write("\n");
-    for (const line of details) process.stdout.write(`  · ${line}\n`);
-    for (const line of notes) process.stdout.write(`  · ${line}\n`);
+    for (const line of details) process.stdout.write(`  - ${line}\n`);
+    for (const line of notes) process.stdout.write(`  - ${line}\n`);
   }
   if (dryRun) process.stdout.write("\n（dry-run：以上改动未落盘）\n");
   return failed.length > 0 ? 1 : 0;

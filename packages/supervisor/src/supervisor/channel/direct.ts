@@ -207,7 +207,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     const looksChinese = /[\u4e00-\u9fa5]/.test(raw) && raw.length >= 6;
     if (looksChinese) return { action: "instruct" as SupervisorAction, arg: raw, confirm: false };
     return {
-      error: `未知动作“${head || raw}”。可用动作：${CAPITALIST_ACTIONS.join(" / ")}（中文同义词同样可用；整句自然语言会按 instruct 解析）`,
+      error: `未知动作“${head || raw}”：请改用支持的指令`,
     };
   }
 
@@ -228,11 +228,11 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     return {
       error:
         `${action} 缺少内容：写成 ${action} <受阻原因>。` +
-        "diagnose 只查不改（只读诊断），fix 查完直接修；两者都用全新进程、不占业务槽位。",
+        "diagnose 只诊断不修改，fix 诊断后直接修复。",
     };
   }
   if (action === "instruct" && !rest) {
-    return { error: "instruct 缺少内容：请写明要执行的操作，例如“把 UI 相关的任务都停掉”" };
+    return { error: "请写明要执行的操作，例如“把 UI 相关的任务都停掉”" };
   }
   if (action === "ask" && !rest) {
     return { error: "ask 缺少问题：写成 ask <一句话>" };
@@ -282,7 +282,7 @@ export function appendSupervisorDirective(
 
   if (explicit) {
     if (!(CAPITALIST_ACTIONS as readonly string[]).includes(explicit)) {
-      return { ok: false, error: `未知动作“${explicit}”。可用动作：${CAPITALIST_ACTIONS.join(" / ")}` };
+      return { ok: false, error: `未知动作“${explicit}”：请改用支持的指令` };
     }
     action = explicit as SupervisorAction;
   } else {
@@ -358,7 +358,7 @@ export function appendSupervisorDirective(
   }
 
   if (!appendJsonl(supervisorDirectPath(root), rec)) {
-    return { ok: false, error: "指令写入失败（.capitalist 不可写？）" };
+    return { ok: false, error: "指令写入失败：请检查任务目录是否可写" };
   }
   recordEvent(root, "supervisor_direct_inject", {
     id: rec.id,

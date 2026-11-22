@@ -219,8 +219,8 @@ export function yieldedOf(d: Dispatch): { yielded_at?: string; yielded_by?: stri
 export function yieldedReason(d: Dispatch): string {
   const by = String(d.yielded_by ?? "").trim();
   return by
-    ? `已为立即执行派单 ${by} 释放槽位，该单结束后按原顺序恢复`
-    : "已为立即执行派单释放槽位，该单结束后按原顺序恢复";
+    ? `已让位给立即执行单 ${by}，该单结束后按原顺序恢复`
+    : "已让位给立即执行单，该单结束后按原顺序恢复";
 }
 
 export const WORKER_ACTION_TAIL_BYTES = 256 * 1024;
@@ -507,8 +507,8 @@ export function buildThreadsPageUncached(
     else if (d.yielded_at) reason = yieldedReason(d);
     else if (isHeld(d.shard)) reason = "人工接管中，监工不自动派单";
     else if (capacity <= 0) reason = "等待外部领单（--no-spawn）";
-    else if (running >= capacity) reason = `等待空槽（并行度 ${running}/${capacity}）`;
-    else reason = "等待派发（槽位未满）";
+    else if (running >= capacity) reason = `并发名额已满（${running}/${capacity}），等待空位`;
+    else reason = "等待派发（有空闲并发名额）";
     threads.set(key, {
       id: key,
       no: "",
@@ -574,8 +574,8 @@ export function buildThreadsPageUncached(
       else if (d.yielded_at) reason = yieldedReason(d);
       else if (isHeld(d.shard)) reason = "人工接管中，监工不自动派单";
       else if (capacity <= 0) reason = "等待外部领单（--no-spawn）";
-      else if (running >= capacity) reason = `等待空槽（并行度 ${running}/${capacity}）`;
-      else reason = "等待派发（槽位未满）";
+      else if (running >= capacity) reason = `并发名额已满（${running}/${capacity}），等待空位`;
+      else reason = "等待派发（有空闲并发名额）";
       t.queued_reason = reason;
     }
   }

@@ -203,19 +203,19 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
     return {
       decision: "continue",
       why: detail
-        ? `判定通道不可用：${detail.slice(0, 160)}。流程继续。`
-        : "判定通道不可用：模型未给出失败原因。流程继续。",
+        ? `自动判定不可用：${detail.slice(0, 160)}。流程继续。`
+        : "自动判定不可用：模型未给出失败原因。流程继续。",
       fallback: true,
       error: String(r.error ?? "").slice(0, 400),
     };
   }
   const first = r.actions[0];
-  if (!first) return { decision: "continue", why: "模型未给出动作", fallback: true, error: "模型返回了内容但没有第一个动作" };
+  if (!first) return { decision: "continue", why: "模型未给出动作", fallback: true, error: "模型返回了内容，但没有可执行的动作。" };
   const decision = first.name as TriageDecision;
   const say = decision === "nudge" || decision === "reject" ? String(first.arg ?? "").trim() : "";
   return {
     decision,
-    why: String(first.why ?? "").slice(0, 240) || "(模型未给理由)",
+    why: String(first.why ?? "").slice(0, 240) || "(模型未给出理由)",
     ...(say ? { say: say.slice(0, 200) } : {}),
   };
 }

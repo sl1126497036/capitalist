@@ -63,7 +63,7 @@ export const impl: HostImpl = {
     // hook 命令本身不经 shell 语法；宿主若以 Git Bash 为执行器，缺 bash 时条目写入但不触发。
     preconditions: (ctx) =>
       ctx.platform === "win32" && !gitBashAvailable(ctx.platform)
-        ? ["本机未见 bash.exe：宿主若经 Git Bash 执行 hook，条目会写入但不触发；改用其它宿主，或装 Git for Windows"]
+        ? ["本机未见 bash.exe：宿主若经 Git Bash 执行 hook，条目会写入但不触发；改用其他宿主，或安装 Git for Windows"]
         : [],
   }),
 

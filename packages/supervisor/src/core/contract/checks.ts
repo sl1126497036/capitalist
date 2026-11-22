@@ -94,7 +94,7 @@ function readText(p: string): { text: string } | { error: string } {
 function failKeys(spec: Spec, rel: string, lack: string[]): CheckResult {
   const tpl = typeof spec.msg === "string" ? spec.msg : "";
   if (tpl.includes("{k}")) return { ok: false, missing: lack.map((k) => tpl.replace(/\{k\}/g, k)) };
-  return fail(spec, `${rel} 缺键：${lack.join("、")}`, lack.length);
+  return fail(spec, `${rel} 缺少键：${lack.join("、")}`, lack.length);
 }
 
 /** 秒级时间戳；接受数字与 ISO 字符串，取不到返回 0。 */
@@ -162,10 +162,10 @@ function checkAssertion(data: unknown, a: Assertion, rel: string): string | null
   const got = pickPath(data, a.path);
   if (!got.found) {
     return a.op === "truthy"
-      ? `${head}：期望 truthy，实际 缺失`
+      ? `${head}：期望为真，实际缺失`
       : a.op === "falsy"
         ? null // 缺字段按“没有这个元素”处理
-        : `${head}：期望 ${a.op || "（空）"} ${show(a.value)}，实际 缺失`;
+        : `${head}：期望 ${a.op || "（空）"} ${show(a.value)}，实际缺失`;
   }
 
   const actual = got.value;
@@ -201,16 +201,16 @@ function checkAssertion(data: unknown, a: Assertion, rel: string): string | null
       const want = Number(a.value);
       const tol = a.tol === undefined || a.tol === null ? 0 : Number(a.tol);
       if (typeof actual !== "number" || !Number.isFinite(actual) || !Number.isFinite(want) || !Number.isFinite(tol)) {
-        return `${head}：期望 near ${show(a.value)} ± ${show(a.tol ?? 0)}，实际 ${show(actual)}（不是可比的数值）`;
+        return `${head}：期望 near ${show(a.value)} ± ${show(a.tol ?? 0)}，实际 ${show(actual)}（不是数值，无法比较）`;
       }
       return Math.abs(actual - want) <= tol
         ? null
         : `${head}：期望 near ${show(want)} ± ${show(tol)}，实际 ${show(actual)}`;
     }
     case "truthy":
-      return actual ? null : `${head}：期望 truthy，实际 ${show(actual)}`;
+      return actual ? null : `${head}：期望为真，实际 ${show(actual)}`;
     case "falsy":
-      return actual ? `${head}：期望 falsy，实际 ${show(actual)}` : null;
+      return actual ? `${head}：期望为假，实际 ${show(actual)}` : null;
     default:
       return `${head}：未知断言类型 ${a.op || "（空）"}（无法判定，不等于已满足）`;
   }
@@ -229,7 +229,7 @@ const CHECKS: Record<string, Checker> = {
   file_exists: (spec, root) => {
     const rel = String(spec.path ?? "");
     const p = join(root, rel);
-    if (!existsSync(p)) return fail(spec, `缺文件：${rel}`);
+    if (!existsSync(p)) return fail(spec, `缺少文件：${rel}`);
     // existsSync 与 statSync 之间存在竞态（并发删除），stat 一次拿不到就按不达标处理。
     let size: number;
     try {
@@ -271,7 +271,7 @@ const CHECKS: Record<string, Checker> = {
     }).length;
     if (lacking === 0) return { ok: true, missing: [] };
     if (rows.length === 0) return fail(spec, `${rel} 是空的（0 行）`, 0);
-    return fail(spec, `${lacking} 行缺字段 ${field}`, lacking);
+    return fail(spec, `${lacking} 行缺少字段 ${field}`, lacking);
   },
 
   jsonl_status_min: (spec, root) => {
@@ -349,7 +349,7 @@ const CHECKS: Record<string, Checker> = {
   file_contains_all: (spec, root) => {
     const rel = String(spec.path ?? "");
     const p = join(root, rel);
-    if (!existsSync(p)) return fail(spec, `缺文件：${rel}`);
+    if (!existsSync(p)) return fail(spec, `缺少文件：${rel}`);
     const read = readText(p);
     if ("error" in read) return fail(spec, `${rel} ${read.error}`);
     const needRes = strListOrFail(spec, "contains", "file_contains_all.contains");
@@ -357,7 +357,7 @@ const CHECKS: Record<string, Checker> = {
     const lack = needRes.list.filter((w) => !read.text.includes(w));
     return lack.length === 0
       ? { ok: true, missing: [] }
-      : fail(spec, `${rel} 缺要素：${lack.join("、")}`, lack.length);
+      : fail(spec, `${rel} 缺少要素：${lack.join("、")}`, lack.length);
   },
 
   glob_all_contains: (spec, root) => {
@@ -389,13 +389,13 @@ const CHECKS: Record<string, Checker> = {
     }
     return bad.length === 0
       ? { ok: true, missing: [] }
-      : fail(spec, `${bad.length} 个文件缺要素：${bad.slice(0, 5).join("、")}`, bad.length);
+      : fail(spec, `${bad.length} 个文件缺少要素：${bad.slice(0, 5).join("、")}`, bad.length);
   },
 
   mtime_after_stage: (spec, root) => {
     const rel = String(spec.path ?? "");
     const p = join(root, rel);
-    if (!existsSync(p)) return fail(spec, `缺文件：${rel}`);
+    if (!existsSync(p)) return fail(spec, `缺少文件：${rel}`);
     const state = readJson<Record<string, unknown> | null>(runtimeLoc.state(root), null);
 
     // 时间基准由具体到宽泛：优先本阶段进入时刻，其次 `created_at`。早于该字段出现的
@@ -418,7 +418,7 @@ const CHECKS: Record<string, Checker> = {
     } catch (err) {
       return fail(spec, `读不到 ${rel} 的修改时间（${errCode(err)}）`);
     }
-    return mtime >= entered ? { ok: true, missing: [] } : fail(spec, `${rel} 本阶段没更新过`);
+    return mtime >= entered ? { ok: true, missing: [] } : fail(spec, `${rel} 本阶段未更新`);
   },
 
   evidence_complete: (spec, root) => {
@@ -460,7 +460,7 @@ const CHECKS: Record<string, Checker> = {
     }
     return {
       ok: false,
-      missing: [`以下条件至少要满足一条：`, ...failures.map((f) => `  · ${f}`)],
+      missing: [`以下条件至少要满足一条：`, ...failures.map((f) => `  - ${f}`)],
     };
   },
 

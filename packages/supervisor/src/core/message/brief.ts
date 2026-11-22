@@ -39,14 +39,14 @@ interface Texts {
 
 const TEXTS: Record<BriefLang, Texts> = {
   zh: {
-    fallbackHead: "▸ 通用任务列表 · 无领域判据（不阻断）",
+    fallbackHead: "通用任务列表，无领域判据（不阻断）",
     fallbackBody: [
-      "  未指定领域任务列表，跑的是通用三阶段：通用红线（破坏性删除 / SQL 清库 / 凭据）生效，",
+      "  未指定领域任务列表，使用通用三阶段：通用红线（破坏性删除、SQL 清库、凭据）生效，",
       "  但该领域的完成判据与禁止动作未定义。",
       "  若这是明确领域任务：capitalist adopt --contract <任务列表名>",
     ],
-    mode: (m) => `▸ 权限档位：${m}（非默认，动作被拦可能由档位导致，而非任务列表红线）`,
-    head: (domain, target, stage, name) => `【capitalist · ${domain}】${target} ｜ 阶段 ${stage} ${name}`,
+    mode: (m) => `权限档位：${m}（非默认，动作被拦截可能由档位导致，而非任务列表红线）`,
+    head: (domain, target, stage, name) => `【capitalist | ${domain}】${target} | 阶段 ${stage} ${name}`,
     goal: (g) => `  本阶段目标：${g}`,
     next: (n) => `  下一步：${n}`,
     missing: "  未达门槛：",
@@ -101,7 +101,7 @@ export function buildBrief(input: BriefInput): string {
   lines.push(
     custom
       ? t.head(contract.domain || t.genericDomain, state.target, state.stage, stage?.name ?? "")
-      : `【capitalist · ${contract.domain || t.genericDomain}】${state.target}`,
+      : `【capitalist | ${contract.domain || t.genericDomain}】${state.target}`,
   );
 
   if (custom && stage?.goal) lines.push(t.goal(stage.goal));
@@ -120,7 +120,7 @@ export function buildBrief(input: BriefInput): string {
   const open = openInboxAsks(root).filter((q) => !q.stage || q.stage === state.stage);
   if (open.length > 0) {
     lines.push(t.asks(open.length));
-    for (const q of open.slice(0, 3)) lines.push(`    · ${String(q.text ?? "")}`);
+    for (const q of open.slice(0, 3)) lines.push(`    - ${String(q.text ?? "")}`);
   }
 
   return lines.join("\n");

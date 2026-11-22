@@ -324,7 +324,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       });
       write(t(`Supervisor is not running, so no verdict is possible. ${id} closed as-is.\n`, `监工未运行，无法裁决：${id} 已按现状结束。\n`));
       if (note) write(t(`Note: ${note}\n`, `备注：${note}\n`));
-      write(t("After the supervisor starts, `capitalist tasks` shows it accepted. If that is wrong, reopen it with capitalist dispatch.\n", "监工启动后 `capitalist tasks` 显示该项已验收；结论不符时执行 capitalist dispatch 重开派单。\n"));
+      write(t("After the supervisor starts, `capitalist tasks` shows it accepted. If that is wrong, reopen it from the board.\n", "监工启动后 `capitalist tasks` 显示该项已验收；结论不符时由看板重新派单。\n"));
       return 0;
     }
 
@@ -388,7 +388,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
     } catch {
       /* 队列写不进去不影响结束流程：审查是增强，不是前置条件 */
     }
-    write(t(`Reported ${id}; waiting for the supervisor's verdict (it reviews the report and evidence before closing).\n`, `已上报完成 ${id}，等监工裁决（它看完报告与证据再决定结不结束，不再有倒计时）\n`));
+    write(t(`Reported ${id}; waiting for the supervisor's verdict (it reviews the report and evidence before closing).\n`, `已上报完成 ${id}，等监工裁决（监工审阅报告与证据后决定是否结束）\n`));
     if (note) write(t(`Note: ${note}\n`, `说明：${note}\n`));
     if (added) write(t(`New requirement recorded; review follows it: ${added.slice(0, 200)}\n`, `已记录新增要求，监工按最新要求审这一单：${added.slice(0, 200)}\n`));
     write(t("The dispatch stays in flight until the verdict. Do not start another one for the same work.\n", "这一单在监工裁决前仍然算在途：不要另派一单做同一件事。\n"));
@@ -409,11 +409,11 @@ export async function cmdReport(p: Parsed): Promise<number> {
     }
     if (verdict === "error") {
       write(t(`Error (not a rejection). Stop as recorded by the supervisor:\n${verdictReason(root, id)}\n`, `本单出现异常（非打回），按监工记录停手：\n${verdictReason(root, id)}\n`));
-      write(t("Once the blocker is clear, describe it with capitalist ask. Do not open a new dispatch.\n", "确认卡在哪之后用 capitalist ask 说明，不要重开新单。\n"));
+      write(t("Once the blocker is clear, describe it with capitalist ask. Do not open a new dispatch.\n", "确认受阻原因后用 capitalist ask 说明，不要重开新单。\n"));
       return 0;
     }
     write(t("No verdict yet (the supervisor is busy). Do not re-report; keep working on what remains.\n", "裁决未出（监工正忙）。不要重报同一份，继续完成剩余部分；\n"));
-    write(t("Blocked: capitalist ask \"<what blocks it>\" and stop. Finished: wait for the verdict; do not redo the same work.\n", "确实受阻：capitalist ask \"<卡在哪>\" 后停止；确实完成：等待监工结论，不要重复修改同一处。\n"));
+    write(t("Blocked: capitalist ask \"<what blocks it>\" and stop. Finished: wait for the verdict; do not redo the same work.\n", "确实受阻：capitalist ask \"<受阻原因>\" 后停止；确实完成：等待监工结论，不要重复修改同一处。\n"));
     return 1;
   }
 
@@ -484,7 +484,7 @@ export function cmdNext(p: Parsed): number {
       `${claimed.action}\n\n` +
       `${buildGroundingBlock(claimed).join("\n")}\n\n` +
       t(`When done: capitalist report ${claimed.id} done --note "<what was done>" --evidence "<changes / tests / result>"\n`, `完成后：capitalist report ${claimed.id} done --note "<做了什么>" --evidence "<改了哪几处 / 跑了什么 / 结果>"\n`) +
-      t(`Blocked: capitalist ask "<question>" or capitalist block <type> "<what blocks it>"\n`, `受阻：capitalist ask "<问题>" 或 capitalist block <类型> "<卡在哪>"\n`),
+      t(`Blocked: capitalist ask "<question>" or capitalist block <type> "<what blocks it>"\n`, `受阻：capitalist ask "<问题>" 或 capitalist block <类型> "<受阻原因>"\n`),
   );
   return 0;
 }
@@ -606,7 +606,7 @@ export function cmdWorkers(p: Parsed): number {
  */
 export function cmdStopWorker(p: Parsed): number {
   const id = p.positional[0];
-  if (!id) die(t("Usage: capitalist stop-worker <worker-id> [--requeue] | capitalist stop-worker --help", "用法：capitalist stop-worker <worker-id> [--requeue] ｜ capitalist stop-worker --help"));
+  if (!id) die(t("Usage: capitalist stop-worker <worker-id> [--requeue] | capitalist stop-worker --help", "用法：capitalist stop-worker <worker-id> [--requeue] | capitalist stop-worker --help"));
   const root = rootOrDie(p);
   const requeue = flagBool(p, "requeue");
   const reason = flagString(p, "reason") ?? "";
@@ -622,8 +622,8 @@ export function cmdStopWorker(p: Parsed): number {
           : t(`Dispatch ${r.dispatch} closed as failed.\n`, `派单 ${r.dispatch} 已按失败结束（不残留占位记录）。\n`)
         : t("This worker had no open dispatch.\n", "该 worker 没有在途派单。\n")) +
       (requeue
-        ? t("Effect: the dispatch is re-dispatched next round; the session continues on the same lane with history intact.\n", "后果：该派单随后重派，会话按同一 lane 续接，历史不丢失。\n")
-        : t("Effect: the dispatch is re-dispatched next round unless the shard is taken over (capitalist takeover) or blocked (capitalist block).\n", "后果：该派单会重派，除非该片被接管（capitalist takeover）或登记了阻塞（capitalist block）。\n")),
+        ? t("Effect: the dispatch is re-dispatched next round; the session continues on the same thread with history intact.\n", "后果：该派单随后重派，会话按同一线程续接，历史不丢失。\n")
+        : t("Effect: the dispatch is re-dispatched next round unless the shard is taken over (capitalist takeover) or blocked (capitalist block).\n", "后果：该派单会重派，除非该分片被接管（capitalist takeover）或登记了阻塞（capitalist block）。\n")),
   );
   return 0;
 }
@@ -636,7 +636,7 @@ export function cmdStopWorker(p: Parsed): number {
  */
 export function cmdClose(p: Parsed): number {
   const target = p.positional[0];
-  if (!target) die(t('Usage: capitalist close <dispatch-id|worker-id|shard> [--reason "why"]', '用法：capitalist close <派单id|worker-id|分片> [--reason "为什么关"]'));
+  if (!target) die(t('Usage: capitalist close <dispatch-id|worker-id|shard> [--reason "why"]', '用法：capitalist close <派单id|worker-id|分片> [--reason "<原因>"]'));
   const root = rootOrDie(p);
   const reason = flagString(p, "reason") ?? "";
   const r = closeTask(root, target, { reason, by: "user" });
@@ -701,13 +701,13 @@ export function cmdPromote(p: Parsed): number {
   write(
     t(
       `Promoted ${r.dispatch} (${where})${r.already ? " (already at front, refreshed)" : ""}; skipped ${r.ahead} queued dispatch(es).\n`,
-      `已置顶 ${r.dispatch}（${where}）${r.already ? "· 重复置顶，已刷新到队首" : ""}：越过 ${r.ahead} 张排队单。\n`,
+      `已置顶 ${r.dispatch}（${where}）${r.already ? "（重复置顶，已刷新到队首）" : ""}：越过 ${r.ahead} 张排队单。\n`,
     ) +
       (r.behind
         ? t(`An immediate-run dispatch (${r.behind}) is running; this one waits at the front and starts when it finishes.\n`, `立即执行 ${r.behind} 已运行中，这一单按置顶排队；它结束后按队列顺序派发。\n`)
         : live < cap
-          ? t(`${live}/${cap} slots free; the process starts next round (within 5 s).\n`, `当前 ${live}/${cap} 个槽有空，即将启动进程。\n`)
-          : t(`${live}/${cap} slots busy: the supervisor suspends one running task to free a slot (shown as “yielded”); it resumes in order afterwards.\n`, `当前 ${live}/${cap} 个槽均已占用：监工将挂起一个运行中的任务释放槽位，该任务显示“已让位”，结束后按原顺序恢复。\n`)) +
+          ? t(`${live}/${cap} slots free; the process starts next round (within 5 s).\n`, `当前 ${live}/${cap} 个并发名额空闲，即将启动进程。\n`)
+          : t(`${live}/${cap} slots busy: the supervisor suspends one running task to free a slot (shown as “yielded”); it resumes in order afterwards.\n`, `当前 ${live}/${cap} 个并发名额均已占用：监工将挂起一个运行中的任务以释放并发名额，该任务显示“已让位”，结束后按原顺序恢复。\n`)) +
       t("Record: urgent / promoted_at / promoted_by written to .capitalist/inbox/dispatch.jsonl; event dispatch_promoted recorded.\n", "记录：.capitalist/inbox/dispatch.jsonl 写 urgent / promoted_at / promoted_by，事件 dispatch_promoted 已写入。\n"),
   );
   return 0;

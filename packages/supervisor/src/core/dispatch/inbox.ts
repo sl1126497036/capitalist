@@ -57,23 +57,23 @@ export function validateInboxRecord(row: unknown): string | null {
   const r = row as Record<string, unknown>;
 
   if (r.type === "answer") {
-    if (typeof r.qid !== "string" || r.qid.trim() === "") return "回答缺 qid";
-    if (String(r.text ?? "").trim() === "") return "回答 text 为空";
+    if (typeof r.qid !== "string" || r.qid.trim() === "") return "回答缺少问题编号（qid）";
+    if (String(r.text ?? "").trim() === "") return "回答正文（text）为空";
     r.id = r.qid;
     if (typeof r.status !== "string") r.status = "new";
     return null;
   }
 
   if (typeof r.id !== "string" || r.id.trim() === "") {
-    return r.id === undefined ? "缺 id" : `id 非法（${typeof r.id}）`;
+    return r.id === undefined ? "缺少编号（id）" : `编号（id）格式非法：${typeof r.id}`;
   }
-  if (typeof r.type !== "string" || !TYPES.has(r.type)) return `type 非法（${String(r.type)}）`;
+  if (typeof r.type !== "string" || !TYPES.has(r.type)) return `类型（type）格式非法：${String(r.type)}`;
   if (typeof r.status !== "string" || !STATUSES.has(r.status)) {
-    return `status 非法（${String(r.status)}）`;
+    return `状态（status）格式非法：${String(r.status)}`;
   }
   // text 兼容历史写法：早期监工写 `question`。两种都没有才是空。
   const text = String(r.text ?? r.question ?? "").trim();
-  if (text === "") return "text 为空";
+  if (text === "") return "正文（text）为空";
   return null;
 }
 

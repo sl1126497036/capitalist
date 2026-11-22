@@ -31,7 +31,7 @@ function parseEnvelope(text: string, fallbackCode: number): Envelope {
   }
   const env = parsed as Envelope;
   if (typeof env.code !== "number") {
-    return { code: fallbackCode, msg: `信封缺 code 字段：${text.slice(0, 200)}` };
+    return { code: fallbackCode, msg: `信封缺少 code 字段：${text.slice(0, 200)}` };
   }
   return env;
 }

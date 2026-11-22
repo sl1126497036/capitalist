@@ -62,7 +62,7 @@ const EN = {
   "唤醒": "Wake",
   "确认唤醒": "Confirm wake",
   "取消唤醒": "Cancel wake",
-  "只解除这一张；全局暂停解除后参与调度": "Lifts this dispatch only; it runs once the global pause is lifted",
+  "只解除这一张，转为待调度": "Lifts this dispatch only; it becomes pending",
   "已唤醒": "Woken",
   "唤醒失败": "Wake failed",
   /* 模型切换为异步请求，期间显示加载态回执。 */
@@ -145,7 +145,7 @@ const EN = {
   "已压缩": "Compacted",
   "空闲": "Idle",
   "待裁决": "Needs decision",
-  "指令已登记，下一轮调度生效": "Command recorded; takes effect on the next scheduling round",
+  "已登记待调度": "Recorded, pending scheduling",
   "模型已切换": "Model switched",
   "切换模型失败": "Switch model failed",
   "已设定派单模型": "Dispatch model set",
@@ -274,10 +274,9 @@ const EN = {
   "全部完成": "all done",
   "卡在 #{id}": "Stuck on #{id}",
   "等待 {id}": "Waiting on {id}",
-  "原消息不在当前窗口内，待确认": "Original message is outside this window, awaiting confirmation",
+  "原消息不在当前窗口，可展开更早的消息查找": "Original message is outside this window; expand earlier messages to find it",
   "受 #{id} 断链影响": "Affected by the broken chain at #{id}",
   "台账未记录": "not recorded in the ledger",
-  "运行中": "Running",
   "复制失败": "Copy failed",
   "失败": "Failed",
   "失败原因：{why}": "Failure reason: {why}",
@@ -314,7 +313,6 @@ const EN = {
   "已执行": "Executed",
   /* 执行回执整句带任务编号。 */
   "已执行 #{no}": "Executed #{no}",
-  "已结束": "Finished",
   /* 监工介入状态气泡只报状态本身，按当前进展分三段推进。 */
   "介入中": "Involving",
   "已介入": "Involved",
@@ -355,20 +353,18 @@ const EN = {
   "消耗：未上报": "cost not reported",
   "用户习惯": "User habits",
   "看这几张图": "See these images",
-  "等待下一轮调度": "waiting for the next dispatch",
   "等父节点": "Waiting on parent",
   "耗时": "Duration",
   "被拒": "Rejected",
   "输入": "Input",
   "输出": "Output",
-  "还差 {list}": "{list}",
   "这一单在排队；此时发送的内容会并入这一单，启动时一并带入":
     "This task is queued; what is sent now is merged into it and carried in at start",
   "派单已结束，消息在原会话中回复":
     "Dispatch finished; messages are answered in the original session",
   "排队中的派单不计耗时": "Queued dispatches have no duration",
-  "本轮进程已退出，等待下一轮派发（{why}）":
-    "This round's process exited; waiting for the next dispatch ({why})",
+  "本轮进程已退出，待派单（{why}）":
+    "This round's process exited; pending dispatch ({why})",
   "这个进程尚无消息": "This process has no messages yet",
   "本阶段分片均已完成": "all shards in this stage are complete",
   "进程异常": "Process failed",
@@ -539,8 +535,8 @@ const EN = {
   "重试": "Retry",
   "错误": "Error",
   "阶段": "Stage",
-  "附件可能已被清理，或取图接口出错。":
-    "The attachment may have been cleaned up, or the image API failed.",
+  "附件可能已被清理，或暂时无法读取。":
+    "The attachment may have been cleaned up, or cannot be read right now.",
   "附件预览": "Attachment preview",
   "项": "items",
   "验收项": "Acceptance",
@@ -623,13 +619,13 @@ const EN = {
   "留言": "Message",
   "插话": "Interject",
   /* ---- 消息折叠块 ---- */
-  "已并入派单；随该单启动生效": "Merged into the dispatch; takes effect when it starts",
-  "已并入派单 #{no}；随该单启动生效": "Merged into dispatch #{no}; takes effect when it starts",
+  "已并入派单": "Merged into the dispatch",
+  "已并入派单 #{no}": "Merged into dispatch #{no}",
   "已送达；执行中的进程已收到": "Delivered; the running process received it",
   "已送达 #{no}；执行中的进程已收到": "Delivered to #{no}; the running process received it",
   "随派单启动带入": "Carried in when the dispatch starts",
-  "已登记，进程下一次动作间隙送达": "Registered delivered at the process's next tool gap",
-  "已登记，随归属单带入": "Registered carried in with its dispatch",
+  "已登记待送达": "Registered, pending delivery",
+  "已登记待带入": "Registered, pending carry-in",
   "待补投递": "Awaiting re-delivery",
   "待送达": "Pending delivery",
   "未送达": "Not delivered",
@@ -665,8 +661,8 @@ const EN = {
     "The “#” on a message card quotes it; the quote goes out with your next message",
   "点击“中断”可结束当前进程并重派；“中断”时勾选“同时登记阻塞”则不再重派":
     "Interrupt ends the current process and redispatches it; ticking “Also record a blocker” in that dialog skips the redispatch",
-  "连续失败达到上限会停下等用户裁决，不再自动重派":
-    "Consecutive failures reaching the limit stop for the user's decision and are not retried automatically",
+  "连续失败达到上限会停止并等待用户裁决，不再自动重派":
+    "Consecutive failures reaching the limit stop and wait for the user's decision, without automatic redispatch",
   /* 繁忙提醒分三段渲染，各段分别取词条；“繁忙中”标提醒色。 */
 
   /* ---- 全局提示与操作回执 ---- */
@@ -685,12 +681,9 @@ const EN = {
   "未知错误": "unknown error",
   "未知原因": "unknown reason",
   "插话失败": "Failed to send",
-  "已登记（{eff}生效）": "Recorded (takes effect {eff})",
-  "下一次派单": "on the next dispatch",
   "用户中断工作进程后登记阻塞": "Blocker recorded after the user interrupted the work process",
   "登记阻塞失败": "Failed to record the blocker",
   "已中断": "Interrupted",
-  "下一轮调度重派": "redispatched on the next scheduling round",
   "中断失败": "Interrupt failed",
   "已交还监工：下一轮调度恢复自动裁定": "Handed back; automatic adjudication resumes next round",
   "交还失败": "Handback failed",
@@ -760,6 +753,23 @@ const EN = {
   "待重派": "Pending redispatch",
   "取消中": "Cancelling…",
   "关闭中": "Closing…",
+  /* ---- 语言表补登（组件在用但此前漏登） ---- */
+  "裁决未生效": "Verdict not applied",
+  "已允许这一次": "Allowed this time",
+  "已拒绝": "Denied",
+  "技能": "Skills",
+  "随消息下发的技能": "Skills delivered with messages",
+  "选择技能": "Select skills",
+  "搜索技能：名称或说明": "Search skills by name or description",
+  "正在加载技能…": "Loading skills…",
+  "没有匹配的技能": "No matching skills",
+  "没有可用的技能": "No skills available",
+  "已停止": "Stopped",
+  "待补项": "Open items",
+  "读模型清单失败：{e}": "Failed to read the model list: {e}",
+  " 等": " and more",
+  "后台采样器尚无数据": "The background sampler has no data yet",
+  "暂无数据": "No data yet",
 };
 
 /**

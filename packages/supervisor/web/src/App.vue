@@ -1160,7 +1160,7 @@ async function say(text, quote) {
     setNotice({ text: `${$t("插话失败")} ${r.data.error || r.data.reason || $t("未知原因")}`, bad: true });
     return false;
   }
-  setNotice({ text: $t("已登记（{eff}生效）", { eff: r.data.effective || $t("下一次派单") }), bad: false });
+  setNotice({ text: $t("已登记"), bad: false });
   return true;
 }
 
@@ -1210,7 +1210,7 @@ async function onInterject({ text, alsoBlock, quote }) {
            * 回执只显示任务号：进程号是调度内部标识，不向用户展示。
            * 任务号缺失（旧格式单）时使用泛称，不以进程 id 代替。
            */
-          ? `${$t("已中断")} ${t.no ? `#${t.no}` : $t("工作进程")} ${d.effective || $t("下一轮调度重派")}`
+          ? `${$t("已中断")} ${t.no ? `#${t.no}` : $t("工作进程")}${d.effective ? `：${d.effective}` : ""}`
           : `${$t("中断失败")} ${d.error || d.reason || $t("未知原因")}`,
     });
   } finally {

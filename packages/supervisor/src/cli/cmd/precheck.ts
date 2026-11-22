@@ -73,7 +73,7 @@ export function cmdGate(p: Parsed): number {
     write(`${JSON.stringify({ decision: gate.decision, mode, local: localDecision, hits: gate.hits }, null, 2)}\n`);
   } else {
     write(
-      `红线预检：${gate.decision}${localDecision && localDecision !== "allow" ? ` ｜ 本机边界：${localDecision}` : ""}\n`,
+      `红线预检：${gate.decision}${localDecision && localDecision !== "allow" ? ` | 本机边界：${localDecision}` : ""}\n`,
     );
     for (const h of gate.hits) write(`  [${h.level}] ${h.id} ${h.label}\n         命中：…${h.snippet}…\n`);
   }

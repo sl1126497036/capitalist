@@ -124,7 +124,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
       kind: "concurrency",
       arg: conc[1] as string,
       reason: "识别到“并行度 + 数字”",
-      detail: `并行度调整为 ${conc[1]}（作为后续派单的槽位数）`,
+      detail: `并发名额调整为 ${conc[1]}`,
     };
   }
 
@@ -134,7 +134,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "retry",
       arg: hit ? hit.id : "",
-      reason: hit ? `识别到“重派”+ 分片 ${hit.id}` : "识别到“重派”，但未指明分片",
+      reason: hit ? `识别到“重派”，分片 ${hit.id}` : "识别到“重派”，但未指明分片",
       detail: hit ? `重派分片 ${hit.id}` : "重派：未指明分片，请补充分片名",
     };
   }
@@ -169,11 +169,11 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "set-next",
       arg: text,
-      reason: "识别到“接下来/改成”（原话登记，派单前由对话层整理）",
+      reason: "识别到“接下来/改成”，原话已登记。",
       detail:
-        `原话已登记：${text}。派单前对话层要把它整理成结构完整、无歧义的提示词，` +
-        "理解不透先向用户澄清，不许原样转发；排序、依赖等调度说明由对话层自己执行，不写入单子。" +
-        "组单时在任务说明末尾追加语言一致性要求：以用户当前使用的语言写作，语言跟随用户实际语言，不固定为某一种。" +
+        `原话已登记：${text}。派单前整理为结构完整、无歧义的任务说明。` +
+        "理解不透先向用户澄清，不原样转发。排序与依赖由调度层处理，不写进派单。" +
+        "派单时在任务说明末尾追加：思考、回复与文案使用与用户相同的语言，代码与标识符除外。" +
         "该设置只影响整阶段补派的派单，有分片的阶段不受影响。要停止某类任务，输入“停止…”",
     };
   }
@@ -204,8 +204,8 @@ export function planInstruct(input: InstructInput): InstructPlan {
       reason: `“${why}”命中了当前阶段 ${cur.stage.id} ${cur.stage.name}`,
       detail:
         `跳过 ${cur.stage.id} ${cur.stage.name}` +
-        (shards.length ? `（该阶段有 ${shards.length} 个分片，按整阶段处理，本通道只支持阶段粒度）` : "") +
-        "；跳过将记为待补项，终审时仍会清算",
+        (shards.length ? `（该阶段有 ${shards.length} 个分片，按整阶段处理）` : "") +
+        "；该阶段记为待补，最终仍会补做。",
     };
   }
 
@@ -215,7 +215,7 @@ export function planInstruct(input: InstructInput): InstructPlan {
     return {
       kind: "clarify",
       reason: "命中的不是当前阶段",
-      detail: `当前阶段为 ${input.currentStage}。该输入更接近指定 ${names}，它们不在当前阶段，未做变更。停止当前阶段请指明阶段名，或使用“全部停止”`,
+      detail: `当前阶段为 ${input.currentStage}。该输入更接近 ${names}，但不在当前阶段，未做变更。要停止当前阶段，请指明阶段名，或输入“全部停止”。`,
       candidates: candidates(),
     };
   }

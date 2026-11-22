@@ -119,11 +119,10 @@ function watchOrphanSupervisors(root: string, out: (s: string) => void): () => v
       const reaped = reapOrphans(root, out, { onlySupervisorPid: rec.pid });
       handled.add(key);
       out(
-        `[看板] 监工 pid ${rec.pid} 已不在（记录状态仍是 running，判定被强杀），` +
-          `已回收它拉起的 ${reaped.length} 个 worker`,
+        `[看板] 监工已退出：回收其拉起的 ${reaped.length} 个工作进程`,
       );
     } catch (err) {
-      out(`[看板] 收孤儿失败：${err instanceof Error ? err.message : String(err)}`);
+      out(`[看板] 回收遗留工作进程失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
   const timer = setInterval(tick, 5000);

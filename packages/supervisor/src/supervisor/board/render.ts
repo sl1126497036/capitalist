@@ -110,7 +110,7 @@ export function cmdReceiptText(e: Record<string, unknown>): string {
   const detail = String(e.detail ?? "").trim();
   return [
     `指令：${label}${arg ? ` · ${arg}` : ""}`,
-    `结果：${ok ? "已执行" : "被拒"}`,
+    `结果：${ok ? "已执行" : "失败"}`,
     !ok && reason ? `原因：${reason}` : "",
     detail ? `说明：${detail}` : "",
   ]

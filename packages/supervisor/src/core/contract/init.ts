@@ -64,7 +64,7 @@ export function newState(target: string, contract: Contract, fallback: boolean):
   if (!stage) {
     throw new Error(
       `任务列表 ${contract.name}（${contract.file}）没有定义任何阶段：监工无法确定起点。` +
-        "请在任务列表里补 stages，或改用 capitalist start --contract minimal 先跑通用流程。",
+        "请在任务列表里补阶段配置，或改用 capitalist start --contract minimal 先跑通用流程。",
     );
   }
 

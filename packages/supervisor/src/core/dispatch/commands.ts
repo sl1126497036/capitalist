@@ -555,8 +555,8 @@ export function spliceDirectives(action: string, directives: Directive[]): strin
   const hint =
     "（逐条处理，每条都要给结论，收尾时用 capitalist report 的 --outcome 逐条回报：" +
     "本单做完写 `<编号>=done`；判定不属于本单写 `<编号>=not_mine` 并说明该归哪一单；" +
-    "做不了写 `<编号>=blocked` 并说明卡在哪。有哪条没给结论，收工闸会挡回并列出缺哪几条。）";
-  return appendSection(action, "【用户插话 · 只对本次派单生效】", [hint, ...lines]);
+    "无法完成写 `<编号>=blocked` 并说明受阻原因。有哪条没给结论，将无法收工，并列出缺哪几条。）";
+  return appendSection(action, "【用户插话，只对本次派单生效】", [hint, ...lines]);
 }
 
 /**
@@ -577,7 +577,7 @@ export function markDirectiveOutcome(
   opts?: { note?: string; by?: string },
 ): { ok: true; rec: Directive } | { ok: false; reason: string } {
   const key = String(ref ?? "").trim();
-  if (!key) return { ok: false, reason: "缺少插话编号" };
+  if (!key) return { ok: false, reason: "缺少插话编号：回报时写 --outcome \"<编号>=结论\"" };
   if (!DIRECTIVE_OUTCOMES.includes(outcome)) {
     return { ok: false, reason: `结论只能是 ${DIRECTIVE_OUTCOMES.join(" / ")}` };
   }
@@ -591,7 +591,7 @@ export function markDirectiveOutcome(
       reason:
         outcome === "not_mine"
           ? "not_mine 必须说明该归哪一单：--outcome \"<编号>=not_mine:该归 #30-2\""
-          : "blocked 必须说明卡在哪：--outcome \"<编号>=blocked:等接口权限\"",
+          : "blocked 必须说明受阻原因：--outcome \"<编号>=blocked:等接口权限\"",
     };
   }
   const got = withFileLock(file, () => {
@@ -855,7 +855,7 @@ export function stopWorker(root: string, id: string, opts: StopWorkerOptions = {
   const d = rec.dispatch
     ? requeue
       ? requeueDispatch(root, rec.dispatch, opts.reason || "换模型重启")
-      : closeDispatch(root, rec.dispatch, `被 user 中断（worker ${id}）`, "user")
+      : closeDispatch(root, rec.dispatch, `被用户中断（工作进程 ${id}）`, "user")
     : null;
   recordEvent(root, requeue ? "worker_requeued" : "worker_stopped", {
     worker: id,

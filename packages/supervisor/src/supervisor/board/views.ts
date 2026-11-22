@@ -58,7 +58,7 @@ export function buildTaskSummaries(roots: string[]): TaskSummary[] {
       const running = snap.workers.filter((w) => w.status === "running" || w.status === "starting").length;
       const liveWorker = snap.workers.filter((w) => w.status === "running" || w.status === "starting").pop();
       const doing = liveWorker
-        ? `${liveWorker.id} 运行中 ${liveWorker.stage}${liveWorker.dispatch ? ` · ${liveWorker.dispatch}` : ""}`
+        ? `${liveWorker.id} 运行中 ${liveWorker.stage}${liveWorker.dispatch ? ` | ${liveWorker.dispatch}` : ""}`
         : snap.diagnosis.title;
       return {
         root,
@@ -335,7 +335,7 @@ function heartbeatSummary(root: string, hours: number): string {
   if (timeout > 0) parts.push(`心跳超时 ${timeout}`);
   if (killed > 0) parts.push(`判定失败 ${killed}`);
   if (redispatch > 0) parts.push(`重派 ${redispatch}`);
-  return parts.length ? `${parts.join(" · ")}（近 ${hours} 小时）` : "";
+  return parts.length ? `${parts.join(" | ")}（近 ${hours} 小时）` : "";
 }
 
 export function buildSupervisorStatus(root: string): SupervisorStatusView {
@@ -431,7 +431,7 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
       last_status: "",
       pid: capitalist.pid,
       online: false,
-      detail: `最后一次心跳 ${age}s 前，超过判活窗口 ${stale}s`,
+      detail: `最后一次心跳 ${age} 秒前，超过判活时限 ${stale} 秒`,
       heartbeat_age_sec: age,
       stale_sec: stale,
       max_workers: capitalist.max_workers,
@@ -448,7 +448,7 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
     last_status: "",
     pid: capitalist.pid,
     online: true,
-    detail: `监工在线，并行度 ${capitalist.max_workers}`,
+    detail: `监工在线，最多 ${capitalist.max_workers} 个工作进程`,
     heartbeat_age_sec: age,
     stale_sec: stale,
     max_workers: capitalist.max_workers,

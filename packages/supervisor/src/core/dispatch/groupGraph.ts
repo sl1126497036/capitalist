@@ -42,7 +42,7 @@ export function groupStateWord(s: GroupState): string {
     case "review":
       return "待复核";
     case "waiting":
-      return "等重派";
+      return "等待重派";
     case "done":
       return "已完成";
     case "blocked":

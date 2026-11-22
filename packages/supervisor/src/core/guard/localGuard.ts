@@ -478,7 +478,7 @@ export function localDeleteCheck(
       hits: [
         {
           kind: "delete",
-          path: "（通配符 / 变量）",
+          path: "（通配符、变量）",
           why: "删除目标不是具体路径，无法确认不会删到任务根以外",
         },
       ],
@@ -494,7 +494,7 @@ export function localDeleteCheck(
   const out: LocalHit[] = [];
   for (const t of targets) {
     if (!isInside(normLocal(t, root), taskRoot)) {
-      out.push({ kind: "delete", path: t, why: "不许删除任务根以外的本机内容" });
+      out.push({ kind: "delete", path: t, why: "禁止删除任务根以外的本机内容" });
     }
   }
   return out.length > 0 ? { decision: "deny", hits: out } : { decision: "allow", hits: [] };

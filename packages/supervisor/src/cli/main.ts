@@ -79,7 +79,7 @@ function cmdStart(p: Parsed): number {
 
   if (existing) {
     const st = loadState(existing);
-    write(t(`Existing task root: ${existing}\nTarget: ${st?.target ?? "?"} | Stage: ${st?.stage ?? "?"}\n`, `已有任务根：${existing}\n目标：${st?.target ?? "?"} ｜ 阶段：${st?.stage ?? "?"}\n`));
+    write(t(`Existing task root: ${existing}\nTarget: ${st?.target ?? "?"} | Stage: ${st?.stage ?? "?"}\n`, `已有任务根：${existing}\n目标：${st?.target ?? "?"} | 阶段：${st?.stage ?? "?"}\n`));
     return cmdStatus({ cmd: "status", positional: [], flags: { root: existing } });
   }
 
@@ -389,7 +389,7 @@ function cmdTasks(p: Parsed): number {
   }
   write(`${summaryLine(s)}\n`);
   if (rows.length === 0) {
-    write(t("(The task pool is empty: no dispatches yet. Each dispatch registers one entry.)\n", "（任务池是空的：尚未派过单。每建一张派单会自动登记一项。）\n"));
+    write(t("(The task pool is empty: no dispatches yet. Each dispatch registers one entry.)\n", "（任务池为空：尚未派过单。每建一张派单会自动登记一项。）\n"));
     return 0;
   }
   /** 排序按“还欠着的”优先：失败 -> 待确认 -> 进行中 -> 待派 -> 已验收 -> 已关闭。 */
@@ -488,10 +488,10 @@ function cmdStatus(p: Parsed): number {
   if (lease.holder) {
     write(
       t(`Instance: holder pid ${lease.holder.pid} (${lease.holder.instance_id}); instances ${lease.instance_count}; heartbeat ${lease.heartbeat_age_sec}s ago\n`,
-        `实例：持有者 pid ${lease.holder.pid}（${lease.holder.instance_id}） ｜ 实例数 ${lease.instance_count} ｜ 心跳 ${lease.heartbeat_age_sec}s 前\n`),
+        `实例：持有者 pid ${lease.holder.pid}（${lease.holder.instance_id}） | 实例数 ${lease.instance_count} | 心跳 ${lease.heartbeat_age_sec} 秒前\n`),
     );
   } else {
-    write(t(`Instance: no live holder; instances ${lease.instance_count}\n`, `实例：无存活持有者 ｜ 实例数 ${lease.instance_count}\n`));
+    write(t(`Instance: no live holder; instances ${lease.instance_count}\n`, `实例：无存活持有者 | 实例数 ${lease.instance_count}\n`));
   }
   if (lease.warn) write(t(`Warning: ${lease.warn}\n`, `警告：${lease.warn}\n`));
 
@@ -507,12 +507,12 @@ function cmdStatus(p: Parsed): number {
   const tk = activeTakeover(root);
   if (tk.all || tk.shards.length > 0) {
     const scope = tk.all ? t("the whole task root", "整个任务根") : t(`shard(s) ${tk.shards.join(", ")}`, `分片 ${tk.shards.join("、")}`);
-    write(t(`Under takeover: ${scope} (reason: ${tk.reason}); auto-redispatch and auto-review are suspended for it\n`, `接管中：${scope}（原因：${tk.reason}）；监工暂停该片自动重派与自动验收\n`));
+    write(t(`Under takeover: ${scope} (reason: ${tk.reason}); auto-redispatch and auto-review are suspended for it\n`, `接管中：${scope}（原因：${tk.reason}）；监工暂停该分片自动重派与自动验收\n`));
   }
 
   const ws = checkWorkspacePrepare(root);
   if (!ws.ok) {
-    write(t(`\n⚠ Workspace preparation failed (${ws.impl}): ${ws.message}\n${ws.fix}\n`, `\n⚠ 工作区准备失败（${ws.impl}）：${ws.message}\n${ws.fix}\n`));
+    write(t(`\n⚠ Workspace preparation failed (${ws.impl}): ${ws.message}\n${ws.fix}\n`, `\n工作区准备失败（${ws.impl}）：${ws.message}\n${ws.fix}\n`));
   }
 
   // 退出码表达“门槛过没过”，与 --json 一致：脚本里两种模式行为相同才算说得清
@@ -565,7 +565,7 @@ function cmdMode(p: Parsed): number {
   }
   write(t(`Mode: ${effective} -> ${next} (${describeMode(next)})\n`, `档位：${effective} 改为 ${next}（${describeMode(next)}）\n`));
   if (next === "bypass") {
-    write(t("Bypass relaxes the mode and local-boundary checks; task-list redlines still block as before. For controlled environments only.\n", "bypass 档位放宽档位与本机边界判定，任务列表红线仍按原级别拦截。该档位仅用于受控环境。\n"));
+    write(t("Bypass relaxes the mode and local-boundary checks; task-list redlines still block as before. For controlled environments only.\n", "bypass 放宽权限档位与本机边界判定，任务列表红线仍按原级别拦截。该档位仅用于受控环境。\n"));
   }
   return 0;
 }
@@ -573,7 +573,7 @@ function cmdMode(p: Parsed): number {
 function cmdSay(p: Parsed): number {
   const text = (positionalText(p) || flagString(p, "text") || "").trim();
   const name = p.cmd === "direct" ? "direct" : "say";
-  if (!text) die(t(`Usage: capitalist ${name} "<text>" [--shard <shard>] [--thread <thread>] | capitalist ${name} --help`, `用法：capitalist ${name} "<文本>" [--shard <分片>] [--thread <线程>] ｜ capitalist ${name} --help`));
+  if (!text) die(t(`Usage: capitalist ${name} "<text>" [--shard <shard>] [--thread <thread>] | capitalist ${name} --help`, `用法：capitalist ${name} "<文本>" [--shard <分片>] [--thread <线程>] | capitalist ${name} --help`));
   if (text.length > 4000) die(t("Text too long (max 4000 chars)", "文本过长（上限 4000 字）"));
   const root = rootOrDie(p);
   const shard = flagString(p, "shard") || null;
@@ -655,7 +655,7 @@ function cmdTakeover(p: Parsed): number {
       `From the next round the supervisor neither re-dispatches nor auto-reviews it; restore with capitalist release.\n` +
       `Takeover only changes supervisor behavior; to stop the process use capitalist stop-worker <id>.\n`,
     `已接管 ${scope}（原因：${rec.reason}）。\n` +
-      `监工从下一轮调度起：不自动重派该片、不自动验收该片，等 capitalist release 恢复。\n` +
+      `监工从下一轮调度起：不自动重派该分片、不自动验收该分片，等 capitalist release 恢复。\n` +
       `接管只改变监工行为，不终止运行中的进程；中断进程使用 capitalist stop-worker <id>。\n`),
   );
   return 0;
@@ -667,14 +667,14 @@ function cmdRelease(p: Parsed): number {
   const shard = p.positional[0] ?? (flagString(p, "shard") || null);
   const { released } = releaseShard(root, shard);
   if (released.length === 0) {
-    write(t(shard ? `Shard ${shard} is not under takeover; nothing to release.\n` : "No shard is under takeover; nothing to release.\n", shard ? `分片 ${shard} 没有被接管，无需交还。\n` : "当前没有处于接管状态的片，无需交还。\n"));
+    write(t(shard ? `Shard ${shard} is not under takeover; nothing to release.\n` : "No shard is under takeover; nothing to release.\n", shard ? `分片 ${shard} 没有被接管，无需交还。\n` : "当前没有处于接管状态的分片，无需交还。\n"));
     return 0;
   }
   write(
     t(`Released: ${released.map((s) => (s === "*" ? t("the whole task root", "整个任务根") : t(`shard ${s}`, `分片 ${s}`))).join(", ")}.\n` +
       `From the next round the supervisor resumes auto-redispatch and auto-review for them.\n`,
     `已交还 ${released.map((s) => (s === "*" ? "整个任务根" : `分片 ${s}`)).join("、")}。\n` +
-      `生效时机：下一轮调度起监工恢复该片的自动重派与自动验收。\n`),
+      `生效时机：下一轮调度起监工恢复该分片的自动重派与自动验收。\n`),
   );
   return 0;
 }
@@ -854,7 +854,7 @@ function workspaceFixHint(root: string, msg: string): string {
       ].join("\n"),
     );
   }
-  return t("Fix per the failure above and retry: capitalist status | capitalist supervise", "查看上面的失败信息并修复后重试：capitalist status ｜ capitalist supervise");
+  return t("Fix per the failure above and retry: capitalist status | capitalist supervise", "查看上面的失败信息并修复后重试：capitalist status | capitalist supervise");
 }
 
 async function main(): Promise<number> {
@@ -1071,8 +1071,8 @@ async function main(): Promise<number> {
       }
       const ws = checkWorkspacePrepare(supervisorRoot);
       if (!ws.ok) {
-        write(t(`⚠ Workspace preparation failed (${ws.impl}): ${ws.message}\n${ws.fix}\n`, `⚠ 工作区准备失败（${ws.impl}）：${ws.message}\n${ws.fix}\n`));
-        write(t("(If the workspace is not ready the worker may sit on a confirmation page and not run; fix per the above, then start.)\n", "（工作区未就绪时 worker 可能停在确认页，不会自动执行；按上述说明修复后启动。）\n"));
+        write(t(`⚠ Workspace preparation failed (${ws.impl}): ${ws.message}\n${ws.fix}\n`, `工作区准备失败（${ws.impl}）：${ws.message}\n${ws.fix}\n`));
+        write(t("(If the workspace is not ready the worker may sit on a confirmation page and not run; fix per the above, then start.)\n", "（工作区未就绪时工作进程可能停在确认页，不会自动执行；按上述说明修复后启动。）\n"));
       }
 
       const { detectWorkerHost } = await import("../supervisor/worker/worker");

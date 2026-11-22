@@ -120,7 +120,7 @@ export async function pickAgents(opts: {
   /* 缩进统一两格：标题、版本行、选项、输入提示同基准。 */
   const lines: string[] = ["", BANNER, ""];
   if (VERSION) lines.push(`  capitalist ${VERSION}`);
-  lines.push("", `  选择要${verb}的 agent（可多选，编号以空格分隔）`, "");
+  lines.push("", `  选择要${verb}的宿主（可多选，编号以空格分隔）`, "");
   /* 标签按最大宽度加 2 补齐，最短与最长标签同标记至少隔 4 个空格，标记列保持对齐。 */
   const labelWidth = Math.max(...AGENT_GROUPS.map((group) => group.label.length));
   AGENT_GROUPS.forEach((group, index) => {

@@ -51,7 +51,7 @@ import type { ActionKind, GateResult, LocalDecision } from "../core/types";
  */
 const HINT_UNWATCHED: Record<BriefLang, string> = {
   zh:
-    "【capitalist 已生效 · 本会话未纳管】hook 正在运行，当前目录没有任务根。" +
+    "【capitalist 已生效，本会话未纳管】hook 正在运行，当前目录没有任务根。" +
     "普通问答忽略本行；长流程任务可回复“给这个项目开监督”，" +
     '或执行 `capitalist start "<目标>" --contract <任务列表名>`。',
   en:
@@ -517,7 +517,7 @@ function guardFileLock(
       return hook.deny(
         [
           `【文件已被改】${p} 在读取之后被${st.by ? ` ${st.by} ` : "他人"}修改。`,
-          st.why ? `· ${st.why}` : "",
+          st.why ? `- ${st.why}` : "",
           "",
           "先重新 Read 这个文件，基于新内容再改；不要用旧内容覆盖他人的改动。",
         ]
@@ -630,8 +630,8 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
     return hook.inject(
       `${
         lang === "zh"
-          ? `【capitalist${dlabel ? ` · ${dlabel}` : ""}】（监工已派单；只做这一单，结束时 capitalist report）`
-          : `【capitalist${dlabel ? ` · ${dlabel}` : ""}】(dispatched; do only this task, run \`capitalist report\` when done)`
+          ? `【capitalist${dlabel ? ` | ${dlabel}` : ""}】（监工已派单；只做这一单，结束时 capitalist report）`
+          : `【capitalist${dlabel ? ` | ${dlabel}` : ""}】(dispatched; do only this task, run \`capitalist report\` when done)`
       }\n${THINK_LANG[lang]}`,
       event.point,
       event.sessionId,
