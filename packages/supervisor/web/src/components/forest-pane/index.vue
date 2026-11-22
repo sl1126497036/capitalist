@@ -127,12 +127,12 @@ function progress(t) {
 const summary = computed(() => {
   const t = totals.value;
   if (!t) return "";
-  const bits = [tr("{n} 棵树", { n: trees.value.length }), tr("{n} 个节点", { n: t.total }), tr("{n} 个已完成", { n: t.done })];
-  if (t.closed) bits.push(tr("{n} 个已结束", { n: t.closed }));
-  if (t.running) bits.push(tr("{n} 进行中", { n: t.running }));
-  if (t.waiting) bits.push(tr("{n} 等父节点", { n: t.waiting }));
-  if (t.failed) bits.push(tr("{n} 失败", { n: t.failed }));
-  if (t.blocked) bits.push(tr("{n} 个落在断链子树", { n: t.blocked }));
+  const bits = [tr("{n} 棵树", { n: trees.value.length }), tr("{n} 个节点 ", { n: t.total }), tr("{n} 个已完成 ", { n: t.done })];
+  if (t.closed) bits.push(tr("{n} 个已结束 ", { n: t.closed }));
+  if (t.running) bits.push(tr("{n} 进行中 ", { n: t.running }));
+  if (t.waiting) bits.push(tr("{n} 等父节点 ", { n: t.waiting }));
+  if (t.failed) bits.push(tr("{n} 失败 ", { n: t.failed }));
+  if (t.blocked) bits.push(tr("{n} 个落在断链子树 ", { n: t.blocked }));
   return bits.join(" ");
 });
 
