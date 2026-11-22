@@ -53,17 +53,15 @@
   border-left: 1px solid var(--line-3);
 }
 
-.msep {
-  flex: 0 0 auto;
-  align-self: stretch;
-  margin: 3px 2px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--line-2);
-}
-
+/* 组间竖线与格间同一来源：线条由格子左边框画，.msep 只负责触发这条规则。 */
+.mcell + .mcell,
 .msep + .mcell {
   padding-left: var(--s10);
+  border-left: 1px solid var(--line-3);
+}
+
+.msep {
+  display: none;
 }
 
 .mcell.run b {

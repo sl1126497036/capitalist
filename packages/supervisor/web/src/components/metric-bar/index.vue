@@ -333,7 +333,7 @@ async function submitConc() {
   }
 }
 
-/* 读数按任务进程、流量与上下文两组排列，组间用 sep 分隔线。 */
+/* 读数按任务进程、流量与上下文两组排列，组间用 sep 补上分隔线。 */
 const cells = computed(() => [
   {
     k: t("并行"),
