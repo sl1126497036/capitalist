@@ -7,7 +7,7 @@
 [中文](README.md)
 </div>
 
-An AI automated task scheduling plugin: long task flows are broken down automatically, multiple tasks are allocated, and similar tasks run as concurrent shards. Once a task is issued, a task tree is generated automatically, each task keeps its own context, and a supervisor process schedules everything, keeping a separate context and memory of its own while scheduling. Designed, tested and reviewed by hand; coded with Deepseek.
+An AI automated task scheduling plugin: long task flows are broken down automatically, multiple tasks are allocated, and similar tasks run as concurrent shards. Once a task is issued, a task tree is generated automatically, each task keeps its own context, and a supervisor process schedules everything, maintaining its own separate context and memory during scheduling. Designed, tested and reviewed by hand; coded with Deepseek.
 
 The project is still in testing and not yet stable.
 
@@ -82,8 +82,8 @@ The supervisor board provides access to local folders, which may leak files on a
 
 ### 2. File security
 
-1. Sensitive paths and credential-like access are denied by default.
-2. Wildcards and deletions without arguments are denied by default.
+1. Access to sensitive paths and to keys or credentials is denied by default.
+2. Deletions with wildcards or without arguments are denied by default.
 3. Operations inside the workspace, and whitelisted read-only operations, are allowed by default.
 4. Any other operation outside the workspace goes to the supervisor, which decides by impact.
 

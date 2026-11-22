@@ -7,7 +7,7 @@
 [中文](README.md)
 </div>
 
-An AI automated task scheduling plugin: long task flows are broken down automatically, multiple tasks are allocated, and similar tasks run as concurrent shards. Once a task is issued, a task tree is generated automatically, each task keeps its own context, and a supervisor process schedules everything, maintaining a separate context and memory per task. Designed, tested and reviewed by hand; coded with Deepseek-V4.1-Flash.
+An AI automated task scheduling plugin: long task flows are broken down automatically, multiple tasks are allocated, and similar tasks run as concurrent shards. Once a task is issued, a task tree is generated automatically, each task keeps its own context, and a supervisor process schedules everything, maintaining its own separate context and memory during scheduling. Designed, tested and reviewed by hand; coded with Deepseek.
 
 The project is still in testing and not yet stable.
 
@@ -52,10 +52,8 @@ Requirements: Node.js ≥ 18.17; macOS / Windows; the work-process host must off
 
 ### Notes for WorkBuddy
 
-- Without a terminal the host runs in "restricted mode". Clear it first, otherwise commands are unavailable.
-- Starting the supervisor requires `--detach`. The host moves a long command to the background and returns immediately; the credentials are read while that command runs, which is when the authorization prompt can be triggered. On macOS the user must grant authorization; without `--detach`, or without authorization, the host reports "chat channel unavailable".
-- WorkBuddy and CodeBuddy are installed together: the plugin runs in the WorkBuddy desktop app, work processes are carried by the CodeBuddy CLI, and the account credentials come from CodeBuddy.
-- WorkBuddy restricts file access to the credential directory (Settings → Security → File security). Failing to allow it can break chat and dispatch.
+- WorkBuddy runs inside a sandbox, so the supervisor can only be started by running the command manually from a terminal; otherwise the host reports "chat channel unavailable".
+- Once started in a terminal, you can keep sending instructions to the supervisor from WorkBuddy, and the supervisor can also identify the models and skills available in WorkBuddy.
 
 
 
@@ -74,22 +72,40 @@ When a third-party skill is referenced in a host, the supervisor can either gene
 
 The supervisor panel is recommended for task supervision and scheduling. The startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address can be read from `board_url` in `capitalist status`. From the panel you can resume dispatches, inspect stages, interact with running work processes, write new instructions and adjudicate questions. The access key is not checked by default, but leaving it unchecked may pose an intranet security risk; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
 
+## Security policy
+
+The project implements its own local security policy so it can run outside the host sandbox.
+
+### 1. Board security
+
+The supervisor board provides access to local folders, which may leak files on a LAN; an access key can be required with `--secure`.
+
+### 2. File security
+
+1. Access to sensitive paths and to keys or credentials is denied by default.
+2. Deletions with wildcards or without arguments are denied by default.
+3. Operations inside the workspace, and whitelisted read-only operations, are allowed by default.
+4. Any other operation outside the workspace goes to the supervisor, which decides by impact.
+
 ## Use cases
 
 Tasks can be issued from the host directly or from the supervisor panel.
 
-### 1. Coding tasks: frontend and backend in parallel
+### 1. Literary creation
+
+For literary creation, the historical setting, story outline, character relationships and the detailed content of each chapter can be handed to separate processes, with the supervisor accepting and advancing the work as required.
+
+### 2. Coding tasks: frontend and backend in parallel
 
 For coding tasks the supervisor can let frontend and backend proceed independently and start integration and automated-test processes once both are done.
 
 You can: create a custom contract with frontend and backend as two `parallel` shards, one dispatch and one work process each; put integration and automated tests in later stages, which advance automatically once the previous stage is done.
 
-### 2. Security tasks: batch dispatch and split by domain
+### 3. Security tasks: batch dispatch and split by domain
 
 For security tasks a skill can drive vulnerability hunting across several sites in one dispatch, with the supervisor enforcing redlines and accepting results as the skill requires; alternatively, split by site and dispatch by subdomain once asset collection is done.
 You can split multiple sites into shards per site, split a single site into later-stage shards per subdomain, or dispatch several src hunting instructions in one go.
-## Runtime panel
-![Supervisor panel](board.png)
+
 
 
 
