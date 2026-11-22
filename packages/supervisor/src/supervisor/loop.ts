@@ -6624,7 +6624,7 @@ function runFacts(root: string): { facts: string; count: number } | null {
         ? String(d.note ?? "").trim()
         : "";
     lines.push(
-      `· ${label || d.id} ${title}${spent ? `（${spent}）` : ""}：${closedWord(d)}` +
+      `- ${label || d.id} ${title}${spent ? `（${spent}）` : ""}：${closedWord(d)}` +
         `${why ? `（${why}）` : ""}`,
     );
   }
@@ -6800,7 +6800,7 @@ function withAcceptance(root: string, action: string): string {
       return `- [${id}] ${title}${how ? `\n  怎么验：${how}` : ""}`;
     });
     return (
-      `${action}\n\n【验收清单 · 未勾选 ${todo.length} 条】\n${lines.join("\n")}\n` +
+      `${action}\n\n【验收清单】未勾选 ${todo.length} 条：\n${lines.join("\n")}\n` +
       `（每完成一条，把 ${LEGACY_ACCEPTANCE_DIR}/reports/vue-acceptance.jsonl 中该条目的 done 改为 true，` +
       "并在 evidence 写明核对方式；已完成条目不重复执行。）"
     );

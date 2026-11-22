@@ -2,7 +2,7 @@
  * 消息编号：发送方 + 接收方 + 毫秒时间戳，天然携带顺序。
  *
  * 全系统消息只有这一套编号，落盘不带 `#`，展示才带 `#`（见 {@link msgNoLabel}）。
- * 方向段一律写成「谁发给谁」，不用单字母：只写发送方无法区分收件人，
+ * 方向段一律写成“谁发给谁”，不用单字母：只写发送方无法区分收件人，
  * 监工回复用户、监工派单给工作进程、监工裁决申报会挤在同一个段里。
  *
  *   用户发给工作进程      `2-U2W-<毫秒>`   显示 `#2-U2W-<毫秒>`
@@ -23,14 +23,14 @@
 
 import { padBareNo } from "../record/idMap";
 
-/** 消息方向。前六段是「发送方到接收方」，后三段只为兼容旧台账保留。 */
+/** 消息方向。前六段是“发送方到接收方”，后三段只为兼容旧台账保留。 */
 export type MsgDirection = "U2W" | "U2S" | "W2S" | "S2W" | "S2U" | "W2U" | "W" | "S" | "SP";
 
 /**
  * 用户消息的承接方。
  *
- * 方向由承接方决定，不由请求里带了哪个参数决定。早先按「是否监工介入」判定方向，
- * 监工面板直发因不带介入标记，全部落成 `U2W`，与「用户发给 Worker」无法区分。
+ * 方向由承接方决定，不由请求里带了哪个参数决定。早先按“是否监工介入”判定方向，
+ * 监工面板直发因不带介入标记，全部落成 `U2W`，与“用户发给 Worker”无法区分。
  */
 export type UserMsgCarrier = "supervisor" | "worker";
 
@@ -50,9 +50,19 @@ export function isUserMsgDirection(value: string): value is MsgDirection {
 /** 监工面板全局消息的单号占位。 */
 export const SUPERVISOR_NO = "S0";
 
-/** 毫秒时间戳计数器，保证同一毫秒内仍有序。 */
+/**
+ * 毫秒时间戳计数器，保证同一毫秒内仍有序。
+ *
+ * 只服务写入路径。读接口每轮把同一批台账记录重新构造成消息，用它会带着上一轮的序号继续
+ * 递增，同一条消息在两次重建之间换号。读路径改用 {@link msgIdScope}。
+ */
 let lastMs = 0;
 let lastSeq = 0;
+
+/** 拼编号：`任务号-方向-毫秒`，同一毫秒的第二条起后缀 `-序号`。 */
+function composeMsgId(taskNo: string | number, dir: MsgDirection, ms: number, seq: number): string {
+  return `${taskNo}-${dir}-${seq > 0 ? `${ms}-${seq}` : ms}`;
+}
 
 /**
  * 生成消息编号（落盘形式，不带 `#`）。
@@ -68,8 +78,27 @@ export function msgId(taskNo: string | number, dir: MsgDirection, now = Date.now
     lastMs = ms;
     lastSeq = 0;
   }
-  const suffix = lastSeq > 0 ? `${ms}-${lastSeq}` : `${ms}`;
-  return `${taskNo}-${dir}-${suffix}`;
+  return composeMsgId(taskNo, dir, ms, lastSeq);
+}
+
+/**
+ * 单次重建内的发号器。
+ *
+ * 读接口要给缺号的事件补号，但补出来的号必须每轮一致：前端按 id 合并消息，号一变就当成
+ * 新消息追加，同一段文字会反复出现。序号限定在一次构建内按源记录顺序取，源顺序不变，
+ * 重建即得同一串。
+ *
+ * 视图块（思考、输出、工具、引擎）不用这里：它们不是消息，身份走 `viewId`。
+ */
+export function msgIdScope(): (taskNo: string | number, dir: MsgDirection, now: number) => string {
+  const used = new Map<string, number>();
+  return (taskNo, dir, now) => {
+    const ms = Math.max(0, Math.trunc(now));
+    const key = `${taskNo}\u0000${dir}\u0000${ms}`;
+    const seq = used.get(key) ?? 0;
+    used.set(key, seq + 1);
+    return composeMsgId(taskNo, dir, ms, seq);
+  };
 }
 
 /**

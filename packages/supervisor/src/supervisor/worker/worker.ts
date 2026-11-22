@@ -52,7 +52,7 @@ import { bindAttachments } from "../../core/message/attachments";
  */
 export type WorkerHost = string;
 
-/** 拉起工作进程的入参。 */
+/** 启动工作进程的入参。 */
 export interface LaunchOptions {
   root: string;
   target: string;
@@ -293,7 +293,7 @@ export function resolveSession(root: string, dispatch: Dispatch): WorkerSession 
  */
 export const ACTION_TAIL_MARKERS = [
   "\n\n【用户插话 · 只对本次派单生效】",
-  "\n\n【验收清单 · 未勾选的",
+  "\n\n【验收清单",
   "\n\n【上一轮卡点",
 ];
 
@@ -310,7 +310,7 @@ export function actionTail(action: string): string {
  * 重派与续跑共用的卡点段：旧正文原样重发，仅在末尾追加一条不超过 {@link BLOCKER_MAX_CHARS} 字的短消息。
  * 两处入口共用同一成文函数，口径一致。
  */
-export const BLOCKER_MARKER = "【上一轮卡点 · 不是新要求，无需重做】";
+export const BLOCKER_MARKER = "【上一轮卡点，不是新要求，无需重做】";
 /** 追加段字数上限。 */
 export const BLOCKER_MAX_CHARS = 300;
 
@@ -404,7 +404,7 @@ export function buildAcceptBlock(d: Dispatch): string[] {
   if (!accept) return [];
   return [
     "",
-    "【本次验收 · 上一轮未通过项优先，其余按原验收清单，不降低标准】",
+    "【本次验收】上一轮未通过项优先，其余按原验收清单，不降低标准",
     accept,
     "报告时逐条说明该项当前如何满足；未做到的如实说明，不写“已优化”这类无法核对的说法。",
     "核对方式按下面的结束口径：以代码证据与相关单元测试为准。",
@@ -488,13 +488,13 @@ function buildHelpBlock(dispatchId: string): string[] {
   ];
 }
 
-/** “改完必须生效”约束：改动须重启承载进程才会生效。工作进程不直接结束监工，走既有安全流程（确认空闲 -> 外部拉起 / `capitalist reload` + 外部重起）。 */
+/** “改完必须生效”约束：改动须重启承载进程才会生效。工作进程不直接结束监工，走既有安全流程（确认空闲 -> 外部启动 / `capitalist reload` + 外部重起）。 */
 export function buildApplyBlock(): string[] {
   return [
     "【五、改完要生效】只改文件、不重启承载进程，不构成有效交付：",
     "  1. 改动涉及前端界面：构建后重启面板服务（只重启面板，不动监工），重启后确认页面加载的是新构建产物。",
     "  2. 改动涉及监工主进程逻辑（调度、派单、提示词等）：先确认没有运行中的任务，再按现有安全流程重启监工使其生效。",
-    "     工作进程不直接终止监工进程：走外部拉起，或先 capitalist reload 落盘再由外部重起；重启后用新的进程号与启动时间核对。",
+    "     工作进程不直接终止监工进程：走外部启动，或先 capitalist reload 落盘再由外部重起；重启后用新的进程号与启动时间核对。",
     "  3. 收尾报告写“已重启生效：<面板 / 监工>”及重启对象；未重启的不报 done。",
   ];
 }
@@ -549,7 +549,7 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
     `${dispatchHead(d, title)}这一单的要求原文如下，原样重发，不重写。`,
-    baseAction || "(这一单没有留下正文，按下面的验收清单与卡点确定任务；无法判断时使用 capitalist ask)",
+    baseAction || "（这一单没有留下正文，按下面的验收清单与卡点确定任务；无法判断时使用 capitalist ask。）",
     "继续完成剩余部分；已改过的文件不重做，开始前先核对当前状态。",
     ...(tail
       ? [
@@ -594,7 +594,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     `任务根：${opts.root}`,
     ``,
     `【一、卡点】`,
-    baseAction || "(这一单没有留下卡点描述；按下面“只做一件事”的范围自行定位)",
+    baseAction || "（这一单没有留下卡点描述；按下面“只做一件事”的范围自行定位。）",
     ...(extra
       ? [
           "",
@@ -756,7 +756,7 @@ function writeWorkerBrief(root: string, workerId: string, text: string): void {
 }
 
 /**
- * 拉起一个工作进程，输出直接落到 `workers/<id>.log`。
+ * 启动一个工作进程，输出直接落到 `workers/<id>.log`。
  * 监工不解析工作进程的自然语言输出，只接受写回 `.capitalist/` 的结构化结果（report / ask / block）；解析 stdout 会把判定绑到措辞上。
  */
 export function launchWorker(opts: LaunchOptions): Launched {
@@ -969,7 +969,7 @@ function silentStartProbeMs(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 25_000;
 }
 
-/** 日志相对拉起时的增量字节；读不到按 0 处理。 */
+/** 日志相对启动时的增量字节；读不到按 0 处理。 */
 function logGrowth(log: string, baseline: number): number {
   try {
     return Math.max(0, statSync(log).size - baseline);
@@ -979,7 +979,7 @@ function logGrowth(log: string, baseline: number): number {
 }
 
 /**
- * 拉起后的静默自检：非交互模式下的失败常无输出或仅以退出码 0 结束，监工只能看到心跳超时，无法区分端口冲突、认证失效与单例锁冲突。
+ * 启动后的静默自检：非交互模式下的失败常无输出或仅以退出码 0 结束，监工只能看到心跳超时，无法区分端口冲突、认证失效与单例锁冲突。
  * 固定时长后日志正文仍为空时，补记一条诊断，写入进程存活、日志增量、argv 规模与是否含换行、令牌是否注入等事实。
  */
 function watchSilentStart(
@@ -999,7 +999,7 @@ function watchSilentStart(
     const hasToken = Object.keys(env).some((k) => k.endsWith("_TOKEN") && !!env[k]);
 
     const lines = [
-      `[silent] 拉起后${Math.round(delayMs / 1000)}秒日志仍无正文，工作进程没有进入会话`,
+      `[silent] 启动后${Math.round(delayMs / 1000)}秒日志仍无正文，工作进程没有进入会话`,
       /* `child.pid` 缺失时 pid 为 0，判活按“已退出”处理：未取得 pid 即表示未启动。 */
       `[silent] 进程${pid}${pidAlive(pid) ? "仍存活" : "已退出"}，日志增量 0 字节`,
       `[silent] 参数${args.length}项、共${argvChars}字符，${multiline ? "含换行" : "不含换行"}`,

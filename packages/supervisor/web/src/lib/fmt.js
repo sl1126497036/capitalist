@@ -6,6 +6,7 @@ import { CMD_ZH, EVENT_ZH, EVENT_ZH_FALLBACK } from "../../../src/supervisor/con
 import { lang, t } from "./i18n.js";
 import { rejectTail } from "./rejectTail.js";
 import { noLabel, bareNoLabel } from "./no.js";
+import { splitStatus, interjectTone } from "./statusParts.js";
 
 /* 时间格式随界面语言：英文用 en-GB（24 小时制、日/月顺序），中文用 zh-CN。 */
 const locale = () => (lang.value === "en" ? "en-GB" : "zh-CN");
@@ -103,32 +104,56 @@ export function isSupervisorSpeech(m, supervisorView) {
 }
 
 /**
- * 用户指令 / 追加卡片的生效状态词。`no` 由服务端下发，仅已落到派单的状态带号。
- * 失败时 reason 优先、为空回落 detail，与 rejectTail 及 stat() 同口径。
+ * 用户指令与追加卡片的生效状态词。`no` 由服务端下发，仅已落到派单的状态带号。
+ * 失败时 reason 优先、为空回落 detail，与 rejectTail 及 stat() 同一取值顺序。
  */
 export function sayStatus(s, no, reason, detail) {
-  const v = String(s || "");
-  /* 编号一律经 lib/no.js 取：`n` 带 `#`（直接拼在句尾），`b` 不带 `#`（填 `#{no}` 占位）。 */
+  /* 编号一律经 lib/no.js 取：`n` 带 `#`，直接拼在句尾；`b` 不带 `#`，填 `#{no}` 占位。 */
   const n = noLabel(no);
   const b = bareNoLabel(no);
   const withNo = (base) => (n ? `${base} ${n}` : base);
-  if (v === "executed") return withNo(t("已执行"));
-  if (v === "rejected") {
-    const tail = rejectTail(reason, detail);
-    return tail ? `${t("失败")} · ${tail}` : t("失败");
+  /*
+   * 服务端下发的状态可能在主状态后面接一段结论。判定按主状态，结论翻译后用括号附在句尾。
+   * 整串比对会把带结论的记录判成未知状态，气泡上就只剩一个编号。
+   */
+  const { head, tail: parts } = splitStatus(s);
+  const tail = parts.length ? `（${parts.map((x) => t(x)).join("、")}）` : "";
+  if (head === "executed") return withNo(t("已执行")) + tail;
+  if (head === "rejected") {
+    const why = rejectTail(reason, detail);
+    return (why ? `${t("失败")}：${why}` : t("失败")) + tail;
   }
-  if (v === "pending") return t("等待下一轮调度");
-  if (v === "已并入派单") {
-    return b ? t("已并入派单 #{no}；随该单启动生效", { no: b }) : t("已并入派单；随该单启动生效");
+  if (head === "pending") return t("等待下一轮调度") + tail;
+  if (head === "已并入派单") {
+    const base = b ? t("已并入派单 #{no}；随该单启动生效", { no: b }) : t("已并入派单；随该单启动生效");
+    return base + tail;
   }
-  if (v === "已送达执行中的进程") {
-    return b ? t("已送达 #{no}；执行中的进程已收到", { no: b }) : t("已送达；执行中的进程已收到");
+  if (head === "已送达执行中的进程") {
+    const base = b ? t("已送达 #{no}；执行中的进程已收到", { no: b }) : t("已送达；执行中的进程已收到");
+    return base + tail;
   }
-  if (v === "随派单启动带入") return t("随派单启动带入");
-  if (v === "已登记，进程下一次动作间隙送达") return t("已登记，进程下一次动作间隙送达");
-  if (v === "已登记，随归属单带入") return t("已登记，随归属单带入");
-  if (v === "待补投递") return t("待补投递");
+  if (head === "未投递") return t("未投递") + tail;
+  if (head === "随派单启动带入") return t("随派单启动带入");
+  if (head === "已登记，进程下一次动作间隙送达") return t("已登记，进程下一次动作间隙送达");
+  if (head === "已登记，随归属单带入") return t("已登记，随归属单带入");
+  if (head === "待补投递") return t("待补投递");
   return "";
+}
+
+/** 插话送达短词：三档各一个词，气泡尾标只用它。 */
+const INTERJECT_WORD = { ok: "已送达", pending: "待送达", bad: "未送达" };
+
+/**
+ * 用户插话的尾标：一个短词、一个配色档、一段悬停原因。
+ *
+ * 气泡只回答送到没有。档位由 {@link interjectTone} 判定，任何状态都有档位，
+ * 尾标位置不会时有时无。
+ */
+export function interjectStatus(s, reason, detail) {
+  const { head, tail } = splitStatus(s);
+  const tone = interjectTone(s);
+  const why = tone === "bad" ? (head === "rejected" ? rejectTail(reason, detail) : tail.join("、")) : "";
+  return { text: t(INTERJECT_WORD[tone]), tone, why };
 }
 
 

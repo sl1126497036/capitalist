@@ -641,7 +641,7 @@
                     <button
                       v-if="stat(v) && v.jump"
                       class="sayst jump"
-                      :class="v.m.status"
+                      :class="statTone(v)"
                       type="button"
                       data-tip=""
                       @click.stop="jumpThread(v.m)"
@@ -650,7 +650,7 @@
                     <span
                       v-else-if="stat(v)"
                       class="sayst"
-                      :class="v.m.status"
+                      :class="statTone(v)"
                       data-tip=""
                       @mouseenter="saystTipOn($event, v)"
                     >{{ stat(v) }}</span>

@@ -76,7 +76,7 @@ function buildPrompt(input: TriageInput): string {
     "",
     "【当前局面】",
     `阶段：${input.state.stage} ｜ 运行中 ${input.live}/${input.capacity} 个进程 ｜ 这一片已失败 ${input.failures} 次`,
-    `缺少的门槛：${input.gateMissing.length ? input.gateMissing.join("；") : "(无)"}`,
+    `缺少的门槛：${input.gateMissing.length ? input.gateMissing.join("；") : "（无）"}`,
     ...(input.recent.length ? ["最近失败：", ...input.recent.slice(-3).map((x) => `  - ${x}`)] : []),
     "",
     "【可选动作，只能选一个】",

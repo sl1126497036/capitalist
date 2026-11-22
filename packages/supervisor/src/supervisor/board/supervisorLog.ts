@@ -8,11 +8,12 @@ import { shardTitle } from "../usage/taskTitle";
 import { dispatchNoTable } from "../usage/threadNo";
 import { readJsonlFromTail } from "./logs";
 import { MQ_KIND_LABEL, fingerprint, maskThreadMessage } from "./render";
-import { REFUNDABLE_EVENTS, ThreadRole, ThreadMessage, describeEvent, ledgerOnlyRoot } from "./snapshot";
+import { ThreadRole, ThreadMessage, describeEvent, ledgerOnlyRoot } from "./snapshot";
 import { atTs, attachmentsOf, eventsFile, readDispatchesBoard } from "./sources";
 import { taskKeyOf } from "./state";
 import { viewId } from "./viewId";
-import { isMsgNo, msgId, msgTaskNo } from "../../core/message/msgId";
+import { isMsgNo, msgIdScope, msgTaskNo } from "../../core/message/msgId";
+import { eventRef } from "./eventMsg";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { loadState } from "../../core/record/state";
 import { hasCustomContract } from "../../core/contract/customContract";
@@ -335,6 +336,8 @@ export function buildSupervisorLog(
   const logAgg = new Map<string, ThreadMessage>();
 
   const unhandledIds = new Set(unhandledFromEvents(rows).map((u) => u.msg_id));
+  /** 事件补号器：一次重建内按源顺序取号，重建后不换号。 */
+  const nextMsgId = msgIdScope();
 
   for (const e of rows) {
     const name = String(e.event ?? e.kind ?? "");
@@ -355,28 +358,14 @@ export function buildSupervisorLog(
     }
     const bad = CAPITALIST_BAD_EVENTS.has(name) || (name === "supervisor_cmd" && e.ok === false);
     const tier = supervisorTierOf(name, e);
-    /* 身份：优先 `msg_id`，申报类事件把消息号写在 `id` 上；两者都不合法时按视图块处理。 */
-    const msgIdOf = String(
-      (e as { msg_id?: unknown }).msg_id ?? (e as { id?: unknown }).id ?? "",
-    ).trim();
-    const hasMsgNo = isMsgNo(msgIdOf);
-    /*
-     * 裁决与回执要能引用：它们是监工对某条申报或某个流程的正式结论。
-     * 编号取事件落盘时间，事件写入时就有这个时刻，重建得到同一个号。
-     */
-    const refundable = !hasMsgNo && REFUNDABLE_EVENTS.has(name);
-    const bornMs = Math.round(atTs(String(e.at ?? "")) * 1000) || Date.now();
-    const refundableNo = refundable
-      ? msgId(
-          msgTaskNo(String((e as { msg?: unknown }).msg ?? "")) ||
-            String(taskNoOfDispatchId(String((e as { dispatch?: unknown }).dispatch ?? "")) || "S0"),
-          name === "mq_triage" ? "S2W" : "S2U",
-          bornMs,
-        )
-      : "";
+    /* 身份与线程消息流同源：自带消息号优先，可引用事件补号，其余按视图块。 */
+    const taskNo =
+      msgTaskNo(String((e as { msg?: unknown }).msg ?? "")) ||
+      String(taskNoOfDispatchId(String((e as { dispatch?: unknown }).dispatch ?? "")) || "S0");
+    const ref = eventRef(e, { taskNo, base: CAPITALIST_THREAD_ID, nextId: nextMsgId });
     const item: ThreadMessage = {
-      id: hasMsgNo ? msgIdOf : refundableNo || viewId(CAPITALIST_THREAD_ID, "event", fingerprint(e)),
-      ...(hasMsgNo || refundable ? {} : { view: true }),
+      id: ref.id,
+      ...(ref.view ? { view: true } : {}),
       at: String(e.at ?? ""),
       role:
         ((e as { from?: unknown }).from as ThreadRole) || (name === "supervisor_chat_ask" ? "user" : "supervisor"),

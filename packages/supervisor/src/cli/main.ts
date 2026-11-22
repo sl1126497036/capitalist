@@ -470,7 +470,7 @@ function cmdStatus(p: Parsed): number {
   // 看板地址只在监工在线时给：已停的监工没有在监听的端口，印出来等于引导用户点一个空地址。
   if (boardUrl) write(t(`Board: ${boardUrl}\n`, `看板：${boardUrl}\n`));
 
-  if (pause) write(t(`Paused since ${pause.at}; reason: ${pause.reason} (no new dispatches, workers stopped; resume with capitalist resume)\n`, `调度暂停中 · 自 ${pause.at} · 原因：${pause.reason}（不派新单、进程已停；恢复：capitalist resume）\n`));
+  if (pause) write(t(`Paused since ${pause.at}; reason: ${pause.reason} (no new dispatches, workers stopped; resume with capitalist resume)\n`, `调度暂停中（自 ${pause.at} 起，原因：${pause.reason}）：不派新单、进程已停；恢复：capitalist resume\n`));
 
   /* 暂停单来自上次中断，与新派单互不阻塞；单独一行列出唤醒方式。 */
   const pausedRows = pausedDispatches(root);
@@ -532,7 +532,7 @@ function cmdBrief(p: Parsed): number {
     text += t(
       `\n▸ Task paused (since ${pause.at}; reason: ${pause.reason}). Dispatching is suspended; the "Next" above is on hold.\n` +
         `  Waiting for capitalist resume. Do not start work before it.\n`,
-      `\n▸ 调度暂停中（自 ${pause.at}，原因：${pause.reason}）：监工不派单，上面的“下一步”暂不执行。\n` +
+      `\n调度暂停中（自 ${pause.at}，原因：${pause.reason}）：监工不派单，上面的“下一步”暂不执行。\n` +
         `  等待操作者执行 capitalist resume；恢复之前不要继续开工。\n`,
     );
   }

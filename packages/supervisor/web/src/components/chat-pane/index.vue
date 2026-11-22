@@ -40,6 +40,7 @@ import {
   evtTag,
   evtText,
   hhmm,
+  interjectStatus,
   isSupervisorSpeech,
   msgRef,
   sayStatus,
@@ -232,8 +233,6 @@ function cls(m) {
     if (m.kind === "thinking") return "think";
     /* 引擎诊断单独分档，渲染为系统消息样式的折叠块。 */
     if (m.kind === "engine") return "engine";
-    /* 状态提示（如插话已送达）不是推理内容：按系统消息渲染，不做折叠卡。 */
-    if (m.kind === "notice") return "sys";
     /* 进程非零退出由底部状态条表达，其历史正文不按失败着色。 */
     return "worker";
   }
@@ -935,11 +934,20 @@ function stamp(iso) {
     : `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
 }
 
+/** 用户插话的尾标：短词与配色档由 {@link interjectStatus} 一处给出，过程细节只在悬停提示里。 */
+function interjectOf(v) {
+  return interjectStatus(v.m.status, v.m.reason, v.m.detail);
+}
+
 function stat(v) {
-  /* 监工直达消息（supervisorsay）同样带执行状态小字。 */
-  if (v.c === "user" || v.c === "human" || v.c === "supervisorsay") {
+  /*
+   * 用户插话只回答送到没有。三档固定短词，任何状态都有值。
+   * 派单号、并入过程、落实结论都不进气泡，它们会让同一句话的宽度和内容来回跳。
+   */
+  if (v.c === "user" || v.c === "human") return interjectOf(v).text;
+  /* 监工派单卡按编号对齐回执，缺失时只显示状态词。 */
+  if (v.c === "supervisorsay") {
     const s0 = sayStatus(v.m.status, v.m.no, v.m.reason, v.m.detail);
-    /* 派单消息卡带 no 时显示 #NN，与执行回执的编号一致。 */
     if (!s0 && v.m.no) return noLabel(v.m.no);
     return s0;
   }
@@ -950,16 +958,25 @@ function stat(v) {
   /* 失败尾标按 reason 优先、回落 detail，两者皆空只显示“失败”；字段由 supervisor_cmd 事件与 SC- 指令卡下发。 */
   if (s === "rejected") {
     const tail = rejectTail(v.m.reason, v.m.detail);
-    return tail ? `${tr("失败")} · ${tail}` : tr("失败");
+    return tail ? `${tr("失败")}：${tail}` : tr("失败");
   }
   return "";
 }
 
-/** 状态尾标仅在文案被省略号截断时挂 data-tip，放得下时不弹提示。 */
+/** 尾标配色档：用户插话三档固定，其余沿用原状态串，由既有样式处理。 */
+function statTone(v) {
+  if (v.c === "user" || v.c === "human") return interjectOf(v).tone;
+  return String(v.m.status || "");
+}
+
+/** 悬停提示：未送达总给原因，其余仅在文案被截断时给全文。 */
 function saystTipOn(e, v) {
   const el = e.currentTarget;
   if (!(el instanceof Element)) return;
-  if (el.scrollWidth > el.clientWidth + 1) el.setAttribute("data-tip", stat(v));
+  const mine = v.c === "user" || v.c === "human" ? interjectOf(v) : null;
+  const tip = mine ? [mine.text, mine.why].filter(Boolean).join("：") : stat(v);
+  const want = (mine && mine.why) || el.scrollWidth > el.clientWidth + 1;
+  if (want && tip) el.setAttribute("data-tip", tip);
   else el.removeAttribute("data-tip");
 }
 

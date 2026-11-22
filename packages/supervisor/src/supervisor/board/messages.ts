@@ -1,17 +1,18 @@
 import { hasCustomContract } from "../../core/contract/customContract";
 import { loadState } from "../../core/record/state";
 import { listDirectives } from "../../core/dispatch/commands";
-import { isMsgNo, msgId, msgTaskNo } from "../../core/message/msgId";
+import { isMsgNo, msgIdScope, msgTaskNo } from "../../core/message/msgId";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { mqPath } from "../../core/dispatch/mq";
 import { Dispatch, WorkerRecord } from "../../core/record/supervisor";
 import { dispatchNoTable } from "../usage/threadNo";
 import { readWorkerEvents, FRESH_LOG_SEC, logIdleSec, chunkWorkerLines, readJsonlFromTail } from "./logs";
 import { fingerprint, maskThreadMessage, toolSummary, verdictText } from "./render";
-import { REFUNDABLE_EVENTS, ThreadMessage } from "./snapshot";
+import { ThreadMessage } from "./snapshot";
 import { BOARD_READ_TTL_MS, atTs, attachmentsOf, eventsFile, listWorkersBoard, readDispatchesBoard } from "./sources";
 import { taskKeyOf } from "./state";
 import { viewId } from "./viewId";
+import { eventRef } from "./eventMsg";
 import { statSync } from "node:fs";
 
 /**
@@ -150,6 +151,8 @@ export function threadMessages(
   }
 
   const msgs: ThreadMessage[] = [];
+  /** 事件补号器：一次重建内按源顺序取号，重建后不换号。 */
+  const nextMsgId = msgIdScope();
   const dispatches = ctx.dispatches;
   const workers = ctx.workers;
   const sameTask = (w: { stage: string; shard?: string | null }): boolean =>
@@ -336,12 +339,13 @@ export function threadMessages(
         if (block.body.length === 0) return;
         const body = block.body.join("\n");
         /*
-         * 思考块按创建时刻取号：块首段日志自带的事件时间，取不到时退回进程启动时刻。
-         * 不用块上插值出来的 `at`，那个值随日志长度变化，会让同一块在每次重建时换号。
+         * 思考块是视图块，不是消息：身份走 viewId，界面不显示编号、不提供引用。
+         * 序号取块首段日志自带的事件时间，取不到时退回块序号；块上插值出来的 `at` 随日志
+         * 长度变化，用它当身份会让同一块在每次重建时换号。
          */
-        const bornMs = block.times[0] || Math.round(t0 * 1000);
+        const born = block.times[0] || i;
         msgs.push({
-          id: msgId(taskNoOfDispatchId(viewBase) || "S0", "W2U", bornMs),
+          id: viewId(viewBase, "think", born),
           view: true,
           at: new Date(block.at * 1000).toISOString(),
           role: "worker",
@@ -354,41 +358,6 @@ export function threadMessages(
           lines: body.split("\n").length,
         });
       });
-
-      /*
-       * 插话已送达、但工作进程还没产出新的思考：最后一段（越过全部插话的那一块）此时是空的，
-       * 界面停在插话前那张思考卡上，刷新后也看不出这次插话生效，看起来像没发出去。
-       * 补一条占位块，给插话留下可见落点；新思考一到，这个位置自然被真内容占掉，占位消失。
-       *
-       * 判据用“块序号 = 已越过几次插话”这一既有语义，不做时间比较：思考段本身没有真实
-       * 时间戳，`at` 是在 `t0..t1` 之间按序号插值出来的，用它和 `at_ts` 比较会误判。
-       * 只在已经有过真实思考时补：宿主不输出推理的情况下凭空造一条“思考过程”，
-       * 点开是空的，比没有这条更糟。占位本身按提示消息渲染，不套思考折叠壳。
-       */
-      const pendingIdx = thinkSayTimes.length;
-      const lastSay = pendingIdx > 0 ? thinkSayTimes[pendingIdx - 1]! : 0;
-      const tail = blocks[pendingIdx];
-      const hasRealThink = blocks.some((b) => b.body.length > 0);
-      if (hasRealThink && lastSay > 0 && (!tail || tail.body.length === 0)) {
-        const live = ["running", "starting", "claimed"].includes(String(worker.status ?? ""));
-        /* 排在所有已有思考块之后：插值时间可能晚于插话时刻，取两者较大值再让一步。 */
-        const lastAt = blocks.reduce((mx, b) => (b.body.length > 0 ? Math.max(mx, b.at) : mx), t0);
-        const at = Math.max(lastSay, lastAt + 0.001);
-        const text = live ? "插话已送达，正在重新思考" : "插话已送达，下一轮派单时生效";
-        msgs.push({
-          id: viewId(viewBase, "think-pending"),
-          view: true,
-          at: new Date(at * 1000).toISOString(),
-          role: "worker",
-          kind: "notice",
-          text,
-          tool: "",
-          cmd: "",
-          status: worker.status,
-          thread: tid,
-          lines: 1,
-        });
-      }
     }
 
     const chunks = chunkWorkerLines(lines);
@@ -396,10 +365,13 @@ export function threadMessages(
     for (let ci = 0; ci < chunks.length; ci++) {
       const block = chunks[ci] ?? [];
       const at = t0 + (span * (offset + block.length)) / (lines.length + 1);
-      /* 编号取块首行的创建时刻，与思考块同一口径；插值出的 `at` 会随日志长度变化，不能用来取号。 */
-      const bornMs = events.textTimes[offset] || Math.round(t0 * 1000);
+      /*
+       * 输出块是视图块，不是消息：身份走 viewId，序号取块首行在日志中的偏移。
+       * 偏移只随日志追加而增大，重建得到同一个身份；用块首行的时间戳不行，同一毫秒的
+       * 多行会撞成同一个身份，界面上只剩最后一块。
+       */
       msgs.push({
-        id: msgId(taskNoOfDispatchId(viewBase) || "S0", "W2U", bornMs),
+        id: viewId(viewBase, "out", offset),
         view: true,
         at: new Date(at * 1000).toISOString(),
         role: "worker",
@@ -472,25 +444,11 @@ export function threadMessages(
     if (name === "dispatch_open") continue;
     const text = verdictText(e, ctx.mqById, ctx.nos, { customContract });
     if (!text.trim()) continue;
-    /* 事件身份：优先 `msg_id`，申报类事件把消息号直接写在 `id` 上（`mq_message`）。 */
-    const evMsgId = String(
-      (e as { msg_id?: unknown }).msg_id ?? (e as { id?: unknown }).id ?? "",
-    ).trim();
-    const evIsMsg = isMsgNo(evMsgId);
-    /*
-     * 裁决与回执要能引用：它们是监工对某条申报或某个流程的正式结论，出问题时要能指着说。
-     * 进程启停、心跳这类状态播报不给号，它们没有可引用的内容。
-     */
-    const refundable = REFUNDABLE_EVENTS.has(name);
-    const evDir = name === "mq_triage" ? "S2W" : "S2U";
-    const evBorn = Math.round(atTs(String(e.at ?? "")) * 1000) || Date.now();
+    /* 事件身份与监工事件流同源：自带消息号优先，可引用事件补号，其余按视图块。 */
+    const ref = eventRef(e, { taskNo: eventTaskNoOf(e), base: tid, nextId: nextMsgId });
     msgs.push({
-      id: evIsMsg
-        ? evMsgId
-        : refundable
-          ? msgId(eventTaskNoOf(e), evDir, evBorn)
-          : viewId(tid, "event", fingerprint(e)),
-      ...(evIsMsg || refundable ? {} : { view: true }),
+      id: ref.id,
+      ...(ref.view ? { view: true } : {}),
       at: String(e.at ?? ""),
       role: "supervisor",
       kind: "verdict",

@@ -7,6 +7,7 @@ import ChatPane from "./components/chat-pane";
 import SupervisorStrip from "./components/supervisor-strip";
 import ForestPane from "./components/forest-pane";
 import { msgRef } from "./lib/fmt.js";
+import { mergeInterject, interjectRank } from "./lib/statusParts.js";
 import { lang, t } from "./lib/i18n.js";
 /* 局部 t 会遮蔽模块级文案函数，取文案统一走 $t 别名。 */
 const $t = t;
@@ -459,7 +460,7 @@ function mergeMessages(prev, next) {
       idx.set(key, out.length);
       out.push(m);
     } else {
-      out[at] = m;
+      out[at] = mergeInterject(out[at], m);
     }
   }
   /* 稳定归位：有时间按时间升序，同一时间或两边都缺时间时用原下标保证次序稳定。 */
@@ -480,6 +481,8 @@ const echoes = ref([]);
 let echoSeq = 0;
 /** 本地回显三分钟未落库即移除。 */
 const ECHO_TTL = 3 * 60 * 1000;
+/** 插话在这么多毫秒内仍未送达，取数时继续走全量校正；超过按老消息放过，避免每轮全量。 */
+const STALE_INTERJECT_MS = 10 * 60 * 1000;
 
 /** 判同忽略标点、空格与全半角，与 ChatPane 一致。 */
 function normSay(s) {
@@ -601,7 +604,16 @@ async function loadMessages() {
     return;
   }
 
-  const full = forceFull || !msgSince;
+  /*
+   * 送达状态由服务端按台账实时计算，只有全量取数才会带上窗口内每条的最新状态。
+   * 近期插话还停在待送达时强制全量，避免一份陈旧对象把尾标钉在待送达上。
+   */
+  const staleInterject = messages.value.some((m) => {
+    if (m?.role !== "user" || m?.kind !== "say" || interjectRank(m.status) !== 0) return false;
+    const at = Date.parse(String(m.at || ""));
+    return Number.isFinite(at) && Date.now() - at < STALE_INTERJECT_MS;
+  });
+  const full = forceFull || !msgSince || staleInterject;
   forceFull = false;
   const url = `./api/thread?${q({
     ...withRoot,
