@@ -76,8 +76,7 @@ const RATE_HINT = /(\b429\b|rate[_\s-]?limit|too[_\s-]?many[_\s-]?requests|限�
 /**
  * 回复正文里的动作行标记。
  *
- * 带动作行的正文是模型在干活，不可能是上游拒绝说明。这一条挡住的正是“模型复述失败原因后
- * 顺手给出重派指令”的常见形态。
+ * 带动作行的正文表明模型仍在执行任务，不可能是上游拒绝说明。该判据专门排除“模型复述失败原因后又给出重派指令”这一常见情形。
  */
 const ACTION_LINE =
   /^[ \t]*(?:DO|ATT|PARENT|PARENT_REASON|AFTER|GROUP|INSERT|INSERT_MODE|REVOKE|TITLE)[ \t]*[:：]/im;

@@ -110,7 +110,7 @@ function cmdRestart(p: Parsed): number {
 
   const spec = flagString(p, "contract");
   const contract = loadContract(spec ?? "minimal", skillDirs());
-  if (!contract) die(t(`Task list not found: ${spec ?? "minimal"}`, `找不到任务列表：${spec ?? "minimal"}`));
+  if (!contract) die(t(`Task list not found: ${spec ?? "minimal"}`, `未找到任务列表：${spec ?? "minimal"}。`));
 
   mkdirSync(rootDir(root), { recursive: true });
   mkdirSync(inboxLoc.dir(root), { recursive: true });
@@ -123,7 +123,7 @@ function cmdRestart(p: Parsed): number {
 function createRoot(target: string, spec: string, fallback: boolean, rootArg?: string): number {
   const contract = loadContract(spec);
   if (!contract) {
-    die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `找不到任务列表：${spec}\n可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}`));
+    die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `未找到任务列表：${spec}。可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}。`));
   }
   const root = rootArg ?? process.cwd();
   if (existsSync(rootDir(root))) die(t(`A supervised task already exists: ${root} (see capitalist status)`, `已存在受监督任务：${root}（用 capitalist status 查看）`));
@@ -150,8 +150,8 @@ function createRoot(target: string, spec: string, fallback: boolean, rootArg?: s
           `      Generic redlines apply, but "what counts as done in this domain" is undefined.\n` +
           `      For a domain task: capitalist adopt --contract <${others}>\n`,
         `\n未指定领域任务列表，已使用通用任务列表（generic）。\n` +
-          `      通用红线生效，但“这个领域什么算做完”没有定义。\n` +
-          `      若这是明确领域任务：capitalist adopt --contract <${others}>\n`,
+          `      通用红线生效，但该领域的完成标准未定义。\n` +
+          `      若任务属于明确领域，执行：capitalist adopt --contract <${others}>\n`,
       ),
     );
   }
@@ -163,7 +163,7 @@ function cmdAdopt(p: Parsed): number {
   const root = rootOrDie(p);
   const { state } = loadOrDie(root);
   const contract = loadContract(spec, skillDirs());
-  if (!contract) die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `找不到任务列表：${spec}\n可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}`));
+  if (!contract) die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `未找到任务列表：${spec}。可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}。`));
 
   const prev = state.contract;
   const keepStage = flagBool(p, "keep-stage");
@@ -197,7 +197,7 @@ function cmdAdvance(p: Parsed): number {
   if (!check.ok && !force) {
     recordViolation(root, {
       rule: "STAGE_SKIP",
-      label: `${sid} 阶段门槛没达标就想推进`,
+      label: `${sid} 阶段门槛未达标，不可推进。`,
       fix: `先把这些门槛项补齐再 advance：${check.missing.slice(0, 5).join("；")}`,
       evidence: check.missing.join("；"),
       decision: "REJECT",
@@ -227,13 +227,13 @@ function cmdAdvance(p: Parsed): number {
   }
 
   if (isLastStage(contract, sid)) {
-    write(t(`Already the last stage ${sid}; wrap-up is allowed once its gate passes.\n`, `已是最后阶段 ${sid}。收工条件满足时允许收工。\n`));
+    write(t(`Already the last stage ${sid}; wrap-up is allowed once its gate passes.\n`, `已是最后阶段 ${sid}；门槛达标后可收工。\n`));
     return 0;
   }
 
   const nid = nextStageId(contract, sid);
   const next = nid ? stageById(contract, nid) : undefined;
-  if (!next) die(t(`No stage after ${sid} in task list ${contract.name}`, `任务列表 ${contract.name} 里找不到 ${sid} 的下一阶段`));
+  if (!next) die(t(`No stage after ${sid} in task list ${contract.name}`, `任务列表 ${contract.name} 未定义 ${sid} 之后的阶段。`));
 
   if (updateState(root, (s) => enterStage(s, next)) === null) {
     die(t("State write conflict; the retry failed too. Run the command again", "状态写入冲突，重试后仍未成功：请再执行一次"));
@@ -304,7 +304,7 @@ function cmdAsk(p: Parsed): number {
     session: process.env.CAPITALIST_SESSION_ID ?? "",
   });
 
-  write(t(`Question registered as ${id}\nStopping here is allowed. To return: capitalist inbox ${id}\n`, `问题已登记 问${id}\n现在可以停下（这是合法停顿）。回来用：capitalist inbox ${id}\n`));
+  write(t(`Question registered as ${id}\nStopping here is allowed. To return: capitalist inbox ${id}\n`, `问题已登记 问${id}。可在此停止；返回后执行 capitalist inbox ${id} 查看。\n`));
   return 0;
 }
 
@@ -375,7 +375,7 @@ function cmdTasks(p: Parsed): number {
     }
     if (groups.length > 25) write(t(`  …and ${groups.length - 25} more group(s)\n`, `  …另有 ${groups.length - 25} 组\n`));
     if (!flagBool(p, "apply")) {
-      write(t("\nPreview only. Add --apply to confirm (merged items become void, not deleted; traceable)\n", "\n这只是预览。确认后加 --apply 执行（被并走的项转 void，不删除，可追溯）\n"));
+      write(t("\nPreview only. Add --apply to confirm (merged items become void, not deleted; traceable)\n", "\n这只是预览。确认后使用 --apply 执行（归并项转为已关闭，不删除，可追溯）。\n"));
       return 0;
     }
     const n = applyMerges(root, groups);
@@ -502,7 +502,7 @@ function cmdStatus(p: Parsed): number {
   // 指令与接管状态输出“已登记，下次派单生效”。
   const pending = listDirectives(root).filter((r) => r.consumed !== true);
   if (pending.length > 0) {
-    write(t(`Pending directives: ${pending.length} (apply to the next dispatch only; not yet merged into the action)\n`, `待生效指令：${pending.length} 条（只对下一次派单生效，尚未拼入 action）\n`));
+    write(t(`Pending directives: ${pending.length} (apply to the next dispatch only; not yet merged into the action)\n`, `待生效指令：${pending.length} 条（仅对下一次派单生效，尚未并入派单正文）。\n`));
   }
   const tk = activeTakeover(root);
   if (tk.all || tk.shards.length > 0) {
@@ -790,7 +790,7 @@ function cmdHosts(p: Parsed): number {
     if (r.aliases.length > 0) write(t(`  aliases ${r.aliases.join(",")}`, `  别名 ${r.aliases.join(",")}`));
     write("\n");
   }
-  write(t("\n# Capabilities derive from the facets declared by each impl; view the event mapping with capitalist-hook --selftest --agent <id>.\n", "\n# 能力由 impl 声明的 facet 推导；事件映射用 capitalist-hook --selftest --agent <id> 查看。\n"));
+  write(t("\n# Capabilities derive from the facets declared by each impl; view the event mapping with capitalist-hook --selftest --agent <id>.\n", "\n# 能力由各宿主实现声明；事件映射用 capitalist-hook --selftest --agent <id> 查看。\n"));
   return 0;
 }
 
@@ -822,7 +822,7 @@ function checkWorkspacePrepare(root: string): WorkspaceCheck {
       return {
         ok: false,
         impl: impl.id,
-        message: t(`Workspace preparation threw: ${err instanceof Error ? err.message : String(err)}`, `工作区准备抛出异常：${err instanceof Error ? err.message : String(err)}`),
+        message: t(`Workspace preparation threw: ${err instanceof Error ? err.message : String(err)}`, `工作区准备未完成：${err instanceof Error ? err.message : String(err)}`),
         fix: workspaceFixHint(root, String((err as Error)?.message ?? "")),
       };
     }
@@ -849,8 +849,8 @@ function workspaceFixHint(root: string, msg: string): string {
         "工作区配置目录写入被拒绝（权限 / 只读 / 被占用）。可操作的修复：",
         `  1. 确认当前用户对任务根有写权限（Windows：右键目录->属性->安全；或 icacls "${root}"）`,
         "  2. 关闭可能占用配置文件（settings.json / 项目配置）的进程：编辑器、其它 agent 会话、IDE",
-        "  3. 若任务根在只读挂载或受控目录，换一个可写目录重新 capitalist start",
-        "  4. 修复后执行 capitalist status 复检，或重新 capitalist supervise",
+        "  3. 若任务根在只读挂载或受控目录，换一个可写目录后重新执行 capitalist start。",
+        "  4. 修复后执行 capitalist status 复检，或重新执行 capitalist supervise。",
       ].join("\n"),
     );
   }

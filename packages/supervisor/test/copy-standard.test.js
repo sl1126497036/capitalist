@@ -39,7 +39,7 @@ test("记忆里没有配置就不带（代码不再内置固定文案）", () =>
   assert.ok(!out.includes("文案规范"));
 });
 
-test("删除记忆条目 = 关开关：之后不再带", () => {
+test("删除记忆条目即停用该配置：此后不再追加", () => {
   const root = newRoot();
   const added = memory.addMemory(root, NOTE, "habit");
   assert.ok(added);

@@ -52,7 +52,7 @@ export function defaultContextWindow(model: string): number {
 
 export const CTX_WINDOW_PRESETS = [300_000, 600_000, 1_000_000] as const;
 
-/** 未设置时的默认上下文窗口：监工与各工作进程各自独立取值，缺省都是这个数。 */
+/** 未设置时的默认上下文窗口：监工与各工作进程各自独立取值，默认值都是这个数。 */
 export const DEFAULT_CTX_WINDOW = 600_000;
 
 export function isCtxWindowPreset(n: number): boolean {
@@ -153,7 +153,7 @@ export function modelRealWindow(model: string, reported?: number | null): number
   return defaultContextWindow(model) || null;
 }
 
-/** 该模型的缺省窗口：600k，模型窗口不足时降到模型的真实窗口。 */
+/** 该模型的默认窗口为 600k；模型真实窗口不足时，按其真实窗口取值。 */
 export function defaultCtxWindowFor(model: string, reported?: number | null): number {
   const real = modelRealWindow(model, reported);
   return real !== null && real < DEFAULT_CTX_WINDOW ? real : DEFAULT_CTX_WINDOW;
@@ -170,10 +170,9 @@ export function effectiveCtxWindow(model: string, reported: number | null | unde
 
 
 /**
- * 这个模型撑不撑得住用户选的窗口。
+ * 判断模型是否支持用户所选的窗口大小。
  *
- * 判据：模型在默认表里登记过就用表；没登记看宿主报的读数（占位 300000 当“不知道”，
- * 按不支持处理）。返回 `supported` 与一句能直接给用户看的理由。
+ * 判据：模型在默认表中登记过就按表判断；未登记则看宿主上报的读数（占位值 300000 视为未知，按不支持处理）。返回是否支持与模型真实窗口。
  */
 export function ctxWindowSupported(
   model: string,
@@ -188,13 +187,7 @@ export function ctxWindowSupported(
 /**
  * 生效上下文窗口（token）：宿主上报 + 默认表，唯一的换算入口。
  *
- * 规则：
- * 1. 宿主没报、或报的是占位值 -> 用默认表；
- * 2. 宿主报了别的值 -> 用它（比表大不压低，比表小也当作该模型的真实配额）；
- * 3. 两边都没有 -> null：没有可依据的上限，界面只显示已用，不编一个。
- *
- * 看板读数、会话更换判定、监工上下文的超限判定都调这个函数。各算一套的后果是
- * “界面显示还有一半，实际判定已经超过上限”，且这类偏差不会报错。
+ * 规则：宿主未上报或上报占位值时用默认表；上报其他值时以该值为准；两者都没有时返回 null，界面只显示已用量，不虚构上限。看板读数、会话更换判定与监工上下文的超限判定统一调用本函数，避免界面显示与判定结果不一致。
  */
 export function resolveContextWindow(model: string, reported?: number | string | null): number | null {
   const host = Number(reported);

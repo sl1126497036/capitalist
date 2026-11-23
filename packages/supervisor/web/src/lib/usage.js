@@ -112,14 +112,14 @@ export function spendOf(usage) {
     return {
       text: `${Math.round(Number(u.credit)).toLocaleString("en-US")} ${t("积分")}`,
       tip: t(
-        "计费接口增量分摊（输入 {a} + 输出 {b} token）；面板未开启期间不分摊",
+        "按输入 {a}、输出 {b} token 计费",
         { a: fmtTokens(u.input_tokens) || t("未上报"), b: fmtTokens(u.output_tokens) || t("未上报") },
       ),
     };
   }
   if (!u.reported) return { text: "", tip: String(u.unavailable_reason || t("这条线程没有用量读数")) };
   if (u.billing_unit === "usd" && Number(u.cost_usd) > 0) {
-    return { text: `$${Number(u.cost_usd).toFixed(2)}`, tip: t("金额取自日志 result 行的 total_cost_usd") };
+    return { text: `$${Number(u.cost_usd).toFixed(2)}`, tip: t("金额取自用量记录") };
   }
   if (Number.isFinite(Number(u.total_tokens))) {
     /*
@@ -130,7 +130,7 @@ export function spendOf(usage) {
       return {
         text: "",
         tip: t(
-          "按积分计费，本线程未分摊到读数；输入 {a} + 输出 {b} token",
+          "按积分计费，本线程无用量读数；输入 {a} + 输出 {b} token",
           { a: fmtTokens(u.input_tokens) || t("未上报"), b: fmtTokens(u.output_tokens) || t("未上报") },
         ),
       };
@@ -147,5 +147,5 @@ export function spendOf(usage) {
       ),
     };
   }
-  return { text: "", tip: t("这条读数有用量但没有 token 字段") };
+  return { text: "", tip: t("这条读数有用量但没有明细") };
 }

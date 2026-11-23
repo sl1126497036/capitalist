@@ -136,7 +136,7 @@ export function guardSupervisor(): void {
       appendFileSync(
         log,
         `[capitalist-guard] ${new Date().toISOString()} 监工 pid ${supervisorPid} 连续 ${misses} 次检测不到，` +
-          "判定父进程已被强杀，worker 自行退出\n",
+          "判定父进程已被强制终止，worker 自行退出\n",
       );
     } catch {
       /* 日志写不进去也要退出，否则孤儿进程会残留 */

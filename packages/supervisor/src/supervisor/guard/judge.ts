@@ -174,7 +174,7 @@ async function judgeOne(
     notifyWorker(
       root,
       { stage: rec.stage || state.stage, worker: rec.worker, dispatch: rec.dispatch, paths: rec.paths },
-      `【权限已批准】${rec.paths.join("、")}\n监工已批准这一次操作，按原命令重试一次即可。${why ? `\n理由：${why}` : ""}`,
+      `【权限已批准】${rec.paths.join("、")}\n按原命令重试。${why ? `\n理由：${why}` : ""}`,
     );
     out(`[监工] 权限申请 ${rec.id} 批准：${rec.paths.join("、")}`);
     return true;

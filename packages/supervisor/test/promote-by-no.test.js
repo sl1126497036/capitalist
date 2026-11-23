@@ -72,7 +72,7 @@ test("按号定位：单已终结时不返回（不用已终结的单置顶）",
   }
 });
 
-test("按号定位：编号表里没有这个号 -> undefined，不按队列顺序猜", () => {
+test("按号定位：编号表中无该号时返回 undefined，不按队列顺序推断", () => {
   const root = sandbox();
   try {
     seedWithNo(root, "D-any");
@@ -106,7 +106,7 @@ test("监工发出“立即执行 #N”：指令落实后置顶生效", async ()
   }
 });
 
-test("监工发出“立即执行 #N”而编号不存在：给出明确的拒绝理由，不再沿用“找不到排队中的单”", async () => {
+test("监工发出“立即执行 #N”但该编号不存在时：返回明确的拒绝理由，不再沿用“未找到排队中的单”", async () => {
   const root = sandbox();
   try {
     seedWithNo(root, "D-queued2");

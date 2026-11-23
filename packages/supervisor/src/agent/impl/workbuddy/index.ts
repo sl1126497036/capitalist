@@ -54,7 +54,7 @@ export const impl: HostImpl = {
   projectLocal: true,
   knownModels: ["fast-model", "deepseek-v4.1-flash", "glm-5.3-flash"],
   cliBins: ["workbuddy", "workbuddy.cmd"],
-  /* 平台模型策略：默认档与禁用名单，阻止宿主自行改用其它档位（见 shared/modelPolicy.ts）。 */
+  /* 平台模型策略：默认档与禁用名单，阻止宿主自行改用其他档位（见 shared/modelPolicy.ts）。 */
   modelPolicy: TENCENT_MODEL_POLICY,
 
   hook: new ClaudeStyleHook({ guessPriority: 50 }),

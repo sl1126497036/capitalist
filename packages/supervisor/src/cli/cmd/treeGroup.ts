@@ -259,7 +259,7 @@ export function cmdTreeMove(p: Parsed, root: string, detach: boolean): number {
   if (target && !normalizeGroupId(target)) {
     const hit = resolveIds(root, [target]);
     if (hit.ids.length === 0) {
-      process.stdout.write(`未改动：父节点“${target}”${hit.errors.length ? `（${hit.errors.join("；")}）` : "找不到"}\n`);
+      process.stdout.write(`未改动：${hit.errors.length ? `父节点“${target}”未解析成功（${hit.errors.join("；")}）` : `未找到父节点“${target}”`}。\n`);
       return 1;
     }
     target = hit.ids[0] ?? "";

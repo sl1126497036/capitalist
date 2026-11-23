@@ -146,9 +146,7 @@ function newId(target: string, fromUser: boolean): string {
    * 方向段按发起方取，不按记录类型取。
    *
    * 这张台账存的是调度指令，但其中一部分是用户在界面上说的话（`via` 缺省或 `user`）。
-   * 那些记录会以“我：”气泡显示，身份必须是用户消息编号（`U2S`）；早先一律按指令性质
-   * 记成 `S`，界面上就出现“用户说的话带着监工方向”，引用条也跟着复述错号。
-   * 监工对话层自己生成的指令才是 `S2W`：这条台账的内容是发给工作进程的。
+   * 这些记录在界面上以“我：”气泡呈现，身份须采用用户消息编号（`U2S`）；若按指令性质一律记为 `S`，气泡会显示为用户消息却带监工方向标记，引用条中的编号也随之出错。监工对话层自行生成的指令才使用 `S2W`，因为该台账内容是发给工作进程的。
    */
   const no = taskNoOfDispatchId(String(target ?? "")) || "S0";
   return msgId(no, fromUser ? userMsgDirectionOf("supervisor") : "S2W");
@@ -187,9 +185,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
   let action = pick();
 
   /*
-   * 口语里的“重派 #02”指的是整单返工，而 retry 只重跑分片，两者参数形态不同：
-   * 带 `#编号` 的转给 redo，参数统一为 `#N`（redo 只认开头编号）；
-   * 不带井号的（如“重派 s2”）仍按 retry 处理。
+   * 用户说“重派 #02”通常指整单返工，而 retry 只重跑分片，两者参数形态不同：带 #编号 的输入转交 redo，参数统一为 #N（redo 只识别开头的编号）；不带 # 的输入（如“重派 s2”）仍按 retry 处理。
    */
   if (action === "retry") {
     const hashed = /#\s*(\d{1,4})\b/.exec(rest);

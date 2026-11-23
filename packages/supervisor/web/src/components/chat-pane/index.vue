@@ -936,7 +936,7 @@ function stamp(iso) {
 
 /** 用户插话的尾标：短词与配色档由 {@link interjectStatus} 一处给出，过程细节只在悬停提示里。 */
 function interjectOf(v) {
-  return interjectStatus(v.m.status, v.m.reason, v.m.detail);
+  return interjectStatus(v.m);
 }
 
 function stat(v) {
@@ -1197,7 +1197,7 @@ const stageIds = computed(() =>
       shards: typeof s.shards === "number" ? s.shards : Array.isArray(s.shards) ? s.shards.length : null,
       total: all.size,
       doneCount: ok.size,
-      leftTip: left.length ? tr("未完成：{list}", { list: left.join(tr("、")) }) : tr("本阶段分片均已完成"),
+      leftTip: left.length ? tr("未完成：{list}", { list: left.join(tr("、")) }) : tr("本阶段任务均已完成"),
       gate: Boolean(s.gate_passed ?? s.gate_ok ?? s.done),
       done: Boolean(s.done) || i < props.stageIndex,
       cur: i === props.stageIndex,
@@ -1309,7 +1309,7 @@ const usageCells = computed(() => {
   const ctx = fmtCtx(u.context_used, winNow, u.context_over === true);
   const ctxNote = [
     u.context_estimate ? tr("按消息文本估算") : "",
-    u.context_over ? tr("已用超过生效上限，按上限显示") : "",
+    u.context_over ? tr("用量已超上限") : "",
   ]
     .filter(Boolean)
     .join("；");
@@ -1623,7 +1623,7 @@ async function memDelete(entry) {
 const FEATURE_HINTS = [
   "已结束的派单可在原会话中回复，也可由监工介入唤醒",
   "拖输入框上沿可改变高度，双击恢复默认",
-  "通过“图片/路径”选择文件后，任务根内的相对路径会插入输入框",
+  "通过“图片/路径”选择文件后，任务目录内的相对路径会插入输入框",
   "截图可直接粘贴或拖入输入框，上传完成后随消息一并发送",
   "在工作进程会话中开启“监工介入”，消息将转由监工处理，工作进程不会收到",
   "“派单模型”选定后对之后的新单持续生效，更换或清除后失效",
@@ -2372,7 +2372,7 @@ async function uploadOne(file, gen = draftGen) {
     pushLive(
       timedOut
         ? tr("上传超时（{n} 秒）：图片未上传，点击“重试”重新上传", { n: UPLOAD_TIMEOUT_MS / 1000 })
-        : tr("上传中断：连接已断开，点击“重试”重新上传"),
+        : tr("上传中断：连接已断开，点击“重试”继续"),
       "bad",
     );
     if (gen === draftGen) uploadFails.value = [...uploadFails.value, {file, name: file.name || "clipboard.png"}];
@@ -2628,10 +2628,10 @@ const placeholder = computed(() => {
   if (!isSupervisor.value) {
     /* 已结束的单仍可发消息，服务端把原单置回 open 带原上下文续跑。 */
     const st = String(props.thread?.status || "");
-    if (st === "queued") return tr("这一单在排队；此时发送的内容会并入这一单，启动时一并带入");
+    if (st === "queued") return tr("这一单在排队，现在发送的内容会在启动时带入");
     if (!["running", "starting"].includes(st))
       return tr("派单已结束，消息在原会话中回复");
-    return tr("给执行中的进程发消息；会在下一个动作间隙收到，不打断当前执行");
+    return tr("给执行中的进程发消息，不打断当前执行");
   }
   return tr("给监工派单或发送消息");
 });

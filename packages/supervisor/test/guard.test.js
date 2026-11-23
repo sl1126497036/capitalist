@@ -21,7 +21,7 @@ function tmpRoot() {
 }
 
 
-test("POSIX 绝对路径能抽出来（曾经抽不出，导致 /etc 与 /var/log 从未生效）", () => {
+test("POSIX 绝对路径可被提取（此前识别失败，导致 /etc 与 /var/log 配置项从未生效）", () => {
   assert.deepEqual(extractLocalPaths("cat /etc/passwd", ROOT), ["/etc/passwd"]);
   assert.deepEqual(extractLocalPaths("rm -rf /var/log/app", ROOT), ["/var/log/app"]);
   assert.deepEqual(extractLocalPaths("--path=/usr/share/x", ROOT), ["/usr/share/x"]);
@@ -264,7 +264,7 @@ test("report_assert：缺字段、非数值、未知断言类型都 fail closed"
   assert.match(unknown.missing[0], /未知断言类型/);
 });
 
-test("report_assert：只有空断言或读不到报告时不判通过", () => {
+test("report_assert：仅当断言为空或无法读取报告时不判通过", () => {
   const root = tmpRoot();
   assert.equal(runCheck({ type: "report_assert", file: "nope.json", assert: [] }, root).ok, false);
   assert.equal(runCheck({ type: "report_assert", file: "nope.json", assert: "header" }, root).ok, false);

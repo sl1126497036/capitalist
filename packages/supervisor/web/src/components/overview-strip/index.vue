@@ -101,12 +101,12 @@ const mem = computed(() => (memPressure.value === null ? null : `${Math.round(me
 
 const cpuTitle = computed(() => {
   const r = res.value;
-  if (cpuPct.value !== null) return t("整机处理器占用率，与活动监视器口径一致");
-  return t("处理器采样不可用：{why}", { why: r?.unavailable_reason || "后台采样器尚无数据" });
+  if (cpuPct.value !== null) return t("整机处理器占用率");
+  return t("处理器采样不可用：{why}", { why: r?.unavailable_reason || "后台尚无采样数据" });
 });
 const memTitle = computed(() => {
   const r = res.value;
-  if (mem.value) return t("整机内存压力：100% 减去可用内存占比（memory_pressure）");
+  if (mem.value) return t("整机内存压力");
   return t("内存压力读取不可用：{why}", { why: r?.unavailable_reason || "暂无数据" });
 });
 

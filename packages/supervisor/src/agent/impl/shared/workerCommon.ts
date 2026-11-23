@@ -13,7 +13,7 @@ import type { WorkerFacet } from "../../contract";
 /**
  * 判断某个可执行文件是否必须经 shell 才能 spawn。
  *
- * Windows 上的 `.cmd` / `.bat` 包装脚本返回 true，其它情况返回 false。
+ * Windows 上的 `.cmd` / `.bat` 包装脚本返回 true，其他情况返回 false。
  */
 export const winShellForShim: NonNullable<WorkerFacet["needsShell"]> = (bin, platform) =>
   platform === "win32" && /\.(cmd|bat)$/i.test(bin);
@@ -21,7 +21,7 @@ export const winShellForShim: NonNullable<WorkerFacet["needsShell"]> = (bin, pla
 /**
  * 候选可执行文件名。
  *
- * Windows 为 `<name>.cmd` / `<name>.exe` / `<name>`，其它平台只有裸名。平台分支收在这里，
+ * Windows 为 `<name>.cmd` / `<name>.exe` / `<name>`，其他平台只有裸名。平台分支收在这里，
  * 差异只在 `<name>`。
  */
 export function winBinNames(platform: NodeJS.Platform, name: string): string[] {

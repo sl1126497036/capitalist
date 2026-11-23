@@ -28,7 +28,7 @@ export function reopenOneByRef(root: string, arg: string, directiveId: string): 
 
   const st = String(hit.status ?? "");
   if (st === "claimed" || st === "reported" || st === "review") {
-    return { ok: false, reason: `这一单仍在执行或等待裁决（${st}），无需重派；调整做法用 amend` };
+    return { ok: false, reason: `这一单仍在执行或等待裁决，无需重派；调整做法用 amend` };
   }
   const next = reopenSettledDispatch(root, String(hit.id), "用户要求重派");
   if (!next) return { ok: false, reason: "重开失败：该单已在执行，或取号锁被占用，稍后重试即可" };

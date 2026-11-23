@@ -1,4 +1,4 @@
-/** 前置判定：派单前置沿用原规则，组前置整组了结才放行。 */
+/** 前置判定：派单前置沿用原规则，组前置整组完成才放行。 */
 
 const test = require("node:test");
 const assert = require("node:assert");
@@ -106,7 +106,7 @@ test("splitPrerequisites：拆出派单与组，保留屏障标记", () => {
   assert.strictEqual(split.barrier, true);
 });
 
-test("组的成员全部是 closed：按已了结放行", () => {
+test("组的成员全部是 closed：按已完成放行", () => {
   const rows = [d("1-1", "closed", { group: "G1" }), d("3-1", "open", { parent: "G1" })];
   const idx = groupIndexOf(rows, [g("G1")]);
   assert.deepStrictEqual(pendingOf(rows[1], rows, idx), []);

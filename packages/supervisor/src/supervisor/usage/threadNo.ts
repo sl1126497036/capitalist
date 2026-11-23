@@ -157,19 +157,24 @@ export function threadIdByNo(root: string, no: number | string): string {
  * 默认只认在途状态，用于“该编号当前执行到哪一步”。重开（redo）要的恰恰是已经结束的那张单，
  * 该场合把 `includeDone` 打开，否则会被 live 过滤掉，表现为“没有编号 #01”。
  *
+ * 只取终态时用 `settledOnly`：取“派发序最大的单”可能命中同批刚开出的替代单，
+ * 拿它当重开目标等于让两张单同时做同一件事。
+ *
  * @param rows 传入已读的台账可省一次 IO；不传时自行读取。
  * @param opts.includeDone 为真时把已结束的单（`done` / `closed` / `failed`）也视为可取目标（仍取最近一条）。
+ * @param opts.settledOnly 为真时只取终态，在途单不参与，优先于其余两个选项。
  * @returns 命中的那张单；号不存在、或已终结且未开启 includeDone 时为 undefined。
  */
 export function dispatchOfThreadNo(
   root: string,
   no: number,
   rows: Dispatch[] = readDispatches(root),
-  opts: { includeDone?: boolean; anyStatus?: boolean } = {},
+  opts: { includeDone?: boolean; anyStatus?: boolean; settledOnly?: boolean } = {},
 ): Dispatch | undefined {
   const want = Math.trunc(no);
   const prefix = `${want}-`;
   const live = (s: string): boolean => {
+    if (opts.settledOnly === true) return ["done", "closed", "failed"].includes(s);
     /* 排结构、挂依赖要能指向已经结束的单，这类场合由调用方打开 `anyStatus`。 */
     if (opts.anyStatus === true) return true;
     if (["open", "claimed", "reported", "review"].includes(s)) return true;

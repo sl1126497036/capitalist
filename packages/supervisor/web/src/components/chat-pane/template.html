@@ -52,7 +52,7 @@
                   class="memta"
                   rows="3"
                   :maxlength="memLimits?.note_max || 160"
-                  :placeholder="t('一条对当前任务有用的记忆：用户习惯、运行环境、项目约定、注意事项等')"
+                  :placeholder="t('一条对当前任务有用的记忆：用户习惯、运行环境、项目约定、卡点等')"
                 ></textarea>
                 <div class="memacts">
                   <button class="membtn ok" type="button" :disabled="memSaving" @click.stop="memSave">{{ t("保存") }}</button>

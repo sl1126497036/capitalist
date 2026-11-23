@@ -13,6 +13,7 @@ import { BOARD_READ_TTL_MS, atTs, attachmentsOf, eventsFile, listWorkersBoard, r
 import { taskKeyOf } from "./state";
 import { viewId } from "./viewId";
 import { eventRef } from "./eventMsg";
+import { directiveDelivery } from "./delivery";
 import { statSync } from "node:fs";
 
 /**
@@ -512,10 +513,40 @@ export function threadMessages(
     /*
      * 身份按来源取：监工记录用自身编号（`id`，方向 `S`），用户发言用触发它的用户消息编号
      * （`msg_id`，方向 `U2W` / `U2S`）。两者都必须是消息编号形态；老记录两者都不合规时
-     * 按视图块处理，界面不显示编号、不提供引用，避免拿一串哈希当消息号。
+     * 按视图块处理，界面不显示编号、不提供引用，避免把内容指纹当作消息编号。
      */
     const dirMsgId = [String(r.id ?? "").trim(), String(r.msg_id ?? "").trim()].find((x) => isMsgNo(x)) ?? "";
     const dirQuote = String((r as { quote?: unknown }).quote ?? "").trim();
+    /*
+     * 档位与文案同源：档位决定气泡上的短词，文案只作悬停提示。
+     * 两者分头计算会让一条已送达的记录带上一句待送达的原因。
+     */
+    const delivery = directiveDelivery(r);
+    const deliveryText = ((): string => {
+      if (delivery === "bad") return "未投递，所属派单已随阶段推进作废";
+      if (delivery === "ok") {
+        const base = String(r.consumed_via ?? "") === "hook" ? "已送达执行中的进程" : "已并入派单";
+        const outcome = String((r as { outcome?: unknown }).outcome ?? "");
+        const tail =
+          outcome === "done"
+            ? " | 已执行"
+            : outcome === "not_mine"
+              ? " | 不属于本任务"
+              : outcome === "blocked"
+                ? " | 卡住"
+                : (r as { delivered?: unknown }).delivered === true
+                  ? " | 待完结"
+                  : "";
+        return base + tail;
+      }
+      const targetId = String((r as { target?: unknown }).target ?? "");
+      const td = targetId ? ctx.dispatches.find((x) => String(x.id) === targetId) : undefined;
+      const ts = String(td?.status ?? "");
+      if (!td) return "已登记，随归属单带入";
+      if (ts === "open") return "随派单启动带入";
+      if (ts === "claimed" || ts === "reported" || ts === "review") return "已登记，进程下一次动作时送达";
+      return "待补投递";
+    })();
     msgs.push({
       id: dirMsgId || viewId(tid, "say", fingerprint(r)),
       ...(dirMsgId ? {} : { view: true }),
@@ -529,35 +560,8 @@ export function threadMessages(
       text: toWorker ? `已转告工作进程：${body}` : body,
       tool: "",
       cmd: "",
-      status: r.consumed
-        ? (() => {
-            const via = String((r as { consumed_via?: unknown }).consumed_via ?? "");
-            /* 无进程接收的记录不能显示成“已并入派单”，否则用户会误以为内容已进入执行。 */
-            if (via === "dropped") return "未投递，所属派单已随阶段推进作废";
-            const viaHook = via === "hook";
-            const base = viaHook ? "已送达执行中的进程" : "已并入派单";
-            const outcome = String((r as { outcome?: unknown }).outcome ?? "");
-            const tail =
-              outcome === "done"
-                ? " | 已执行"
-                : outcome === "not_mine"
-                  ? " | 不属于本任务"
-                  : outcome === "blocked"
-                    ? " | 卡住"
-                    : (r as { delivered?: unknown }).delivered === true
-                      ? " | 待完结"
-                      : "";
-            return base + tail;
-          })()
-        : (() => {
-            const targetId = String((r as { target?: unknown }).target ?? "");
-            const td = targetId ? ctx.dispatches.find((x) => String(x.id) === targetId) : undefined;
-            const ts = String(td?.status ?? "");
-            if (!td) return "已登记，随归属单带入";
-            if (ts === "open") return "随派单启动带入";
-            if (ts === "claimed" || ts === "reported" || ts === "review") return "已登记，进程下一次动作间隙送达";
-            return "待补投递";
-          })(),
+      status: deliveryText,
+      delivery,
       ...(tookNo ? { no: tookNo } : {}),
       thread: tid,
       ...(attachmentsOf(r).length ? { atts: attachmentsOf(r) } : {}),

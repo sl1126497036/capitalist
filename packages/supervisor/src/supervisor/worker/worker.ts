@@ -33,6 +33,7 @@ import {
   touchWorker,
   workerLogPath,
 } from "../../core/record/supervisor";
+import { handoffLines, lastSettledOf, squashOutcome } from "../../core/record/outcome";
 import { workers as workersLoc } from "../../core/record/locations";
 import type { HostImpl, WorkerSession } from "../../agent/contract";
 import { byId, currentHost, siblings, workerByKey, workerHosts } from "../../agent/registry";
@@ -324,12 +325,6 @@ export interface BlockerInfo {
   review_note?: string;
 }
 
-/** 压成一行：卡点段只写能改变下一步动作的信息，不保留台账里的换行与缩进。 */
-function squashBlocker(text: unknown, max: number): string {
-  const t = String(text ?? "").replace(/\s+/g, " ").trim();
-  return t.length > max ? `${t.slice(0, Math.max(0, max - 1))}…` : t;
-}
-
 /**
  * 把台账上的一张单压成卡点素材。
  * 取不到原因时返回空对象，由 {@link buildSkipBlocker} 写成“上一轮未记录失败原因”，让工作进程先复现再开始修改。
@@ -337,9 +332,9 @@ function squashBlocker(text: unknown, max: number): string {
 export function blockerInfoOf(d: Partial<Dispatch> | undefined | null): BlockerInfo {
   if (!d) return {};
   return {
-    note: squashBlocker(d.note, 400),
-    retry_why: squashBlocker(d.retry_why, 400),
-    review_note: squashBlocker(d.review_note, 400),
+    note: squashOutcome(d.note, 400),
+    retry_why: squashOutcome(d.retry_why, 400),
+    review_note: squashOutcome(d.review_note, 400),
   };
 }
 
@@ -379,7 +374,7 @@ export function blockerLines(info?: BlockerInfo | null): string[] {
     24,
     BLOCKER_MAX_CHARS - BLOCKER_MARKER.length - 1 - lead.length - how.length - 1,
   );
-  return [`${lead}${squashBlocker(parts.join("；"), budget)}`, how];
+  return [`${lead}${squashOutcome(parts.join("；"), budget)}`, how];
 }
 
 /** 卡点段成文（标题 + 正文）。重派建单与发车提示词共用同一构造口。 */
@@ -446,12 +441,12 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
 function buildBoundaryBlock(id: string): string[] {
   return [
     "【三、边界】",
-    `  1. 只认这一单：需要复查要求时读 .capitalist/workers/${id}/brief.md；不读 .capitalist/ledger/tasks.jsonl、`,
-    "     .capitalist/inbox/*.jsonl、其他 .capitalist/workers/* 或其他 brief。这些属于其他派单。",
-    "     其他进程的日志与报告都不算证据；不把“上一轮同口径的单已经实现过”当作本单产出，",
-    "     本单未做即未完成。",
-    "  2. 台账里 done / closed 的派单是历史，不是待办：读台账、日志排查时，不要按历史派单的描述",
-    "     “恢复”或“实现”任何东西。界面现状以代码为准，不以截图、旧日志、旧派单正文为准；",
+    `  1. 只认这一单：需要复查要求时读 .capitalist/workers/${id}/brief.md；`,
+    "     .capitalist/ledger/tasks.jsonl 只读本任务号的行（同一任务此前的结论），按本单派单号的 `任务号-` 前缀过滤，",
+    "     不读其他任务的派单记录；不读 .capitalist/inbox/*.jsonl、其他 .capitalist/workers/* 或其他 brief。",
+    "     其他进程的日志与报告不算证据；不把其他任务的产出当作本单产出，本单未做即未完成。",
+    "  2. 本任务台账里 done / closed 的单是历史，不是待办：按历史结论核对已改过什么，",
+    "     不按历史描述“恢复”或“实现”任何东西。界面现状以代码为准，不以截图、旧日志、旧派单正文为准；",
     "     历史描述与本单冲突时以本单为准，并在报告里写明冲突点。",
     "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
     "     那三项属于监工，工作进程代为执行会使执行与验收职责不分。",
@@ -547,14 +542,14 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
     `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；不要读其他单的说明与台账）`,
     "",
     "【一、这一单要做什么】",
-    "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
+    "  （下面正文里若再出现【用户插话】【上一轮卡点】【上一轮已完成的部分】【本次验收】，都是这一块的子项，不是新的一节。）",
     `${dispatchHead(d, title)}这一单的要求原文如下，原样重发，不重写。`,
     baseAction || "（这一单没有留下正文，按下面的验收清单与卡点确定任务；无法判断时使用 capitalist ask。）",
     "继续完成剩余部分；已改过的文件不重做，开始前先核对当前状态。",
     ...(tail
       ? [
           "",
-          "本次启动前用户追加了新要求（或列了还没完成的验收项），原文如下，先做这些：",
+          "本次启动前用户追加了要求或未完成的验收项，原文如下，优先执行：",
           tail,
         ]
       : []),
@@ -623,7 +618,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     `【${CN[n]}、边界】`,
     `  1. 不执行 capitalist advance / capitalist adopt / capitalist supervise，也不手改 .capitalist/ 下的台账；`,
     `     台账只按本单 id 取本单的行，其他单不读。`,
-    `  2. 不重启监工：那是监工自己的动作，重启会终止正在执行这条修复的进程。`,
+    `  2. 不重启监工：重启会终止正在执行本单修复的进程。`,
     readonly
       ? "  3. 只读：代码、配置、台账均不改。"
       : "  3. 可以改代码，但只改与这个卡点直接相关的地方；不连带重构，不做其他单的任务。",
@@ -633,7 +628,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     ``,
     `【${CN[n + 2]}、收尾】`,
     `  ${readonly ? "查清后" : "修完并验证后"}：capitalist report ${d.id} done --note "<${readonly ? "根因" : "改了什么"}>" --evidence "<${readonly ? "支持这个根因的证据" : "跑了什么、结果如何"}>"`,
-    `  查不下去：capitalist report ${d.id} failed --note "<已经排除了什么、还差什么>"`,
+    `排查受阻：capitalist report ${d.id} failed --note "<已排除什么、还差什么>"`,
     `  需人工裁决：capitalist ask "<问题>" 后停手。`,
   ].join("\n");
 }
@@ -707,6 +702,11 @@ export function buildPrompt(opts: {
    * 每块只出现一次，块内编号从 1 起，块外用中文序号标识阅读路径。
    */
   const accept = buildAcceptBlock(d);
+  /*
+   * 新会话起步时没有上一轮的上下文。同一件事此前已结束过的，把结论交过去；
+   * 没有这一段，新进程只能照着正文重做，撞上上一轮已经改过的地方再回头申报。
+   */
+  const carry = handoffLines(lastSettledOf(opts.root, d));
   return [
     "你是独立的工作进程，不是监工。",
     `任务根：${opts.root}`,
@@ -714,9 +714,11 @@ export function buildPrompt(opts: {
     `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；内容与下面正文一致，需要复查时读取该文件）`,
     ``,
     "【一、这一单要做什么】",
-    "  （下面正文里若再出现【用户插话】【上一轮卡点】【本次验收】，都是这一块的子项，不是新的一节。）",
+    "  （下面正文里若再出现【用户插话】【上一轮卡点】【上一轮已完成的部分】【本次验收】，都是这一块的子项，不是新的一节。）",
     dispatchHead(d, title),
     attPayload.text,
+    /* 上一轮结论先于卡点：先知道做完了什么，再看没做成什么。 */
+    ...(carry.length ? ["", "【上一轮已完成的部分】", ...carry] : []),
     /* 卡点段只在发车时拼进提示词，不写入 action；放在正文之后、其余约束之前。 */
     ...(retryCtx ? ["", retryCtx] : []),
     /* 本次验收（重派时才有）：属于“这一单要做什么”的一部分，不另起一块。 */
@@ -999,10 +1001,10 @@ function watchSilentStart(
     const hasToken = Object.keys(env).some((k) => k.endsWith("_TOKEN") && !!env[k]);
 
     const lines = [
-      `[silent] 启动后${Math.round(delayMs / 1000)}秒日志仍无正文，工作进程没有进入会话`,
+      `[silent] 启动后 ${Math.round(delayMs / 1000)} 秒，日志仍无正文，工作进程未进入会话`,
       /* `child.pid` 缺失时 pid 为 0，判活按“已退出”处理：未取得 pid 即表示未启动。 */
       `[silent] 进程${pid}${pidAlive(pid) ? "仍存活" : "已退出"}，日志增量 0 字节`,
-      `[silent] 参数${args.length}项、共${argvChars}字符，${multiline ? "含换行" : "不含换行"}`,
+      `[silent] 参数 ${args.length} 项，共 ${argvChars} 字符，${multiline ? "含换行" : "不含换行"}`,
       `[silent] 令牌变量${hasToken ? "已注入" : "未注入"}`,
       "",
     ];

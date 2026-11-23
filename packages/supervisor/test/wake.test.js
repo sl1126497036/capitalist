@@ -45,7 +45,7 @@ test("续跑提示词自包含：重发正文，并带上用户唤醒的话", ()
   assert.match(p, /D-wake1/, "派单 id 要在，收尾 report 用得上");
 });
 
-test("没有尾巴时续跑提示词照样带正文，不出现空的插话段", () => {
+test("没有尾巴时续跑提示词仍带正文，不出现空的插话段", () => {
   const root = sandbox();
   const p = buildResumePrompt({
     root,
@@ -57,7 +57,7 @@ test("没有尾巴时续跑提示词照样带正文，不出现空的插话段",
   assert.ok(!p.includes("追加了新要求"), "没有新要求就不该说“追加了新要求”");
 });
 
-test("首次启动提示词照旧带整段 action（含尾巴）", () => {
+test("首次启动提示词仍带整段 action（含尾巴）", () => {
   const root = sandbox();
   const d = {
     id: "D-wake1",

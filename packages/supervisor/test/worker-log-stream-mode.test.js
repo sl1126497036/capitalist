@@ -36,7 +36,7 @@ const EVENT_TEXT = JSON.stringify({
   message: { content: [{ type: "text", text: "清单读完了，开始改注释" }] },
 });
 
-/** 每个用例一份独立日志，避免模块级游标缓存互相串。 */
+/** 每个用例一份独立日志，避免模块级游标缓存互相干扰。 */
 function withLog(body) {
   const dir = mkdtempSync(join(tmpdir(), "worker-log-mode-"));
   const file = join(dir, "output.log");

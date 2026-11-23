@@ -15,9 +15,7 @@ const CONTAINER_CONTRACT_NAME = "generic";
 /**
  * 用户是否自己写了任务列表。
  *
- * `minimal` 是引擎自带的默认工序，`generic` 是调度层的容器键，两者都不是用户定义的过程。
- * 这两种情况不在界面描述契约：用户没有“S0”这个概念，一张单落在哪一步也不影响他要看的结果，
- * 写出来只会让人以为漏了别的步骤。只有用户自己写了任务列表，阶段名与门槛才是他关心的信息。
+ * `minimal` 是引擎自带的默认工序，`generic` 是调度层的容器键，都不是用户定义的过程。这两种情况不展示阶段与门槛：用户没有“S0”这一概念，阶段归属不影响他要查看的结果，展示反而让人误以为漏了步骤。只有用户自己写了任务列表，阶段名与门槛才有意义。
  */
 export function hasCustomContract(name: unknown): boolean {
   const n = String(name ?? "").trim();

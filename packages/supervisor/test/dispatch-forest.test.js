@@ -138,7 +138,7 @@ test("自指树边被拒：父节点不能是本单自己", () => {
   assert.strictEqual(chk.code, "self_parent");
 });
 
-test("孤儿父节点：父记录不在台账里时放行，并在森林视图里列出来（不静默等死）", () => {
+test("孤儿父节点：父记录不在台账里时放行，并在森林视图中列出（不作静默挂起）", () => {
   const root = sandbox();
   put(root, "A", { parent: "D-gone", parent_reason: "父记录被清理掉了" });
   put(root, "B");
@@ -220,7 +220,7 @@ test("建单：PARENT: none 等于不挂父节点（新树 / 兄弟）", async (
   assert.strictEqual(capitalist.dependenciesSettled(created, capitalist.readDispatches(root)), true);
 });
 
-test("挂父节点的单不参与同类合并：合进去等于替它背一条没写在自己记录上的树边", async () => {
+test("挂父节点的派单不参与同类合并：合并会使其承担一条未记录在自身记录上的树边", () => {
   const root = sandbox();
   put(root, "A");
   const run = async (arg, parent, reason) => {
@@ -281,11 +281,11 @@ test("场景：异常中断 / 进程被杀，重启后树与队列和中断前�
   const before = queueAfterRestart(root);
   assert.deepStrictEqual(before, ["B", "C", "X"]);
 
-  /* B 的进程被杀：单留在 claimed，重启不拉起在途单（等收尸）。 */
+  /* B 的进程被终止：派单留在 claimed，重启不拉起在途派单（等待回收判定）。 */
   patch(root, "B", { status: "claimed" });
   assert.deepStrictEqual(queueAfterRestart(root), ["C", "X"], "在途单不重复拉起，其余顺序不变");
 
-  /* 收尸判 failed，重派单按台账追加排队尾；树边跟着重派走。 */
+  /* 回收判定为 failed，重派单按台账追加至队尾；树边随重派单保留。 */
   patch(root, "B", { status: "failed", done_at: new Date().toISOString() });
   put(root, "B2", { parent: "A", parent_reason: "要 A", lineage: "B" });
   assert.deepStrictEqual(queueAfterRestart(root), ["C", "X", "B2"], "重派单排到队尾，树边仍在");

@@ -104,6 +104,7 @@ import { copyStandardNote, memoriesFor, primeMemory, rememberLesson, renderMemor
 import { commitCursor, readPendingMq, type MqMessage } from "../core/dispatch/mq";
 import { attachmentsIn, bindAttachments, stripAttachments, withAttachmentLines } from "../core/message/attachments";
 import { attachmentsOfMessage } from "../core/message/messages";
+import { isTerminal } from "../core/record/dispatchState";
 import { taskNoOfDispatchId, titleSimilarity } from "../core/record/tasks";
 import {
   clearPreemptLease,
@@ -230,8 +231,7 @@ import { currentHost, siblings, workerHosts } from "../agent/registry";
 import { supervisorModelOf } from "./judge/supervisorModel";
 
 /**
- * 运行期细节。默认不上控制台：控制台只留状态行（running 及其后随的停派原因），
- * 逐条追踪用 `--verbose` 或 `CAPITALIST_VERBOSE=1`。
+ * 运行期细节默认不输出到控制台：控制台只保留状态行（running 及随后的停派原因）。逐条追踪用 `--verbose` 或 `CAPITALIST_VERBOSE=1`。
  *
  * 事件本身照常落台账与日志文件，这里只负责终端。
  */
@@ -316,7 +316,7 @@ export interface SupervisorOptions {
   force?: boolean;
   /**
    * 是否由监工拉起工作进程。关闭时监工只派单，工作进程由外部会话用 `capitalist next` 领取；
-   * 无非交互入口的宿主强行 spawn 只会得到 never-start 记录。
+   * 没有非交互入口的宿主无法拉起工作进程，强行拉起只会留下未启动记录。
    */
   spawnWorkers?: boolean | undefined;
   /**
@@ -337,13 +337,13 @@ export interface SupervisorOptions {
   /**
    * 看板重启的合并窗口（毫秒）：产物版本稳定这么久之后才重启。
    *
-   * 省缺取环境变量 `CAPITALIST_BOARD_RELOAD_QUIET_MS`，再缺省 {@link DEFAULT_BOARD_RELOAD_QUIET_MS}。
+   * 缺省取环境变量 `CAPITALIST_BOARD_RELOAD_QUIET_MS`，再取 {@link DEFAULT_BOARD_RELOAD_QUIET_MS}。
    */
   boardQuietMs?: number | undefined;
   /**
    * 两次看板重启的最小间隔（毫秒）。
    *
-   * 省缺取环境变量 `CAPITALIST_BOARD_RELOAD_MIN_GAP_MS`，再缺省 {@link DEFAULT_BOARD_RELOAD_MIN_GAP_MS}。
+   * 缺省取环境变量 `CAPITALIST_BOARD_RELOAD_MIN_GAP_MS`，再取 {@link DEFAULT_BOARD_RELOAD_MIN_GAP_MS}。
    */
   boardMinGapMs?: number | undefined;
   out?: (line: string) => void;
@@ -441,7 +441,7 @@ function envNumber(key: string, fallback: number): number {
 }
 
 /**
- * 抖动比例：`CAPITALIST_RETRY_JITTER`（0~1，缺省 0.2）。作用是把同时到点的重派在本地错开，
+ * 抖动比例：`CAPITALIST_RETRY_JITTER`（0~1，缺省 0.2）。它把同时到点的重派在本地错开，
  * 不改变阶梯的单调递增与上限。
  */
 function retryJitterRatio(): number {
@@ -487,8 +487,7 @@ function failDispatchAndJudge(
   out: (s: string) => void,
 ): boolean {
   /*
-   * 登录态不可用时不进入重试裁决：裁决需调用模型，同一登录态下同样失败，结果落到
-   * “判定通道不可用 -> 按可重试处理”并反复重派。直接判定失败。
+   * 登录态不可用时不进入重试裁决：裁决需调用模型，同一登录态下同样失败，否则会被当成可重试通道反复重派。这里直接判定失败。
    */
   if (note === AUTH_REQUIRED_TEXT) {
     markChannelDown(root, AUTH_REQUIRED_TEXT);
@@ -525,7 +524,7 @@ function failDispatchAndJudge(
 }
 
 /**
- * 父节点失败到重派上限后，整棵子树同步判定失败，再由监工处理父节点失败原因，无法处理时等待人工检查。
+ * 父节点重派到上限后，整棵子树一并判为失败。监工随后诊断父节点的失败原因；无法处理时转人工检查。
  * 顺序固定：先停进程（让工作进程退出回调看到终态 `failed`，不二次结束），再写 `failed` 与
  * `retry_verdict: "give_up"`（否则 `requeueAdhoc` 会重新拉起整棵子树），最后记事件标明断裂的祖先。
  * `done` / `closed` 的子孙不动。
@@ -644,19 +643,19 @@ const FAILURE_RULES: Array<{ cause: FailureCause; re: RegExp; fixable: boolean; 
     cause: "model_down",
     re: /rate[ _-]?limit|too many requests|overloaded|\b529\b|服务过载|请求过于频繁|insufficient|余额不足|额度(?:已)?(?:用尽|用完|耗尽|不足)|quota|(?:http|status|code|error|response)[^\n]{0,24}\b429\b/i,
     fixable: false,
-    summary: "模型额度不可用（耗尽 / 限流 / 过载）：额度恢复后把 retry_verdict 改回 retry 再重派",
+    summary: "模型额度不可用（耗尽、限流或过载）：额度恢复后重开这一单再重派",
   },
   {
     cause: "proxy",
     re: /ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|EPIPE|\b50[234]\b|proxy|网络中断|连接被重置/i,
     fixable: true,
-    summary: "代理或网络中断：属于环境抖动，等退避后重跑",
+    summary: "代理或网络中断：等网络恢复后重跑",
   },
   {
     cause: "env",
     re: /ENOENT|EACCES|EADDRINUSE|EBUSY|EPERM|ENOSPC|cannot find module|端口.{0,4}占用|磁盘空间/i,
     fixable: true,
-    summary: "环境缺件（文件/端口/权限位）：消除本地条件后重跑",
+    summary: "缺少运行条件（文件、端口或权限）：补齐本地条件后重跑",
   },
 ];
 
@@ -715,9 +714,7 @@ function diagnoseFailure(root: string, d: Dispatch): Diagnosis {
 const CASCADE_AUTO_RESET_MAX = 1;
 
 /**
- * 父节点断掉后的接手动作：能修则重跑子树（父节点开一张继承派生链的后续单，子孙原地重开），
- * 即换会话或换时机重跑；修不了（被拒、无法识别、已自动重置过）则登记待裁决问题并标阻塞。
- * 级联后必须有人接手，否则成为静默失败。
+ * 父节点失败到上限后由监工接手：原因可处理时重跑子树（父节点开一张继承派生链的后续单，子节点原地重开），即换会话或换时机；无法处理（被拒、无法识别或已自动重置过）时登记待裁决问题并标阻塞。级联失败无人接手会变成静默失败。
  */
 function handleBrokenParent(
   root: string,
@@ -822,8 +819,7 @@ function resetSubtree(
 }
 
 /**
- * 转人工：登记待裁决问题并标阻塞。`capitalist ask` 使问题可见，`capitalist block` 使调度停下；
- * 仅 ask 会被超时宽限放过，仅 block 则看不到停机原因，两者须同时具备。
+ * 转人工须同时登记待裁决问题与阻塞：`capitalist ask` 让问题可见，`capitalist block` 让调度停下。只用 ask，问题超时后会被宽限放过；只用 block，看不到停机原因。
  */
 function escalateCascade(
   root: string,
@@ -847,7 +843,7 @@ function escalateCascade(
         `连续失败 ${Number(failed.retry_count ?? 0) || "?"} 次后级联判定失败`,
         `诊断原因：${dg.cause}｜${dg.summary}`,
         `判断依据：${dg.evidence.slice(0, 400)}`,
-        "处置：确认原因后执行 capitalist answer 本问题；重跑时把该节点的 retry_verdict 改回 retry 并重开",
+        "处置：确认原因后执行 capitalist answer 回答本问题；需要重跑时重开该节点",
       ].join("\n"),
       failed.stage,
       "" /* 整阶段级：父节点失败后，该树上的单不再自动推进。 */,
@@ -1016,7 +1012,7 @@ async function judgeRetry(
       },
       {
         name: "hold",
-        desc: "暂不重派：上一轮的卡点核对后仍未消除（缺的依赖还在、前置单未完成、同一处报错未修），重派只会在同一个地方再失败一次",
+        desc: "暂不重派：上一轮的卡点核对后仍未消除（依赖仍缺失、前置单未完成或同一处报错未修），重派仍会在同一处失败",
       },
     ],
     session: "capitalist-brain-retry",
@@ -1076,7 +1072,7 @@ interface DispatchEx extends Dispatch {
   required?: boolean;
   /** 最近一次被用户消息唤醒的时间（ISO）；宽限期内的在途单不因阶段推进被作废。 */
   wake_at?: string;
-  /** 阶段卡死检测强制结束的标记；语义为“确认已死”，不占重派退避窗口，失败计数与重派上限照常。 */
+  /** 阶段卡死检测强制结束的标记；表示已确认进程不再推进，不占重派退避窗口，失败计数与重派上限照常。 */
   forced?: boolean;
 }
 
@@ -1261,15 +1257,14 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   const leaseTask = leaseTaskName(opts.root);
   const prevLease = readLease(opts.root, leaseTask);
   /*
-   * 持有者只要进程还在就拒绝接管，不看心跳窗口：心跳超时可能只是它卡在一次长调用上，
-   * 同一任务根仅允许一个监工实例。
+   * 持有者进程仍在即拒绝接管，不按心跳窗口判断：心跳超时可能只是该进程仍在执行一次长调用。同一任务根仅允许一个监工实例。
    * 需要强制接管时使用 --force。pid 已消失时按常规接管，并将旧租约标记为 superseded。
    */
   if (prevLease && prevLease.status === "running" && pidAlive(prevLease.pid) && !opts.force) {
     detail(
       t(
         `[supervisor] instance lease held: pid ${prevLease.pid}, started at ${prevLease.started_at} (.capitalist/locks/${leaseTask}.lock).`,
-        `[监工] 实例租约被持有：pid ${prevLease.pid}，启动于 ${prevLease.started_at}（.capitalist/locks/${leaseTask}.lock）。`,
+        `[监工] 任务根已有实例持有租约：pid ${prevLease.pid}，启动于 ${prevLease.started_at}（.capitalist/locks/${leaseTask}.lock）。`,
       ),
     );
     detail(
@@ -1370,8 +1365,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
   /*
    * 启动等同一次暂停调度：不派单、不推进阶段，等用户恢复。
    *
-   * 判据是“有没有未结派单”，不是“有没有待办”：阶段还没走完但一张单都没派时，
-   * 没有可冻结的对象，写暂停会让新任务根一启动就停在 paused，看板与日志都看不出它已在跑。
+   * 判据是“有没有未结派单”，不是“有没有待办”：阶段未走完但一张单都没派时没有可冻结的对象，写暂停会让新任务根一启动就停在暂停状态，看板与日志都看不出它已在运行。
    * 有单则先停上次退出留下的存活进程，再写暂停与打标记；没有单时只清理孤儿进程。
    */
   const pendingWork0 = hasPendingWork(opts.root, contract0, state0);
@@ -1972,7 +1966,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
               raiseAsk(
                 opts.root,
                 "任务列表改动触及需求层（删除需求条目或降低验收标准），监工拒绝采用并转交裁决",
-                `违反项：${violations.map((v) => `${v.kind}:${v.stage ?? ""}:${v.detail}`).join("; ")}`,
+                `违反项：${violations.map((v) => v.detail).join("；")}`,
               );
               detail(
                 t(
@@ -2091,7 +2085,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       const capacity = spawnWorkers ? capWanted : 0;
       rec = { ...rec, max_workers: capacity };
 
-      // hook 周期自检：工作进程心跳续写与契约红线拦截依赖它，缺失不报错，只表现为心跳不涨、红线不拦。
+      // hook 周期自检：工作进程心跳续写与契约红线拦截依赖它；hook 缺失不报错，只表现为心跳停止增长、红线不再拦截。
       // settings.local.json 可能被 git clean、手工清理或换机 clone 后不存在，故不能只查启动时一次。
       // 补装受 `installHooks` 控制，避免 `--no-hooks` 下被循环写回；按 60 秒节流。
       if (spawnWorkers && opts.installHooks === true && Date.now() - lastHookHeal > 60_000) {
@@ -2108,7 +2102,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
         }
       }
 
-      /* 顺序：先刷新会话占用，再回收、再填槽；占用未落盘时闸门读不到实时读数。 */
+      /* 顺序固定：先刷新会话占用，再回收进程，再按空闲并发名额派单；占用未落盘时闸门读到的是旧值。 */
       refreshLaneUsage(opts.root, readDispatches(opts.root));
 
       await reap(opts.root, workerTimeoutSec, detail, stuckSec);
@@ -2121,7 +2115,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
       });
 
       /*
-       * 权限申请排在申报之后：申请来自工作进程刚才被拦下的动作，先确认进程仍在运行再裁决。
+       * 权限申请排在申报之后：申请来自工作进程刚被拦下的动作，裁决前先确认该进程仍在运行。
        * 判定走监工的模型通道，不使用规则表。
        */
       {
@@ -2261,7 +2255,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
               stallReported = true;
               reportStageStalled(opts.root, stall, stallTicks, tickSec);
             }
-            // 超过 2 倍工作进程超时仍未结束的单强制结束重派，不占退避窗口；先报告 stall 再处置。
+            // 超过两倍工作进程超时仍未结束的单强制结束并重派，不占退避窗口；先报告阶段停滞，再处置。
             forceFinishHung(opts.root, workerTimeoutSec * 2, detail);
           }
         }
@@ -2291,7 +2285,7 @@ export async function runSupervisor(opts: SupervisorOptions): Promise<number> {
     process.removeListener("SIGTERM", onSignal);
     process.removeListener("beforeExit", onBeforeExit);
 
-    // 看板服务与工作进程须随监工一并释放；所有退出路径汇集到同一 dispose，否则残留占端口的服务与进程。
+    // 看板服务与工作进程须随监工一并释放；所有退出路径汇集到同一处清理，否则会留下占用端口的服务与进程。
     for (const f of disposeAll("shutdown")) out(t(`[supervisor] exit cleanup failed: ${f}`, `[监工] 退出清理失败：${f}`));
 
     // 退场时只释放 instance_id 匹配的租约，不改动其它实例持有的记录。
@@ -2361,7 +2355,7 @@ function contractShardAction(contract: Contract, stageId: string, shardId: strin
 /**
  * 结束工作进程：先发 SIGTERM，再按进程树强杀，以确认退出为准。
  * 启动清孤儿与退出清场复用 `terminate.ts` 的同一套动作。
- * Windows 宿主的 `.cmd` shim 才是台账记录的 pid，只结束它会残留 CLI 与工具进程。
+ * Windows 宿主下台账记录的是 `.cmd` 转层进程的 pid，只结束它会残留 CLI 与工具进程。
  */
 const killWorkerPid = killTree;
 
@@ -2505,14 +2499,14 @@ export async function handleStuckWorker(
       }
     }
     const note =
-      `卡死（${ev.label}）：同类指导 ${prev.attempts} 次均未生效。` +
-      `判定依据：${ev.why}；已试手段：写入干预 ${prev.attempts} 次（${
+      `卡死（${ev.label}）：同类指导已下发 ${prev.attempts} 次均未生效。` +
+      `判定依据：${ev.why}。指导发送方式：${
         prev.channel === "consumed"
-          ? "hook 通道，已被领取"
+          ? "已通过 hook 通道送达"
           : prev.channel === "hook"
-            ? "hook 通道，工作进程未领取"
+            ? "已写入 hook 通道但工作进程未领取"
             : "写入失败"
-      }）。`;
+      }。`;
     killJudgedWorker(root, w, true, detail);
     saveWorker(root, { ...w, status: "failed", stuck: prev });
     failDispatchAndJudge(root, d, note, detail);
@@ -2638,10 +2632,10 @@ export function refreshLaneUsage(root: string, dispatches: readonly Dispatch[]):
 }
 
 /**
- * 收割：工作进程心跳超时或进程已退出时判定失败其派单，等待下一轮按退避重派。
+ * 回收：工作进程心跳超时或进程已退出时，将其派单判为失败，等待下一轮按退避间隔重派。
  * 两遍扫描顺序固定：先按工作进程记录判定失败并标终态，再扫全部 claimed 派单就地结束。
- * 心跳超时的进程可能仍存活，先结束并确认退出再结束，避免残留孤儿进程。
- * 第二遍须遍历全部 claimed，分片并行时只查一张会漏掉其它僵尸派单。
+ * 心跳超时的进程可能仍存活：先结束进程并确认退出，再判定派单失败，避免留下孤儿进程。
+ * 第二遍须遍历全部 claimed 派单；分片并行时只查一张会漏掉其他无人处理的派单。
  */
 async function reap(
   root: string,
@@ -2666,7 +2660,7 @@ async function reap(
     const stale = !isWorkerAlive(root, w.id, timeoutSec, undefined, stuckSec);
 
     /*
-     * 存活与否都走卡点判定：原地重复的进程心跳与日志都正常，仅按两信号过期判不到它。
+     * 无论进程是否存活都要做卡点判定：原地重复的进程心跳与日志都正常，只看两个信号是否过期无法发现它。
      * 仍存活但两信号过期或日志重复度高时，先判卡点、发指导，同类指导两次无效才判定失败重派。
      */
     if (!gone) {
@@ -2871,9 +2865,7 @@ function reportStageStalled(root: string, progress: StageProgress, ticks: number
 }
 
 /**
- * 强制结束在途超过 `maxAgeSec` 的派单，使其下一轮重派。
- * 结束后打 `forced` 标记，重派不占退避窗口，失败计数与重派上限照常。
- * 可见窗口模式只结束、不结束进程。
+ * 强制结束在途超过 `maxAgeSec` 的派单，使其下一轮重派。结束后写入 `forced` 标记：重派不占退避窗口，失败计数与重派上限不变。可见窗口模式只结束派单，不结束进程。
  * @returns 被强制结束的派单 id，供调用方汇总。
  */
 function forceFinishHung(root: string, maxAgeSec: number, out: (s: string) => void): string[] {
@@ -3039,8 +3031,7 @@ function reject(reason: string): SupervisorResult {
 /**
  * 取号失败即不建单。
  *
- * 取号锁重试用尽后不静默降级成“按当前最大值猜一个号”：那正是撞号的来源。调用方拿到
- * `error` 后必须把失败如实回给用户（用户建单），或跳过本轮（监工内部重派）。
+ * 取号锁重试用尽后不得静默降级为“按当前最大值猜一个号”，否则会撞号。调用方拿到 `error` 后须把失败如实回给用户，或在监工内部重派时跳过本轮。
  */
 function issueDispatchId(
   root: string,
@@ -3066,8 +3057,7 @@ function dispatchNoLabel(root: string, id: string): string {
 }
 
 /**
- * 用当前状态回答 `ask` 的问题。只读，只陈述阶段进度、并行度、在途数、派单构成、`runCheck` 结果、
- * 暂停与裁决与待补项、重派最多的分片、下一步，不给建议也不改变调度状态。问题原文置于开头。
+ * 用当前状态回答 `ask` 的问题。只读，只陈述阶段进度、并行度、在途数、派单构成、门槛结果、暂停状态、待裁决问题、待补项、重派最多的分片与下一步，不给建议，也不改变调度状态。问题原文置于开头。
  */
 function answerSupervisorQuestion(root: string, contract: Contract, state: TaskState, question: string): string {
   const stageId = String(state.stage ?? "");
@@ -3247,9 +3237,7 @@ async function applyOneDirective(
     const want = String(d.target ?? "").trim();
     const byId = want ? rows.find((x) => String(x.id) === want) : undefined;
     /*
-     * 线程内追加只作用于当前单：`target` 是会话归属，正文编号指向别的单即越界
-     * （典型是监工顺带给同批另一单改口径）。以 `target` 为准拒绝，不静默改到当前单——
-     * 那会让针对另一单的正文落到本单上，语义错位更难查。
+     * 线程内追加只作用于当前单：`target` 表示会话归属，正文编号指向别的单即越界（典型情形是监工顺带给同批另一单改口径）。按 `target` 拒绝，不静默改到当前单，否则针对另一单的正文会落到本单上，语义错位更难排查。
      */
     if (byId && noM && Number(noM[1]) !== taskNoOfDispatchId(byId.id)) {
       return reject(
@@ -3336,7 +3324,7 @@ async function applyOneDirective(
       detail: reopened
         ? `已追加到派单${pickLabel ? ` ${pickLabel}` : ""}（原单已终结，已开新单，下一轮携带原上下文重新拉起）`
         : `已追加到在途派单${pickLabel ? ` ${pickLabel}` : ""}（${pick.status === "open" ? "尚未拉起，启动时带入" : "执行中的进程会在下一个动作间隙收到"}）` +
-          "；它收尾时用 --added 说明，复审按新口径验收",
+          "；该进程收尾时用 --added 说明改动，复审按新口径验收",
       /* dispatch 供回执卡片查任务编号（见 direct.ts 的 SupervisorResult.dispatch）。 */
       dispatch: reopened || pick.id,
     };
@@ -3356,7 +3344,7 @@ async function applyOneDirective(
     const bound = directiveAttachments(root, d, arg);
     const boundArg = bindAttachments(arg, bound.atts);
     /*
-     * `--now`：新建即抢占。建单时即带立即执行语义，避免再补 promote 之间该单被排后。
+     * `--now` 表示新建即抢占：建单时带上立即执行语义，避免补发 promote 之前该单被排到后面。
      * 与 `queue` 的区别保留：queue 只插队到队首，不抢占。
      */
     const nowM = /^\s*--now\s+/i.exec(boundArg.text);
@@ -3384,7 +3372,7 @@ async function applyOneDirective(
     if (dupe?.kind === "dup") {
       const label = dispatchNoLabel(root, dupe.id);
       return reject(
-        `已有在途单${label ? ` ${label}` : ""}（${dupe.status}）覆盖同一件事，本条未新建。需要重跑时对该单执行 capitalist retry。`,
+        `已有在途单${label ? ` ${label}` : ""}覆盖同一件事，本条未新建。需要重跑时对该单执行 capitalist retry。`,
       );
     }
     if (dupe?.kind === "twin") {
@@ -3457,8 +3445,7 @@ async function applyOneDirective(
     const MERGE_MAX_CHARS = 6000;
     /*
      * 带依赖的单不合并：并入他单后依赖边不随记录保存，重启会丢失执行顺序。
-     * 组成员同样不合并：并入别的单会让组少一名成员，而组的完成条件是"全体完成"，
-     * 少算一名成员就可能提前放行下游。
+     * 组成员同样不合并：并入别的单会让组少一名成员，而组的完成条件是“全体完成”，少算一名成员就可能提前放行下游。
      */
     if (tag && afterIds.length === 0 && !parentNode && !groupId) {
       /* 标签仅作必要条件，另按标题与正文开头的相似度判定，阈值 0.45。 */
@@ -3677,7 +3664,7 @@ async function applyOneDirective(
       ok: true,
       reason: "",
       detail:
-        `已建${action === "fix" ? "修复" : "诊断"}单 ${id}（全新会话 ${`capitalist-${state.stage}-${tag}`}，不占业务槽位）` +
+        `已建${action === "fix" ? "修复" : "诊断"}单 ${id}（使用全新会话 ${`capitalist-${state.stage}-${tag}`}，不占用并发名额）` +
         `：${boundArg.text.slice(0, 80)}`,
     };
   }
@@ -3722,7 +3709,7 @@ async function applyOneDirective(
     const q = frontDispatch(root, qTarget, "supervisor");
     if (!q) {
       return reject(
-        `“${arg}”不在排队：插队仅对未开始的派单有效。抢占运行中的派单用 promote。`,
+        `派单 ${arg} 不在排队队列中：插队仅对未开始的派单有效。抢占运行中的派单用 promote。`,
       );
     }
     return { ok: true, reason: "", detail: "已插到队首：空出槽位后优先执行，运行中的进程不受影响" };
@@ -3771,7 +3758,7 @@ async function applyOneDirective(
     const rows = readDispatches(root).filter((x) => x.stage === state.stage && (x.shard ?? "") === arg);
     const inflight = rows.find((x) => x.status === "open" || x.status === "claimed");
     if (inflight) {
-      return reject(`分片“${arg}”已有在途派单 ${inflight.id}（${inflight.status}），不重复派`);
+      return reject(`分片“${arg}”已有在途派单 ${inflight.id}，不重复派`);
     }
     const attempt = shardRetry(rows).failures + 1;
     if (!createOpenShardDispatch(root, contract, state, shard, wopts, detail, attempt)) {
@@ -3783,65 +3770,49 @@ async function applyOneDirective(
   /*
    * redo：把已经结束的一单重开。
    *
-   * 每重开一次就是新派一次单：发一张新单、派单号 +1（内容沿用原单、会话按 lineage 续接），
-   * 不再原地翻回同一张单。派单号的意义就是“同一个任务累计派了几次”，与上一次单的状态无关。
+   * 每重开一次就是新派一次单：发一张新单、派单号 +1，内容沿用原单。
+   * 重开不是“让两张单并行”：同一任务已有在途单时直接拒绝，改口径用 amend、
+   * 放弃用 cancel。两张单并行会让后拉起的那张因会话被占而换新会话，从零重做。
    */
   if (action === "redo") {
     const m = /^\s*#?\s*(\d{1,4})\b/.exec(arg || "");
     const rows = readDispatches(root);
-    const hit = m
-      ? /* 重开的目标通常是已结束的单，必须允许 done，否则会被“在途”过滤掉。 */
-        dispatchOfThreadNo(root, Number(m[1]), rows, { includeDone: true })
-      : (() => {
-          const want = String(d.target ?? "").trim();
-          return want ? rows.find((x) => String(x.id) === want) : undefined;
-        })();
-    if (!hit) {
+    const want = String(d.target ?? "").trim();
+    const target = m || !want ? undefined : rows.find((x) => String(x.id) === want);
+    const no = m ? Number(m[1]) : target ? taskNoOfDispatchId(String(target.id)) : 0;
+    if (!m && !target) return reject("redo 要写编号：`DO: redo #<编号>`");
+    /*
+     * 同一任务只允许一张在途单。`open` 也算在途：它已占住任务与会话，再开一张就是两单做同一件事。
+     * 旧格式单反解不出任务号（`no` 为 0）时跳过这一判定，按单 id 继续。
+     */
+    const live =
+      no > 0
+        ? rows.find(
+            (x) => taskNoOfDispatchId(String(x.id)) === no && !isTerminal(String(x.status ?? "")),
+          )
+        : undefined;
+    if (live) {
       return reject(
-        m ? `没有编号 #${m[1]}` : "redo 要写编号：`DO: redo #<编号>`",
+        `#${no} 正在执行（派单 ${live.id}），不重开。改口径用 amend #${no} <内容>；放弃这一单用 cancel #${no}`,
       );
     }
-    const label = m ? `#${m[1]}` : String(hit.id).slice(-6);
     /*
-     * 用户要求重开不分状态：已结束的（done / closed / failed）直接发新单；
-     * 在途的先停掉当前进程再发，否则两条执行流会写同一件事。
+     * 目标只取已终结的单。取“派发序最大的单”会命中同批 amend 刚开出的替代单，
+     * 重开它就是让两张单同时做同一件事。
      */
-    if (["claimed", "reported", "review"].includes(String(hit.status))) {
-      const w = hit.worker ? loadWorker(root, hit.worker) : null;
-      if (w && w.pid > 0 && pidAlive(w.pid)) {
-        try {
-          process.kill(w.pid, "SIGTERM");
-        } catch {
-          /* 进程刚好退出：结果一致 */
-        }
-      }
-      if (w) saveWorker(root, { ...w, status: "exited" });
+    const hit = m
+      ? dispatchOfThreadNo(root, no, rows, { settledOnly: true })
+      : target && isTerminal(String(target.status ?? ""))
+        ? target
+        : undefined;
+    if (!hit) return reject(`没有可重开的 #${no}：该任务没有已结束的派单`);
+    const next = reopenSettledDispatch(root, String(hit.id), "用户要求重派");
+    if (!next) {
+      /* 与 amend 共用同一入口：在途、取号锁被占用都走这条，不猜状态。 */
+      return reject("重开未执行：原单状态已变化或取号锁被占用。稍后重试即可，原单状态未改动。");
     }
-    /*
-     * 发一张新单：派单号在原任务累计派发序上 +1，内容沿用原单、lineage 继承原链保证会话续接。
-     * 旧格式单（D- 前缀）反解不出任务号时由 newDispatchId 发行新任务号，仅兜底历史档。
-     */
-    const de = hit as DispatchEx;
-    const issued = issueDispatchId(root, hit.stage, hit.shard ?? undefined, hit.id);
-    if (!issued.id) {
-      return reject(`重开未执行：${issued.error?.message ?? "取号锁被占用"}。稍后重试即可，原单状态未改动。`);
-    }
-    const nextId = issued.id;
-    const next = deriveDispatch(hit, {
-      id: nextId,
-      stage: hit.stage,
-      shard: hit.shard ?? "",
-      action: stripAttachments(String(hit.action ?? "")),
-      source: "requeue",
-      attempt: Number(hit.attempt ?? 1) + 1,
-      lineage: String(de.lineage ?? hit.id),
-      atts: [],
-      /* 重开要回到原来的树位置：树边（含分组）、标题、标签、模型一并继承。 */
-      keys: ["tree", "title", "tags", "model"],
-    });
-    commitDispatch(root, next);
     recordEvent(root, "dispatch_reopened", {
-      dispatch: nextId,
+      dispatch: next.id,
       from: String(hit.id),
       by: "supervisor-direct",
       directive: d.id,
@@ -3849,8 +3820,8 @@ async function applyOneDirective(
     return {
       ok: true,
       reason: "",
-      detail: `已重开 ${label}：新派单 ${nextId}，沿用原内容与会话，下一轮调度拉起`,
-      dispatch: nextId,
+      detail: `已重开 ${dispatchNoLabel(root, String(hit.id)) || `#${no}`}：新派单 ${next.id}，下一轮调度拉起`,
+      dispatch: next.id,
     };
   }
 
@@ -4443,9 +4414,7 @@ function advanceStage(
   /*
    * 没有派单就没有工作，门槛即便满足也不往下走。
    *
-   * 门槛是“做了什么”的证据，不能当“该不该前进”的依据：S0 只要求登记一条需求，
-   * 一条占位记录就能让状态机空走一格，而这一格背后没有任何派单。判据改成“本阶段有单”，
-   * 没单就停住并说明原因；提示节流到五分钟一次，避免每轮调度刷屏。
+   * 门槛是“做了什么”的证据，不能当“该不该前进”的依据：S0 只要求登记一条需求，一条占位记录就能让状态机推进一格，而这一格背后没有任何派单。判据改为“本阶段有单”，没单就停住并说明原因；提示每五分钟一次，避免每轮调度重复输出。
    */
   const stageDispatches = readDispatches(root).filter(
     (d) => String((d as { stage?: string }).stage ?? "") === state.stage,
@@ -4489,7 +4458,7 @@ function advanceStage(
     detail(t("[supervisor] paused: the new stage dispatches nothing for now; it resumes automatically after resume", "[监工] 已暂停：新阶段暂不派单，resume 后自动补上"));
     return "continue";
   }
-  // 顺序固定：先清算旧阶段、再开新阶段派单、最后填槽；否则旧进程占槽导致新单填不进去。
+  // 顺序固定：先清算旧阶段，再为新阶段派单，最后拉起进程；否则旧进程会占住并发名额，新单无法启动。
   supersedeStaleDispatches(root, contract, next.id, detail);
   /*
    * 填槽只拉起已存在的单，不建新单：用户提前为下一阶段建的单在这一轮就能启动。
@@ -4549,7 +4518,7 @@ function supersedeStaleDispatches(
       was: d.status,
       reason: "阶段已推进，本单的验收口径不再适用",
     });
-    detail(`[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）属于已推进的阶段，标记 superseded 并释放槽位`);
+    detail(`[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）属于已推进的阶段，标记为已作废并释放并发名额`);
     /* 作废原因写进台账，工作树与任务列表据此展示。 */
     const hadNote = String((d as { note?: unknown }).note ?? "").trim();
     return {
@@ -5075,8 +5044,7 @@ function fillSlots(
      */
     const allRows = readDispatches(root);
     /*
-     * 组索引每轮按当前台账重算一次。挂组的派单必须靠它判定"整组是否做完"：
-     * 缺索引时组号会被当成不存在的前置，按孤儿规则放行，成员还在排队时下游就已启动。
+     * 组索引每轮按当前台账重算一次。挂组的派单必须靠它判定“整组是否做完”：缺索引时组号会被当成不存在的前置，按孤儿规则放行，成员还在排队时下游就已启动。
      */
     const gidx = groupIndexFrom(root, allRows);
     if (!forestChecked) {
@@ -5512,7 +5480,7 @@ function launch(
     return false;
   }
 
-/* 文件冲突由会话规避（同类活共 lane、lane 单持有）。 */
+/* 文件冲突由会话规避：同类任务共用一条会话，同一会话内串行持有文件。 */
 
   /*
    * 进程号与领单在同一临界区内完成：号一旦算出就先落到派单的 worker 字段上，

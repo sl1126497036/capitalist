@@ -34,7 +34,7 @@ export interface StuckEvidence {
 /** 卡点类型名，与判据一并写入任务卡与事件。 */
 export const STUCK_LABEL: Record<StuckKind, string> = {
   idle: "空转等待",
-  retry: "重复无效重试",
+  retry: "反复重试无果",
   external: "等外部条件",
   error_loop: "报错循环",
   unknown: "无法归类",
@@ -127,7 +127,7 @@ export function classifyStuck(lines: readonly string[], repeat?: RepeatSignal): 
     return {
       kind: "external",
       label: STUCK_LABEL.external,
-      why: `日志末尾 ${tail.length} 行里有 ${externalHits} 行在提示登录/授权/验证码/配额/确认类条件：${firstMatch(tail, RE_EXTERNAL)}`,
+      why: `日志末尾 ${tail.length} 行里有 ${externalHits} 行提示登录、授权、验证码、配额或确认等条件：${firstMatch(tail, RE_EXTERNAL)}`,
     };
   }
 
@@ -182,7 +182,7 @@ export function stuckGuidance(ev: StuckEvidence, idleSec: number): string {
       );
     case "retry":
       return (
-        "解除办法：同一操作已经重复多次且结果没有变化，继续重复不会得到不同结果。" +
+        "解除办法：同一操作已重复多次，结果没有变化。" +
         "停止重复该操作；把失败点、已经试过的路径写进 `capitalist notify stuck`，" +
         "改用一条可行的路径或更小的验证步骤，再继续原任务。"
       );
@@ -193,7 +193,7 @@ export function stuckGuidance(ev: StuckEvidence, idleSec: number): string {
       );
     default:
       return (
-        `解除办法：${silent}先确认是否在等待一项不会到达的输入（交互确认、权限弹窗、目录信任）。` +
+        `解除办法：${silent}先确认是否在等待交互确认、权限弹窗或目录信任等外部输入。` +
         "若在等，改为用 `capitalist block` 上报并停手；若不是，先做下一个不依赖它的步骤，并在 `capitalist notify progress` 里写清当前进度。"
       );
   }

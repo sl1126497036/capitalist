@@ -23,7 +23,7 @@ const LOGIN_HINT =
  * 实时输出开关。
  *
  * 默认的 `--output-format text` 只在会话结束输出一段总结：执行 70 分钟的工作进程，日志里只有宿主
- * 的运维行，看板因此“看不到它在做什么”，用户也无法判断它是确实在推进还是已阻塞。
+ * 的运维行，看板没有过程可看，用户也无法判断它是确实在推进还是已阻塞。
  * `stream-json` 把每个 assistant 消息、每次工具调用按行实时输出，看板才有过程可看。
  *
  * 设 `CAPITALIST_WORKER_STREAM=0` 可关闭流式输出；解析侧无法识别格式时改用纯文本。
@@ -79,13 +79,13 @@ export const impl: HostImpl = {
   userLevelHook: true,
   knownModels: ["fast-model", "deepseek-v4.1-flash", "glm-5.3-flash"],
   cliBins: ["codebuddy", "codebuddy.cmd"],
-  /* 平台模型策略：默认档与禁用名单，阻止宿主自行改用其它档位（见 shared/modelPolicy.ts）。 */
+  /* 平台模型策略：默认档与禁用名单，阻止宿主自行改用其他档位（见 shared/modelPolicy.ts）。 */
   modelPolicy: TENCENT_MODEL_POLICY,
 
   hook: new ClaudeStyleHook({ guessPriority: 30 }),
 
   install: settingsHookInstall("codebuddy", {
-    /* 该提示只对 Windows 成立（Git Bash 执行 hook 的前置条件），其它平台不适用。 */
+    /* 该提示只对 Windows 成立（Git Bash 执行 hook 的前置条件），其他平台不适用。 */
     notice: () => (process.platform === "win32" ? POST_INSTALL_NOTICE : null),
     // hook 命令是 node 绝对路径的直调，cmd 与 PowerShell 都能执行。宿主若以 Git Bash
     // 为 hook 执行器，本机缺 bash 时条目仍在但不会触发，这种情形只有装完才能发现。
@@ -153,7 +153,7 @@ export const impl: HostImpl = {
 
   workspace: createWorkspaceFacet({
     configDir: ".codebuddy",
-    /* 项目里出现 `.codebuddy` 会让 WorkBuddy 转受限模式，而工作进程用 `bypassPermissions` 起，不需要项目级档位。 */
+    /* 项目里出现 `.codebuddy` 会让 WorkBuddy 转受限模式，而工作进程以 `bypassPermissions` 启动，不需要项目级档位。 */
     projectConfigDir: null,
     label: LABEL,
     ...TRUST_PRESET,

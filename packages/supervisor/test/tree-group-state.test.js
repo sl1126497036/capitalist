@@ -104,7 +104,7 @@ test("组被解散：挂在该组下的下游直接放行", () => {
   assert.strictEqual(groupSettled("G1", rows, idx).settled, true);
 });
 
-test("成员记录缺失（已归档）：按已了结处理，不阻塞放行", () => {
+test("成员记录缺失（已归档）：按已完成处理，不阻塞放行", () => {
   /* 组记录里还有两条，但台账只剩 1-1：2-1 已被归档。 */
   const rows = [d("1-1", "done", { group: "G1" })];
   const idx = idxOf(rows, [group("G1")]);

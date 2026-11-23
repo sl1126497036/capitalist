@@ -62,7 +62,7 @@ test("不再有重复的核对现状：只有一块，且合并了两边独有�
   assert.equal(headings.length, 1, `“核对现状”只该有一个区块标题，实际：${headings.join(" / ")}`);
   assert.ok(text.includes("mtime 晚于本单创建时刻"), "preflight 独有的 mtime 比对要保留");
   assert.ok(text.includes("与已验收的做法相反"), "preflight 独有的口径核对要保留");
-  assert.ok(text.includes("相关模块现在怎么做的"), "grounding 独有的理解现状要保留");
+  assert.ok(text.includes("同时了解相关模块的当前实现方式"), "grounding 独有的理解现状要保留");
 });
 
 test("“带超时”只写一遍：结束口径里说完，不再在动作清单里重复", () => {

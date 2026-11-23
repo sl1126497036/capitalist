@@ -14,6 +14,7 @@ import { taskKeyOf } from "./state";
 import { viewId } from "./viewId";
 import { isMsgNo, msgIdScope, msgTaskNo } from "../../core/message/msgId";
 import { eventRef } from "./eventMsg";
+import { DELIVERED } from "./delivery";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { loadState } from "../../core/record/state";
 import { hasCustomContract } from "../../core/contract/customContract";
@@ -137,7 +138,7 @@ function supervisorEventText(
         needs === "decision" ? "等裁决" : needs === "intervention" ? "等干预" : "",
       ]
         .filter(Boolean)
-        .join(" · ");
+        .join(" - ");
     }
     case "gate_eval": {
       const missing = Array.isArray(e.missing) ? e.missing.map((x) => String(x)) : [];
@@ -382,6 +383,8 @@ export function buildSupervisorLog(
             ? "done"
             : "pending"
           : "",
+      /* 对话层的问话写进事件台账时监工已经取走，档位恒为已送达。 */
+      ...(name === "supervisor_chat_ask" ? { delivery: DELIVERED } : {}),
       thread: CAPITALIST_THREAD_ID,
       event: name,
       tier,

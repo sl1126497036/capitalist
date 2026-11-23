@@ -155,7 +155,7 @@ export function saveSessions(root: string, data: Sessions): void {
  * 登记或更新一个会话。
  *
  * 多进程下这是判断“哪些会话仍在运行”的唯一依据：hook 每次运行都 touch 一次，
- * `capitalist sessions` 据此判断哪个会话还活着、哪个已经交接出去。
+ * `capitalist sessions` 据此判断哪些会话仍在运行、哪些已经交接出去。
  *
  * @param patch 要更新的字段。`tokens` 只增不减；`compact` 为 true 时压缩计数加一。
  */

@@ -48,12 +48,12 @@ export function saveState(root: string, state: TaskState): void {
  * 表现为已生效的设置被无声回退。
  *
  * 做法是乐观并发：读到 rev=n 就记下，写回前再读一次；磁盘上不是 n 说明中间有人写过，
- * 重读再改。重试三次仍冲突就放弃并返回 null，写不进去好过写错。
+ * 重读再改。重试三次仍冲突就放弃并返回 null，写入失败优于写入错误数据。
  *
  * 不用文件锁：hook 在用户操作的必经路径上，等锁的代价比偶发丢一次更新大。
  *
  * @param retries 冲突重试次数，默认 3。
- * @returns fn 的返回值；任务根不存在或连续冲突则为 null
+ * @returns fn 的返回值；任务根不存在或连续冲突时返回 null。
  */
 export function updateState<T>(root: string, fn: (state: TaskState) => T, retries = 3): T | null {
   for (let i = 0; i < retries; i += 1) {

@@ -28,7 +28,7 @@ test("标题行样式：动作按钮不缩，前置元素依次让位", () => {
   /* 按钮：不缩，宽度不够时不参与压缩，它们是“必须在”的那一组。 */
   assert.match(block(".stopbtn"), /flex:\s*0 0 auto/);
 
-  /* 用量格：shrink 权重远高于其它可缩项，先压成省略号。 */
+  /* 用量格的 shrink 权重远高于其他可缩项，压缩时优先压缩为省略号。 */
   const usage = block(".chat.mode-worker > .chead > .urow");
   const weight = Number((usage.match(/flex-shrink:\s*(\d+)/) || [])[1]);
   assert.ok(weight >= 100, `用量串必须先让位，实际 flex-shrink=${weight}`);
@@ -39,7 +39,7 @@ test("标题行样式：动作按钮不缩，前置元素依次让位", () => {
     assert.match(rule, /flex:\s*0 1 auto/, `${sel} 必须允许收缩`);
   }
 
-  /* 监工面板的指标条与按钮排布不归本单一管，不许在这里被改成可缩。 */
+  /* 监工面板的指标条与按钮排布不在本单范围内，不得在此改为可缩。 */
   assert.match(block(".hmetrics"), /flex:\s*0 1 auto/);
 });
 

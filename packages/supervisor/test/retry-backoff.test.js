@@ -18,7 +18,7 @@ const KEYS = [
   "CAPITALIST_RETRY_JITTER",
 ];
 
-/** 每个用例前清空退避配置，用完还原，避免与其它测试串味。 */
+/** 每个用例前清空退避配置，用完还原，避免与其他测试互相干扰。 */
 function withEnv(vars, fn) {
   const saved = KEYS.map((k) => [k, process.env[k]]);
   for (const k of KEYS) delete process.env[k];

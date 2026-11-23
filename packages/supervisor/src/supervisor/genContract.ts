@@ -132,7 +132,7 @@ export async function generateContract(opts: {
     ...(opts.effort ? { effort: opts.effort } : {}),
     ...(String(opts.model ?? "").trim() ? { model: String(opts.model).trim() } : {}),
   });
-  if (!r.ok) return { ok: false, path, why: `模型通道不可用：${r.text}`, stages: [] };
+  if (!r.ok) return { ok: false, path, why: `模型调用失败：${r.text}`, stages: [] };
 
   const raw = r.text;
   const start = raw.indexOf("{");
@@ -169,7 +169,7 @@ export async function generateContract(opts: {
     brief_redlines: [
       "不许删除任务根以外的本机内容",
       "不得访问凭据：.env / 密钥 / *.pem / ~/.ssh",
-      "动手改既有文件之前先备份",
+      "改既有文件前先备份。",
     ],
     stages,
   };

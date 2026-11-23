@@ -88,7 +88,7 @@ export function missingBoardWebPage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>capitalist · 看板前端未构建</title>
+<title>capitalist - 看板前端未构建</title>
 <style>
 body{margin:0;padding:48px 24px;font:14px/1.7 -apple-system,"Segoe UI",sans-serif;color:#1f2328;background:#f6f7f9}
 main{max-width:640px;margin:0 auto}

@@ -5,7 +5,7 @@
  *
  * 1. `dispatch_retry` 这类事件名只活在台账里，界面上必须翻成“重派任务”；
  * 2. 消息正文里的 worker / exit / pid / SIGTERM / hook 全部换成中文，
- *    `open` / `gone` 这类原始状态也不许直接摆出来；
+\`open\` / \`gone\` 这类原始状态也不直接展示；
  * 3. 标签表只有 `src/supervisor/terms.ts` 一份，前端 `fmt.js` 直接读它。
  *    谁再复制一份映射表出来，本测试会拦下（复制会导致漂移）。
  *

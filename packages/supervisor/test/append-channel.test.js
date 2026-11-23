@@ -108,7 +108,7 @@ test("送达之后不再重复：第二次工具调用放行，插话保持已�
   assert.equal(cmds.listDirectives(root)[0].consumed, true);
 });
 
-test("别单的消息不串：派生链对不上的插话不会被这一单认领", () => {
+test("其他派单的消息不串：派生链不匹配的插话不被当前派单认领", () => {
   const root = sandbox();
   seedDispatch(root, { lineage: "D-other" });
   cmds.appendDirective(root, { text: "这是给另一条链的话", lineage: "D-mine" });
@@ -213,7 +213,7 @@ test("看板会话流：未消费的追加内容显示去向，不写成无限�
   assert.ok(!String(say.status).includes("等下一次派单"), "目标单运行中或即将启动时不许写无限期等待");
 });
 
-test("滞留追加补投递：目标单已终结时翻回 open，下一拍带着追加重新拉起", () => {
+test("滞留追加补投递：目标派单已终结时翻回 open，并在下一轮调度携带追加内容重新拉起", () => {
   const root = sandbox();
   seedDispatch(root, { status: "failed", done_at: new Date().toISOString() });
   cmds.appendDirective(root, {
@@ -270,7 +270,7 @@ test("追加目标单属已推进阶段：不翻回，追加标记为未投递",
 });
 
 test("手动结束的单不会被追加重新拉开", () => {
-  /* 用户结束就是结束：补投递只救失败的单，不能把关闭的单悄悄拉回队列。 */
+  /* 用户确认结束即为终态：补投递仅针对失败派单，不得将已关闭派单重新拉回队列。 */
   const root = sandbox();
   seedDispatch(root, { status: "closed", done_at: new Date().toISOString() });
   cmds.appendDirective(root, {
@@ -355,7 +355,7 @@ test("合并回执显示并入的任务编号：卡片与结果说明都不出�
   assert.equal(card.no, "01", "合并回执卡片带目标单号（与任务列表同源）");
 });
 
-test("历史合并回执按自己的说明回填编号：查不到归属时不显示，不推测", () => {
+test("历史合并回执按自身说明回填编号：未查到归属时不显示编号，也不作推测", () => {
   const root = sandbox();
   capitalist.appendDispatch(root, {
     id: "D-old",
@@ -376,7 +376,7 @@ test("历史合并回执按自己的说明回填编号：查不到归属时不�
     reason: "",
     detail: "同类任务已在执行：本条并入派单 D-old（批次 ui，累计 10 字），不新建进程",
   });
-  /* 编号表中查不到的派单不写编号，也不按时间或队列顺序推断。 */
+  /* 编号表中未查到的派单不写编号，也不按时间或队列顺序推断其归属。 */
   const b = appendSupervisorDirective(root, { action: "dispatch", arg: "[ui] 并进未知单" });
   markSupervisorDirective(root, b.rec.id, {
     ok: true,
@@ -408,7 +408,7 @@ test("追加被启动带入时，卡片状态写“已并入派单 #号”而不
   assert.equal(say.status, "已并入派单 · 待结论");
   assert.equal(say.no, "01", "已并入时要显示目标单号");
 
-  /* 回报结论之后，同一个卡片要变成“已落实”，这是用户能不能看出“到底改没改”的地方。 */
+  /* 回报结论之后，同一卡片须更新为“已落实”，以便用户确认改动是否已生效。 */
   const rec = cmds.listDirectives(root).find((x) => String(x.text).includes("启动时一起带入的话"));
   cmds.markDirectiveOutcome(root, cmds.directiveRef(rec), "done", { by: "D-append1", note: "改了 styles.css" });
   const after = buildThreadMessages(root, "shard:a", "a", { limit: 400 });
@@ -420,7 +420,7 @@ test("没有归属单的追加：不显示单号，不推测", () => {
   const root = sandbox();
   seedDispatch(root, { status: "claimed", lineage: "D-other" });
   assignThreadNos(root, ["s0/a"]);
-  /* 这句话落在 s0/a 线程上，但没有任何一张单领走它。 */
+  /* 该消息落在 s0/a 线程上，但没有任何派单领取它。 */
   cmds.appendDirective(root, { text: "还没有归属的话", shard: "a" });
 
   const { messages } = buildThreadMessages(root, "shard:a", "a", { limit: 400 });

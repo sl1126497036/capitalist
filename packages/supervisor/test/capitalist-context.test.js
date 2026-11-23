@@ -62,7 +62,7 @@ test("看板视图：已用与生效上限同源，缺失字段为 null", () => 
   assert.equal(big.limit, 1_000_000, "模型支持 2M 时仍按配置 1M");
 });
 
-test("超限判定用的分母就是面板显示的生效上限", () => {
+test("超限判定所用分母与面板显示的生效上限一致", () => {
   const root = sandbox({ supervisor_context_limit: 1_000_000 });
   recordSupervisorContext(root, 260_000, 300_000, "model-a");
   assert.equal(buildSupervisorContextView(root).limit, 300_000);

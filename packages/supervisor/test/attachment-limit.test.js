@@ -19,15 +19,15 @@ function sandbox() {
 
 const FIVE = ["a.png", "b.png", "c.png", "d.png", "e.png"];
 
-test("不设上限：五张全带上，一张都不裁", () => {
+test("不设上限：五张图片全部携带，不作裁剪", () => {
   const r = bindAttachments("看这几张\n\n[附件] 野路径.png", FIVE);
   assert.deepStrictEqual(r.kept, FIVE, "字段里声明了几张就带几张");
   assert.equal((r.text.match(/\[附件\]/g) ?? []).length, 5, "正文里应有五行附件");
   assert.ok(!r.text.includes("野路径.png"), "正文里原有的路径一律剥掉，不参与合并");
 });
 
-test("去留不按顺序决定：旧图排在前面也不会挤掉新图", () => {
-  /* 这就是出事的那一单：单上已有两张旧图，插话又带了一张新的。 */
+test("去留不按到达顺序决定：旧图排在前面也不排除新图", () => {
+  /* 这是触发问题的现场：派单已有两张旧图，插话又携带一张新图。 */
   const old = ["old-1.png", "old-2.png"];
   const fresh = ["new-1.png"];
   const r = bindAttachments("做这个", [...old, ...fresh]);
@@ -45,7 +45,7 @@ test("插话拼进派单：只认插话自己的 atts，正文里的路径不采
 test("重派继承：只接上一单字段声明的图，不从它的正文里解析", () => {
   const root = sandbox();
   try {
-    /* 上一单：字段里只声明了 kept.png，正文里却躺着一张残留的 stray.png。 */
+    /* 上一单：字段仅声明 kept.png，正文中另残留一张 stray.png。 */
     appendDispatch(root, {
       id: "D-prev",
       at: new Date().toISOString(),

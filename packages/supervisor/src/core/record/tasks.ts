@@ -93,7 +93,7 @@ function reservedTaskNos(root: string): number[] {
  * 占住一个派单号。
  *
  * 写占位是一次追加，落在算号的同一临界区内：号离开临界区时已经被占用，后来者读到的最大值
- * 必然包含它，因此不会出现“算出来又被别人算一遍”的撞号。派单最终没有落成也不回收该号，
+ * 必然包含它，因此不会出现同一编号被重复分配的撞号。派单最终未落成也不回收该号，
  * 与“任务号、派单号只增不复用”一致。
  */
 function reserveDispatchNo(root: string, id: string, taskNo: number, seq: number): void {

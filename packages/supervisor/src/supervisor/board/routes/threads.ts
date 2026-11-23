@@ -12,6 +12,7 @@ import { balanceView } from "../../usage/balance";
 import { stripDispatchEcho } from "../../view/msgView";
 import { readJsonlFromTail } from "../logs";
 import { buildThreadMessages } from "../messages";
+import { DELIVERED } from "../delivery";
 import { fingerprint, maskThreadMessage } from "../render";
 import { dispatchNoTable } from "../../usage/threadNo";
 import { THREAD_PAGE_LIMIT, ThreadRole, ThreadKind, ThreadMessage, rootFromUrl } from "../snapshot";
@@ -211,6 +212,8 @@ export function handleThreadMessage(ctx: BoardCtx): void {
         tool: "",
         cmd: "",
         status: "",
+        /* 对话层的问话写进事件台账时工作进程已经取走，档位恒为已送达。 */
+        ...(isAsk ? { delivery: DELIVERED } : {}),
         ref: "",
         unread: false,
         thread: id,

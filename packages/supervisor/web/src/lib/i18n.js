@@ -77,7 +77,7 @@ const EN = {
   "账号信息不可用": "Account info unavailable",
   "有效期未知": "expiry unknown",
   "无昵称": "no nickname",
-  "暂停后不再派新单；运行中进程停止，未结派单置为暂停中，恢复后按原状态继续": "Pausing stops new dispatches; running processes are stopped and all unfinished dispatches show paused. Resuming continues them in their original states.",
+  "暂停后不再派新单，运行中的进程与派单会停止，恢复后继续": "Pausing stops new dispatches and halts running processes and dispatches; resuming continues them",
   "切换界面语言": "Switch UI language",
   "关于": "About",
   "在 GitHub 上查看源码": "View source on GitHub",
@@ -152,16 +152,16 @@ const EN = {
   "设定派单模型失败": "Set dispatch model failed",
   "已派出、还未领取的派单数（与左栏“排队”同一份统计）":
     "Dispatched but not yet claimed (same count as “Queued” in the left column)",
-  "失败、丢失、孤立或已消失的线程数（与左栏“异常”同一份统计）":
-    "Threads that failed, were lost, orphaned or vanished (same count as “Failed” in the left column)",
+  "异常任务数":
+    "Failed tasks",
   "验收通过的项数": "Items accepted",
   "上行": "Input",
   "当前任务全部工作进程的累计输入用量": "Cumulative input usage of all work processes in this task",
   "下行": "Output",
   "当前任务全部工作进程的累计输出用量": "Cumulative output usage of all work processes in this task",
-  "整机处理器占用率，与活动监视器口径一致": "Host CPU usage, same reading as Activity Monitor",
-  "整机内存压力：100% 减去可用内存占比（memory_pressure）":
-    "Host memory pressure: 100% minus the free memory percentage (memory_pressure)",
+  "整机处理器占用率": "Host CPU usage",
+  "整机内存压力":
+    "Host memory pressure",
   "内存压力读取不可用：{why}": "Memory pressure unavailable: {why}",
   "来源：{s}": "Source: {s}",
   "账号级额度，全部监工共用": "Account-level quota, shared by every supervisor",
@@ -241,8 +241,8 @@ const EN = {
   "调度于 {t}": "Dispatched at {t}",
   "输入 {a} + 输出 {b}；缓存命中 {c} 单独列出，不计入总量":
     "Input {a} + output {b}; cache hits {c} listed separately and excluded from the total",
-  "金额取自日志 result 行的 total_cost_usd": "Amount taken from total_cost_usd on the log's result line",
-  "这条读数有 usage 但没有 token 字段": "This reading has usage but no token fields",
+  "金额取自用量记录": "Amount taken from usage records",
+  "这条读数有用量但没有明细": "This reading has usage but no details",
   /* fast-model 别名的旁注：它在两个 flash 模型间轮换，名字本身按原 id 展示。 */
   "轮换": "rotation",
 
@@ -265,10 +265,10 @@ const EN = {
   "上下文": "Context",
   "上下文 {v}": "Context {v}",
   "超限": "over limit",
-  "已用超过生效上限，按上限显示": "used exceeds the effective limit; shown at the limit",
+  "用量已超上限": "Usage over limit",
   "按消息文本估算": "Estimated from message text",
-  "上传中断：连接已断开，点击“重试”重新上传":
-    "Upload interrupted: connection lost; click Retry to upload again",
+  "上传中断：连接已断开，点击“重试”继续":
+    "Upload interrupted: connection lost; click Retry to continue",
   "从上方监工条选择一个任务根": "Pick a task root from the supervisor bar above",
   "从左侧选择一个进程": "Pick a process from the left column",
   "全部完成": "all done",
@@ -326,11 +326,11 @@ const EN = {
   "成环：无可达根节点": "Cycle: no reachable root",
   "截图": "screenshot",
   "给监工派单或发送消息": "Dispatch or message the supervisor",
-  "给执行中的进程发消息；会在下一个动作间隙收到，不打断当前执行":
-    "Message the running process; it arrives at the next action gap without interrupting current work",
+  "给执行中的进程发消息，不打断当前执行":
+    "Message the running process without interrupting it",
   "描述要修改的内容": "Describe what to change",
-  "描述要修改的内容；执行中的进程会在下一个动作间隙收到，不打断当前执行":
-    "Describe what to change; the running process receives it at the next action gap without interrupting current work",
+  "描述要修改的内容，消息会送达正在执行的进程":
+    "Describe what to change; the message reaches the running process",
   "断链": "Broken chain",
   "断链：其下子树无法推进": "Broken chain: its sub-tree cannot proceed",
   "无读数": "no reading",
@@ -358,15 +358,15 @@ const EN = {
   "被拒": "Rejected",
   "输入": "Input",
   "输出": "Output",
-  "这一单在排队；此时发送的内容会并入这一单，启动时一并带入":
-    "This task is queued; what is sent now is merged into it and carried in at start",
+  "这一单在排队，现在发送的内容会在启动时带入":
+    "This task is queued; what you send now is carried in at start",
   "派单已结束，消息在原会话中回复":
     "Dispatch finished; messages are answered in the original session",
   "排队中的派单不计耗时": "Queued dispatches have no duration",
   "本轮进程已退出，待派单（{why}）":
     "This round's process exited; pending dispatch ({why})",
   "这个进程尚无消息": "This process has no messages yet",
-  "本阶段分片均已完成": "all shards in this stage are complete",
+  "本阶段任务均已完成": "All tasks in this stage are complete",
   "进程异常": "Process failed",
   "进程异常 {why}": "Process failed {why}",
   "重派 {n} 次": "redispatched {n} times",
@@ -421,8 +421,8 @@ const EN = {
   "复制引擎调试全文": "Copy the full engine debug output",
   "复制这一段": "Copy this passage",
   "复制这条": "Copy this message",
-  "失败节点带“断链”标记，其下整棵子树降亮并注明受影响的单号":
-    "Failed nodes carry a “broken chain” mark; their whole sub-tree is dimmed and the affected task numbers are noted",
+  "失败节点标“断链”，其下游任务变暗并标出受影响的单号":
+    "Failed nodes are marked \"broken chain\"; downstream tasks dim and show the affected task numbers",
   "对话层": "Chat layer",
   "对话模型": "Chat model",
   "展开": "Expand",
@@ -511,7 +511,7 @@ const EN = {
   "插队失败": "Jump-the-queue failed",
   "编辑": "Edit",
   "缩小": "Zoom out",
-  "脏数据：成环节点": "Bad data: nodes in a cycle",
+  "数据异常：节点成环": "Bad data: nodes in a cycle",
   "记忆": "Memory",
   "记忆类别": "Memory category",
   "读取中…": "Loading…",
@@ -546,14 +546,14 @@ const EN = {
   /* 单位：token 保留原词，不译为中文。 */
   "token": "tokens",
   "积分": "credits",
-  "计费接口增量分摊（输入 {a} + 输出 {b} token）；面板未开启期间不分摊":
-    "Attributed from billing API deltas (input {a} + output {b} tokens); no attribution while the board is closed",
-  "按积分计费，本线程未分摊到读数；输入 {a} + 输出 {b} token":
-    "Credit-based host; no credits attributed to this thread; input {a} + output {b} tokens",
-  "积分按计费接口已用积分的增量分摊到这条线程；面板未开启期间的消耗没有分摊依据，读数可能偏小":
-    "Credits are attributed to this thread from the increment of the billing API's used-credits; consumption while the panel was closed has no attribution basis, so the figure may be low",
+  "按输入 {a}、输出 {b} token 计费":
+    "Billed by input {a} and output {b} tokens",
+  "按积分计费，本线程无用量读数；输入 {a} + 输出 {b} token":
+    "Credit-based host; no usage reading for this thread; input {a} + output {b} tokens",
+  "积分读数来自账号用量，面板关闭期间的消耗可能未计入":
+    "Credits come from account usage; consumption while the board is closed may be excluded",
   "这条线程没有用量读数": "this thread has no usage reading",
-  "这条读数有用量但没有 token 字段": "this reading has usage but no token fields",
+  "这条读数有用量但没有明细": "This reading has usage but no details",
   "展开列表": "Expand list",
   "收起列表": "Collapse list",
 
@@ -645,8 +645,8 @@ const EN = {
     "A finished dispatch can be answered in its original session or woken by the supervisor",
   "拖动输入框上沿可改变高度，双击恢复默认":
     "Drag the top edge of the input box to change its height; double-click to reset",
-  "通过“图片/路径”选择文件后，任务根内的相对路径会插入输入框":
-    "Picking a file under Image / path inserts its path relative to the task root",
+  "通过“图片/路径”选择文件后，任务目录内的相对路径会插入输入框":
+    "Picking a file under Image / path inserts its path relative to the task directory",
   "截图可直接粘贴或拖入输入框，上传完成后随消息一并发送":
     "Screenshots can be pasted or dropped into the input and are sent with the message once uploaded",
   "在工作进程会话中开启“监工介入”，消息将转由监工处理，工作进程不会收到":
@@ -685,7 +685,7 @@ const EN = {
   "登记阻塞失败": "Failed to record the blocker",
   "已中断": "Interrupted",
   "中断失败": "Interrupt failed",
-  "已交还监工：下一轮调度恢复自动裁定": "Handed back; automatic adjudication resumes next round",
+  "已交还监工，后续由监工接手": "Handed back to the supervisor",
   "交还失败": "Handback failed",
   "已结束": "Closed",
   "监工不再为它重新派单": "the supervisor will not dispatch for it again",
@@ -745,7 +745,7 @@ const EN = {
   "调度暂停中": "Scheduling paused",
   "点击右上角“恢复调度”继续": "Click Resume scheduling in the top right to continue",
   "重启监工": "Restart supervisor",
-  "当前进程立即退出，正在执行的工作进程一并结束；新进程随后自动拉起。任务记录、阶段与看板地址都不变。": "The current process exits immediately and running work processes end with it; a new process starts automatically. Task records, stages and the board address are unchanged.",
+  "当前进程立即退出，正在执行的工作进程一并结束，随后自动重启；任务记录、阶段与看板地址不变": "The current process exits immediately and running work processes end with it; a new process restarts automatically. Task records, stages and the board address are unchanged",
   "关停监工": "Stop supervisor",
   "进程立即退出，正在执行的工作进程一并结束。恢复需要重新执行 capitalist supervise。":
     "The process exits immediately and running work processes end with it. Recovery requires running capitalist supervise again.",
@@ -768,7 +768,7 @@ const EN = {
   "待补项": "Open items",
   "读模型清单失败：{e}": "Failed to read the model list: {e}",
   " 等": " and more",
-  "后台采样器尚无数据": "The background sampler has no data yet",
+  "后台尚无采样数据": "No sampling data yet",
   "暂无数据": "No data yet",
 };
 

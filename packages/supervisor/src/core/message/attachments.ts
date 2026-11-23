@@ -17,8 +17,7 @@ function looksLikePath(p: string): boolean {
 /**
  * 一段话里提到的所有附件路径（去重，保留出现顺序）。
  *
- * 行首形式与行内形式都认；不像路径的（没有目录分隔符 / 没有扩展名）直接丢，
- * 避免把正文里随手写的“[附件] 见上”解析为文件名并写入工作进程提示词。
+ * 行首形式与行内形式都认；不含目录分隔符和扩展名的串不作为路径，避免把正文里的“[附件] 见上”当成文件名写进工作进程提示词。
  */
 export function attachmentsIn(text: string): string[] {
   const src = String(text ?? "");
@@ -126,8 +125,7 @@ export function bindAttachments(text: string, own: string[]): { text: string; ke
   const out: string[] = [];
   for (const line of src.split(/\r?\n/)) {
     /*
-     * 第 3 组连前导空白一起捕获：`path（现状）` 与 `path （现状）` 是两种写法，
-     * 重建时原样还回去，不要替使用者调整空格（中文括号前多一个空格，读起来就是错的）。
+     * 第 3 组连前导空白一起捕获：`path（现状）` 与 `path （现状）` 是两种写法，重建时原样保留，不替使用者调整空格。
      */
     const m = /^\s*\[((?:附件|图\s*\d*))\][\s\u3000]*([^\s\u3000（(]+)(\s*.*)$/.exec(line);
     if (!m) {
@@ -160,9 +158,7 @@ export function bindAttachments(text: string, own: string[]): { text: string; ke
 /**
  * 解析消息正文里的附件行，原样保留。
  *
- * 过去这里还会把超出的部分裁掉并补一句“另有 N 张未带入”。上限取消后（见文件里
- * “附件张数不设上限”那段），裁剪分支恒不触发，函数退化成“解析”，保留名字与返回
- * 形状，避免调用方跟着改；语义已变更：不丢弃任何附件。
+ * 该函数只解析附件行，原样保留全部路径，不裁剪。
  */
 export function trimAttachmentLines(text: string): { text: string; kept: string[]; dropped: number } {
   const src = String(text ?? "");

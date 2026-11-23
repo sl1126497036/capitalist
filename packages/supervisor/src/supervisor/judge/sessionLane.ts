@@ -37,6 +37,13 @@ export interface LaneState {
   resumes?: number;
   /** 上一次更新的时刻。 */
   at: string;
+  /**
+   * 上一代的会话 id。
+   *
+   * 换代后旧会话仍留在宿主侧，排查“这一代为什么丢了上下文”时要能找回它。
+   * 只记录，不参与续接判定。
+   */
+  previous?: string;
   /** 实际跑这一代的宿主（`codebuddy` / `claude-code`）；记录用，不参与判定。 */
   host?: string;
   /** 宿主会话文件的落盘路径；宿主决定位置，capitalist 只记录不写。 */
@@ -222,7 +229,7 @@ export function laneContextWindow(st: LaneState | null): number {
   return w !== null && w > 0 ? w : 0;
 }
 
-/** 这一代会话的更换会话阈值（token）：窗口的六成，拿不到窗口时取默认值。 */
+/** 这一代会话的更换会话阈值（token）：窗口的一半，拿不到窗口时取默认值。 */
 export function laneLimit(st: LaneState | null): number {
   if (!st) return CTX_FALLBACK_LIMIT;
   const win = laneContextWindow(st);
@@ -355,6 +362,7 @@ function rotateLane(root: string, st: LaneState, why: string, sig = st.sig): Lan
     current,
     gen,
     sig,
+    previous: st.current,
     // 换代时清零占用读数：新一代从零开始。
     ctx_used: null,
     ctx_window: st.ctx_window,

@@ -154,7 +154,7 @@ function confirmYes() {
 function restartSupervisor() {
   confirmAsk.value = {
     title: t("重启监工"),
-    text: t("当前进程立即退出，正在执行的工作进程一并结束；新进程随后自动拉起。任务记录、阶段与看板地址都不变。"),
+    text: t("当前进程立即退出，正在执行的工作进程一并结束，随后自动重启；任务记录、阶段与看板地址不变"),
     ok: t("重启"),
     danger: false,
     /* 先铺蒙版再发请求：监工收到命令即退场，期间界面无反馈；事件由 App 接住铺满视口，/api/supervisor 恢复后撤除。 */
@@ -359,7 +359,7 @@ const cells = computed(() => [
     v: count(stat("failed")),
     tone: (stat("failed") ?? 0) > 0 ? "bad" : "",
     na: stat("failed") === null,
-    tip: t("失败、丢失、孤立或已消失的线程数（与左栏“异常”同一份统计）"),
+    tip: t("异常任务数"),
   },
   {
     k: t("已验收"),

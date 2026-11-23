@@ -69,8 +69,7 @@ export function newGuardId(): string {
 /**
  * 申请指纹：动作 + 路径集合。
  *
- * 不含命令原文：同一条路径用不同工具、不同写法访问属于同一件事。恢复命令行里只要
- * 路径与动作一致即命中，不必逐字照抄原命令。
+ * 不含命令原文：同一路径用不同工具或写法访问属于同一件事。恢复命令行时只要路径与动作一致即命中，无需与原命令逐字相同。
  */
 export function fingerprintOf(kind: GuardKind, action: ActionKind, paths: readonly string[]): string {
   const norm = [...new Set(paths.map((p) => normLocal(p)).filter(Boolean))].sort();

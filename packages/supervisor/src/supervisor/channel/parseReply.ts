@@ -39,8 +39,7 @@ const DO_LINE = /^\s*DO:\s*([a-zA-Z-]+)\s*([\s\S]*)$/;
  * 树字段的集合。`ParsedReply`（单动作兼容）与 `ParsedAction`（每个动作）都满足它，
  * 于是 `treeDirectiveFields` 只认这一份形状，不必区分调用方传的是整条还是单条。
  *
- * 字段只在这里列举一次：`ParsedAction` 直接继承它。两处各写一遍时，新增一个树字段
- * 很容易只加到其中一处，表现是“解析出来了但没落库”，且不会报错。
+ * 字段只在此处列举一次，`ParsedAction` 直接继承。若在两处分别声明，新增树字段时容易只补其中一处，表现为字段已解析却未写入台账，且不会报错。
  */
 export interface TreeFieldBag {
   /**

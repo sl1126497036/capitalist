@@ -84,8 +84,8 @@ function listTrees(root: string, all = false): number {
 /** 打印重建计划（人读版）。 */
 function printPlan(plan: ReturnType<typeof planRebuild>): void {
   process.stdout.write(
-    `重建计划：台账 ${plan.stats.total} 行 · 在途 ${plan.stats.inFlight} · 已完成 ${plan.stats.settled}\n` +
-      `将关闭 ${plan.stats.close} 条、重开 ${plan.stats.reopen} 条、保留 ${plan.stats.keep} 条 · 重建后 ${plan.stats.trees} 棵树\n\n`,
+    `重建计划：台账 ${plan.stats.total} 行 | 在途 ${plan.stats.inFlight} | 已完成 ${plan.stats.settled}\n` +
+      `将关闭 ${plan.stats.close} 条、重开 ${plan.stats.reopen} 条、保留 ${plan.stats.keep} 条 | 重建后 ${plan.stats.trees} 棵树\n\n`,
   );
 
   for (const g of plan.clusters) {

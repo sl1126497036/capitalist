@@ -45,7 +45,7 @@ function claim(root, dispatchId, extra = {}) {
 }
 
 
-test("同一单能一次领走多条：不再被 FIFO 卡在队尾", () => {
+test("同一派单可一次领取多条消息：不再被 FIFO 阻塞在队尾", () => {
   const root = sandbox();
   seed(root, "D-a");
   put(root, "第一条要求");
@@ -56,7 +56,7 @@ test("同一单能一次领走多条：不再被 FIFO 卡在队尾", () => {
   assert.equal(taken.length, 3, "三条都该被同一单领走");
 });
 
-test("执行中送达（limit=1）只领一条，其余留在队列里", () => {
+test("执行中送达（limit=1）仅领取一条，其余留在队列中", () => {
   const root = sandbox();
   seed(root, "D-b");
   put(root, "第一条");
@@ -66,8 +66,8 @@ test("执行中送达（limit=1）只领一条，其余留在队列里", () => {
   assert.equal(one.length, 1, "hook 通道一次只能铺一条");
 
   /*
-   * 判据用“还在不在队列里”而不是 isDirectiveOpen：后者问的是“落实了没有”，
-   * 领走但没结论的那条对收工闸仍然是“没落实”，两个问题不能混。
+   * 判据为“是否仍在队列中”，而非 isDirectiveOpen：后者判断的是“是否已落实”。
+   * 已领取但无结论的消息对收工闸仍算“未落实”，两者不可混同。
    */
   const rest = cmds.listDirectives(root).filter((x) => x.consumed !== true);
   assert.equal(rest.length, 1, "没送到的那条不许被标成已送达");
@@ -87,7 +87,7 @@ test("领的时候先领明确写给这一单的，不被无归属的旧积压�
   assert.equal(cmds.directiveRef(taken[0]), cmds.directiveRef(mine), "精确归属的要排在最前");
 });
 
-test("字数上限只约束第二条起：单条超长也得送，否则它永远卡在队首", () => {
+test("字数上限仅从第二条起生效：单条超长也须送达，否则将始终阻塞队首", () => {
   const root = sandbox();
   seed(root, "D-c");
   const long = "长".repeat(500);
@@ -100,7 +100,7 @@ test("字数上限只约束第二条起：单条超长也得送，否则它永�
 });
 
 
-test("送达不等于落实：领走之后仍然算“没落实”", () => {
+test("送达不等于落实：消息领取之后仍记为“未落实”", () => {
   const root = sandbox();
   seed(root, "D-d");
   const rec = put(root, "改了没");
@@ -167,7 +167,7 @@ test("结论只认 done / not_mine / blocked", () => {
   assert.equal(r.ok, false);
 });
 
-test("not_mine / blocked 不带说明要拒：不允许用一句“说句收到过”代替必要说明", () => {
+test("not_mine / blocked 缺少说明时须拒绝：不得用“已知悉”一类空话替代必要说明", () => {
   const root = sandbox();
   seed(root, "D-i2");
   const a = put(root, "一条要求");

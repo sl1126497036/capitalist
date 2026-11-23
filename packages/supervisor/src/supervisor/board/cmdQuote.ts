@@ -78,9 +78,9 @@ export function writeQuotedDirect(
   /*
    * 只走 appendDirective 这一个写入口。
    *
-   * 早先本函数手搓记录直接写盘：没有自身编号、没有 `at` 同毫秒顺延、没有 `direct_inject`
-   * 事件，方向还写死成“用户发给工作进程”。同一毫秒连发两条时引用会指向同一行，结论也会
-   * 落到相邻记录上；监工面板代发的话还会被记成用户发给工作进程。
+   * 写入只走 appendDirective 这一个入口：它统一处理自身编号、`at` 同毫秒顺延与 `direct_inject`
+   * 事件，并按会话归属记方向。若自行拼装记录写盘，同一毫秒连发两条时引用会指向同一行，结论
+   * 也会写到相邻记录上；监工面板代发还会被误记成用户发给工作进程。
    */
   const no = taskNoOfDispatchId(String(input.target ?? "")) || "S0";
   const identity =
@@ -174,7 +174,7 @@ export function setPause(root: string, reason: string): PauseOutcome {
   return pauseAll(root, "board", reason || "看板暂停调度");
 }
 
-/** 解除暂停并清除派单标记；失败时抛错，由调用方回给用户。 */
+/** 解除暂停并清除派单标记；失败时抛错，由调用方返回给用户。 */
 export function clearPause(root: string): ResumeOutcome {
   const r = resumeAll(root, "board");
   if (!r.ok) throw new Error(`暂停状态删除失败：${r.error || "未知原因"}`);

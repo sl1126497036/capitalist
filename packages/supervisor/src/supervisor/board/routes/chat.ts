@@ -179,9 +179,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
                     ? `用户说“插队 / 排到前面”：DO: queue ${taskNoLabel(Number(talkNo))}：仅插入队首，运行中的派单不受影响。`
                     : "用户说“插队 / 排到前面”：先按【任务编号表】找号，再写 DO: queue #NN。",
                   talkNo
-                    ? `用户说“立即执行 / 马上跑 / 别等”：DO: promote ${taskNoLabel(Number(talkNo))}：抢占槽位，运行中的派单退回队首，本单结束后继续执行。`
-                    : "用户说“立即执行 / 马上跑”：DO: promote #NN：抢占槽位。",
-                  "要新建派单并立刻抢占槽位（不等排队）：DO: dispatch --now <内容>（--now 表示立即执行，会挂起运行中的派单）。",
+                    ? `用户说“立即执行 / 马上跑 / 别等”：DO: promote ${taskNoLabel(Number(talkNo))}：抢占并发名额，运行中的派单退回队首，本单结束后继续执行。`
+                    : "用户说“立即执行 / 马上跑”：DO: promote #NN：抢占并发名额。",
+                  "要新建派单并立刻抢占并发名额（不等排队）：DO: dispatch --now <内容>（--now 表示立即执行，会挂起运行中的派单）。",
                   "要继续执行该单：排队中用 queue 或 promote；已结束用 DO: redo #<本单编号>，沿用原单与原会话，不新建单。",
                   "要补充或更正要求：DO: amend #<本单编号> <内容>；只有用户明确说“另开一单 / 新任务”才 dispatch。",
                   "不要为启动某一单而新建派单去改动机制；用户明确要求时除外。",
@@ -312,7 +312,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           finish({
             reply: "",
             applied: onDuty
-              ? "已登记到当前派单，执行中的进程会在下一个动作间隙收到"
+              ? "已登记到当前派单，执行中的进程随后会收到"
               : "已登记到当前派单，启动后一并下发",
             dispatch: targetDispatch,
           });
@@ -439,7 +439,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ...settledLines(ctx.opts.root),
         `并行度：${capitalist.parallel ?? "?"} ｜ 运行中 ${running.length} 个${
           running.length
-            ? `（${running.map((t) => `${taskNoLabel(Number(t.no))} ${t.title || t.shard || t.id}${t.worker ? ` · ${t.worker}` : ""}`).join("、")}）`
+            ? `（${running.map((t) => `${taskNoLabel(Number(t.no))} ${t.title || t.shard || t.id}${t.worker ? ` - ${t.worker}` : ""}`).join("、")}）`
             : ""
         } ｜ 排队 ${queued} ｜ 异常 ${failed}`,
         ...(idleQueue ? ["队列状态：空（待命，没有派单在执行，也没有排队项）"] : []),

@@ -292,7 +292,7 @@ export function acquire(root: string, path: string, mode: LockMode, holder: stri
 /**
  * 申请并在超时内轮询等待。
  *
- * 这是“其他 worker 要写需要等”的实现入口：hook 侧调它，等到锁就继续，等不到就拒绝。
+ * 这是其他 worker 写入时需要等待的实现入口：hook 侧调用它，拿到锁就继续，拿不到就拒绝。
  * 轮询间隔从 120ms 起、每次 +80ms 退避，最多等到 `waitMs`。
  */
 export function acquireWithWait(
@@ -370,8 +370,7 @@ export function release(root: string, path: string, holder: string): boolean {
 /**
  * 强制解锁（不看持有者）。
  *
- * 只在人明确要求时用：`capitalist lock release <path> --force`。典型场景是持有者进程还活着
- * 但已经卡死，而它占的文件正被其它进程等待修改，这时候等 ttl 到期太慢。
+ * 仅在用户明确要求时使用：`capitalist lock release <path> --force`。适用于持有者进程仍在但已卡死、其占用的文件正被其他进程等待修改的情形，此时等 TTL 到期太慢。
  */
 export function forceRelease(root: string, path: string): boolean {
   const key = lockKey(path);
@@ -437,7 +436,7 @@ export function lockStatus(root: string, only?: string): { locks: LockEntry[]; q
   return { locks, queue: table.queue };
 }
 
-/** 某路径当前有没有别人持有写锁（调度亲和用）。 */
+/** 某路径当前是否被其他持有者持有写锁（用于调度亲和）。 */
 export function writeHolderOf(root: string, path: string): LockEntry | null {
   const table = readTable(root);
   const e = table.locks[lockKey(path)];
@@ -524,7 +523,7 @@ export function checkStale(root: string, holder: string, path: string): StaleRes
     const other = recentWriter(root, path, holder);
     return {
       stale: true,
-      why: `已读取 ${mark.at} 的版本，之后文件已被修改（mtime ${new Date(mark.mtime).toLocaleTimeString("zh-CN", { hour12: false })} -> ${new Date(st.mtimeMs).toLocaleTimeString("zh-CN", { hour12: false })}）`,
+      why: `读取时的文件版本已过期，请重新读取后再写入`,
       ...(other ? { by: other } : {}),
     };
   } catch {
@@ -533,7 +532,7 @@ export function checkStale(root: string, holder: string, path: string): StaleRes
   }
 }
 
-/** 从事件台账里找最近写过这个文件的别人（给拒绝理由用，认不出就空）。 */
+/** 从事件台账查找最近写过该文件的其他进程，用于生成拒绝理由；找不到时返回空串。 */
 function recentWriter(root: string, path: string, holder: string): string {
   const key = lockKey(path);
   try {

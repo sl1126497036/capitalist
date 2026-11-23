@@ -1,7 +1,7 @@
 /**
  * 监工与工作进程之间的落盘协议。
  *
- * 三种角色，三种进程，互不同享上下文：
+ * 三种角色对应三类进程，彼此不共享上下文：
  *
  *   监工进程      长驻，独立进程。建根、定契约、派单、验收、判定失败后重新派发。
  *   工作进程      监工拉起的独立宿主进程，一个 worker 一个上下文，互不可见。
@@ -182,8 +182,7 @@ export interface Dispatch {
   /**
    * 最近一次被点名唤醒的时刻（ISO）。
    *
-   * 全局暂停期间，监工每轮补暂停标记时跳过它：用户已单独解除这一张，再标回去会让
-   * 唤醒回执与界面互相矛盾。阶段推进的作废宽限期同样读这个字段。
+   * 全局暂停期间，监工每轮补暂停标记时跳过该派单：用户已单独解除其暂停，重新标记会使唤醒回执与界面不一致。阶段推进的作废宽限期同样读这个字段。
    */
   wake_at?: string;
   /**
@@ -292,7 +291,7 @@ export interface WorkerStuckState {
   kind: StuckKind;
   /** 给用户看的中文类型名。 */
   label: string;
-  /** 判据摘要：凭什么判成这一类。 */
+  /** 判据摘要：判定为这一类的依据。 */
   why: string;
   /** 给工作进程的跳出办法（已写成可直接执行的句子）。 */
   guidance: string;
@@ -333,7 +332,7 @@ export interface WorkerRecord {
    * 因此监工不按心跳判定失败（见 `supervisor/loop.ts` 的 `reap`），只认它写回的 report。
    */
   mode?: "background" | "visible";
-  /** 拉起它的监工进程号。 */
+  /** 拉起它的监工系统进程号（pid）。 */
   supervisor_pid?: number;
   stuck?: WorkerStuckState | undefined;
   stop_reason?: string | undefined;
@@ -345,7 +344,7 @@ export interface WorkerRecord {
    * 可以被多个 worker 先后复用。看板“与这个进程说话”要送到 ai_session，
    * 调度层判断“这条会话是否仍被占用”也只认它。
    *
-   * 老记录没有这一项：按“不知道”处理，不以 `session` 代入，两者语义不同。
+   * 老记录没有这一项时按未知处理，不以 `session` 代替；两个字段语义不同。
    */
   ai_session?: string;
 }
@@ -381,7 +380,7 @@ export function saveSupervisor(root: string, rec: SupervisorRecord): void {
 /**
  * 判活窗口，单位秒。取 3 轮调度且不低于 30 秒。
  *
- * 下限用于吸收调度抖动：调度轮次设得小时（调试常用 1 秒）窗口会短到把正常抖动读成死亡，
+ * 下限用于吸收调度抖动：调度轮次过小时（调试常用 1 秒）窗口会短到把正常抖动误判为进程退出，
  * 于是 hook 在监工仍存活时误报“监工已停”。
  */
 export function supervisorStaleSec(rec: SupervisorRecord): number {
@@ -392,7 +391,7 @@ export function supervisorStaleSec(rec: SupervisorRecord): number {
  * 监工是否在线：状态为 `running`、记录的 pid 仍在、且心跳在判活窗口内。
  *
  * 被强杀（`taskkill /F`、后台任务管理器结束进程）的监工不写收尾，
- * `.capitalist/runtime/supervisor.json` 停在最后一次心跳，此后 30 秒内心跳仍显示新鲜。
+ * `.capitalist/runtime/supervisor.json` 停在最后一次心跳，此后 30 秒内心跳看起来仍在判活窗口内。
  * pid 判活覆盖该窗口：pid 消失时按离线处理。
  *
  * @param nowSec 当前 epoch 秒，默认取系统时间。传入固定值可让判定可重现。
@@ -476,7 +475,7 @@ export function workersDir(root: string): string {
  * worker id 会直接拼进文件名，因此必须是单段名字。
  *
  * 不做校验时，`capitalist stop-worker ../../x` 或看板转发来的非法 id 会把读 / 写引到 `.capitalist/workers`
- * 之外：读是越权，写更糟，`saveWorker` 会在任务根外落一个 json。id 由本模块生成，
+ * 之外：读取会越权，写入更严重，`saveWorker` 会在任务根外生成 json 文件。id 由本模块生成，
  * 但入口（CLI 参数、HTTP 查询串）是外部输入，必须在拼路径之前挡住。
  */
 export function isSafeWorkerId(id: string): boolean {
@@ -823,7 +822,7 @@ const DEFAULT_KEEP_RECENT_WORKERS = 50;
 const DEFAULT_WORKER_RECORD_MAX_AGE_MS = 24 * 3600 * 1000;
 
 /**
- * pid 是否还活着。只作辅助：pid 会被复用，最终判活仍看心跳。
+ * pid 是否仍然存活。只作辅助：pid 会被复用，最终判活仍以心跳为准。
  *
  * 实现在 `./process`；此处转发，保持既有导入路径可用。
  */
@@ -944,7 +943,7 @@ export function readDispatches(root: string): Dispatch[] {
  *
  * 台账只追加、不重写（改状态也是整份写回，size 会变），所以 `size + mtime` 一变就重读，
  * 不会给出旧数据。返回的是浅拷贝数组：调用方常常 `rows[idx] = next` 之后整份写回，
- * 共享同一个数组会把缓存改脏；元素本身只读使用（要改的地方都先 `{...cur}` 造新对象）。
+ * 共享同一个数组会污染缓存；元素按只读使用，需要修改时先以 `{...cur}` 创建新对象。
  */
 let dispatchCache: { root: string; key: string; rows: Dispatch[] } | null = null;
 
@@ -1506,7 +1505,7 @@ export function checkTreeEdge(rows: Dispatch[], parentId: string, reason: string
     return {
       ok: false,
       code: "missing_reason",
-      reason: "声明了父节点但未写 PARENT_REASON：说明为何必须先完成父节点（一两句），否则无法判定该边是否成立",
+      reason: "已指定父节点但未说明原因：请写明为何必须先完成该节点，否则无法建立该依赖",
     };
   }
   const byId = new Map(rows.map((r) => [String(r.id), r] as const));
@@ -1741,7 +1740,7 @@ export function requeueDispatch(root: string, id: string, note?: string): Dispat
   const idx = rows.findIndex((d) => d.id === id);
   if (idx < 0) return null;
   const cur = rows[idx] as Dispatch;
-  /* 已经在排队了：重复点一次切换不该把队列顺序再洗一遍。 */
+  /* 已在排队：重复切换不应重排队列顺序。 */
   if (cur.status === "open") return cur;
 
   const now = new Date().toISOString();

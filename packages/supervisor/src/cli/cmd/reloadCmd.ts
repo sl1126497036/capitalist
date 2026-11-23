@@ -60,7 +60,7 @@ export async function cmdReload(p: Parsed): Promise<number> {
       `快照：${snapshotPath(root)}`,
       `上下文：${summary.before_chars} -> ${summary.after_chars} 字` +
         `（事件 ${summary.events_total} 条，移除 ${summary.events_dropped} 条心跳、调度与已完成明细）`,
-      `会话：${summary.session_id}（换会话即换上下文，老会话不再读）`,
+      `会话：${summary.session_id}（已切换对话会话，原会话的输出不再读取）。`,
       `不重派（已完成且有证据）：${summary.skip} 片`,
       `待复验（已做未验证）：${summary.reverify} 个分片，下一轮调度派复验单` +
         (summary.deferred ? `（另有 ${summary.deferred} 片属于旧阶段/已删分片，只记录不派）` : ""),

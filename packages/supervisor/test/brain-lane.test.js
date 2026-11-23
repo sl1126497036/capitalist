@@ -37,7 +37,7 @@ test("一条消息三件事：三个动作，各带自己的图", () => {
   assert.equal(r.reply, "三件事分开派了。", "动作行与 ATT 行都不进气泡");
 });
 
-test("单动作：ATT 语义与改动前一致（没写=undefined，none=[]）", () => {
+test("单动作：ATT 语义与改动前一致（未指定为 undefined，none 表示空数组）", () => {
   const none = parseReply("DO: dispatch 修一下\nATT: none");
   assert.deepEqual(none.shots, []);
   assert.equal(none.acts.length, 1);
@@ -99,7 +99,7 @@ test("判定脑会话：首轮 fresh，之后同一条会话，轮次累加", ()
   const root = tmpRoot("brainlane");
   /*
    * 会话名带随机后缀：占用估算按会话 id 去宿主的 projects 目录找记录，
-   * 用固定名会读到这台机器上真实跑过的同一条会话（几 MB），测试就变成看环境脸色。
+   * 用固定名会读到这台机器上真实跑过的同一条会话（几 MB），测试结果将依赖运行环境。
    */
   const base = `capitalist-brain-t-${Date.now().toString(36)}`;
   const first = brainSessionOf(root, base);

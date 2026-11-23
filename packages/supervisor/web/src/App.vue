@@ -7,7 +7,7 @@ import ChatPane from "./components/chat-pane";
 import SupervisorStrip from "./components/supervisor-strip";
 import ForestPane from "./components/forest-pane";
 import { msgRef } from "./lib/fmt.js";
-import { mergeInterject, interjectRank } from "./lib/statusParts.js";
+import { mergeInterject, deliveryOf } from "./lib/statusParts.js";
 import { lang, t } from "./lib/i18n.js";
 /* 局部 t 会遮蔽模块级文案函数，取文案统一走 $t 别名。 */
 const $t = t;
@@ -609,7 +609,7 @@ async function loadMessages() {
    * 近期插话还停在待送达时强制全量，避免一份陈旧对象把尾标钉在待送达上。
    */
   const staleInterject = messages.value.some((m) => {
-    if (m?.role !== "user" || m?.kind !== "say" || interjectRank(m.status) !== 0) return false;
+    if (m?.role !== "user" || m?.kind !== "say" || deliveryOf(m) !== "pending") return false;
     const at = Date.parse(String(m.at || ""));
     return Number.isFinite(at) && Date.now() - at < STALE_INTERJECT_MS;
   });
@@ -1226,7 +1226,7 @@ function onHandback() {
   return applyAction({
     action: "release",
     body: { id: t.id, shard: t.shard || "" },
-    text: (d, ok) => (ok ? $t("已交还监工：下一轮调度恢复自动裁定") : `${$t("交还失败")} ${d.error || $t("未知原因")}`),
+    text: (d, ok) => (ok ? $t("已交还监工，后续由监工接手") : `${$t("交还失败")} ${d.error || $t("未知原因")}`),
   });
 }
 

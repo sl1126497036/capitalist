@@ -118,7 +118,7 @@ test("清空任务卡不换监工会话，也不动对话台账", () => {
   assert.ok(!String(r.body.effective || "").includes("新会话"), "回执不再声称换会话");
 });
 
-test("new-session 在命令白名单内", () => {
+test("new-session 是工作进程允许执行的命令", () => {
   assert.ok(COMMAND_ACTIONS.has("new-session"));
 });
 

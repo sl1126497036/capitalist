@@ -53,13 +53,12 @@ export function recordUserMessage(
   /** 图在这里编一次号（`[附件] x.png` -> `[图1] x.png`），后续环节统一沿用该编号。 */
   let text = numberAttachmentLines(String(input.text ?? ""));
   /*
-   * 方向必须由调用方给出。缺省成 `U2W` 会把「忘记传方向」的调用静默记成
-   * 「用户发给某个工作进程」，事后无法与真实的工作进程消息区分，故在这里直接失败。
+   * 方向必须由调用方给出。缺省为 `U2W` 会把漏传方向的调用静默记成用户发给工作进程的消息，事后无法与真实消息区分，因此这里直接报错。
    */
   const direction = String(input.direction ?? "").trim();
   if (!isUserMsgDirection(direction)) {
     throw new Error(
-      `用户消息缺少方向：工作进程承接写 U2W，监工承接写 U2S（收到 "${direction}"）。`,
+      `用户消息缺少方向：请指定由工作进程还是监工承接。`,
     );
   }
   const id = newMessageId(input.taskNo ?? "S0", direction);

@@ -458,7 +458,7 @@ export function detectRequirementViolation(prev: ContractData, next: ContractDat
   for (const ps of prevStages) {
     const ns = nextById.get(ps.id);
     if (!ns) {
-      out.push({ kind: "delete_stage", stage: ps.id, detail: `需求条目阶段 ${ps.id} 被删除` });
+      out.push({ kind: "delete_stage", stage: ps.id, detail: `需求条目对应的阶段 ${ps.id} 被删除` });
       continue;
     }
     const pa = (ps as unknown as Record<string, unknown>).acceptance;
@@ -785,7 +785,7 @@ export function leasePath(root: string, task: string): string {
  * 造一条本进程的租约。
  *
  * @param pid 持有者进程号。
- * @param staleSec 判活窗口（秒），下限 30，容纳调度抖动、避免将调度抖动误判为失效。
+ * @param staleSec 判活窗口（秒），下限 30，容忍调度抖动，避免把存活实例误判为失效。
  * @param instanceId 实例 id；省略时按时间与随机数生成。
  */
 export function newInstanceLease(
@@ -871,9 +871,7 @@ export interface LeaseStatus {
 /**
  * 汇总本任务的实例租约状态。
  *
- * 扫锁目录里属于本任务的全部租约文件（`<task>.lock` 与 `<task>.*.lock` 残留都算），
- * 实例数按“状态 running 且进程仍存活”计。数目大于 1 说明有多个监工实例同时占着
- * 这个任务根，重复派单、重复拉 worker 都会发生，必须告警。
+ * 扫锁目录里属于本任务的全部租约文件（`<task>.lock` 与 `<task>.*.lock` 残留都算），实例数按“状态 running 且进程存活”计。多于一个说明多个监工实例同时持有该任务根，会造成重复派单和重复启动进程，必须告警。
  */
 export function instanceLeaseStatus(root: string, task: string): LeaseStatus {
   const dir = locksDir(root);
@@ -913,9 +911,7 @@ export function instanceLeaseStatus(root: string, task: string): LeaseStatus {
 /**
  * 红线预检。
  *
- * 带 `defer` 的红线只负责“认出这是什么动作”，放不放行交给更专门的判定
- * （例如本机删除要判路径在不在任务根内）。因此它们不参与最严级别计算，
- * 否则“认出一次删除”就会直接 BLOCK，使路径判定失效。
+ * 带 `defer` 的红线只识别动作类型，是否放行交给更专门的判定（例如本机删除需判断路径是否在任务根内）。这类红线不参与最严级别计算，否则识别到删除就会直接拦截，使路径判定失效。
  *
  * @param text 被检查的命令文本。
  * @returns 判定结果与命中的红线列表。`skip_if` 正则非法时按“不跳过”处理。

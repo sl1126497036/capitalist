@@ -168,7 +168,17 @@ export interface ThreadMessage {
   quote_text?: string;
   /** 视图块标记：真相是日志切片或聚合结果，不是一条消息。界面不显示编号、不提供引用。 */
   view?: boolean;
+  /**
+   * 用户消息的送达档位。
+   *
+   * 界面按档位出词与配色，不解析 `status` 的文案：`status` 是给人看的句子，措辞随时会改，
+   * 前端按字面比对在改词后整片失效。这里只给码。
+   */
+  delivery?: Delivery;
 }
+
+/** 用户消息的送达档位：`ok` 已送达，`pending` 待送达，`bad` 未送达。 */
+export type Delivery = "ok" | "pending" | "bad";
 
 export interface ThreadSummary {
   id: string;
@@ -775,9 +785,9 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
   if (i.supervisor.max_workers === 0) {
     return {
       level: "warn",
-      title: "监工不自动拉起工作进程",
+      title: "监工不自动启动工作进程",
       detail: "以 --no-spawn 运行：只派单，由另一个会话执行 capitalist next 接收。",
-      fix: "另开一个会话跑 capitalist next，做完 capitalist report <派单id> done",
+      fix: "另开一个会话执行 capitalist next，完成后执行 capitalist report <派单id> done",
     };
   }
 

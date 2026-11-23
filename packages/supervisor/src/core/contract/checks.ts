@@ -48,9 +48,7 @@ function strList(v: unknown): string[] {
 /**
  * 取字符串数组字段；字段存在但不是数组时 fail closed。
  *
- * “读不懂配置”与“没有这条要求”不能同义：按空数组放过去，等于把一条写错的检查变成
- * 永远达标，阶段会在没有证据的情况下被判完成。缺省（字段不存在）仍按空数组处理，
- * 那时语义确实是“没要求”。
+ * “配置无法解析”与“没有该要求”不能等同：把写错的检查按空数组放行，会让它永远达标，阶段在无证据的情况下被判完成。字段缺失时仍按空数组处理，此时语义确实是“没有要求”。
  */
 function strListOrFail(spec: Spec, key: string, label: string): { list: string[] } | { error: CheckResult } {
   const v = spec[key];
@@ -218,12 +216,7 @@ function checkAssertion(data: unknown, a: Assertion, rel: string): string | null
 
 const CHECKS: Record<string, Checker> = {
   /*
-   * 显式“无验收条件”。
-   *
-   * 与“没写 done”区分开：`runCheck` 对空 spec 是 fail closed（判不达标），因为漏配
-   * 门槛通常是写错了。但有些阶段确实不需要验收条件，比如只按派单台账执行的任务根，
-   * 阶段不代表一段有产出物的工序。这类阶段写 `{"type":"none"}`，明确表示“本阶段
-   * 没有门槛”，而不是留空让人猜是漏配还是故意不配。
+   * 显式“无验收条件”。与“没写 done”区分开：`runCheck` 对空 spec 判为不达标，因为漏配门槛通常是写错了。有些阶段确实不需要验收条件，例如只按派单台账执行的任务根。这类阶段写 `{"type":"none"}`，明确表示“本阶段没有门槛”，避免留空后无法区分是漏配还是有意不配。
    */
   none: () => ({ ok: true, missing: [] }),
   file_exists: (spec, root) => {

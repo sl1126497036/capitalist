@@ -14,7 +14,7 @@
  * - 项目级权限由各宿主的 `projectConfigDir` 决定；声明为空时不写，避免宿主把项目判为
  *   受限工作区。
  *
- * 用户已有的信任条目与其它键不改动。
+ * 用户已有的信任条目与其他配置键不改动。
  */
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

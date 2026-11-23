@@ -19,7 +19,7 @@ import { basename, dirname, join } from "node:path";
 import { locks as locksLoc } from "./locations";
 import { pidAlive, sleepSync } from "./process";
 
-/** 锁被占用且重试用尽。调用方据此判定「本次创单失败」。 */
+/** 取号锁已被占用，重试次数也已用尽；调用方据此判定本次创单失败。 */
 export class NoLockTimeoutError extends Error {
   constructor(
     /** 没抢到的锁键。 */
@@ -27,7 +27,7 @@ export class NoLockTimeoutError extends Error {
     /** 从首次尝试到放弃共等待的毫秒数。 */
     readonly waitedMs: number,
   ) {
-    super(`取号锁 ${key} 在 ${waitedMs}ms 内未取得，本次创单失败；稍后重试`);
+    super(`本次创单失败：取号超时，请稍后重试`);
     this.name = "NoLockTimeoutError";
   }
 }
@@ -182,7 +182,7 @@ const PARK_DIRNAME = "released";
  * 把锁文件移出主路径。
  *
  * 用 `rename` 而不是 `unlink`：本机安全策略会拦截删除动作，`unlink` 失败会让锁文件永远留在
- * 主路径上，后来者只能等到 TTL 才接管，表现为「取号一直超时」。移动到同级归档目录不触发
+ * 主路径上，后来者只能等到 TTL 到期才能接管，表现为取号持续超时。移动到同级归档目录不触发
  * 删除拦截，主路径立刻空出，锁照样是一次性的。
  *
  * 归档文件不自动清理；取号频率是每次派单一次，堆积量可控，需要时由使用者清理。

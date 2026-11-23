@@ -153,7 +153,7 @@ export function supervisorPolicy(opts: {
     "  · 只有“要落地改动（代码 / 数据 / 文件 / 配置 / 文档）、需要长时间运行、需要独立上下文”才开进程。",
     "    diagnose 仅用于对话层无法完成、需要长时间排查的任务；能自行回答的不派单。",
     "  · 派单需排队，轮到执行时单内所述现状可能已变化。派单正文写**目标**，不写**现状对比**：",
-    "    - 不写“核查 #29 是否已过期，逐条给出作废/改写/保留”；该写法属代为读取台账。",
+    "    · 不写“核查 #29 是否已过期，逐条给出作废/改写/保留”；该写法属代为读取台账。",
     "    · 写“把 <文件> 的 <行为> 改成 <目标行为>，验收读改动点确认”；现状由工作进程按目标核对。",
     "",
     "【动作面】判定依据为台账与派单状态。可用动作：",
@@ -188,7 +188,7 @@ export function supervisorPolicy(opts: {
     "",
     "【边界两条，不作为免责条款】",
     "  · 落地改动归工作进程：对话层判断、派单、验收，但不改动任务根内的文件（代码、数据、配置、文档均属此类）。",
-    "  · 你不占并发槽：只有派出去的单才占，所以只读任务不派发。",
+    "  · 你不占并发名额：只有派出去的单才占，所以只读任务不派发。",
     "  · 除此之外不存在禁区：无法回答的先读取，读完再作答。",
     "",
     ...(opts.viaSupervisor
@@ -205,7 +205,7 @@ export function supervisorPolicy(opts: {
     "    才能开始写参数；没有把握的部分直接问用户，不要带着含糊动笔。",
     "  · 参数里写明关键上下文锚点，让工作进程无需猜测：涉及哪些模块或界面、当前行为是什么、",
     "    完成标准、不许改动的边界（哪些文件 / 模块 / 行为这一单不得触碰）。",
-    "    - 用户给了 skill、文档或一段任务描述，先读完读懂；理解不透就直接向用户询问要哪部分，",
+    "    · 用户给了 skill、文档或一段任务描述，先读完读懂；理解不透就直接向用户询问要哪部分，",
     "    不要把自己没读懂的原始表述原样写入参数转给工作进程。",
     "  · 参数只写这一单的工作内容，整理成结构完整、目标明确、无歧义的一段话：任务内容、",
     "    改动位置与完成标准。不直接引用用户的口语表述。",
@@ -278,7 +278,7 @@ export function supervisorPolicy(opts: {
     "",
     "【验收要求不写测试与截图门槛】参数里的“完成标准”按行为写，不按证据形式写：",
     "  · 不要要求“跑通全量测试”“构建加全量校验”“端到端长跑”，这类耗时流程不作为阶段门槛；",
-    "  - 不要要求截图或截图核对。验收就写“用户要的那个结果如何确认”，能看到那个结果出现即为通过，",
+    "  · 不要要求截图或截图核对。验收就写“用户要的那个结果如何确认”，能看到那个结果出现即为通过，",
     "    不要写成流程（跑通测试、构建完成）或者材料清单（交截图、交文档）。",
     "    那个结果的形态由这件事决定：一个数值、一段输出、一个能复现的现象、一份能打开的文件。",
     "  · 只有用户明确点名要看截图时，才在参数里写截图。",
@@ -292,7 +292,7 @@ export function supervisorPolicy(opts: {
     "    它就只是一张普通排队单，前方存在运行中的派单时仍须排队；",
     "  · 只认明确说法：立即 / 马上 / 现在就 / 最高优先级 / 插队 / 别排队。",
     "    “优先”“尽快”“注意一下”不算，那些是普通措辞，标成立即执行会让真正紧急的事项排到后面；",
-    "  · 同一时刻只允许一张立即执行单。已经有一张立即执行单在占用槽位时，如实告诉用户",
+    "  · 同一时刻只允许一张立即执行单。已经有一张立即执行单占用并发名额时，如实告诉用户",
     "    “#N 正在执行，这一单排在它之后”，不要两张都标记；",
     "  · 用户说的是**运行中**的派单要插队，那就只写 promote，不要再 dispatch 一张。",
     "",
@@ -419,7 +419,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
       if (r.code !== 0) return { status: 400, body: { error: r.stderr || r.stdout || "接管失败", action } };
       return {
         status: 200,
-        body: { ok: true, action, shard: target || "all", detail: r.stdout, effective: "监工不再自动重派/验收该片" },
+        body: { ok: true, action, shard: target || "all", detail: r.stdout, effective: "监工不再自动重派或验收该分片" },
       };
     }
     case "release": {
@@ -534,7 +534,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
           action,
           worker: wid,
           detail: r.stdout,
-          effective: "监工将重派这一单（除非该片已被接管或登记了阻塞）",
+          effective: "监工将重派这一单（除非该分片已被接管或已登记阻塞）",
         },
       };
     }
@@ -542,7 +542,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
       if (!thread && !shard) return cBad("id 必填");
       const model = String(body.model ?? "").trim();
       /*
-       * 换模型与有没有运行中的进程无关：模型记在这张单上，该单下一轮拉起时用它。
+       * 换模型与有没有运行中的进程无关：模型记在这张单上，该单下一轮启动时用它。
        * 入参可能是线程键、派单 id 或工作进程 id，三者都要换算到同一张单。
        */
       const t = thread ? buildThreads(root).find((x) => x.id === thread) : undefined;
@@ -563,7 +563,7 @@ export function runCommand(root: string, raw: unknown): CommandResult {
         /*
          * 写在这张单上：原单重派、重开与追问都领同一张单，模型随之沿用。
          * `model_by` 让同一线程后续补派也用它，别的线程与新派单不受影响。
-         * 旧的回退档一并清掉，否则启动失败时会退回上一轮的模型。
+         * 旧的回退配置一并清除，否则启动失败时会退回上一轮的模型。
          */
         patchDispatch(root, d.id, {
           model: pick.model ?? model,
@@ -579,12 +579,12 @@ export function runCommand(root: string, raw: unknown): CommandResult {
           model_fallback_used: undefined,
         });
       }
-      /* 旧版本把换模型请求写成按分片消费的文件，拉起时优先于单上的值：清掉本分片残留，避免盖掉刚写下的。 */
+      /* 旧版本把换模型请求写成按分片消费的文件，启动时优先于单上的值。清除本分片的残留值，避免覆盖这次写入的模型。 */
       clearWorkerModel(root, String(d.shard ?? ""));
 
       const what = model ? `已切到 ${model}` : "已切回默认模型";
       /*
-       * 正在跑的这一轮不打断：进程启动时就定了模型，改启动参数只影响下一次拉起。
+       * 正在执行的这一轮不打断：进程启动时就定了模型，改启动参数只影响下一次启动。
        * 三档文案分别对应会话仍在跑、单已结束、单在途等待。
        */
       const effective = liveWorker

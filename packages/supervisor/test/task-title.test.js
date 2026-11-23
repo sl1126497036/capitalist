@@ -76,7 +76,7 @@ test("前端只有一份分片映射表，且取自服务端", () => {
   const abs = resolve(dirname(WEB_TABLE), imported[1]);
   assert.ok(existsSync(abs), `导入路径不存在：${abs}`);
 
-  /* 目标文件必须真的导出该符号，否则前端拿到的是 undefined，映射表会整体失效。 */
+  /* 目标文件必须导出该符号，否则前端取得 undefined，映射表会整体失效。 */
   const target = readFileSync(abs, "utf8");
   assert.match(target, /export\s+const\s+SHARD_TITLES\b/, `${abs} 未导出 SHARD_TITLES`);
 });
@@ -107,7 +107,7 @@ test("标题取值顺序：契约 title -> 分片映射 -> 正文摘要，不回
   assert.strictEqual(taskTitle({ shard: "ux-chat" }), "对话修复");
   assert.strictEqual(taskTitle({ shard: "no-such-shard", action: "把左栏的行名改成中文，别显示代号" }), "把左栏的行名改成中文");
   assert.strictEqual(taskTitle({}), "");
-  // 分片 id 永远不是标题：查不到、正文也没中文时返回空串，而不是把 id 原样吐出来。
+  // 分片 id 永远不是标题：未查到且正文无中文时返回空串，而不原样返回 id。
   assert.strictEqual(taskTitle({ shard: "no-such-shard", action: "Only modify the left column" }), "");
 });
 
@@ -123,9 +123,7 @@ test("正文摘要取首个含中文的句读段，不按字数截断短标题",
 
 test("正文摘要保留原文，只剥行首列表序号", () => {
   /*
-   * 线上实例（2026-11-20）：派单写“2. 校验第 1 张单产出的文案问题与改法清单”，
-   * 任务卡标题成了“校验第张单产出的文案问题与改法清单”。数字被当成非中文删掉，
-   * “第几张单”这个指代直接消失，而且从标题上看不出被删过。
+派单写“2. 校验第 1 张单产出的文案问题与改法清单”时，任务卡标题会变成“校验第张单产出的文案问题与改法清单”：数字被当作非中文删掉，“第几张单”的指代随之消失，且从标题上无法看出被删过。
    * 现在只去格式，不动词：数字、小数点、百分比、英文标识都留在标题里。
    */
   assert.strictEqual(
@@ -219,8 +217,7 @@ async function runDirectives(root) {
 
 test("TITLE 行：标题按派单取值，不从正文摘要推测", async () => {
   /*
-   * 线上实例（2026-11-21）：13 张单的正文都以“加载 code-craft 技能”开头，
-   * 摘要取首从句并删掉英文与路径，13 张单全部叫“加载技能”。标题是派单方最清楚的信息，
+13 张单的正文都以“加载 code-craft 技能”开头时，摘要取首从句并删掉英文与路径，会把它们全部命名为“加载技能”。标题是派单方最清楚的信息，
    * 由它在 `TITLE:` 行给出，摘要只作兜底。
    */
   const root = titleSandbox();

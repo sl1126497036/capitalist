@@ -43,7 +43,7 @@ test("非 stream 模式同样不把噪声写进展开块", () => {
   assert.deepStrictEqual(parts.text, ["worker 自己说的一句话"], "正文不受影响");
 });
 
-test("消息流里真诊断走折叠块：整块只有噪声时不发，混了真告警发折叠块", () => {
+test("消息流中的真实诊断使用折叠块：整块只有噪声时不发送，混入真实告警时发送折叠块", () => {
   const run = (lines) => {
     const root = mkdtempSync(join(tmpdir(), "capitalist-noise-"));
     try {

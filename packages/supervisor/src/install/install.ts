@@ -12,7 +12,7 @@
  * ## 合并原则
  *
  * 只增改 `hooks` 下的自有条目：按标记移除旧条目再追加，重复执行结果相同；
- * 其余键（用户的 permissions、env、其他 hook）一律原样保留。安装器无权改动用户的其它配置。
+ * 其余键（用户的 permissions、env、其他 hook）一律原样保留。安装器无权改动用户的其他配置。
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

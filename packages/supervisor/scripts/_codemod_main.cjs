@@ -55,7 +55,7 @@ const edits = [
   { s: 260, e: 260, expect: "die(`写入失败：${target}`", text: `  if (!appendJsonl(target, obj)) die(t(\`Write failed: \${target}\`, \`写入失败：\${target}\`));` },
   { s: 261, e: 261, expect: "write(`已记录到", text: `  write(t(\`Recorded to .capitalist/\${name}\\n\`, \`已记录到 .capitalist/\${name}\\n\`));` },
   { s: 268, e: 268, expect: `die('用法：capitalist ask`, text: `  if (!text) die(t('Usage: capitalist ask "<question>"', '用法：capitalist ask "<问题>"'));` },
-  { s: 293, e: 293, expect: "write(`问题已登记", text: `  write(t(\`Question registered as \${id}\\nStopping here is allowed. To return: capitalist inbox \${id}\\n\`, \`问题已登记 问\${id}\\n现在可以停下（这是合法停顿）。回来用：capitalist inbox \${id}\\n\`));` },
+  { s: 293, e: 293, expect: "write(`问题已登记", text: `  write(t(\`Question registered as \${id}\\nStopping here is allowed. To return: capitalist inbox \${id}\\n\`, \`问题已登记 问\${id}\\n可在此停止。回来后用：capitalist inbox \${id}\\n\`));` },
   { s: 308, e: 314, expect: "write(\n      `已忽略", text: `    write(
       t(
         \`Ignored \${ignored.length} malformed record(s) (not reviewed): \` +
@@ -123,7 +123,7 @@ const edits = [
   { s: 535, e: 535, expect: "die(`未知档位：", text: `  if (!next) die(t(\`Unknown mode: \${value}\\nAvailable: \${modeNames().join(", ")}\`, \`未知档位：\${value}\\n可用：\${modeNames().join(", ")}\`));` },
   { s: 537, e: 537, expect: `die("状态写入冲突`, text: `    die(t("State write conflict; the retry failed too. Run the command again", "状态写入冲突，重试后仍未成功：请再执行一次"));` },
   { s: 539, e: 539, expect: "write(`档位：", text: `  write(t(\`Mode: \${effective} -> \${next} (\${describeMode(next)})\\n\`, \`档位：\${effective} 改为 \${next}（\${describeMode(next)}）\\n\`));` },
-  { s: 541, e: 541, expect: "bypass 档位放宽", text: `    write(t("Bypass relaxes the mode and local-boundary checks; task-list redlines still block as before. For controlled environments only.\\n", "bypass 档位放宽档位与本机边界判定，任务列表红线仍按原级别拦截。该档位仅用于受控环境。\\n"));` },
+  { s: 541, e: 541, expect: "bypass 档位放宽", text: `    write(t("Bypass relaxes the mode and local-boundary checks; task-list redlines still block as before. For controlled environments only.\\n", "bypass 放宽档位与本机边界判定，任务列表红线仍按原级别拦截。该档位仅用于受控环境。\\n"));` },
   { s: 549, e: 549, expect: "die(`用法：capitalist ${name}", text: `  if (!text) die(t(\`Usage: capitalist \${name} "<text>" [--shard <shard>] [--thread <thread>] | capitalist \${name} --help\`, \`用法：capitalist \${name} "<文本>" [--shard <分片>] [--thread <线程>] ｜ capitalist \${name} --help\`));` },
   { s: 550, e: 550, expect: "文本过长", text: `  if (text.length > 4000) die(t("Text too long (max 4000 chars)", "文本过长（上限 4000 字）"));` },
   { s: 580, e: 580, expect: "写入失败：.capitalist/direct.jsonl", text: `  if (!rec) die(t("Write failed: .capitalist/direct.jsonl", "写入失败：.capitalist/direct.jsonl"));` },
@@ -185,8 +185,8 @@ const edits = [
     t(
       "Resumed: from the next round dispatching starts again; only manually created dispatches run, none are auto-created from the contract.\\n" +
         "Old paused dispatches still need capitalist wake --user.\\n",
-      "已恢复：监工从下一轮调度起恢复派单，只执行派入的派单，不按契约自动建单。" +
-        "被暂停的旧派单仍需通过 capitalist wake --user 唤醒。\\n",
+      "已恢复：监工从下一轮调度起重新派单，只执行用户派入的单，不按契约自动建单。" +
+        "此前暂停的旧派单仍需执行 capitalist wake --user 唤醒。\\n",
     ),
   );` },
   { s: 719, e: 720, expect: "installNeedsConfirm", text: `      caps.install ? (caps.installNeedsConfirm ? t("install(confirm)", "install(需确认)") : "install") : null,
@@ -231,7 +231,7 @@ const edits = [
       }
       if (r.cached) write(t(\`(From cache \${r.status.checkedAt}; use --force to re-check online)\\n\`, \`（结论来自缓存 \${r.status.checkedAt}，加 --force 重新联网）\\n\`));` },
   { s: 1017, e: 1018, expect: "⚠ 工作区准备失败", text: `        write(t(\`⚠ Workspace preparation failed (\${ws.impl}): \${ws.message}\\n\${ws.fix}\\n\`, \`⚠ 工作区准备失败（\${ws.impl}）：\${ws.message}\\n\${ws.fix}\\n\`));
-        write(t("(If the workspace is not ready the worker may sit on a confirmation page and not run; fix per the above, then start.)\\n", "（工作区未就绪时 worker 可能停在确认页，不会自动执行；按上述说明修复后启动。）\\n"));` },
+        write(t("(If the workspace is not ready the worker may sit on a confirmation page and not run; fix per the above, then start.)\\n", "（工作区未就绪时工作进程可能停在确认页，不会自动执行；按上述说明修复后启动。）\\n"));` },
   { s: 1194, e: 1194, expect: "die(\"用法：capitalist guard", text: `        return die(t("Usage: capitalist guard <root> <capitalist-pid> (internal; started by the supervisor)", "用法：capitalist guard <root> <capitalist-pid>（内部命令，由监工自动拉起）"));` },
   { s: 1232, e: 1232, expect: "该命令已移除", text: `      write(t("This command was removed: the plugin never stores or reads tokens from disk; auth uses the host credentials read at startup.\\n", "该命令已移除：插件不从磁盘保存或读取令牌，认证由启动时读取的宿主凭证完成。\\n"));` },
   { s: 1243, e: 1243, expect: "未知命令：", text: `      process.stderr.write(t(\`Unknown command: \${p.cmd}\\n\\n\${HELP}\`, \`未知命令：\${p.cmd}\\n\\n\${HELP}\`));` },

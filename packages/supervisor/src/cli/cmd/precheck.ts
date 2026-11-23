@@ -39,7 +39,7 @@ export function cmdGate(p: Parsed): number {
   const root = findRoot(flagString(p, "root"));
   const spec = flagString(p, "contract") ?? "minimal";
   const contract = root ? loadOrDie(root).contract : loadContract(spec, skillDirs());
-  if (!contract) die(`找不到任务列表：${spec}`);
+  if (!contract) die(`未找到任务列表：${spec}。`);
 
   const mode = root ? resolveModeFor(root, contract) : "default";
   const gate = evaluate(contract, text);

@@ -269,7 +269,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
   const isFileTool = FILE_TOOLS.has(event.tool);
   const isShell = SHELL_TOOLS.has(event.tool);
 
-  // 文件类工具只判路径归属，其它工具不判
+  // 文件类工具只判路径归属，其他工具不判
   if (isFileTool) {
     const p = String(event.toolInput.file_path ?? event.toolInput.path ?? "");
     if (!p.trim()) return hook.passthrough();
@@ -505,8 +505,7 @@ function guardFileLock(
   }
 
   /*
-   * 写之前校验版本。必须在获取锁之后：等锁的这段时间里，上一个持有者完全可能
-   * already 表示目标已变更，写入会用旧内容覆盖新改动，需拦截。
+   * 写之前校验版本，且必须放在获取锁之后：等锁期间，上一个持有者可能已经改动目标，此时写入会用旧内容覆盖新改动，需要拦截。
    */
   if (mode === "write") {
     for (const p of ordered) {
@@ -517,7 +516,7 @@ function guardFileLock(
       return hook.deny(
         [
           `【文件已被改】${p} 在读取之后被${st.by ? ` ${st.by} ` : "他人"}修改。`,
-          st.why ? `- ${st.why}` : "",
+          st.why ? `· ${st.why}` : "",
           "",
           "先重新 Read 这个文件，基于新内容再改；不要用旧内容覆盖他人的改动。",
         ]

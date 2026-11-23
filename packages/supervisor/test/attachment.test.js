@@ -38,21 +38,21 @@ test("取图接口：<img> 形状的请求能拿到图，安全模式仍需 key�
 
     const get = (path, headers = {}) => fetch(`${base}${path}`, {headers, redirect: "manual"});
 
-    /* 1. 浏览器给 <img> 发的就是这种请求：只有 cookie，没有自定义头。 */
+    /* 1. 浏览器为 <img> 发出的即这种请求：仅带 cookie，无自定义头。 */
     const ok = await get("/api/attachment?path=.capitalist/attachments/shot.png", {cookie});
     assert.equal(ok.status, 200, "带 cookie 的图片 GET 不应被 x-capitalist-client 校验拦下");
     assert.match(String(ok.headers.get("content-type")), /^image\/png/);
     assert.equal(Buffer.from(await ok.arrayBuffer()).length, PNG.length);
 
-    /* 2. 缺省不校验 key：不带 cookie 的取图请求同样放行。 */
+    /* 2. 取图请求默认不校验 key：即使不带 cookie，同样放行。 */
     const noCookie = await get("/api/attachment?path=.capitalist/attachments/shot.png");
     assert.equal(noCookie.status, 200, "缺省不校验 key");
 
-    /* 3. 文件真没了才是 404。 */
+    /* 3. 仅在文件确实不存在时返回 404。 */
     const missing = await get("/api/attachment?path=.capitalist/attachments/none.png", {cookie});
     assert.equal(missing.status, 404);
 
-    /* 4. 路径白名单没被放开：`.capitalist/` 下其它文件照样取不到。 */
+    /* 4. 路径允许列表未放开：`.capitalist/` 下其他文件仍无法取得。 */
     const escape = await get("/api/attachment?path=.capitalist/state.json", {cookie});
     assert.equal(escape.status, 404, "只能取 attachments 目录里的图片");
   } finally {

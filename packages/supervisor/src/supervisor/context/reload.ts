@@ -315,7 +315,7 @@ export interface ResumeReverifyItem {
   shard: string;
   title: string;
   action: string;
-  /** 判成“已做但未验证”的依据。 */
+  /** 该片被判定为“已做但未验证”的依据。 */
   why: string;
 }
 
@@ -539,7 +539,7 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
   const qa = readJsonl<Record<string, unknown>>(inboxLoc.qa(root));
 
   /*
-   * 需求原文：契约 context（判据与禁止事项的大本营）+ 当前阶段的 next + 每个分片的 action。
+   * 需求原文由三部分组成：契约 context（判据与禁止事项的来源）、当前阶段的 next，以及每个分片的 action。
    * 全部逐字保存。压缩只针对“过程”，不针对“要求”。
    */
   const requirements: ReloadRequirement[] = [];
@@ -815,9 +815,9 @@ function classifyItem(
         verified_at: String(hit.at ?? ""),
       };
     }
-    return { ...base, state: "done_unverified", why: `已结束（${last.id}），但证据台账里没有对应的 confirmed 记录` };
+    return { ...base, state: "done_unverified", why: `已结束（${last.id}），但证据台账中没有对应的已确认记录` };
   }
-  // open / 其它：没有在途以外的状态落在这里
+  // open 或其他：此处只接收除在途之外的状态
   return { ...base, state: "in_progress", why: `状态 ${last.status}` };
 }
 
@@ -863,13 +863,13 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
     L.push("      过期就更新契约、或 capitalist advance 推进阶段，不要照着旧目标做。");
     L.push("");
   }
-  L.push("## 阶段目标（契约原文，逐字保留 · 不是待办清单）");
+  L.push("## 阶段目标（契约原文，逐字保留，非待办清单）");
   L.push(
     "> 以下是**阶段层面**的目标，可能早于今天的派单（本份简报生成于 " +
       String(snap.at ?? "").slice(0, 16).replace("T", " ") +
       "）。",
   );
-  L.push("> 它们不是“现在要立刻做的事”：当前要做的活以派单台账为准。与下面的“未完成”冲突时，以派单为准；");
+  L.push("> 这些目标并非当前须立即执行的任务：现时任务以派单台账为准。若与下方“未完成”一节冲突，以派单为准；");
   L.push("> 台账里 done / closed 的派单是历史，不要依据它们恢复任何实现。");
   L.push("");
   if (snap.requirements.length === 0) L.push("（无）");
@@ -962,9 +962,7 @@ export function buildResumePlan(snap: ReloadSnapshot): ResumePlan {
       /*
        * 只有“本阶段 + 仍在契约里”的片能派复验单。
        *
-       * 其余两种派了也活不过一个调度轮次：旧阶段的在途单会被 supersedeStaleDispatches
-       * 作废，契约里删掉的分片不在本案集合里同样被作废。所以它们进 deferred，
-       * 留着信息、不制造一张每轮调度生一次的假单。
+       * 另外两种情形派单后也撑不过一个调度轮次：旧阶段的在途单会被 supersedeStaleDispatches 作废，契约中已删除的分片同样因不在当前集合而被作废。因此将其记入 deferred，仅保留信息，不生成每轮调度都会重复产生的无效派单。
        */
       if (i.stage === snap.stage && i.in_contract) {
         reverify.push({ key: i.key, stage: i.stage, shard: i.shard, title: i.title, action: i.action, why: i.why });
@@ -976,7 +974,7 @@ export function buildResumePlan(snap: ReloadSnapshot): ResumePlan {
           shard: i.shard,
           title: i.title,
           why: i.why,
-          reason: i.in_contract ? "属于已推进过去的阶段，复验单会被作废" : "分片已不在任务列表里",
+          reason: i.in_contract ? "所属阶段已推进完毕，复验单会被作废" : "分片已从任务列表中移除",
         });
       }
     } else {
@@ -1060,9 +1058,7 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
         delete st.verify_dispatch;
         st.state = "pending";
       } else {
-        /* open / claimed / review：还在路上，不重复派。
-         * superseded 也落在这里：说明契约在这一代重载之后变了，再派只会被继续作废；
-         * 下一次 reload 会把它判成 in_contract=false 进 deferred，不会卡死。 */
+        /* open / claimed / review：仍在处理中，不重复派单。superseded 也归此类：说明契约在本代重载后发生变化，继续派单只会再次被作废；下一次 reload 会将其判定为 in_contract=false 并移入 deferred，不会陷入停滞。 */
         continue;
       }
     }
@@ -1388,7 +1384,7 @@ export function effectiveSupervisorContextLimit(configLimit: number, modelWindow
 }
 
 /**
- * 看板“监工 · 上下文”一格的视图（GET /api/supervisor 的 `context`）。
+ * 看板中“监工上下文”一格的视图（GET /api/supervisor 的 `context`）。
  * 只反映监工自身对话的用量与上限，与工作进程的上下文分开；上限按 {@link effectiveSupervisorContextLimit} 算。
  * 重载换代后旧读数不作为当前值，显示为空并给出原因。
  */
@@ -1494,7 +1490,7 @@ export function shouldAutoReload(root: string): SupervisorCtxCheck {
   };
 }
 
-/** 读重载状态。过期（进程崩在中途）的标记会被清掉，避免看板永久显示“重载中”。 */
+/** 读重载状态。过期标记（因进程中途退出而残留）会被清除，避免看板持续显示“重载中”。 */
 export function reloadStatus(root: string): ReloadStatus {
   const sess = readJson<SessionRecord | null>(sessionPath(root), null);
   const gen = Number(sess?.gen ?? 0);
@@ -1514,7 +1510,7 @@ export function reloadStatus(root: string): ReloadStatus {
     try {
       rmSync(activePath(root), { force: true });
     } catch {
-      /* 删不掉就留着，下一个读者再试 */
+      /* 删除失败时保留标记，由下一次读取重试删除 */
     }
     recordEvent(root, "supervisor_reload_stale", { gen: marker.gen, phase: marker.phase, age_sec: Math.round(ageMs / 1000) });
     return { active: false, phase: "stale", gen, started_at: started, age_sec: Math.round(ageMs / 1000), trigger: "" };
@@ -1783,7 +1779,7 @@ function tailJsonRows(file: string, maxBytes: number): Array<Record<string, unkn
 export function severeSupervisorEventLines(root: string, max = 8): string[] {
   const rows = tailJsonRows(ledgerLoc.events(root), SEVERE_EVENT_TAIL_BYTES);
   const out: string[] = [];
-  /* 事件名与说明完全相同的只留最近一条，兼容老台账里未节流的成堆重复；不同原因各占一行。 */
+  /* 事件名与说明完全相同的仅保留最近一条，以兼容旧台账中未经节流的批量重复；不同原因各占一行。 */
   const seen = new Set<string>();
   for (let i = rows.length - 1; i >= 0 && out.length < max; i -= 1) {
     const e = rows[i]!;
@@ -1797,7 +1793,7 @@ export function severeSupervisorEventLines(root: string, max = 8): string[] {
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     const at = String(e.at ?? "").slice(5, 16).replace("T", " ");
-    /* `repeat` 是节流写入攒下的次数：连续发生 N 次只落一条，这里如实标出来。 */
+    /* `repeat` 记录节流写入累计的次数：连续发生 N 次仅落一条，此处按原值标注。 */
     const rep = Number(e.repeat ?? 0);
     const times = Number.isFinite(rep) && rep > 1 ? ` ×${rep}` : "";
     out.push(`- ${at} ${EVENT_ZH[name] ?? name}${who ? `（${who}）` : ""}${detail ? `：${detail}` : ""}${times}`);
@@ -1859,7 +1855,7 @@ export function reloadBrief(root: string, maxChars = 12000): string {
   };
 
   const sorted = [...sections].sort((a, b) => rank(a.title) - rank(b.title));
-  /* 需求原体量最大且排在简报最前，按序取或纯按优先级都会挤占其他段落的空间，故先划出 30% 固定配额，其余给增量段落。 */
+  /* 需求原文体量最大且排在简报最前，无论按原序截取还是纯按优先级截取，都会挤占其余段落的空间，因此先划出 30% 固定配额，剩余额度留给增量段落。 */
   const needQuota = Math.floor(maxChars * 0.3);
   let budget = maxChars - head.length - 200;
   const kept: string[] = [];

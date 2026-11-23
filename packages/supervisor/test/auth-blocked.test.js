@@ -1,7 +1,7 @@
 /**
  * 登录态不可用的识别与结束。
  *
- * 覆盖 worker 日志识别、give_up 落盘且不进入重试裁决、额度文案仍走原有重试路径。
+ * 覆盖 worker 日志识别、give_up 落盘且不进入重试裁决、额度文案仍沿用原有重试路径。
  */
 
 const test = require("node:test");
@@ -85,7 +85,7 @@ test("登录态不可用写 give_up，不写 pending 重试", () => {
   assert.ok(!files.includes("verdict"), `不应产生裁决文件：${files}`);
 });
 
-test("额度耗尽仍走原有重试路径，不被登录态分支截走", () => {
+test("额度耗尽仍沿用原有重试路径，不被登录态分支截断", () => {
   const root = scratch();
   seedDispatch(root, { id: "D-2", shard: "" });
 

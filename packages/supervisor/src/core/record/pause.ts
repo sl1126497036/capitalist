@@ -257,7 +257,7 @@ export function setPauseGate(
 export function pauseAll(root: string, by: string, reason: string): PauseOutcome {
   const text = reason || "未填写原因";
   if (!hasUnfinishedDispatches(root)) {
-    /* 已经在暂停态时不要因为“这一轮没单”把文件删掉或谎报未写。 */
+    /* 已处于暂停态时，不要因本轮无单而删除文件或误报未写入。 */
     const existing = readPause(root);
     return {
       marked: 0,
@@ -311,7 +311,7 @@ function removePauseFile(root: string): { ok: boolean; error?: string } {
   let lastErr: unknown = null;
   for (let i = 0; i < 6; i += 1) {
     try {
-      /* 直接删除不经过 writeJson，读缓存要一起丢：否则 300ms 内仍读到“暂停中”。 */
+      /* 直接删除不经过 writeJson，需同时清除读缓存，否则 300ms 内仍读到“暂停中”。 */
       if (!existsSync(p)) {
         forgetJson(p);
         return { ok: true };

@@ -97,7 +97,7 @@ export function matchWatchDir(cwd: string, rules = loadWatchRules()): WatchMatch
   return null;
 }
 
-/** 自动纳管失败的可诊断落点：用户级日志（失败时任务根可能仍不存在，写不进 `.capitalist/`）。 */
+/** 自动纳管失败时，诊断信息写入用户级日志；此时任务根可能尚未创建，无法写入 `.capitalist/`。 */
 function noteAdoptFailure(root: string, err: unknown): void {
   const file = join(homedir(), ".capitalist", "adopt-errors.log");
   try {

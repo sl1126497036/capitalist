@@ -47,7 +47,7 @@ test("派单是抢占的：第二个 worker 领不到同一张单", () => {
   assert.equal(second, null, "同一张单不能被两个人领");
 });
 
-test("已经了结的单不能再改", () => {
+test("已结束的单不能再改", () => {
   const root = sandbox();
   openDispatch(root);
   capitalist.claimDispatch(root, "D-test1", "W-a");
@@ -115,7 +115,7 @@ test("worker 进程已退出时判定失败，并回收它手上的单", () => {
   assert.equal(capitalist.readDispatches(root)[0].status, "failed");
 });
 
-test("tick 回收所有 claimed 僵尸单，不只最后一张", () => {
+test("每个调度节拍回收所有 claimed 僵尸单，不只最后一张", () => {
   const root = sandbox();
   const now = new Date().toISOString();
   const rows = [
@@ -145,7 +145,7 @@ test("tick 回收所有 claimed 僵尸单，不只最后一张", () => {
   assert.equal(capitalist.loadWorker(root, "W-dead").status, "exited");
 });
 
-test("契约没有 parallel 时并行度就是 1", () => {
+test("契约没有 parallel 时，同时执行的派单数就是 1", () => {
   const root = sandbox();
   const contract = {
     name: "minimal",
@@ -273,7 +273,7 @@ process.stdin.on("end", () => {
   const dispatches = capitalist.readDispatches(base);
   assert.equal(dispatches.length, 1);
   /*
-   * 假 worker 写完就退出，监工还活着时会立刻把它判成 failed，这正说明它真的被拉起过。
+   * 假 worker 写完即退出，监工仍在运行时会立刻将其判为 failed，这说明它确实被启动过。
    * 这里验的是绑定关系：派单上有 worker 与 claimed_at，且指向刚建的那条进程记录。
    */
   assert.equal(dispatches[0].worker, workers[0].id, "派单应绑定到刚拉起的 worker");
@@ -336,7 +336,7 @@ test("停止走哨兵文件，不会被心跳写回 running", () => {
   capitalist.requestSupervisorStop(root);
   assert.equal(capitalist.stopRequested(root), true);
 
-  // 另一个监工（或同一监工的下一 tick）写心跳，不能把停止请求冲掉
+  // 另一个监工（或同一监工的下一调度节拍）写心跳，不能覆盖停止请求
   capitalist.saveSupervisor(root, { ...runningRecord(), status: "running" });
   assert.equal(capitalist.stopRequested(root), true, "心跳不得覆盖停止请求");
 
@@ -379,7 +379,7 @@ const SHARD_CONTRACT = {
   ],
 };
 
-test("刚失败的单按退避等待，不会每个 tick 重拉进程", () => {
+test("刚失败的单按退避等待，不会每个调度节拍重新启动进程", () => {
   const root = sandbox();
   failedDispatch(root, "D-now", "a", 0);
 
@@ -485,7 +485,7 @@ function runningRecord() {
 }
 
 
-test("立即执行：一个 tick 内腾槽拉起，运行中的单挂起并标已让位", () => {
+test("立即执行：一个调度节拍内腾出槽位并启动，运行中的单挂起并标记为已让位", () => {
   const { chmodSync, writeFileSync: write } = require("node:fs");
   const preempt = require("../dist/core/dispatch/preempt");
   const boardMod = require("../dist/supervisor/board");
@@ -498,7 +498,7 @@ test("立即执行：一个 tick 内腾槽拉起，运行中的单挂起并标�
   write(fake, "#!/usr/bin/env node\nprocess.stdin.resume();\nsetTimeout(() => {}, 60000);\n");
   chmodSync(fake, 0o755);
 
-  /* 一个真的活着的进程，扮演“正运行中的那一单”。 */
+  /* 一个确实存活的进程，模拟“正在运行的那一单”。 */
   const victim = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], {
     stdio: "ignore",
     windowsHide: true,

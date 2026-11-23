@@ -108,7 +108,7 @@ test("有进程时不打断这一轮：只登记，进程记录不动", () => {
   assert.equal(core.readDispatches(root).find((x) => x.id === id).model, "deepseek-v4.1-flash");
 });
 
-test("找不到单时给 404，不再拿“没有运行中的进程”当理由", () => {
+test("未找到单时返回 404，不再以“没有运行中的进程”为由", () => {
   const root = sandbox();
   const r = switchModel(root, { id: "9-9", model: "glm-5.3" });
   assert.equal(r.status, 404);

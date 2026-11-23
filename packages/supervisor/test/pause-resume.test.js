@@ -168,7 +168,7 @@ test("看板：运行中的单暂停后显示暂停中，不再显示待重派",
   assert.strictEqual(t.status, "paused", "进程行也要先判暂停");
 });
 
-test("看板唤醒动作在白名单内：不再返回未知动作", () => {
+test("看板唤醒动作属于允许的动作：不再返回未知动作", () => {
   const root = sandbox();
   put(root, "D-a", {});
   capitalist.holdDispatch(root, "D-a", "startup", "测试");

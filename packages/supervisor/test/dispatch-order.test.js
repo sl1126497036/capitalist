@@ -115,11 +115,11 @@ test("场景：异常中断与关机，重启后队列顺序与启动前一致�
   const before = queueAfterRestart(root);
   assert.deepStrictEqual(before, ["D1", "D2", "D3"]);
 
-  /* 异常中断：D2 的进程被杀，单留在 claimed（重启不拉起在途单，等收尸）。 */
+  /* 异常中断：D2 的进程被终止，派单留在 claimed（重启不拉起在途派单，等待回收判定）。 */
   setStatus(root, "D2", "claimed");
   assert.deepStrictEqual(queueAfterRestart(root), ["D1", "D3"], "重启后只剩 open 单，台账顺序不变");
 
-  /* 收尸判 failed，重派单按台账追加排在队尾，顺序仍是确定的、可复现的。 */
+  /* 回收判定为 failed，重派单按台账追加至队尾，顺序仍确定且可复现。 */
   capitalist.finishDispatch(root, "D2", "failed", "worker 中断");
   put(root, "D2r", { lineage: "D2" });
   const after = queueAfterRestart(root);

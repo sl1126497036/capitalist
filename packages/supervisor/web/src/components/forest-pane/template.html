@@ -22,7 +22,7 @@
           <i class="fv-dot" :class="l.k" />{{ l.text }}
         </span>
         <span class="fv-lg">
-          <i class="fv-dot failed" />{{ tr("失败节点带“断链”标记，其下整棵子树降亮并注明受影响的单号") }}
+          <i class="fv-dot failed" />{{ tr("失败节点标“断链”，其下游任务变暗并标出受影响的单号") }}
         </span>
       </div>
 
@@ -41,7 +41,7 @@
           >
             <header class="fv-thead">
               <span v-if="rootNo(t)" class="fv-tidx">{{ rootNo(t) }}</span>
-              <b class="fv-tt">{{ t.cycle ? tr("脏数据：成环节点") : rootTitle(t) }}</b>
+              <b class="fv-tt">{{ t.cycle ? tr("数据异常：节点成环") : rootTitle(t) }}</b>
               <span class="fv-tmeta">{{ progress(t) }}</span>
               <span v-if="t.cycle" class="fv-tag bad">{{ tr("成环") }}</span>
               <span v-else-if="!t.alive" class="fv-tag">{{ tr("无在途") }}</span>

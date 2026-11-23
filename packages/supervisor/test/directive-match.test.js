@@ -29,7 +29,7 @@ function seed(root, row) {
 }
 
 
-test("target 指向同链的中途单：重派出来的新单照样领得到", () => {
+test("target 指向同链的中途派单：重派生成的新派单仍能领取该消息", () => {
   const root = sandbox();
   /* 一条链：D-chain（首）-> D-mid（中途被重派掉）。话钉在 D-mid 上。 */
   seed(root, { id: "D-chain", lineage: "D-chain" });
@@ -47,7 +47,7 @@ test("target 指向同链的中途单：重派出来的新单照样领得到", (
   assert.equal(taken[0].text, "改跳过卡点的提示词");
 });
 
-test("target 指向别的链：一张都领不走（串台是这条通道必须根除的问题）", () => {
+test("target 指向其他链：任何派单都无法领取（串台是本通道必须根除的问题）", () => {
   const root = sandbox();
   seed(root, { id: "D-chain", lineage: "D-chain" });
   seed(root, { id: "D-other", lineage: "D-other" });
@@ -109,7 +109,7 @@ test("线程对不上就不领：其他线程的插话不会被这条线程认�
   assert.equal(taken.length, 0);
 });
 
-test("thread 里是进程 id 时只认那台进程：进程退出即作废，不转手给别人", () => {
+test("thread 为进程 id 时仅认该进程：进程退出即作废，不转交其他进程", () => {
   const root = sandbox();
   seed(root, { id: "D-chain", lineage: "D-chain" });
   cmds.appendDirective(root, { text: "说给某一台进程的私话", thread: "W-oldproc", stage: "S0" });
@@ -193,7 +193,7 @@ test("悬空追加回收：失败的单挂着追加时翻回 open，并清掉终
   assert.match(String(after.note), /没人读/, "note 要写清为什么又活了");
 });
 
-test("悬空追加回收：链上还有活单时不动它（那一单自己会领）", () => {
+test("悬空追加回收：链上仍有在途派单时不回收（由该派单自行领取）", () => {
   const root = sandbox();
   seed(root, { id: "D-chain", lineage: "D-chain" });
   seed(root, { id: "D-live", lineage: "D-chain", status: "claimed" });
@@ -218,7 +218,7 @@ test("悬空追加回收：每拍只回收一条链，不一次拉起多个进�
 });
 
 test("悬空追加回收：用户手动结束的单不被自动拉起", () => {
-  /* 关闭是用户的明确意图，监工不能因为“还有话没读”把它悄悄reopen。 */
+  /* 关闭是用户的明确意图，监工不得因“仍有消息未读”而将其重新打开。 */
   const root = sandbox();
   seed(root, { id: "D-closed", lineage: "D-closed", status: "closed" });
   cmds.appendDirective(root, { text: "关闭之后补的话", target: "D-closed", stage: "S0" });

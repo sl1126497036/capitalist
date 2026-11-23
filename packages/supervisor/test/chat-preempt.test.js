@@ -83,7 +83,7 @@ test("抢占之后通道仍可用，不进入失败态", async () => {
   const second = serializeSupervisorChat(async () => "after");
   assert.equal(await first, "aborted");
   assert.equal(await second, "after");
-  /* 再来一轮：链没有被中止留下的残余状态卡住。 */
+  /* 再执行一轮：链不会被中止遗留的残余状态阻塞。 */
   assert.equal(await serializeSupervisorChat(async () => "again"), "again");
 });
 

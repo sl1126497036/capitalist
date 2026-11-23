@@ -1,7 +1,7 @@
 /**
  * 看板产物的模块缓存管理。
  *
- * 热重载只换 `dist/supervisor` 下的模块，不动 `dist/core`：core 的共享可变状态清掉后，
+ * 热重载只替换 `dist/supervisor` 下的模块，不动 `dist/core`：core 的共享可变状态清除后，
  * loop 与 board 会各持一份实例。core 的改动须完整重启。
  */
 
@@ -10,7 +10,7 @@ import { join } from "node:path";
 /**
  * 看板入口的真实产物路径。
  *
- * 单文件时代是 `board.js`，拆成目录后是 `board/index.js`。写死一种，另一种布局下解析不到，
+ * 单文件时代是 `board.js`，拆成目录后是 `board/index.js`。若只兼容一种，另一种布局下无法解析，
  * 缓存清理会静默失效。
  */
 function boardEntry(supervisorDir: string): string {
@@ -23,7 +23,7 @@ function boardEntry(supervisorDir: string): string {
 }
 
 /**
- * 清掉看板产物的模块缓存，否则 `require("./board")` 取回的仍是启动时的旧模块。
+ * 清除看板产物的模块缓存，否则 `require("./board")` 取回的仍是启动时的旧模块。
  *
  * @param supervisorDir `dist/supervisor` 目录
  * @param keep 不清的模块，传 loop 自身，避免两套调度并存

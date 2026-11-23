@@ -2,7 +2,7 @@
  * 契约与 CLI 的一致性。
  *
  * 契约是数据，CLI 是能力，两者之间没有类型系统约束，契约里的 `next` 会原样注入
- * 给执行侧，指向一个不存在的命令时，模型照做就是“未知命令”报错。这类漂移不会
+  * 交给执行侧后，若指向不存在的命令，模型按此执行将得到“未知命令”报错。这类漂移不会
  * 被任何单测发现，只会在真实使用里以“照着指示做却失败”的形式出现。
  *
  * 所以这里直接读源码与契约文本比对：契约引用的每个 `capitalist <cmd>` 都必须有实现。
@@ -36,7 +36,7 @@ function implementedCommands() {
   return new Set([...src.matchAll(/case "([a-z-]+)":/g)].map((m) => m[1]));
 }
 
-test("契约里引用的 capitalist 命令都真实存在（否则执行侧照做会报未知命令）", () => {
+test("契约里引用的 capitalist 命令均有实现（否则执行侧按契约执行会报未知命令）", () => {
   const refs = referencedCommands();
   const impl = implementedCommands();
 

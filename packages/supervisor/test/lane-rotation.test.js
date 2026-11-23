@@ -171,7 +171,7 @@ test("运行中按日志增量刷新占用：不用等进程退出，闸门就�
     })}\n`,
   );
 
-  // 进程没有退出，只有日志增长，这就是“运行中”的现场。
+  // 进程未退出，仅有日志增长，此即“运行中”的表现。
   loop.refreshLaneUsage(root, []);
 
   const st = lane.readLane(root, BASE);
@@ -233,7 +233,7 @@ test("占用一直未知：不会无限续接，到上限就换代", () => {
   const d = aDispatch();
   const first = lane.pickLane(root, d);
 
-  // 宿主不写 usage 的进程：ctx_used 始终是 null（退出回调也拿不到读数）。
+  // 宿主不写 usage 的进程：ctx_used 始终为 null（退出回调也无法取得读数）。
   let resumes = 0;
   let rotated = null;
   for (let i = 0; i < 12; i += 1) {
@@ -255,7 +255,7 @@ test("占用一直未知：不会无限续接，到上限就换代", () => {
   assert.ok(ev);
   assert.strictEqual(ev.ctx_used, null, "未知占用也照样记事件，ctx_used 写 null");
   /*
-   * 换代原因有两档：续接次数到上限记 `ctx_unknown`；续接过一次仍找不到宿主会话文件
+   * 换代原因分两类：续接次数到达上限记 `ctx_unknown`；续接过一次仍未找到宿主会话文件
    * 记 `session_missing`。后者更早拦住“续接一条不存在的会话”，同样满足本用例要守的
    * “ctx_used=null 不能成为永远续接的理由”。
    */

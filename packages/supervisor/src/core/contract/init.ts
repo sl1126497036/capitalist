@@ -51,8 +51,7 @@ export class ContractNotFoundError extends Error {
 /**
  * 构造任务根的初始状态。
  *
- * CLI 与自动纳管共用这一份构造逻辑：两处各自构造时，给一处新增的字段会被另一处漏写，
- * 而漏写不报错（`stage_entered_at_ts` 就被读过、被比对过，却从未写入）。
+ * CLI 与自动纳管共用这一份构造逻辑，避免两处各自构造时新增字段被另一处漏写。
  *
  * `stage_entered_at_ts` 为 epoch 秒，与归档的 Python 实现一致，也是
  * `mtime_after_stage` 的比对基准。
@@ -63,8 +62,8 @@ export function newState(target: string, contract: Contract, fallback: boolean):
   const stage = contract.stages[0];
   if (!stage) {
     throw new Error(
-      `任务列表 ${contract.name}（${contract.file}）没有定义任何阶段：监工无法确定起点。` +
-        "请在任务列表里补阶段配置，或改用 capitalist start --contract minimal 先跑通用流程。",
+      `任务列表 ${contract.name}（${contract.file}）未定义阶段，监工无法确定起点。` +
+        "请补充阶段配置，或改用 capitalist start --contract minimal 运行通用流程。",
     );
   }
 

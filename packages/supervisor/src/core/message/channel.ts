@@ -57,7 +57,7 @@ export function markChannelDown(root: string, reason: string): void {
   try {
     writeFileSync(file, `${JSON.stringify(body, null, 2)}\n`, "utf8");
   } catch {
-    /* 写不进去时闸失效，按无记录处理：宁可多派一次，也不能因为写不成而停住任务。 */
+    /* 写入失败时闸失效，按无记录处理：宁可多派一次，也不因写入失败中断调度。 */
   }
 }
 

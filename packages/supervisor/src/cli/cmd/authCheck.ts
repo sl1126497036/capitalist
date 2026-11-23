@@ -184,7 +184,7 @@ export function cmdAuthCheck(p: Parsed): number {
   const { verdict, action } = skipProbe
     ? {
         verdict: "未做通道探测，登录态未判定。",
-        action: "去掉 --no-probe 后重新执行。",
+        action: "不使用 --no-probe，重新执行。",
       }
     : verdictOfProbe(result.kind, host, tokenHeld);
 

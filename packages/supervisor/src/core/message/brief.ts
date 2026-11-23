@@ -45,13 +45,13 @@ const TEXTS: Record<BriefLang, Texts> = {
       "  但该领域的完成判据与禁止动作未定义。",
       "  若这是明确领域任务：capitalist adopt --contract <任务列表名>",
     ],
-    mode: (m) => `权限档位：${m}（非默认，动作被拦截可能由档位导致，而非任务列表红线）`,
+    mode: (m) => `权限档位：${m}（非默认）。动作被拦截可能与档位有关，而非任务列表红线。`,
     head: (domain, target, stage, name) => `【capitalist | ${domain}】${target} | 阶段 ${stage} ${name}`,
     goal: (g) => `  本阶段目标：${g}`,
     next: (n) => `  下一步：${n}`,
     missing: "  未达门槛：",
     satisfied: "  门槛：已满足，可用 capitalist advance 推进",
-    asks: (n) => `  待裁决 ${n} 条（答完才能继续）：`,
+    asks: (n) => `  待裁决 ${n} 条，答复后才能继续：`,
     genericDomain: "通用任务",
   },
   en: {
@@ -114,7 +114,7 @@ export function buildBrief(input: BriefInput): string {
     lines.push(t.satisfied);
   }
 
-  // 只列本阶段的提问：旧阶段的提问已失效，继续显示会让每一轮都重复催同一件已了结的事。
+  // 只列本阶段的提问：旧阶段的提问已失效，继续显示会在每轮简报中重复提示已了结事项。
   // 走校验读取：缺 id / 空 text / status 越界的记录不参与，它们无法识别其提问内容，
   // 却足以让监工判定“有待裁决”而停派。
   const open = openInboxAsks(root).filter((q) => !q.stage || q.stage === state.stage);

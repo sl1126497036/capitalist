@@ -13,8 +13,8 @@ const { loadState } = require("../dist/core/record/state");
 const loop = require("../dist/supervisor/loop");
 
 /*
- * 判定通道指向一个不存在的可执行文件：本文件验的是“判定失败后怎么传导”，
- * 不验“模型认为该不该重试”。不挡的话每次判定失败都会真的拉起一个模型会话。
+ * 判定通道指向不存在的可执行文件：本文件验证“判定失败后如何传导”，
+ * 不验证“模型是否认为应当重试”。未加拦截时，每次判定失败都会实际拉起一个模型会话。
  */
 process.env.CAPITALIST_WORKER_BIN = join(tmpdir(), "no-such-worker-bin-for-cascade-test");
 
@@ -201,7 +201,7 @@ test("诊断不出原因：登记待裁决并标阻塞，等待人工处理", ()
   assert.equal(row(root, "P2").retry_verdict, "give_up", "父节点不许被自动重试");
 });
 
-test("被拒（权限/凭证）：不自动重跑，直接转人工", () => {
+test("被拒（权限/凭证）：不进行自动重试，直接转人工", () => {
   const root = sandbox();
   scene(root, { log: "请求失败：403 forbidden，permission denied" });
 
@@ -212,7 +212,7 @@ test("被拒（权限/凭证）：不自动重跑，直接转人工", () => {
   assert.equal(readJsonl(join(root, ".capitalist", "inbox", "qa.jsonl")).filter((q) => q.type === "ask").length, 1);
 });
 
-test("上下文超限：重置子树重跑一次，父节点换新单、子孙回到可派", () => {
+test("上下文超限：重置子树并重新运行一次，父节点换新单、子孙回到可派", () => {
   const root = sandbox();
   scene(root, { log: "Error: context window exceeded (maximum context length is 200000 tokens)" });
 
@@ -240,7 +240,7 @@ test("上下文超限：重置子树重跑一次，父节点换新单、子孙�
   assert.equal(row(root, "G1").parent, "C1", "孙子的边不动（它的父节点还在）");
 });
 
-test("可修原因但已经自动重置过一次：不再重跑，转人工", () => {
+test("原因可修复但已自动重置过一次：不再重新运行，转人工", () => {
   const root = sandbox();
   scene(root, { log: "socket hang up" });
   patch(root, "P2", { cascade_resets: 1 });

@@ -155,7 +155,7 @@ export async function decide(opts: DecideOptions): Promise<BrainResult> {
       actions: [],
       raw: r.text,
       fallback: true,
-      error: `模型输出里没有可解析的动作行（允许：${allowed.join(" / ")}），原文前 200 字：${String(r.text ?? "").slice(0, 200)}`,
+      error: `模型没有给出可执行的动作。`,
     };
   }
   return { actions: parsed.actions, raw: r.text, fallback: false };

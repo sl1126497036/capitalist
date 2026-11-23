@@ -109,7 +109,7 @@ export function cmdReceiptText(e: Record<string, unknown>): string {
   const reason = String(e.reason ?? "").trim();
   const detail = String(e.detail ?? "").trim();
   return [
-    `指令：${label}${arg ? ` · ${arg}` : ""}`,
+    `指令：${label}${arg ? ` - ${arg}` : ""}`,
     `结果：${ok ? "已执行" : "失败"}`,
     !ok && reason ? `原因：${reason}` : "",
     detail ? `说明：${detail}` : "",
@@ -197,7 +197,7 @@ function maskWorkerIds(text: string): string {
 export function maskBoardText(text: string, nos?: Map<string, string>): string {
   /*
    * 老派单正文里的 `[@行号]` 标记已停用：插话编号统一为消息编号，历史正文里的这段不再上屏。
-   * 只抹方括号包着的行号，不碰 `PARENT: @1` 这类结构指令写法。
+   * 只去除方括号内的行号，不改动 `PARENT: @1` 这类结构指令写法。
    */
   const clean = String(text ?? "").replace(/\[@\d+\]\s*/g, "");
   return maskDispatchIds(maskWorkerIds(clean), nos);

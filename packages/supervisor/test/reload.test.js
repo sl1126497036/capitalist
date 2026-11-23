@@ -4,7 +4,7 @@
  * 钉住四件事，任何一条破了都会让“重载”变成“失忆”：
  *
  * 1. 快照里该有的都在：阶段、已达标验收项、每片状态、未消费插话、未裁决提问、重派计数；
- * 2. 压缩真的在压：心跳/tick 不进简报，需求原文一字不改地留下；
+ * 2. 压缩确实生效：心跳与调度节拍不进入简报，需求原文原样保留；
  * 3. done_verified 不重派，done_unverified 必须派复验，且重复调用不重复派；
  * 4. 重载标记会自己清掉（进程崩了不能把看板永久钉在“重载中”）。
  */
@@ -191,7 +191,7 @@ test("快照：阶段、验收项、每片状态、插话、提问、重派计�
   assert.ok(snap.boundaries.some((b) => b.includes("禁止删除文件")));
 });
 
-test("压缩：丢心跳与 tick，留需求原文与待复验清单", () => {
+test("压缩：去除心跳与调度节拍，保留需求原文与待复验清单", () => {
   const { root, contract } = makeRoot();
   const snap = buildReloadSnapshot(root, contract, 1);
   const out = buildReloadContext(snap);

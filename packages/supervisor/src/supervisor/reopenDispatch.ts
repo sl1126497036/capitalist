@@ -65,7 +65,7 @@ export function reopenSettledDispatch(root: string, id: string, why: string): Di
   for (const k of TERMINAL_FIELDS) delete next[k];
 
   /*
-   * 追加而非整份重写：与其它写派单的路径一致，避免与并发写入互相覆盖。
+   * 追加而非整份重写：与其他写派单的路径一致，避免与并发写入互相覆盖。
    * 新单的 `id` 由取号临界区先行占位，这里只负责把记录补齐。
    */
   appendJsonl(dispatchPath(root), next);

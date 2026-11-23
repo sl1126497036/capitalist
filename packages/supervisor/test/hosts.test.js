@@ -74,7 +74,7 @@ test("worker 参数快照：argv 与 stdin 两种路径都在 impl 里定死", (
     authEnvVar: null,
   });
   // `--port 0` 让每个 worker 自选端口：默认端口固定，与桌面端宿主同机运行会 EADDRINUSE，
-  // 而 CLI 在这种失败下仍以退出码 0 结束，表现为“进程起来了但什么也没干”。
+  // 而 CLI 在这种失败下仍以退出码 0 结束，表现为“进程已启动但未执行任何操作”。
   assert.deepEqual(seen.codebuddy, {
     argv: ["-p", "DO", "--permission-mode", "bypassPermissions", "--port", "0", "--model", "m", "--output-format", "stream-json", "-d"],
     stdin: ["-p", "--permission-mode", "bypassPermissions", "--port", "0", "--model", "m", "--output-format", "stream-json", "-d"],
@@ -140,7 +140,7 @@ test("workspace：有 facet 的 impl 幂等追加，且不改用户已有值", (
   assert.ok(data.permissions, "应当写入 permissions");
   assert.equal(typeof data.permissions.defaultMode, "string");
 
-  // 用户已有自己的设置：再跑一次不能覆盖
+  // 用户已有自身设置：再次运行不得覆盖。
   data.permissions.defaultMode = "user-choice";
   writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   const second = impl.workspace.prepare(root);
@@ -282,7 +282,7 @@ test("解析失败不缓存：只命中无扩展名文件时返回空清单，�
     board.resetHelpModelsCacheForTest();
     const first = board.helpModels("codebuddy");
     assert.deepEqual(first, [], "起不动的宿主返回空清单，由调用方回退");
-    /* 再跑一遍仍会重试（失败不写缓存）：这里只验证不抛错、结果稳定。 */
+    /* 再次运行仍会重试（失败不写缓存）：此处仅验证不抛错且结果稳定。 */
     const second = board.helpModels("codebuddy");
     assert.deepEqual(second, []);
   } finally {

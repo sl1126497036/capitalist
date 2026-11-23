@@ -172,7 +172,7 @@ function startsAtLine(fd: number, start: number): boolean {
  * 从中间起读时退到第一个换行之后并前移偏移；末尾未完成的行留给下一次。
  *
  * 起点已在行首时保留首行：增量游标记的是上一片末尾换行之后的位置，正好落在行首，
- * 无条件下退会每轮吞掉一行新内容。
+ * 无条件回退每轮会丢失一行新内容。
  */
 export function readLogRange(
   file: string,

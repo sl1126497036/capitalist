@@ -88,7 +88,7 @@ function workerExitReason(root: string, w: WorkerRecord): string {
 export function cmdSuperviseStop(p: Parsed): number {
   const root = rootOrDie(p);
   const rec = loadSupervisor(root);
-  if (!rec) die(t("No supervisor record in this task root. Run capitalist supervise first.", "这个任务根没有监工记录（先跑 capitalist supervise）"));
+  if (!rec) die(t("No supervisor record in this task root. Run capitalist supervise first.", "该任务根没有监工记录。请先执行 capitalist supervise。"));
   const force = flagBool(p, "force");
   if (!requestSupervisorStop(root, force ? "forced stop by user" : "stopped by user", force)) {
     die(t("Failed to write the stop request", "停止请求写入失败"));
@@ -119,7 +119,7 @@ function restartEvidenceGap(root: string, id: string): string {
   const startedAt = Date.parse(String(capitalist?.started_at ?? ""));
   const dispatchedAt = Date.parse(String(d?.at ?? ""));
   if (!isSupervisorAlive(root)) {
-    return t("Supervisor is not running: no restart happened, or it did not start again", "监工未运行：重启未发生，或重启后未启动");
+    return t("Supervisor is not running: no restart happened, or it did not start again", "监工未运行：可能未执行重启，或重启后未成功启动。");
   }
   if (!Number.isFinite(startedAt) || !Number.isFinite(dispatchedAt) || startedAt <= dispatchedAt) {
     return t(
@@ -249,7 +249,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
     const gap = restartEvidenceGap(root, id);
     if (gap) {
       write(t(`Not accepted: ${gap}\n`, `不能算完成：${gap}\n`));
-      write(t("This dispatch can only be closed after a real supervisor restart (new pid and start time).\n", "这类单只有一种合法完成方式：监工真的重启过（新的 pid、新的启动时间）。\n"));
+      write(t("This dispatch can only be closed after a real supervisor restart (new pid and start time).\n", "这类单的合法完成方式只有一种：监工已重启（新 pid 与新启动时间）。\n"));
       write(t("Workers must not restart the supervisor; it schedules them. Options:\n", "工作进程不重启监工：这会终止正在调度它的进程。处理方式：\n"));
       write(t("  1) Start it externally (scripts\\restart-supervisor.bat or a scheduled task);\n", "  1) 由外部拉起（scripts\\restart-supervisor.bat 或计划任务）；\n"));
       write(t("  2) Or run capitalist reload to persist progress, then restart it externally;\n", "  2) 或先 capitalist reload 把进度落盘，再由外部重起；\n"));
@@ -299,8 +299,8 @@ export async function cmdReport(p: Parsed): Promise<number> {
       }
       write(t("Report one outcome per directive, then run capitalist report:\n", "逐条回报结论后再 capitalist report：\n"));
       write(`  capitalist report ${id} --status ${status} --note "…" --outcome "${args.join(";")}"\n`);
-      write(t("Use not_mine for directives owned elsewhere (state the owner); use blocked and name the blocker.\n", "本单不属于自己的写 not_mine 并说明归属；无法执行的写 blocked 并说明卡点；\n"));
-      write(t("If one is hard to judge, register it with capitalist ask; the gate lets registered questions pass.\n", "不确定怎么算的，用 capitalist ask 说明；收工闸对已登记的问题放行。\n"));
+      write(t("Use not_mine for directives owned elsewhere (state the owner); use blocked and name the blocker.\n", "要求不属于本单的填 not_mine 并注明归属；无法执行的填 blocked 并说明卡点。\n"));
+      write(t("If one is hard to judge, register it with capitalist ask; the gate lets registered questions pass.\n", "难以判断的，用 capitalist ask 登记说明；收工闸对已登记的问题放行。\n"));
       return 1;
     }
 
@@ -404,7 +404,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
     }
     if (verdict === "escalated") {
       write(t(`Escalated to the user: ${id}\n${verdictReason(root, id)}\n`, `已转用户决策：${id}\n${verdictReason(root, id)}\n`));
-      write(t("It will not be re-dispatched. After the user answers, wake it from the board or with capitalist wake --user.\n", "本单不再重派。用户答复后由看板唤醒，或 capitalist wake --user 唤醒后再执行。\n"));
+      write(t("It will not be re-dispatched. After the user answers, wake it from the board or with capitalist wake --user.\n", "本单不再重派。用户答复后由看板唤醒，或执行 capitalist wake --user 后继续。\n"));
       return 1;
     }
     if (verdict === "error") {
@@ -412,7 +412,7 @@ export async function cmdReport(p: Parsed): Promise<number> {
       write(t("Once the blocker is clear, describe it with capitalist ask. Do not open a new dispatch.\n", "确认受阻原因后用 capitalist ask 说明，不要重开新单。\n"));
       return 0;
     }
-    write(t("No verdict yet (the supervisor is busy). Do not re-report; keep working on what remains.\n", "裁决未出（监工正忙）。不要重报同一份，继续完成剩余部分；\n"));
+    write(t("No verdict yet (the supervisor is busy). Do not re-report; keep working on what remains.\n", "裁决未出（监工正忙）。不要重复上报，继续完成剩余部分。\n"));
     write(t("Blocked: capitalist ask \"<what blocks it>\" and stop. Finished: wait for the verdict; do not redo the same work.\n", "确实受阻：capitalist ask \"<受阻原因>\" 后停止；确实完成：等待监工结论，不要重复修改同一处。\n"));
     return 1;
   }

@@ -55,7 +55,7 @@ test("登记动作的免检识别：不应放行的形态", () => {
 });
 
 test("登记动作的免检识别：引号内的分隔符不切段", () => {
-  /* 理由里带 `;` 的常见写法，切段失败会退化成“找不到 justify”。 */
+  /* 理由中含 `;` 时若切段失败，结果会退化为“未找到 justify”。 */
   assert.equal(isJustifyInvocation('capitalist justify "/tmp/a" "先备份；再删除"'), true);
 });
 

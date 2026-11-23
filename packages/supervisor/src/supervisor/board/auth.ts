@@ -56,7 +56,7 @@ export function needKeyPage(): string {
   return [
     '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    "<title>capitalist · 需要访问 key</title>",
+    "<title>capitalist - 需要访问 key</title>",
     "<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;",
     "background:#0b1020;color:#c8d3e6;font:14px/1.7 system-ui,-apple-system,'Segoe UI',sans-serif}",
     ".box{max-width:560px;padding:32px 36px;border:1px solid #24304a;border-radius:12px;background:#111830}",
@@ -65,7 +65,7 @@ export function needKeyPage(): string {
     "background:#1a2338;padding:2px 6px;border-radius:4px;color:#9ecbff}</style></head><body>",
     '<div class="box"><h1>需要访问 key</h1>',
     "<p>安全模式下需要访问 key，每次启动生成，见启动日志。</p>",
-    "<p>带 key 打开一次后，浏览器以会话 cookie 保存，关闭浏览器后失效：</p>",
+    "<p>带 key 打开一次后，浏览器会把 key 存成会话 cookie，关闭浏览器即失效：</p>",
     "<p><code>http://&lt;主机&gt;:&lt;端口&gt;/?key=&lt;访问 key&gt;</code></p>",
     "<p>访问 key 也可从启动监工终端输出的 <code>board_url</code> 或 <code>capitalist status</code> 读取。</p>",
     "</div></body></html>",

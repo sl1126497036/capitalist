@@ -53,7 +53,7 @@ function setSessionGen(root, gen, sessionId) {
 }
 
 
-test("骤降判定：刚好腰斩才算，稍高于一半不算", () => {
+test("骤降判定：用量恰好减半才算，略高于一半不算", () => {
   assert.equal(CTX_COMPACT_DROP_RATIO, 0.5);
   assert.equal(ctxDropIsCompaction(200_000, 100_000), true, "刚好 50% 是压缩");
   assert.equal(ctxDropIsCompaction(200_000, 100_001), false, "只掉 49.9995% 不算");
@@ -83,7 +83,7 @@ test("同代同口径骤降 -> 一条 inferred 事件，字段齐全", () => {
   assert.equal(e.source, "inferred", "推断必须与重载区分");
   assert.ok(e.at, "事件自带时刻");
 
-  /* 再掉一点点（100k 仍低于 60k? 不：100k > 60k），不是腰斩，不重复记。 */
+  /* 用量再次小幅下降后为 100k，高于 60k 阈值，不构成减半，不重复记录事件。 */
   recordSupervisorContext(root, 100_000, 600_000, "model-a");
   assert.equal(compactedEvents(root).length, 1, "未腰斩的下降不记第二条");
 });

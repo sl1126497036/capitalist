@@ -163,7 +163,7 @@ export interface Directive {
    *
    * - `done`     已按这条改完（要说清改在哪）
    * - `not_mine` 判定不属本单（必须说清该归哪一单，否则等于丢弃）
-   * - `blocked`  做不了（说清卡在哪；不许拿来做“懒得做”的出口）
+   * - `blocked`  无法完成（说明受阻原因；不得用于规避可执行的要求）
    */
   outcome?: DirectiveOutcome;
   outcome_note?: string;

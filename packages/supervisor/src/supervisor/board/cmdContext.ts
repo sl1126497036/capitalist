@@ -32,8 +32,8 @@ export function taskNoLines(root: string, threads: readonly ThreadSummary[], lim
     .slice(0, limit);
   const lines = picked.map((t) => {
     const who = t.worker ? "执行中" : "排队中";
-    const title = t.title ? ` · ${t.title}` : "";
-    return `  ${taskNoLabel(Number(t.no))} [${t.shard || t.stage}] ${t.status}${title} · ${who}`;
+    const title = t.title ? ` - ${t.title}` : "";
+    return `  ${taskNoLabel(Number(t.no))} [${t.shard || t.stage}] ${t.status}${title} - ${who}`;
   });
   if (lines.length === 0 && readGroups(root).length === 0) return [];
   return [
@@ -62,8 +62,8 @@ export function groupNoLines(root: string, limit = 12): string[] {
       const done = st?.done ?? 0;
       const total = st?.total ?? 0;
       const state = st ? groupStateWord(st.state) : "";
-      const broken = st?.brokenAt ? ` · 断链 ${st.brokenAt}` : "";
-      return `  ${groupNoLabel(g.id)} [组] ${g.title} ${done}/${total} 完成 · ${state}${broken}`;
+      const broken = st?.brokenAt ? ` - 断链 ${st.brokenAt}` : "";
+      return `  ${groupNoLabel(g.id)} [组] ${g.title} ${done}/${total} 完成 - ${state}${broken}`;
     });
   return [
     "",
@@ -89,13 +89,13 @@ export function workerRuntimeLines(root: string, max = 5): string[] {
     const used = st?.ctx_used ?? null;
     const pct = used !== null && win > 0 ? Math.round((used / win) * 100) : null;
     const room = pct === null ? "余量未知" : `余量 ${100 - pct}%`;
-    const gen = st && st.gen >= 4 ? ` · 第 ${st.gen + 1} 代` : "";
+    const gen = st && st.gen >= 4 ? ` - 第 ${st.gen + 1} 代` : "";
     const d = w.dispatch ? disps.find((x) => String(x.id) === String(w.dispatch)) : undefined;
     const rawWhat = d ? stripAttachments(String(d.action ?? "")).trim() || dispatchTitle(d) : "";
     const what = rawWhat.replace(/\s+/g, " ").trim().slice(0, 40);
     const digest = workerDigest(w);
-    const tail = [what, digest].filter(Boolean).join(" · ");
-    rows.push(`  ${no ? no : `进程 ${w.id}`} · ${w.id} · ${short}${gen} · ${room}${tail ? ` · ${tail}` : ""}`);
+    const tail = [what, digest].filter(Boolean).join(" - ");
+    rows.push(`  ${no ? no : `进程 ${w.id}`} - ${w.id} - ${short}${gen} - ${room}${tail ? ` - ${tail}` : ""}`);
   }
   return [
     "",
@@ -178,7 +178,7 @@ export function settledLines(root: string, limit = 8): string[] {
     if (seen.has(key)) continue;
     seen.add(key);
     const res = verdict(t.note);
-    rows.push(`  ${no ? nodeLabel(no) : "-"} ${word(String(t.state ?? ""))} · ${ask(t.detail)}${res ? ` · ${res}` : ""}`);
+    rows.push(`  ${no ? nodeLabel(no) : "-"} ${word(String(t.state ?? ""))} - ${ask(t.detail)}${res ? ` - ${res}` : ""}`);
     if (rows.length >= limit) break;
   }
   return [

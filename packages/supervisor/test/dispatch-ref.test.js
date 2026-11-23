@@ -32,7 +32,7 @@ test("派单 id：任务号-派单序，前导零去掉", () => {
   assert.strictEqual(r.kind, "dispatch-id");
   assert.strictEqual(r.id, "2-3");
   assert.strictEqual(parseRef("2-3").id, "2-3");
-  /* 纯数字不可能是派单 id：派单 id 恒为"任务号-派单序"。 */
+  /* 纯数字不可能是派单 id：派单 id 始终为“任务号-派单序”。 */
   assert.strictEqual(parseRef("2").kind, "task-no");
 });
 

@@ -51,6 +51,6 @@ test("空台账返回 0", () => {
   assert.strictEqual(awaitingVerdict([]), 0);
 });
 
-test("窗口边界：正好卡在阈值上仍算占槽", () => {
+test("窗口边界：恰好位于阈值上仍算占槽", () => {
   assert.strictEqual(awaitingVerdict([row("reported", VERDICT_HOLD_MS - 5_000)]), 1);
 });

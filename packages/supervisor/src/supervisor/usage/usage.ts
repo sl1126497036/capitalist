@@ -120,12 +120,12 @@ export const SCAN_RULES: readonly string[] = [
   "R1 assistant 行 = 一次模型请求；同一 message.id 重复出现（流式分片）只算第一次。",
   "R2 有 type=result 行时以它为唯一口径（source=result），usage 字段照抄，不再叠加 assistant 行，避免重复计数。",
   "R3 没有 result（运行中 / 被 kill）时用去重后的 assistant 行求和（source=stream），标为不完整。",
-  "R4 日志里没有 usage（纯文本输出或进程在写 result 前死掉）-> source=none，数值全为 null，界面显示“未上报”。",
+  "R4 日志里没有 usage 时（宿主以纯文本输出，或进程在写出 result 前退出），source 记为 none，数值全为 null，界面显示“未上报”。",
   "R5 模型取 message.model；版本取 id 的厂商后段（CLI 只给模型 id，没有单独构建号）。",
   "R6 上下文已用优先取 _meta 里以 /contextUsed 结尾的键；宿主没报时按本会话消息文本估算（含工具结果与 thinking，中文 3 字符/token、其余 4 字符/token），估算值标 context_estimate、界面加 ≈；已用一律夹到生效上限，超过时按上限显示并标 context_over。上限取 modelUsage[model].contextWindow，宿主没报或只报 300k 占位值时按模型默认表补（deepseek-v4.1-flash 为 600k），宿主报更大的值时以宿主为准。",
   "R7 时长优先 result.duration_ms；没有则用 started_at->结束时刻，结束时刻取 result 时间戳、最后一条带时间戳的行、派单 done_at 依次取用。",
   "R8 金额取 total_cost_usd；为 0 表示该模型不采用美元计价，billing_unit=token，界面按 token 显示。",
-  "R9 逐次运行的积分日志里没有：credit 取积分台账（.capitalist/ledger/credits.json，把计费接口账号级已用积分的增量按时间窗分摊给窗口内活跃的工作进程；账号级读数含同账号宿主侧对话与监工自身调用）；无活跃进程期间的增量记入 capitalist 独立行（不属于任何工作进程），台账没有该工作进程的分摊记录（面板未打开、未取得快照）时为 null，界面改用 token 显示，不以 0 代替。",
+  "R9 积分不从逐次运行的日志读取：credit 取自积分台账（.capitalist/ledger/credits.json，按时间窗把计费接口账号级已用积分的增量分摊给窗口内活跃的工作进程；账号级读数含同账号宿主侧对话与监工自身调用）；无活跃进程期间的增量记入 capitalist 独立行（不属于任何工作进程）；台账里没有该工作进程的分摊记录（面板未打开、未取得快照）时 credit 为 null，界面改用 token 显示，不以 0 代替。",
   `R10 模型读数不露路由别名：${FAST_MODEL_ALIAS} 在日志里出现具体模型后改显具体模型，一次都未记录时展示层标注它实际对应的两个模型（${FAST_MODEL_TARGETS.join(" / ")}）。`,
 ];
 
@@ -495,7 +495,7 @@ function consumeTail(scan: Scan): void {
 
 /** 无读数时的固定说明，写明缺失来源。 */
 export const NO_USAGE_REASON =
-  "未上报：该进程日志里没有 stream-json 的 usage 行（宿主以纯文本输出，或进程在写 result 前被杀），不按日志体积或时长折算";
+  "未上报：该进程日志里没有 stream-json 的 usage 行（宿主以纯文本输出，或进程在写出 result 前被终止）。";
 
 function emptyFigures(startedAt: string, endedAt: string, model: string, reason: string): UsageFigures {
   return {
@@ -613,7 +613,7 @@ export function workerUsage(w: WorkerRecord, dispatches: readonly Dispatch[] = [
       ? { reported: true, unavailable_reason: "" }
       : {
           reported: false,
-          unavailable_reason: "日志里还没有 token 读数（worker 刚启动，宿主还没写过 usage）",
+          unavailable_reason: "未上报：日志里还没有 token 读数。",
         }),
     models,
   };
@@ -847,7 +847,7 @@ export function buildUsageLedger(root: string): UsageLedger {
         ".capitalist/workers/<id>.log（stream-json：type=assistant 的 message.usage、type=result 的汇总）",
         ".capitalist/workers/<id>.json（started_at / dispatch / stage / shard）",
         ".capitalist/inbox/dispatch.jsonl（派单 model 与 done_at）",
-        "宿主登录态 + POST /v2/billing/meter/get-user-resource（余额与已用积分）",
+        "账号余额与已用积分：本进程不读取宿主令牌，读数不可用（见 balance.ts）。",
       ],
       rules: [...SCAN_RULES],
     },

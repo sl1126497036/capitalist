@@ -384,9 +384,7 @@ export async function askModel(opts: AskModelOptions): Promise<AskModelResult> {
   if (!bin) return { ok: false, text: `找不到 ${host} 可执行文件，对话通道不可用` };
 
   /*
-   * 与工作进程共用同一套环境构造：宿主注入的 `ACC_PRODUCT_CONFIG*` 会把 CLI 的身份指向
-   * 桌面端的产品形态，它据此去读加密凭据信封、判定“未登录”。对话通道
-   * 与工作进程共用同一套环境构造。
+   * 与工作进程共用同一套环境构造：宿主注入的 `ACC_PRODUCT_CONFIG*` 会把 CLI 身份指向桌面端产品形态，CLI 据此读取加密凭据信封并判定“未登录”。
    */
   const env: NodeJS.ProcessEnv = workerEnv();
   injectOfficialToken(env, host, opts.token);

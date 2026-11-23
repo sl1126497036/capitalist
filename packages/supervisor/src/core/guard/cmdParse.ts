@@ -156,8 +156,7 @@ function isJustifySegment(seg: string): boolean {
 /**
  * 命令里是否有一次 `justify` 调用。
  *
- * 该命令免判本机边界：否则登记命令自身也要先通过边界检查，会出现无法解除的死锁，
- * 逐段识别：`rm -rf x && capitalist justify x "理由"` 只有第二段是登记动作。
+ * 该命令免判本机边界，否则登记命令自身也要先通过边界检查，形成无法解除的死锁。识别按段进行：`rm -rf x && capitalist justify x "理由"` 中只有第二段是登记动作。
  *
  * @param cmd shell 命令原文。
  */

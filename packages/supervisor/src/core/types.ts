@@ -94,7 +94,7 @@ export interface LocalGuardConfig {
   justify_ttl_sec?: number;
   deny_message?: string;
   /**
-   * 只读白名单：各宿主技能目录（项目级、用户级、插件缓存）内的读取不按越界处理。
+   * 只读放行目录：各宿主技能目录（项目级、用户级、插件缓存）内的读取不按越界处理。
    *
    * 派单时已把技能文件的完整路径写进派单内容，工作进程按该路径读取属于执行派单本身，
    * 不应再等一次授权。缺省开启；置 `false` 关闭，回到逐次申请。
@@ -134,7 +134,7 @@ export interface Mistake {
  * 任务根状态。
  *
  * `contract_fallback` 标记该任务未指定领域契约，跑的是通用契约。该字段出现在每份简报里，
- * 使“当前无领域判据”这一状态显式可见，而不是被默认成有判据。
+ * 使“当前无领域判据”这一状态显式可见，避免被当作已有判据。
  */
 export interface TaskState {
   version: number;
@@ -144,8 +144,7 @@ export interface TaskState {
   contract_fallback?: boolean;
   permission_mode?: Mode;
   /**
-   * 写入代数。读改写用它做冲突检测：写回时磁盘上的值变了，说明这中间有别的进程
-   * 动过 state，应当重读再改，而不是把对方的字段整块覆盖掉。
+   * 写入代数。读改写用它做冲突检测：写回时磁盘上的值已变，说明有其他进程修改过 state；应重读后再改，避免覆盖对方的字段。
    */
   rev?: number;
   stage: string;

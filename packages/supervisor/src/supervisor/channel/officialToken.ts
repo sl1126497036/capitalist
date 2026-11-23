@@ -83,7 +83,7 @@ export function tokenInjectorPresent(): boolean {
  * 取宿主登录态。
  *
  * 只在启动命令里调用：读取会触发宿主的一次访问询问，必须发生在用户可见的调用路径上。
- * 组件不存在时按缺失处理，不尝试其它读取方式。
+ * 注入组件不可用时按缺失处理，不改用其他读取方式。
  */
 export function readHostCredential(): {
   token: string;

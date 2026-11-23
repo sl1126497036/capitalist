@@ -84,7 +84,7 @@ export function cmdAnswer(p: Parsed): number {
   const { root } = ctxOrDie(p);
   /* 关闭问题与写回填记录的实现在 inbox，看板裁决走同一份。 */
   const res = answerAsk(root, id, guidance);
-  if (!res.ok) throw new Error(`没找到问题 ${id}（capitalist inbox 看当前待裁决）`);
+  if (!res.ok) throw new Error(`未找到问题 ${id}。执行 capitalist inbox 查看当前待裁决问题。`);
   const hitText = res.text;
 
   // 重派上限这类 ask，裁决本身就是“放行该片”：将该批失败排除在统计外。不排除的话重派计数
@@ -100,7 +100,7 @@ export function cmdAnswer(p: Parsed): number {
   }
 
   if (updateState(root, (s) => { s.next_action = guidance; }) === null) {
-    throw new Error("状态写入冲突，指导已回填但下一步没更新：请重试 capitalist answer");
+    throw new Error("状态写入冲突：指导已回填，下一步未更新。请重新执行 capitalist answer。");
   }
 
   process.stdout.write(`已回填 问${id}：${guidance}\n下一步已更新，执行侧随后读取。\n`);
@@ -150,16 +150,16 @@ export function cmdWorker(p: Parsed): number {
   const id = String(p.positional[0] ?? "").trim();
   if (!id) throw new Error("用法：capitalist worker <进程号>（进程号见看板任务卡或 capitalist status）");
   const w = loadWorker(root, id);
-  if (!w) throw new Error(`没有这个进程：${id}`);
+  if (!w) throw new Error(`未找到该进程：${id}。`);
 
   const lane = String((w as unknown as { ai_session?: string }).ai_session ?? "");
   const label = w.dispatch ? readJsonl<{ id: string; title?: string; status?: string }>(
     inboxLoc.dispatch(root),
   ).find((d) => String(d.id) === String(w.dispatch)) : null;
   process.stdout.write(
-    `进程 ${w.id} · ${w.status}${w.exit_code !== null && w.exit_code !== undefined ? `（exit ${w.exit_code}）` : ""}\n`,
+    `进程 ${w.id} | ${w.status}${w.exit_code !== null && w.exit_code !== undefined ? `（exit ${w.exit_code}）` : ""}\n`,
   );
-  process.stdout.write(`派单 ${w.dispatch || "（无）"}${label?.title ? ` · ${label.title}` : ""}\n`);
+  process.stdout.write(`派单 ${w.dispatch || "（无）"}${label?.title ? ` | ${label.title}` : ""}\n`);
   process.stdout.write(`所属会话 ${lane || "（未登记）"}\n`);
 
   const log = String(w.log ?? "");
@@ -233,7 +233,7 @@ export function cmdRetire(p: Parsed): number {
   const id = p.positional[0] ?? envSession();
   if (!id) throw new Error("用法：capitalist retire <会话id> [--note 交接说明]（或设置 CAPITALIST_SESSION_ID）");
   const ok = retireSession(root, id, flagString(p, "note") ?? "");
-  if (!ok) throw new Error(`没登记过这个会话：${id}`);
+  if (!ok) throw new Error(`未登记该会话：${id}。`);
   process.stdout.write(`已退役 ${id}。新会话接手前先看 capitalist status 与 .capitalist/ 下的记录。\n`);
   return 0;
 }
@@ -450,7 +450,7 @@ export function cmdLedger(p: Parsed): number {
     const id = flagString(p, "id") ?? p.positional[1];
     if (!id) throw new Error("用法：capitalist ledger assert --id <台账id>");
     const hit = rows.find((r) => r.id === id);
-    if (!hit) throw new Error(`没找到 ${id}`);
+    if (!hit) throw new Error(`未找到台账记录 ${id}。`);
     const ev = (hit.evidence ?? {}) as Record<string, unknown>;
     const lack = EVIDENCE_FIELDS.filter((f) => !ev[f]);
     process.stdout.write(
@@ -459,7 +459,7 @@ export function cmdLedger(p: Parsed): number {
     return lack.length === 0 ? 0 : 2;
   }
 
-  throw new Error(`未知动作：${action}（可用 add / list / assert）`);
+  throw new Error(`未知动作“${action}”：指令未执行，正确写法见帮助。`);
 }
 
 
@@ -573,7 +573,7 @@ export function cmdFire(p: Parsed): number {
   if (!reqFile) {
     throw new Error('用法：capitalist fire --req <请求文件> [--authorized "<用户授权原话>"] [--gap 秒]');
   }
-  if (!existsSync(reqFile)) throw new Error(`找不到 ${reqFile}`);
+  if (!existsSync(reqFile)) throw new Error(`未找到请求文件：${reqFile}。`);
 
   const text = readFileSync(reqFile, "utf8");
   const { root, state, contract } = ctxOrDie(p);

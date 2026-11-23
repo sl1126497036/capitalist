@@ -76,8 +76,7 @@ function installableIds(): HostId[] {
 /**
  * 解析一行输入。
  *
- * 接受编号、逗号或空格分隔的多个编号，以及 `all` / `全部`。空输入按取消处理。
- * 直接回车与“取消”输入均按取消处理。
+ * 接受编号、逗号或空格分隔的多个编号，以及 `all` / `全部`。直接回车或输入“取消”均按取消处理。
  */
 function parseSelection(raw: string): Selection {
   const text = raw.trim().toLowerCase();

@@ -31,7 +31,7 @@ function sandbox(contract) {
   return root;
 }
 
-/** 台账里铺一批空转拍子：supervisor_tick / supervisor_done 成对，外加一条别的派单事件。 */
+/** 台账中铺入一批空转节拍：supervisor_tick / supervisor_done 成对，另加一条其他派单事件。 */
 function seedIdleTicks(root, times = 3) {
   for (let i = 0; i < times; i += 1) {
     recordEvent(root, "supervisor_tick", { n: i + 1, stage: STAGE });

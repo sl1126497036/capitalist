@@ -1,5 +1,5 @@
 /**
- * 技能目录只读白名单：分类口径与路径口径。
+ * 技能目录只读许可：分类口径与路径口径。
  *
  * 这组用例只用 `localCheck`，不起 hook 进程；技能根用临时目录构造，不读本机真实技能。
  * 临时目录不清理（本机安全策略会拦删除），留给系统回收。
@@ -50,7 +50,7 @@ test("技能目录内的写入仍按越界申请", () => {
   assert.strictEqual(res.decision, "justify", "技能是资料，不是可写区");
 });
 
-test("技能目录内命中敏感文件名：仍拒绝，白名单不能绕过凭据判定", () => {
+test("技能目录内命中敏感文件名：仍拒绝，只读许可不能绕过凭据判定", () => {
   const { base, root } = sandbox("env");
   const env = join(base, "skills", "wording-guard", ".env");
   writeFileSync(env, "SECRET=1\n");
@@ -64,13 +64,13 @@ test("技能目录内命中敏感文件名：仍拒绝，白名单不能绕过�
   assert.strictEqual(res.decision, "deny");
 });
 
-test("技能目录内的凭据文件：白名单不放行，契约未配敏感名也一样", () => {
+test("技能目录内的凭据文件：只读许可不放行，契约未配敏感名也一样", () => {
   const { base, root } = sandbox("hardsecret");
   const env = join(base, "skills", "wording-guard", ".env");
   writeFileSync(env, "SECRET=1\n");
   const key = join(base, "skills", "wording-guard", "server.pem");
   writeFileSync(key, "-----BEGIN-----\n");
-  /* 契约只开白名单，不列敏感名：靠白名单自身的内置规则挡住。 */
+  /* 契约只开启只读许可，不列敏感名：由许可自身的内置规则拦截。 */
   const cfg = contract();
   assert.strictEqual(localCheck(cfg, root, [env], "read", extraOf(base)).decision, "justify");
   assert.strictEqual(localCheck(cfg, root, [key], "read", extraOf(base)).decision, "justify");
@@ -104,7 +104,7 @@ test("插件缓存：技能包内放行，同层其它插件不放行", () => {
   assert.strictEqual(outside.decision, "justify", "缓存目录不整目录放行");
 });
 
-test("契约里关闭技能白名单：读取回到越界申请", () => {
+test("契约里关闭技能只读许可：读取回到越界申请", () => {
   const { base, root } = sandbox("off");
   const res = localCheck(
     contract({ allow_read_skills: false }),

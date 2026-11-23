@@ -63,7 +63,7 @@ const HELP_GROUPS: HelpGroup[] = [
     items: [
       {
         cmd: "start <目标>",
-        brief: ["创建或续用任务根。省略契约时缺省为 minimal"],
+        brief: ["创建或续用任务根；未指定契约时使用 minimal。"],
         opts: [
           { f: "--contract <名|路径>", d: ["契约名或路径"] },
           { f: "--root <目录>", d: ["任务根目录"] },
@@ -87,7 +87,7 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       {
         cmd: "adopt",
-        brief: ["为已有任务根更换契约，此后按正式契约执行"],
+        brief: ["为已有任务根更换契约，此后按新契约执行。"],
         opts: [
           { f: "--contract <名|路径>", d: ["新契约"] },
           { f: "--keep-stage", d: ["保留当前阶段"] },

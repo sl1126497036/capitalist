@@ -110,7 +110,7 @@ function tsOf(iso: string): number {
   return Number.isFinite(t) ? t : 0;
 }
 
-/** 按四道上限裁剪：时效 -> 条数 -> 总字数，顺序固定，优先移除最旧条目。 */
+/** 按三道上限裁剪：时效 -> 条数 -> 总字数，顺序固定，优先移除最旧条目；单条字数上限在写入时截断。 */
 function prune(entries: MemoryEntry[]): { entries: MemoryEntry[]; changed: boolean } {
   const before = entries.length;
   const now = Date.now();
@@ -346,7 +346,7 @@ export function deleteMemory(root: string, id: string): boolean {
   return true;
 }
 
-/** 看板列表用的快照：条目 + 上限 + 当前占用，界面不需要自己再算一遍。 */
+/** 看板列表用的快照：条目、上限与当前占用，界面无需重复计算这些值。 */
 export interface MemorySnapshot {
   at: string;
   entries: MemoryEntry[];

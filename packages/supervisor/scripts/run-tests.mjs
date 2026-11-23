@@ -1,9 +1,7 @@
 /**
  * 测试运行器：给 `node --test` 补上整体时限与并发上限，并在机器过载时中止。
  *
- * `node --test` 的缺省并发度是「核数 - 1」，每个测试文件各起一个子进程。全量 113 个文件
- * 会把所有核心占满，内存随之抬升，短时即可让机器过热。这里显式压住并发，并在 CPU
- * 长时间打满时熔断。
+ * `node --test` 的缺省并发度是“核数 - 1”，每个测试文件各起一个子进程。全量 113 个文件会占满所有核心，内存随之抬升，短时间内即可让机器过热。本脚本显式限制并发，并在 CPU 长时间打满时熔断。
  *
  * 环境变量：
  * - CAPITALIST_TEST_CONCURRENCY：同时运行的测试文件数，缺省 2，上限 4。
@@ -26,7 +24,7 @@ const TOTAL_TIMEOUT_MS = Number(process.env.CAPITALIST_TEST_TIMEOUT_MS ?? 180_00
 const CPUS = Math.max(1, availableParallelism());
 /** 构建机上占用高属正常，负载判定与熔断在此关闭。 */
 const CI = Boolean(process.env.CI);
-/** 上限取 4：再高就接近「核数 - 1」，失去限制意义。 */
+/** 上限取 4：再高就接近“核数 - 1”，失去限制意义。 */
 const MAX_CONCURRENCY = 4;
 const DEFAULT_CONCURRENCY = Math.min(2, Math.max(1, CPUS - 1));
 
