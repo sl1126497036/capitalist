@@ -40,15 +40,6 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 环境要求：Node.js ≥ 18.17；macOS / Windows；工作进程宿主需提供非交互入口（`claude -p`、`codebuddy -p`）。
 
 
-### 安装故障
-
-| 现象 | 处理 |
-|---|---|
-| `npm i -g capitalist` 报 `EEXIST .../bin/capitalist` | 该路径可能存在手工软链或旧版残留。执行 `npm uninstall -g capitalist`，仍存在时移走该文件再安装 |
-| 报 `EISDIR` 或 `ENOTEMPTY .../lib/node_modules/capitalist` | 该目录为旧安装或指向源码的软链，npm 无法覆盖。移走该目录（`$(npm prefix -g)/lib/node_modules/capitalist`）后重装；该目录不承载任务数据 |
-| 报 `Your cache folder contains root-owned files` | npm 缓存目录属主异常。执行 `sudo chown -R $(id -u):$(id -g) ~/.npm` 后重装 |
-| 安装后 `capitalist` 指向源码目录 | 曾用 `npm link` 或手工软链。`readlink -f $(which capitalist)` 确认指向，移走该软链后重新安装 |
-| 安装后命令立即消失，或 `command not found` | 全局目录里存在同名旧包（`package.json` 的 `name` 同为 `capitalist`），npm 重排 `bin` 时删掉新链接。列出 `$(npm prefix -g)/lib/node_modules` 与 `$(npm prefix -g)/bin`，移走改名或指向源码的旧条目后重装 |
 
 ### WorkBuddy 中的注意事项
 
@@ -85,7 +76,7 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 
 任务可在宿主中直接下发，也可通过监工面板下发。
 ### 1. 文学创作
-在文学创作中，将时代背景，故事大纲，任务关系，各章详细内容分别交由不同进程完成，由监工按要求验收和推进。
+在文学创作中，将时代背景，故事大纲，人物关系，各章详细内容分别交由不同进程完成，由监工按要求验收和推进。
 
 ### 2. 编码任务：前后端并行
 
@@ -121,30 +112,20 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 4. 工作进程使用 `capitalist record` 写验收凭据、用 `capitalist report` 结单。监工按阶段验收；门槛达标才推进到下一阶段，未达标时重派。
 5. 会话结束或进程退出后状态仍在磁盘。重新执行 `capitalist supervise` 续用同一任务根；`capitalist reload` 生成快照与恢复计划，下一派单补出复验单。
 
-### 契约
+### 契约和任务树
 
-契约是纯 JSON 文件，定义阶段、门槛、红线与本机边界。仓库内置 `packages/supervisor/contracts/minimal.contract.json`，提供基础三阶段流程。
+1. 契约：契约是纯 JSON 文件，定义阶段、门槛、红线与本机边界。契约可以由监工生成根据用户指令或skill生成，不指定时将使用
+内置契约： `packages/supervisor/contracts/minimal.contract.json`。内置契约提供基础三阶段流程（需求确认-执行-复核并交付）。
+`--contract` 可接受内置名称或契约 JSON 路径，失败时回落内置契约。
 
-```json
-{
-  "name": "my-domain",
-  "domain": "领域名",
-  "stages": [
-    { "id": "S0", "name": "阶段名", "goal": "为什么做", "next": "下一步动作",
-      "done": { "type": "file_exists", "path": "docs/plan.md" } }
-  ],
-  "redlines": [
-    { "id": "R1", "level": "BLOCK", "label": "禁止项",
-      "pattern": "正则", "skip_if": "^(?:grep|rg)\\b", "fix": "正确做法" }
-  ],
-  "local_guard": {
-    "sensitive_paths": ["~/.ssh", "/etc"],
-    "sensitive_names": [".env", "id_rsa"]
-  }
-}
-```
 
-阶段声明 `parallel` 后按分片并行；未声明的阶段并行度固定为 1，传入 `--workers > 1` 不增加并行度。`--contract` 接受内置名称或契约 JSON 路径；新建任务根且未指定契约时按目标生成，生成失败时回落内置契约。
+2. 任务树：任务树和契约相互独立，契约负责阶段推进，任务树负责任务结构管理，一个契约可能存在若干任务树。
+监工可以按用户指令拆解任务，构建任务树，并行切片任务将被划分Group，如果后续任务依赖前序Group，则当前序Group全部执行完成后才会放行。
+任务树中无法成功的任务可以被移除或重派，防止堵塞，下图是一个简单的文案整理任务树：
+![work-tree.png](work_tree.png)
+
+3. 如何使用：你可以使用契约来定义工作流。也可以使用默认契约，然后按任务树灵活定义工作流。
+   总的来说，契约的推进执行将更加严格，而任务树则灵活多变。对于一个复杂的多阶段任务，你可以先制定契约，再建立多阶段任务树执行。
 
 ### 任务根与数据
 
@@ -200,6 +181,16 @@ capitalist install --agent <宿主>   # 选择要接入的宿主，写入 hook �
 | CodeBuddy | `~/.codebuddy/settings.json` | 作为工作进程宿主时在受限环境不可用 |
 | WorkBuddy | `~/.workbuddy/settings.json` | 与 Claude Code 同一套 `hooks` 结构；命令经 POSIX shell 执行 |
 | generic | — | 探测不到宿主时的退出码通路 |
+
+### 安装故障
+
+| 现象 | 处理 |
+|---|---|
+| `npm i -g capitalist` 报 `EEXIST .../bin/capitalist` | 该路径可能存在手工软链或旧版残留。执行 `npm uninstall -g capitalist`，仍存在时移走该文件再安装 |
+| 报 `EISDIR` 或 `ENOTEMPTY .../lib/node_modules/capitalist` | 该目录为旧安装或指向源码的软链，npm 无法覆盖。移走该目录（`$(npm prefix -g)/lib/node_modules/capitalist`）后重装；该目录不承载任务数据 |
+| 报 `Your cache folder contains root-owned files` | npm 缓存目录属主异常。执行 `sudo chown -R $(id -u):$(id -g) ~/.npm` 后重装 |
+| 安装后 `capitalist` 指向源码目录 | 曾用 `npm link` 或手工软链。`readlink -f $(which capitalist)` 确认指向，移走该软链后重新安装 |
+| 安装后命令立即消失，或 `command not found` | 全局目录里存在同名旧包（`package.json` 的 `name` 同为 `capitalist`），npm 重排 `bin` 时删掉新链接。列出 `$(npm prefix -g)/lib/node_modules` 与 `$(npm prefix -g)/bin`，移走改名或指向源码的旧条目后重装 |
 
 ### 适用范围与限制
 

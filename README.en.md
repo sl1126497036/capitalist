@@ -40,21 +40,11 @@ For `--agent` values see the "Supported hosts" table. Installation items are wri
 Requirements: Node.js ≥ 18.17; macOS / Windows; the work-process host must offer a non-interactive entry point (`claude -p`, `codebuddy -p`).
 
 
-### Install troubleshooting
-
-| Symptom | Action |
-|---|---|
-| `npm i -g capitalist` reports `EEXIST .../bin/capitalist` | The path may hold a manual symlink or leftovers from an older version. Run `npm uninstall -g capitalist`; if it remains, move the file away and reinstall |
-| Reports `EISDIR` or `ENOTEMPTY .../lib/node_modules/capitalist` | The directory is an older install or a symlink to the source, which npm cannot overwrite. Move the directory (`$(npm prefix -g)/lib/node_modules/capitalist`) and reinstall; it holds no task data |
-| Reports `Your cache folder contains root-owned files` | The npm cache has a wrong owner. Run `sudo chown -R $(id -u):$(id -g) ~/.npm` and reinstall |
-| `capitalist` points to the source directory after install | An earlier `npm link` or manual symlink. Check with `readlink -f $(which capitalist)`, move the symlink away and reinstall |
-| The command disappears after install, or `command not found` | An older package with the same name exists globally (`package.json` has `name` set to `capitalist` as well) and npm removes the new link when it reshuffles `bin`. List `$(npm prefix -g)/lib/node_modules` and `$(npm prefix -g)/bin`, move the stale entry away and reinstall |
 
 ### Notes for WorkBuddy
 
 - WorkBuddy runs inside a sandbox, so the supervisor can only be started by running the command manually from a terminal; otherwise the host reports "chat channel unavailable".
 - Once started in a terminal, you can keep sending instructions to the supervisor from WorkBuddy, and the supervisor can also identify the models and skills available in WorkBuddy.
-
 
 
 ## Quick use from a host
@@ -129,30 +119,20 @@ You can split multiple sites into shards per site, split a single site into late
 4. The work process writes acceptance evidence with `capitalist record` and closes the dispatch with `capitalist report`. The supervisor accepts per stage; only when the gate passes does it advance, otherwise it re-dispatches.
 5. State stays on disk after the session ends or the process exits. Running `capitalist supervise` again reuses the same task root; `capitalist reload` produces a snapshot and a resume plan, and the next dispatch adds a re-verification dispatch.
 
-### Contract
+### Contracts and task trees
 
-A contract is a plain JSON file defining stages, gates, redlines and local boundaries. The repository ships `packages/supervisor/contracts/minimal.contract.json`, a basic three-stage flow.
+1. Contract: a plain JSON file defining stages, gates, redlines and local boundaries. The supervisor can generate a contract from a user instruction or from a skill; when none is specified, the built-in contract is used:
+`packages/supervisor/contracts/minimal.contract.json`. The built-in contract provides a basic three-stage flow (requirements, execution, review and delivery).
+`--contract` accepts a built-in name or a path to a contract JSON, falling back to the built-in contract on failure.
 
-```json
-{
-  "name": "my-domain",
-  "domain": "domain name",
-  "stages": [
-    { "id": "S0", "name": "stage name", "goal": "why", "next": "next action",
-      "done": { "type": "file_exists", "path": "docs/plan.md" } }
-  ],
-  "redlines": [
-    { "id": "R1", "level": "BLOCK", "label": "forbidden",
-      "pattern": "regex", "skip_if": "^(?:grep|rg)\\b", "fix": "the right way" }
-  ],
-  "local_guard": {
-    "sensitive_paths": ["~/.ssh", "/etc"],
-    "sensitive_names": [".env", "id_rsa"]
-  }
-}
-```
 
-A stage that declares `parallel` runs by shard; stages without it have a fixed parallelism of 1, and `--workers > 1` does not raise it. `--contract` accepts a built-in name or a path to a contract JSON; when a task root is created without one, a contract is generated from the target and the built-in contract is used if generation fails.
+2. Task tree: the task tree and the contract are independent. The contract drives stage advancement; the task tree manages task structure. One contract may cover several task trees.
+The supervisor can break a task down on user instruction and build the task tree. Parallel slices are placed in groups, and when a later task depends on an earlier group, it is released only after every task in that group finishes.
+A task that cannot succeed can be removed or re-dispatched to avoid blocking. The figure below is a simple copy-editing task tree:
+![work-tree.png](work_tree.png)
+
+3. How to use: you can use a contract to define the workflow. You can also keep the default contract and shape the workflow through the task tree instead.
+   On the whole, contract-driven advancement is stricter, while the task tree is flexible. For a complex multi-stage task, draw up the contract first, then build a multi-stage task tree to carry it out.
 
 ### Task root and data
 
@@ -208,6 +188,16 @@ All subcommands and flags are listed in `capitalist --help`; the split of duties
 | CodeBuddy | `~/.codebuddy/settings.json` | Unavailable in restricted environments when used as the work-process host |
 | WorkBuddy | `~/.workbuddy/settings.json` | Same `hooks` structure as Claude Code; commands run through a POSIX shell |
 | generic | — | Exit-code path when no host is detected |
+
+### Install troubleshooting
+
+| Symptom | Action |
+|---|---|
+| `npm i -g capitalist` reports `EEXIST .../bin/capitalist` | The path may hold a manual symlink or leftovers from an older version. Run `npm uninstall -g capitalist`; if it remains, move the file away and reinstall |
+| Reports `EISDIR` or `ENOTEMPTY .../lib/node_modules/capitalist` | The directory is an older install or a symlink to the source, which npm cannot overwrite. Move the directory (`$(npm prefix -g)/lib/node_modules/capitalist`) and reinstall; it holds no task data |
+| Reports `Your cache folder contains root-owned files` | The npm cache has a wrong owner. Run `sudo chown -R $(id -u):$(id -g) ~/.npm` and reinstall |
+| `capitalist` points to the source directory after install | An earlier `npm link` or manual symlink. Check with `readlink -f $(which capitalist)`, move the symlink away and reinstall |
+| The command disappears after install, or `command not found` | An older package with the same name exists globally (`package.json` has `name` set to `capitalist` as well) and npm removes the new link when it reshuffles `bin`. List `$(npm prefix -g)/lib/node_modules` and `$(npm prefix -g)/bin`, move the stale entry away and reinstall |
 
 ### Scope and limits
 
