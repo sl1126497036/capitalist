@@ -212,7 +212,7 @@ export function handleThreadMessage(ctx: BoardCtx): void {
         tool: "",
         cmd: "",
         status: "",
-        /* 对话层的问话写进事件台账时工作进程已经取走，档位恒为已送达。 */
+        /* 对话层的提问写入事件台账时，收件方/监工/工作进程已读取，档位恒为已送达。 */
         ...(isAsk ? { delivery: DELIVERED } : {}),
         ref: "",
         unread: false,

@@ -69,7 +69,7 @@ test("收录范围不只有卡点：默认按习惯/环境收，无关键词也�
   assert.equal(edited.note, "项目约定：不要动 .capitalist 下的文件");
   assert.ok(edited.keys.length > 0, "改成有实词的内容后要重算关键词");
 
-  /* 删除：执行删除后条目即被移除。 */
+  /* 删除：条目可被移除。 */
   assert.equal(deleteMemory(root, env.id), true);
   assert.equal(deleteMemory(root, bare.id), true);
   assert.equal(loadMemories(root).length, 0);

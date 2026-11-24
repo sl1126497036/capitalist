@@ -102,7 +102,7 @@ const mem = computed(() => (memPressure.value === null ? null : `${Math.round(me
 const cpuTitle = computed(() => {
   const r = res.value;
   if (cpuPct.value !== null) return t("整机处理器占用率");
-  return t("处理器采样不可用：{why}", { why: r?.unavailable_reason || "后台尚无采样数据" });
+  return t("处理器采样不可用：{why}", { why: r?.unavailable_reason || t("后台尚无采样数据") });
 });
 const memTitle = computed(() => {
   const r = res.value;

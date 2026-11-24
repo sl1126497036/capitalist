@@ -114,7 +114,7 @@ export function buildBrief(input: BriefInput): string {
     lines.push(t.satisfied);
   }
 
-  // 只列本阶段的提问：旧阶段的提问已失效，继续显示会在每轮简报中重复提示已了结事项。
+  // 只列本阶段的提问：旧阶段的提问已失效，继续显示会在每轮简报中重复提示已完成事项。
   // 走校验读取：缺 id / 空 text / status 越界的记录不参与，它们无法识别其提问内容，
   // 却足以让监工判定“有待裁决”而停派。
   const open = openInboxAsks(root).filter((q) => !q.stage || q.stage === state.stage);

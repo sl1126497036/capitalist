@@ -383,7 +383,7 @@ export function buildSupervisorLog(
             ? "done"
             : "pending"
           : "",
-      /* 对话层的问话写进事件台账时监工已经取走，档位恒为已送达。 */
+      /* 对话层的提问写入事件台账时，收件方/监工/工作进程已读取，档位恒为已送达。 */
       ...(name === "supervisor_chat_ask" ? { delivery: DELIVERED } : {}),
       thread: CAPITALIST_THREAD_ID,
       event: name,

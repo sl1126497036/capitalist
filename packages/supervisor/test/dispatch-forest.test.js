@@ -138,7 +138,7 @@ test("自指树边被拒：父节点不能是本单自己", () => {
   assert.strictEqual(chk.code, "self_parent");
 });
 
-test("孤儿父节点：父记录不在台账里时放行，并在森林视图中列出（不作静默挂起）", () => {
+test("孤儿父节点：父记录不在台账里时放行，并在森林视图中列出（不静默丢弃）", () => {
   const root = sandbox();
   put(root, "A", { parent: "D-gone", parent_reason: "父记录被清理掉了" });
   put(root, "B");

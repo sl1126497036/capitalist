@@ -21,7 +21,7 @@ function tmpRoot() {
 }
 
 
-test("POSIX 绝对路径可被提取（此前识别失败，导致 /etc 与 /var/log 配置项从未生效）", () => {
+test("POSIX 绝对路径可被提取，使 /etc 与 /var/log 配置项生效", () => {
   assert.deepEqual(extractLocalPaths("cat /etc/passwd", ROOT), ["/etc/passwd"]);
   assert.deepEqual(extractLocalPaths("rm -rf /var/log/app", ROOT), ["/var/log/app"]);
   assert.deepEqual(extractLocalPaths("--path=/usr/share/x", ROOT), ["/usr/share/x"]);

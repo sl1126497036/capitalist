@@ -76,11 +76,9 @@ export function writeQuotedDirect(
   },
 ): boolean {
   /*
-   * 只走 appendDirective 这一个写入口。
-   *
-   * 写入只走 appendDirective 这一个入口：它统一处理自身编号、`at` 同毫秒顺延与 `direct_inject`
-   * 事件，并按会话归属记方向。若自行拼装记录写盘，同一毫秒连发两条时引用会指向同一行，结论
-   * 也会写到相邻记录上；监工面板代发还会被误记成用户发给工作进程。
+   * 写入只经 appendDirective 唯一入口：该入口统一处理自身编号、`at` 同毫秒顺延与 `direct_inject`
+   * 事件，并按会话归属记录方向。若自行拼装记录写盘，同一毫秒连续写入两条时引用会指向同一行，
+   * 结论也会写到相邻记录上。
    */
   const no = taskNoOfDispatchId(String(input.target ?? "")) || "S0";
   const identity =

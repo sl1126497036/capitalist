@@ -21,7 +21,7 @@ function statePath(root: string): string {
 /**
  * 读当前额度状态；文件不存在或内容损坏时返回“未耗尽”。
  *
- * 不按时间过期。只有一次成功的模型调用才能证明额度恢复；记录时间不能作为恢复依据，调用失败期间没有证据表明额度已恢复。
+ * 不按时间过期。只有一次成功的模型调用才能证明额度恢复；记录时间不能作为依据，期间没有成功调用就没有恢复的证据。
  */
 export function readQuotaState(root: string): QuotaState {
   let raw: string;

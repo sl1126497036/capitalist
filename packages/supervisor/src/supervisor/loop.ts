@@ -441,7 +441,7 @@ function envNumber(key: string, fallback: number): number {
 }
 
 /**
- * 抖动比例：`CAPITALIST_RETRY_JITTER`（0~1，缺省 0.2）。它把同时到点的重派在本地错开，
+ * 抖动比例：`CAPITALIST_RETRY_JITTER`（0~1，缺省 0.2）。它把同时到期的重派在本地错峰，
  * 不改变阶梯的单调递增与上限。
  */
 function retryJitterRatio(): number {
@@ -649,13 +649,13 @@ const FAILURE_RULES: Array<{ cause: FailureCause; re: RegExp; fixable: boolean; 
     cause: "proxy",
     re: /ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|EPIPE|\b50[234]\b|proxy|网络中断|连接被重置/i,
     fixable: true,
-    summary: "代理或网络中断：等网络恢复后重跑",
+    summary: "代理或网络中断：等网络恢复后重新执行",
   },
   {
     cause: "env",
     re: /ENOENT|EACCES|EADDRINUSE|EBUSY|EPERM|ENOSPC|cannot find module|端口.{0,4}占用|磁盘空间/i,
     fixable: true,
-    summary: "缺少运行条件（文件、端口或权限）：补齐本地条件后重跑",
+    summary: "缺少运行条件（文件、端口或权限）：补齐本地条件后重新执行",
   },
 ];
 
@@ -714,7 +714,7 @@ function diagnoseFailure(root: string, d: Dispatch): Diagnosis {
 const CASCADE_AUTO_RESET_MAX = 1;
 
 /**
- * 父节点失败到上限后由监工接手：原因可处理时重跑子树（父节点开一张继承派生链的后续单，子节点原地重开），即换会话或换时机；无法处理（被拒、无法识别或已自动重置过）时登记待裁决问题并标阻塞。级联失败无人接手会变成静默失败。
+ * 父节点失败到上限后由监工接手：原因可处理时重新执行子树（父节点开一张继承派生链的后续单，子节点原地重开），即换会话或换时机；无法处理（被拒、无法识别或已自动重置过）时登记待裁决问题并标阻塞。级联失败无人接手会变成静默失败。
  */
 function handleBrokenParent(
   root: string,
@@ -843,7 +843,7 @@ function escalateCascade(
         `连续失败 ${Number(failed.retry_count ?? 0) || "?"} 次后级联判定失败`,
         `诊断原因：${dg.cause}｜${dg.summary}`,
         `判断依据：${dg.evidence.slice(0, 400)}`,
-        "处置：确认原因后执行 capitalist answer 回答本问题；需要重跑时重开该节点",
+        "处置：确认原因后执行 capitalist answer 回答本问题；需要重新执行时重开该节点",
       ].join("\n"),
       failed.stage,
       "" /* 整阶段级：父节点失败后，该树上的单不再自动推进。 */,
@@ -3031,7 +3031,7 @@ function reject(reason: string): SupervisorResult {
 /**
  * 取号失败即不建单。
  *
- * 取号锁重试用尽后不得静默降级为“按当前最大值猜一个号”，否则会撞号。调用方拿到 `error` 后须把失败如实回给用户，或在监工内部重派时跳过本轮。
+ * 取号锁重试用尽后不得静默降级为“按当前最大值猜一个号”，否则会产生重复编号。调用方拿到 `error` 后须把失败如实回给用户，或在监工内部重派时跳过本轮。
  */
 function issueDispatchId(
   root: string,
@@ -3809,7 +3809,7 @@ async function applyOneDirective(
     const next = reopenSettledDispatch(root, String(hit.id), "用户要求重派");
     if (!next) {
       /* 与 amend 共用同一入口：在途、取号锁被占用都走这条，不猜状态。 */
-      return reject("重开未执行：原单状态已变化或取号锁被占用。稍后重试即可，原单状态未改动。");
+      return reject("重开未执行：原单状态已变化或取号锁被占用。请稍后重试。原单状态未改动。");
     }
     recordEvent(root, "dispatch_reopened", {
       dispatch: next.id,

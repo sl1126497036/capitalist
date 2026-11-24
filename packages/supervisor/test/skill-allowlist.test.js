@@ -64,7 +64,7 @@ test("技能目录内命中敏感文件名：仍拒绝，只读许可不能绕�
   assert.strictEqual(res.decision, "deny");
 });
 
-test("技能目录内的凭据文件：只读许可不放行，契约未配敏感名也一样", () => {
+test("技能目录内的凭据文件：只读许可不放行，契约未配敏感名时同样不放行", () => {
   const { base, root } = sandbox("hardsecret");
   const env = join(base, "skills", "wording-guard", ".env");
   writeFileSync(env, "SECRET=1\n");
@@ -104,7 +104,7 @@ test("插件缓存：技能包内放行，同层其它插件不放行", () => {
   assert.strictEqual(outside.decision, "justify", "缓存目录不整目录放行");
 });
 
-test("契约里关闭技能只读许可：读取回到越界申请", () => {
+test("契约里关闭技能只读许可：读取转为越界申请", () => {
   const { base, root } = sandbox("off");
   const res = localCheck(
     contract({ allow_read_skills: false }),

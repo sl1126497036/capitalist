@@ -817,7 +817,7 @@ function classifyItem(
     }
     return { ...base, state: "done_unverified", why: `已结束（${last.id}），但证据台账中没有对应的已确认记录` };
   }
-  // open 或其他：此处只接收除在途之外的状态
+  // open 或其他：此处只接收非在途状态
   return { ...base, state: "in_progress", why: `状态 ${last.status}` };
 }
 
@@ -869,7 +869,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
       String(snap.at ?? "").slice(0, 16).replace("T", " ") +
       "）。",
   );
-  L.push("> 这些目标并非当前须立即执行的任务：现时任务以派单台账为准。若与下方“未完成”一节冲突，以派单为准；");
+  L.push("> 这些目标并非当前须立即执行的任务：当前任务以派单台账为准。若与下方“未完成”一节冲突，以派单为准；");
   L.push("> 台账里 done / closed 的派单是历史，不要依据它们恢复任何实现。");
   L.push("");
   if (snap.requirements.length === 0) L.push("（无）");
@@ -962,7 +962,7 @@ export function buildResumePlan(snap: ReloadSnapshot): ResumePlan {
       /*
        * 只有“本阶段 + 仍在契约里”的片能派复验单。
        *
-       * 另外两种情形派单后也撑不过一个调度轮次：旧阶段的在途单会被 supersedeStaleDispatches 作废，契约中已删除的分片同样因不在当前集合而被作废。因此将其记入 deferred，仅保留信息，不生成每轮调度都会重复产生的无效派单。
+       * 另外两种情形派单后也无法维持一个调度轮次：旧阶段的在途单会被 supersedeStaleDispatches 作废，契约中已删除的分片同样因不在当前集合而被作废。因此将其记入 deferred，仅保留信息，不生成每轮调度都会重复产生的无效派单。
        */
       if (i.stage === snap.stage && i.in_contract) {
         reverify.push({ key: i.key, stage: i.stage, shard: i.shard, title: i.title, action: i.action, why: i.why });

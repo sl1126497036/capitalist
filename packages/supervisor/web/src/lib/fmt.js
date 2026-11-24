@@ -114,7 +114,7 @@ export function sayStatus(s, no, reason, detail) {
   const withNo = (base) => (n ? `${base} ${n}` : base);
   /*
    * 入参是服务端写的状态码（`executed` / `rejected` / `pending`），不是界面文案。
-   * 按整串比对即可，不做分隔符解析：解析会把“服务端换了措辞”变成“状态整片失效”。
+   * 按整串比对，不做分隔符解析：解析会把“服务端换了措辞”变成“状态整片失效”。
    */
   const v = String(s || "");
   if (v === "executed") return withNo(t("已执行"));
@@ -143,8 +143,7 @@ const INTERJECT_WORD = { ok: "已送达", pending: "待送达", bad: "未送达"
 /**
  * 用户插话的尾标：一个短词、一个配色档、一段悬停原因。
  *
- * 档位只读服务端下发的 `delivery`，不解析状态文案：文案是给人看的句子，措辞随时会改。
- * 未送达时把状态文案带进悬停提示，那里写着为什么没送到。
+ * 档位只读服务端下发的 `delivery`，不解析 `status` 文案；`status` 文案仅供展示。未送达时把 `status` 文案带入悬停提示。
  */
 export function interjectStatus(m) {
   const tone = deliveryOf(m);

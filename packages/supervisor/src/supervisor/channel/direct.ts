@@ -185,7 +185,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
   let action = pick();
 
   /*
-   * 用户说“重派 #02”通常指整单返工，而 retry 只重跑分片，两者参数形态不同：带 #编号 的输入转交 redo，参数统一为 #N（redo 只识别开头的编号）；不带 # 的输入（如“重派 s2”）仍按 retry 处理。
+   * 用户说“重派 #02”通常指整单返工，而 retry 只重跑分片，两者参数形式不同：带 # 编号的输入交由 redo 处理，参数统一为 #N（redo 只识别开头的编号）；不带 # 的输入（如“重派 s2”）仍按 retry 处理。
    */
   if (action === "retry") {
     const hashed = /#\s*(\d{1,4})\b/.exec(rest);

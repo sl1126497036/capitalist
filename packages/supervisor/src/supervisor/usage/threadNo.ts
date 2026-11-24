@@ -157,8 +157,8 @@ export function threadIdByNo(root: string, no: number | string): string {
  * 默认只认在途状态，用于“该编号当前执行到哪一步”。重开（redo）要的恰恰是已经结束的那张单，
  * 该场合把 `includeDone` 打开，否则会被 live 过滤掉，表现为“没有编号 #01”。
  *
- * 只取终态时用 `settledOnly`：取“派发序最大的单”可能命中同批刚开出的替代单，
- * 拿它当重开目标等于让两张单同时做同一件事。
+ * 只取终态时用 `settledOnly`：取“派发序最大的单”可能命中同批新建的替代单，
+ * 将其作为重开目标会使两张单重复执行同一事项。
  *
  * @param rows 传入已读的台账可省一次 IO；不传时自行读取。
  * @param opts.includeDone 为真时把已结束的单（`done` / `closed` / `failed`）也视为可取目标（仍取最近一条）。

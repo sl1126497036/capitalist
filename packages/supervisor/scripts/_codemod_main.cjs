@@ -55,7 +55,7 @@ const edits = [
   { s: 260, e: 260, expect: "die(`写入失败：${target}`", text: `  if (!appendJsonl(target, obj)) die(t(\`Write failed: \${target}\`, \`写入失败：\${target}\`));` },
   { s: 261, e: 261, expect: "write(`已记录到", text: `  write(t(\`Recorded to .capitalist/\${name}\\n\`, \`已记录到 .capitalist/\${name}\\n\`));` },
   { s: 268, e: 268, expect: `die('用法：capitalist ask`, text: `  if (!text) die(t('Usage: capitalist ask "<question>"', '用法：capitalist ask "<问题>"'));` },
-  { s: 293, e: 293, expect: "write(`问题已登记", text: `  write(t(\`Question registered as \${id}\\nStopping here is allowed. To return: capitalist inbox \${id}\\n\`, \`问题已登记 问\${id}\\n可在此停止。回来后用：capitalist inbox \${id}\\n\`));` },
+  { s: 293, e: 293, expect: "write(`问题已登记", text: `  write(t(\`Question registered as \${id}\\nStopping here is allowed. To return: capitalist inbox \${id}\\n\`, \`问题已登记 问\${id}\\n可在此停止。返回后执行：capitalist inbox \${id}\\n\`));` },
   { s: 308, e: 314, expect: "write(\n      `已忽略", text: `    write(
       t(
         \`Ignored \${ignored.length} malformed record(s) (not reviewed): \` +
@@ -186,7 +186,7 @@ const edits = [
       "Resumed: from the next round dispatching starts again; only manually created dispatches run, none are auto-created from the contract.\\n" +
         "Old paused dispatches still need capitalist wake --user.\\n",
       "已恢复：监工从下一轮调度起重新派单，只执行用户派入的单，不按契约自动建单。" +
-        "此前暂停的旧派单仍需执行 capitalist wake --user 唤醒。\\n",
+        "此前暂停的派单仍需执行 capitalist wake --user。\\n",
     ),
   );` },
   { s: 719, e: 720, expect: "installNeedsConfirm", text: `      caps.install ? (caps.installNeedsConfirm ? t("install(confirm)", "install(需确认)") : "install") : null,

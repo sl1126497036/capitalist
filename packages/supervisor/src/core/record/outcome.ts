@@ -11,7 +11,7 @@ import { readDispatches, type Dispatch } from "./supervisor";
 /**
  * 压成一行并截断。
  *
- * 台账里的换行与缩进进了提示词会变成新的段落，读者会以为那是新的要求。
+ * 台账里的换行与缩进进入提示词后会形成新段落，被当作新的要求。
  */
 export function squashOutcome(text: unknown, max: number): string {
   const t = String(text ?? "").replace(/\s+/g, " ").trim();
@@ -75,7 +75,7 @@ export function handoffLines(prev: Dispatch | null): string[] {
   if (verdict) lines.push(`验收：${verdict}`);
   if (why) lines.push(`卡点：${why}`);
   lines.push(
-    "上一代会话的上下文没有带过来：先看 git status 与 git diff --stat 核对工作树，已改过的文件不重做，缺的补齐；与正文冲突时以工作树现状为准。",
+    "上一代会话的上下文未随派单传递：先看 git status 与 git diff --stat 核对工作树，已改过的文件不重做，缺失的部分补齐；与正文冲突时以工作树现状为准。",
   );
   return lines;
 }

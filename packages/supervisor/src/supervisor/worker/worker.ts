@@ -703,8 +703,8 @@ export function buildPrompt(opts: {
    */
   const accept = buildAcceptBlock(d);
   /*
-   * 新会话起步时没有上一轮的上下文。同一件事此前已结束过的，把结论交过去；
-   * 没有这一段，新进程只能照着正文重做，撞上上一轮已经改过的地方再回头申报。
+   * 新会话缺少上一轮上下文。同一事项此前已结束的，将结论随提示词传递；
+   * 缺少这一段，新进程只能照正文重做，重复修改上一轮已改动的部分并再次申报。
    */
   const carry = handoffLines(lastSettledOf(opts.root, d));
   return [
@@ -717,7 +717,7 @@ export function buildPrompt(opts: {
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【上一轮已完成的部分】【本次验收】，都是这一块的子项，不是新的一节。）",
     dispatchHead(d, title),
     attPayload.text,
-    /* 上一轮结论先于卡点：先知道做完了什么，再看没做成什么。 */
+    /* 上一轮结论先于卡点：先了解已完成内容，再查看未完成内容。 */
     ...(carry.length ? ["", "【上一轮已完成的部分】", ...carry] : []),
     /* 卡点段只在发车时拼进提示词，不写入 action；放在正文之后、其余约束之前。 */
     ...(retryCtx ? ["", retryCtx] : []),

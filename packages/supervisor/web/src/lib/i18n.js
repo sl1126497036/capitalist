@@ -242,7 +242,6 @@ const EN = {
   "输入 {a} + 输出 {b}；缓存命中 {c} 单独列出，不计入总量":
     "Input {a} + output {b}; cache hits {c} listed separately and excluded from the total",
   "金额取自用量记录": "Amount taken from usage records",
-  "这条读数有用量但没有明细": "This reading has usage but no details",
   /* fast-model 别名的旁注：它在两个 flash 模型间轮换，名字本身按原 id 展示。 */
   "轮换": "rotation",
 
