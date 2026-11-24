@@ -100,6 +100,7 @@
   --pill-queue: rgba(226, 224, 218, 0.94);
 
   --chat-bg: rgba(245, 244, 240, 0.94);
+  --chat-sheet: rgba(245, 244, 240, 0.5);
   --blk-bg: #f7f6f2;
   --blk-line: #ddd9d1;
   --blk-time: #837f77;
@@ -236,6 +237,7 @@
   --dim: #5a6478;
 
   --chat-bg: rgba(5, 11, 15, 0.82);
+  --chat-sheet: rgba(5, 11, 15, 0.16);
   --blk-bg: #081318;
   --blk-line: #16303a;
   --blk-time: #4d6169;
@@ -372,6 +374,7 @@
   --pill-queue: rgba(228, 235, 244, 0.92);
 
   --chat-bg: rgba(247, 250, 253, 0.92);
+  --chat-sheet: rgba(247, 250, 253, 0.5);
   --blk-bg: #f9fbfd;
   --blk-line: #e3e9f2;
   --blk-time: #7e8a9b;

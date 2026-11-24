@@ -67,7 +67,8 @@
 
   /* 左右内边距对称：右侧原先为 0，输入框与发送按钮直接贴卡片边框。 */
   padding: 0 var(--s16) var(--s12);
-  background: var(--chat-bg);
+  /* 用透底的 --chat-sheet，让页面背景的光晕透进消息区；卡片范围靠下方 1px 边框表达。 */
+  background: var(--chat-sheet);
   border: 1px solid var(--line);
   /* 圆角卡片，与左栏任务队列同一形状；顶边不再依赖页面级横线。 */
   border-radius: var(--r-card);
