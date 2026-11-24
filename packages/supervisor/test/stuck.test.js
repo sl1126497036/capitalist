@@ -122,7 +122,7 @@ test("四类各有不同的处置办法，且都给出可执行动作", () => {
       { kind, label: stuckMod.STUCK_LABEL[kind], why: "判据" },
       600,
     );
-    assert.match(text, /跳出办法/);
+    assert.match(text, /解除办法/);
     assert.match(text, /capitalist (block|notify)/);
     seen.add(text);
   }
@@ -256,8 +256,8 @@ test("卡点：当轮写入送达通道，两次无效后判卡死并写明卡�
   const d = capitalist.readDispatches(root).find((x) => x.id === "D-stuck1");
   assert.equal(d.status, "failed");
   assert.match(d.note, /卡死（空转等待）/);
-  assert.match(d.note, /同类指导 2 次均未生效/);
-  assert.match(d.note, /已试手段/);
+  assert.match(d.note, /同类指导已下发 2 次均未生效/);
+  assert.match(d.note, /判定依据/);
 });
 
 test("卡点解除：进程恢复输出后清掉标记，不再追加指导", async () => {

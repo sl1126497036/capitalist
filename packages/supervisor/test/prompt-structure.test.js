@@ -60,9 +60,9 @@ test("不再有重复的核对现状：只有一块，且合并了两边独有�
   const text = buildPrompt(ARGS);
   const headings = text.split("\n").filter((l) => /^【/.test(l) && l.includes("核对现状"));
   assert.equal(headings.length, 1, `“核对现状”只该有一个区块标题，实际：${headings.join(" / ")}`);
-  assert.ok(text.includes("mtime 晚于本单创建时刻"), "preflight 独有的 mtime 比对要保留");
+  assert.ok(text.includes("文件的修改时间晚于本单创建时刻"), "核对现状中的修改时间判据要保留");
   assert.ok(text.includes("与已验收的做法相反"), "preflight 独有的口径核对要保留");
-  assert.ok(text.includes("同时了解相关模块的当前实现方式"), "grounding 独有的理解现状要保留");
+  assert.ok(text.includes("读本单作用对象的当前状态"), "核对现状中的作用对象判据要保留");
 });
 
 test("“带超时”只写一遍：结束口径里说完，不再在动作清单里重复", () => {

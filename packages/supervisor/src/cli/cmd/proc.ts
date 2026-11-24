@@ -206,9 +206,9 @@ export async function cmdReport(p: Parsed): Promise<number> {
   if (!id)
     die(
       t(
-        'Usage: capitalist report <dispatch-id> --status done|failed --note "<what was done>" [--evidence "<changes and test results>"]' +
+        'Usage: capitalist report <dispatch-id> --status done|failed --note "<what was done>" [--evidence "<deliverable and check results>"]' +
           ' [--added "<new user requirements>"] [--outcome "<ref>=done|not_mine|blocked;…"]',
-        '用法：capitalist report <派单id> --status done|failed --note "<做了什么>" [--evidence "<改动与验证结果>"]' +
+        '用法：capitalist report <派单id> --status done|failed --note "<做了什么>" [--evidence "<产出物与核对结果>"]' +
           ' [--added "<用户新增的需求>"] [--outcome "<编号>=done|not_mine|blocked;…"]',
       ),
     );
@@ -483,7 +483,7 @@ export function cmdNext(p: Parsed): number {
     t(`Dispatch ${claimed.id} (${claimed.stage}${claimed.shard ? `/${claimed.shard}` : ""})\n`, `派单 ${claimed.id}（${claimed.stage}${claimed.shard ? `/${claimed.shard}` : ""}）\n`) +
       `${claimed.action}\n\n` +
       `${buildGroundingBlock(claimed).join("\n")}\n\n` +
-      t(`When done: capitalist report ${claimed.id} done --note "<what was done>" --evidence "<changes / tests / result>"\n`, `完成后：capitalist report ${claimed.id} done --note "<做了什么>" --evidence "<改了哪几处 / 跑了什么 / 结果>"\n`) +
+      t(`When done: capitalist report ${claimed.id} done --note "<what was done>" --evidence "<deliverable / checks / result>"\n`, `完成后：capitalist report ${claimed.id} done --note "<做了什么>" --evidence "<产出物在哪里 / 核对了什么 / 结果>"\n`) +
       t(`Blocked: capitalist ask "<question>" or capitalist block <type> "<what blocks it>"\n`, `受阻：capitalist ask "<问题>" 或 capitalist block <类型> "<受阻原因>"\n`),
   );
   return 0;

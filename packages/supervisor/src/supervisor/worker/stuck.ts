@@ -178,7 +178,7 @@ export function stuckGuidance(ev: StuckEvidence, idleSec: number): string {
       return (
         "解除办法：当前因需要人工解除的外部条件受阻，重复同一请求不会通过。" +
         "停止重试该操作，用 `capitalist block <类型> \"<受阻原因>\"` 上报后停止；" +
-        "其余不依赖该条件的工作先完成，并把已经做过的改动留在任务根内。"
+        "其余不依赖该条件的工作先完成，并把已经完成的产出物保留在任务根内。"
       );
     case "retry":
       return (

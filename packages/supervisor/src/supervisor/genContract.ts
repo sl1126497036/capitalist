@@ -79,7 +79,7 @@ const SCHEMA_HINT = `只输出一个 JSON 对象，不要任何解释、不要�
       "done": { "type": "file_exists", "path": "相对产出路径" }
     }
   ],
-  "brief_redlines": ["不得访问凭据", "改既有文件前先备份"]
+  "brief_redlines": ["不得访问凭据", "修改既有产出物前先备份"]
 }
 
 规则：
@@ -169,7 +169,7 @@ export async function generateContract(opts: {
     brief_redlines: [
       "不许删除任务根以外的本机内容",
       "不得访问凭据：.env / 密钥 / *.pem / ~/.ssh",
-      "改既有文件前先备份。",
+      "修改既有产出物前先备份。",
     ],
     stages,
   };

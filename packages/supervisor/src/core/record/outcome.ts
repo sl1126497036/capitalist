@@ -63,7 +63,7 @@ function stateWord(status: string): string {
  * 交接摘要：新会话起步时交给工作进程的上一轮结论。
  *
  * 只写能改变下一步动作的信息：上一轮是哪张单、怎么结束、定了什么口径、验收意见、
- * 以及核对工作树的办法。没有已结束的单时返回空数组，首次派单不出现这一段。
+ * 以及核对现状的办法。没有已结束的单时返回空数组，首次派单不出现这一段。
  */
 export function handoffLines(prev: Dispatch | null): string[] {
   if (!prev) return [];
@@ -75,7 +75,7 @@ export function handoffLines(prev: Dispatch | null): string[] {
   if (verdict) lines.push(`验收：${verdict}`);
   if (why) lines.push(`卡点：${why}`);
   lines.push(
-    "上一代会话的上下文未随派单传递：先看 git status 与 git diff --stat 核对工作树，已改过的文件不重做，缺失的部分补齐；与正文冲突时以工作树现状为准。",
+    "上一代会话的上下文未随派单传递：先核对任务根现状，已完成的产出物不重做，缺失的部分补齐；与正文冲突时以现状为准。任务根为 git 仓库时，用 git status 与 git diff 查看已发生的变更。",
   );
   return lines;
 }

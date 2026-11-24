@@ -226,7 +226,7 @@ export function toolArgBrief(toolName: string, input: unknown): string {
     const described = inputDescription(o);
     if (described !== "") return clipText(described, 72);
     if (!SHELL_TOOL.test(toolName.toLowerCase())) return clipText(flat, 72);
-    /* 命令含源码或文档路径时，摘要直接给出该路径。 */
+    /* 命令含文件或文档路径时，摘要直接给出该路径。 */
     const fileHit = flat.match(/[A-Za-z0-9_./-]+\.(?:md|ts|tsx|js|mjs|cjs|json|html|css|yml|yaml|txt)/);
     const bare = flat.replace(/^cd\s+\S+\s*&&\s*/, "").replace(/^cd\s+\S+\s*;\s*/, "");
     if (fileHit && /^(sed|cat|head|tail|less|grep|rg|wc|nl|awk|diff)\b/.test(bare)) {

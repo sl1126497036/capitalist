@@ -79,7 +79,7 @@ const supervisorHours = ref(24);
 const QUEUE_KEY = "cap.board.queue.collapsed";
 const queueCollapsed = ref(false);
 
-/* 工作树开关由 QueuePane 发事件，开合状态与 ForestPane 的挂载由 App 持有。 */
+/* 任务树开关由 QueuePane 发事件，开合状态与 ForestPane 的挂载由 App 持有。 */
 const forestOpen = ref(false);
 
 /* 左栏宽度只写在外壳的 --w-left，QueuePane 按该变量排版；宽度持久化在 localStorage。 */
@@ -1663,7 +1663,7 @@ const ctxMask = computed(() => Boolean(capitalist.value?.reload?.active) || rest
     </div>
   </Transition>
 
-  <!-- 工作树看板 Teleport 到 body；关闭时不发请求。 -->
+  <!-- 任务树看板 Teleport 到 body；关闭时不发请求。 -->
   <ForestPane :root="root" :open="forestOpen" @close="forestOpen = false" />
 </template>
 

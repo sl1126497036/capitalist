@@ -1,6 +1,6 @@
 <script setup>
 /**
- * 工作树看板。数据只从 `GET /api/forest?root=` 取，层级由 nest() 按 depth 还原，
+ * 任务树看板。数据只从 `GET /api/forest?root=` 取，层级由 nest() 按 depth 还原，
  * 节点由 ForestNode.vue 递归渲染。打开时立即拉取并每 5 秒轮询，关闭即停。
  */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";

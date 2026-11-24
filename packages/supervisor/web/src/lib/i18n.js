@@ -81,7 +81,7 @@ const EN = {
   "切换界面语言": "Switch UI language",
   "关于": "About",
   "在 GitHub 上查看源码": "View source on GitHub",
-  "工作树": "Work tree",
+  "任务树": "Task tree",
   "取消": "Cancel",
   "重启": "Restart",
   "监工对话模型": "Supervisor chat model",
@@ -245,7 +245,7 @@ const EN = {
   /* fast-model 别名的旁注：它在两个 flash 模型间轮换，名字本身按原 id 展示。 */
   "轮换": "rotation",
 
-  /* ---- 会话区 / 工作树 / 全局提示 ---- */
+  /* ---- 会话区 / 任务树 / 全局提示 ---- */
   " {n} 条未读": " {n} unread",
   "{n} 个子单": "Sub-tasks: {n}",
   "组内完成": "Group progress:",
@@ -399,7 +399,7 @@ const EN = {
   "全局读数": "Global readings",
   "关": "Off",
   "关停": "Shut down",
-  "关闭工作树看板": "Close the work tree",
+  "关闭任务树看板": "Close the task tree",
   "关闭预览（Esc）": "Close preview (Esc)",
   "删除": "Delete",
   "刷新": "Refresh",
@@ -429,7 +429,7 @@ const EN = {
   "展开更早的消息": "Load earlier messages",
   "展开任务队列": "Expand the task queue",
   "展开辅助面板": "Expand the auxiliary panel",
-  "工作树看板": "Work tree",
+  "任务树看板": "Task tree",
   "工作进程面板": "Worker panel",
   "工具调用": "Tool calls",
   "已发出；仍可继续发送": "Sent; further messages can still be sent",
@@ -740,7 +740,7 @@ const EN = {
   "当前模型未知": "Current model unknown",
   "仍然设置": "Apply anyway",
   "正在设置…": "Applying…",
-  "工作树重建记录": "Work tree rebuild log",
+  "任务树重建记录": "Task tree rebuild log",
   "调度暂停中": "Scheduling paused",
   "点击右上角“恢复调度”继续": "Click Resume scheduling in the top right to continue",
   "重启监工": "Restart supervisor",

@@ -34,13 +34,13 @@
     {
       "id": "S1",
       "name": "执行",
-      "goal": "按确认的需求执行并留存改动记录",
-      "next": "完成一项后执行 capitalist record changes '{\"file\":\"...\",\"what\":\"...\"}'",
+      "goal": "按确认的需求执行并留存交付记录",
+      "next": "完成一项后执行 capitalist record changes '{\"object\":\"...\",\"what\":\"...\"}'",
       "done": {
         "type": "jsonl_min",
         "file": "changes.jsonl",
         "min": 1,
-        "msg": "未登记改动，无法核对变更内容"
+        "msg": "未登记交付记录，无法核对产出物"
       }
     },
     {

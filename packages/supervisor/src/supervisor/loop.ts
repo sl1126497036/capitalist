@@ -4519,7 +4519,7 @@ function supersedeStaleDispatches(
       reason: "阶段已推进，本单的验收口径不再适用",
     });
     detail(`[监工] 派单 ${d.id}（${d.stage}/${d.shard || "整阶段"}）属于已推进的阶段，标记为已作废并释放并发名额`);
-    /* 作废原因写进台账，工作树与任务列表据此展示。 */
+    /* 作废原因写进台账，任务树与任务列表据此展示。 */
     const hadNote = String((d as { note?: unknown }).note ?? "").trim();
     return {
       ...d,

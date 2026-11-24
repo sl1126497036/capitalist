@@ -28,19 +28,18 @@ function freshPrompt(dispatch) {
 test("首次派单提示词带“动手前先核对现状”，并写明五项核对", () => {
   const prompt = freshPrompt({ at: AT });
   assert.ok(prompt.includes(GROUNDING_HEAD));
-  assert.match(prompt, /读目标文件当前内容与最近改动痕迹/);
-  assert.match(prompt, /若已经实现，不要重做：在报告里指出实现位置（文件 \+ 行号）与差异/);
-  assert.match(prompt, /只做了一半的只补缺，不推倒重来/);
+  assert.match(prompt, /读本单作用对象的当前状态（文件、数据、页面、台账）/);
+  assert.match(prompt, /若已完成，不要重做：在报告中指出已完成的位置与要求的差异/);
+  assert.match(prompt, /只做了一半的只补缺，不整体重做/);
   assert.match(prompt, /与已验收的做法相反/);
-  assert.match(prompt, /不许按旧快照覆盖/);
+  assert.match(prompt, /不按旧快照覆盖/);
 });
 
 test("有 at 时写进本单创建时刻，并给出 mtime 比较方法", () => {
   const prompt = freshPrompt({ at: AT });
   assert.ok(prompt.includes(AT), "提示词里应能看到本单 at");
-  assert.match(prompt, /mtime 晚于本单创建时刻/);
-  assert.match(prompt, /stat -c %Y/);
-  assert.match(prompt, new RegExp(`date -d "${AT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" \\+%s`));
+  assert.match(prompt, /文件的修改时间晚于本单创建时刻/);
+  assert.ok(!prompt.includes("stat -c %Y"), "A6 已删除 GNU 专有比较命令");
   /* 能拿到 epoch 秒，用 stat 的秒级时间直接比较。 */
   assert.equal(preflightAtOf({ at: AT }).epoch, Math.floor(Date.parse(AT) / 1000));
 });
@@ -48,7 +47,7 @@ test("有 at 时写进本单创建时刻，并给出 mtime 比较方法", () => 
 test("没有 at 时用通用说法，不出现具体时刻与比较命令", () => {
   const prompt = freshPrompt({ at: "" });
   assert.ok(prompt.includes(GROUNDING_HEAD));
-  assert.match(prompt, /目标文件在本单创建之后被改过时，按最新内容做/);
+  assert.match(prompt, /本单作用对象为文件时：文件在本单创建之后被修改过，按最新内容处理/);
   assert.ok(!prompt.includes("date -d"));
   assert.equal(preflightAtOf({ at: "" }), null);
   assert.equal(preflightAtOf({ at: "not-a-date" }), null);
@@ -62,7 +61,7 @@ test("续跑提示词同样带这一段", () => {
   });
   assert.ok(prompt.includes(GROUNDING_HEAD));
   assert.ok(prompt.includes(AT));
-  assert.match(prompt, /mtime 晚于本单创建时刻/);
+  assert.match(prompt, /文件的修改时间晚于本单创建时刻/);
 });
 
 test("正文已带过则不重复追加", () => {

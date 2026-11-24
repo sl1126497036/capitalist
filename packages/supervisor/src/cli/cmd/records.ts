@@ -142,7 +142,7 @@ export function cmdCorrect(p: Parsed): number {
  * 给监工的“上下文索引”用的：对话层只看到一行摘要（所属会话 / 剩余上下文 / 已执行的动作），
  * 无法判定该事项是否执行过时，用本命令查看明细，不推断，也不重新建单。
  *
- * 输出三块：身份（哪一单、所属哪条会话、什么状态）-> 统计（改过哪些文件、执行过几次构建与测试）
+ * 输出三块：身份（哪一单、所属哪条会话、什么状态）-> 统计（修改过哪些文件、执行过几次构建与测试）
  * -> 时间线（最近 15 条动作，正序）。全部来自 worker 自己的日志与记录，不做推断。
  */
 export function cmdWorker(p: Parsed): number {
@@ -189,10 +189,11 @@ export function cmdWorker(p: Parsed): number {
     else if (/build|构建|tsc|vite|webpack/i.test(s)) build += 1;
     else if (/test|测试|pytest|jest|vitest/i.test(s)) test += 1;
   }
+  const buildTest = build > 0 || test > 0 ? `，构建 ${build} 次、测试 ${test} 次` : "";
   process.stdout.write(
-    `动作 ${acts.length} 条：改过 ${edits.size} 个文件、读过 ${reads.size} 个、构建 ${build} 次、测试 ${test} 次\n`,
+    `动作 ${acts.length} 条：修改 ${edits.size} 个文件、读取 ${reads.size} 个${buildTest}\n`,
   );
-  if (edits.size) process.stdout.write(`改过：${[...edits].join("、")}\n`);
+  if (edits.size) process.stdout.write(`修改过：${[...edits].join("、")}\n`);
   const tail = acts.slice(-15);
   if (tail.length) {
     process.stdout.write("时间线（最近 15 条）：\n");

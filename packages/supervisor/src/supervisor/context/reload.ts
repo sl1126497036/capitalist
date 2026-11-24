@@ -1008,8 +1008,8 @@ function reverifyAction(item: ResumeReverifyItem): string {
   return [
     `复验（不是重做）：${item.stage}/${item.shard || "整阶段"} ${item.title}`,
     `上一轮已报完成，但没有可核对的确认（${item.why}），不能直接当完成。`,
-    "做三件事：1) 按下面的原要求逐条核对是否真的做到；2) 每条给出证据（命令输出、文件与行号、截图路径），结论用 capitalist ledger add 入账；",
-    "3) 成立就在回报里写“已验证”，不重写已经通过的实现，不改动其他分片的文件；不成立就写明缺少哪条。",
+    "做三件事：1) 按下面的原要求逐条核对是否真的做到；2) 每条给出证据（命令输出、产出物位置、截图路径），结论用 capitalist ledger add 入账；",
+    "3) 成立就在回报里写“已验证”，不重写已经通过的部分，不改动其他分片的作用对象；不成立就写明缺少哪条。",
     `原要求：${clipText(oneLine(item.action), 1200)}`,
   ].join("\n");
 }

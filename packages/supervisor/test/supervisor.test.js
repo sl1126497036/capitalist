@@ -188,10 +188,10 @@ test("worker prompt 只给这一单的边界，并禁止代监工推进", () => 
   assert.match(prompt, /不要执行 capitalist advance/);
   assert.match(prompt, /动手前先核对现状/);
   assert.match(prompt, /现状与派单描述冲突/);
-  assert.match(prompt, /改完要生效/);
-  assert.match(prompt, /已重启生效/);
+  assert.match(prompt, /交付生效/);
+  assert.match(prompt, /尚未重载/);
   assert.match(prompt, /怎么算做完/);
-  assert.match(prompt, /全量测试、端到端长跑、构建全量校验/);
+  assert.match(prompt, /全量测试、端到端长跑、全量构建校验/);
   assert.match(prompt, /不要求截图/);
 });
 
@@ -203,9 +203,9 @@ test("续跑提示词同样带上下文约束与生效要求", () => {
     dispatch: { id: "D-1", at: "", stage: "S0", action: "改重试", status: "open" },
   });
   assert.match(p, /动手前先核对现状/);
-  assert.match(p, /改完要生效/);
+  assert.match(p, /交付生效/);
   assert.match(p, /改重试/);
-  assert.match(p, /自成一体/);
+  assert.match(p, /本提示词自包含/);
   assert.match(p, /怎么算做完/);
 });
 
