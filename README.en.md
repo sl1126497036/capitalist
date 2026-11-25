@@ -54,11 +54,11 @@ Send these to a host with the plugin installed (selecting the `capitalist` skill
 - Start a supervisor process and then leave it on standby.
 - Start a supervisor process and finish the billing service refactor.
 - Add a login-page integration task to the supervisor.
-- Open a supervisor for this project and break the work into a task tree following the "xxx" skill workflow.
+- Open a supervisor for this project and create a task tree following the "xxx" skill workflow.
 
 The host runs `capitalist supervise`, which creates the task root in the current directory and starts a resident supervisor; "add task" requests are appended with `capitalist say` and merged into the existing dispatch when work has not started, or delivered by the hook before the next tool call while it runs. See `skill/SKILL.md` for the trigger table.
 
-When a third-party skill is referenced in a host, the supervisor can either generate the guard and the task tree automatically following that skill's workflow, or split the skill by work content and attach the full skill address so work processes can fetch it themselves.
+When a third-party skill is referenced in a host, the supervisor can generate the guard and the task tree automatically following that skill's workflow. It can also split the skill into key points by work content and attach the full skill address so work processes can fetch it themselves.
 
 The supervisor panel is recommended for task supervision and scheduling. The startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address can be read from `board_url` in `capitalist status`. From the panel you can resume dispatches, inspect the task tree, interact with running work processes, write new instructions and adjudicate questions. The access key is not checked by default, but leaving it unchecked may pose an intranet security risk; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
 
@@ -89,7 +89,7 @@ For literary creation, the historical setting, story outline, character relation
 
 For coding tasks the supervisor can let frontend and backend proceed independently and start integration and automated-test processes once both are done.
 
-Dispatch frontend and backend as two parallel dispatches, one work process each; hang integration and automated tests behind them with `AFTER`, and they are released once the prerequisites are delivered.
+Dispatch frontend and backend as two parallel dispatches, one work process each; integration and automated tests are created as parent-child nodes in the task tree and released automatically once the prerequisites are delivered.
 
 ### 3. Security tasks: batch dispatch and split by domain
 
@@ -119,19 +119,11 @@ Multiple sites can be split into parallel dispatches per site, a single site int
 4. The work process writes acceptance evidence with `capitalist record` and closes the dispatch with `capitalist report`. The supervisor accepts against the dispatch's acceptance criteria: when unmet it re-dispatches, when met it releases the next dispatch in the tree.
 5. State stays on disk after the session ends or the process exits. Running `capitalist supervise` again reuses the same task root; `capitalist reload` produces a snapshot and a resume plan, and the next dispatch adds a re-verification dispatch.
 
-### Guards and task trees
+### Task tree
 
-1. Guard: a plain JSON file declaring redlines, local boundaries and where acceptance criteria come from. It carries no workflow. The supervisor can generate one from a user instruction or from a skill; when none is specified, the built-in guard is used:
-`packages/supervisor/policies/minimal.policy.json`.
-`--policy` accepts a built-in name or a path to a guard JSON, falling back to the built-in guard on failure.
-
-
-2. Task tree: the only authority on workflow. Each dispatch carries at most one parent, or names the dispatches it must wait for; a dispatch is not issued until its prerequisites are delivered.
-The supervisor can break a task down on user instruction and build the task tree. Parallel slices are placed in groups, and when a later task depends on an earlier group, it is released only after every task in that group finishes.
+Task tree: the supervisor can break a task down on user instruction and build a task tree. Parallel slices are grouped, and when a later task depends on an earlier group, it is released only after every task in that group finishes.
 A task that cannot succeed can be removed or re-dispatched to avoid blocking. The figure below is a simple copy-editing task tree:
 ![work-tree.png](work_tree.png)
-
-3. How to use: when you need a workflow, build a task tree; the nodes are the steps. Chain dependent work with `PARENT` / `AFTER`, leave independent work side by side, and let `--workers` decide how much runs at once.
 
 ### Task root and data
 
@@ -171,7 +163,7 @@ All subcommands and flags are listed in `capitalist --help`; the split of duties
 |---|---|
 | Host / hook | The agent CLI providing model calls and login state; the hook is the judging entry point it calls at session lifecycle points |
 | Task root | A project directory containing `.capitalist/state.json`; commands search upward for the nearest one |
-| Guard | A plain JSON file: redlines, local boundaries and where criteria come from, with no workflow |
+| Guard | A plain JSON file: redlines, local boundaries and where criteria come from |
 | Task tree | A directed graph formed by each dispatch's `parent` / `after`; the supervisor issues a dispatch only after its prerequisites are delivered |
 | Dispatch / shard | A work unit written by the supervisor to `inbox/dispatch.jsonl`; dispatches of the same shard share one session and one context |
 | Redline / local boundary | Command-text regex rules and path scope in a guard; levels are `BLOCK` / `NEED_USER` / `WARN` |
