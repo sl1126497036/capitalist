@@ -214,7 +214,7 @@ function ensureWatchConfig(dryRun: boolean): string | null {
   const template = {
     _说明:
       "自动纳管规则：当前工作目录的路径段连续匹配 match 时，把匹配段之后的第一级目录作为任务根。"
-      + "在该目录（或它的子目录）里第一次发送消息就会建立任务根，之后不需要 capitalist start。",
+      + "在该目录（或它的子目录）里第一次发送消息就会建立任务根；建立任务根之后不需要 capitalist start。",
     _示例: { match: ["projects", "web"], policy: "minimal", exclude: ["node_modules", "dist"] },
     rules: [],
   };
@@ -463,7 +463,7 @@ export async function runInstall(opts: InstallOptions): Promise<number> {
   if (installable.length === 0) {
     process.stderr.write(
       "✗ 没有检测到可安装的宿主\n" +
-        `  用 --agent 指定：${all().map((impl) => impl.id).join(" | ")}\n`,
+        `  用 --agent 指定：${all().map((impl) => impl.id).join(" | ")}，或 --all 安装到全部已检测宿主\n`,
     );
     return 1;
   }
@@ -604,7 +604,7 @@ export function ensureSkillManual(
   const cleaned: string[] = [];
   const src = skillManualSource();
   if (!src) {
-    failed.push("找不到手册源文件（skill/SKILL.md）；包不完整，重装 capitalist");
+    failed.push("找不到手册源文件（skill/SKILL.md）；包不完整，请重装 capitalist 后重试");
     return { placed, failed, cleaned };
   }
   const body = readFileSync(src, "utf8");

@@ -81,7 +81,7 @@ const HELP_GROUPS: HelpGroup[] = [
         cmd: "restart <目标>",
         brief: ["更换目标重开：旧 .capitalist 归档为 .capitalist.closed.<时间>，再就地重建"],
         opts: [
-          { f: "--policy <名>", d: ["新守卫"] },
+          { f: "--policy <名|路径>", d: ["新守卫"] },
           { f: "--root <目录>", d: ["任务根目录"] },
         ],
       },
@@ -252,6 +252,7 @@ const HELP_GROUPS: HelpGroup[] = [
         ],
         opts: [
           { f: "--workers N", d: ["并行度上限，缺省 3"] },
+          { f: "--tick <秒>", d: ["调度轮询间隔，缺省 5 秒"] },
           {
             f: "--agent <id>",
             d: ["监工所在宿主（workbuddy / codebuddy / claude-code）；", "未声明时按 claude-code 判定，工作进程宿主跟随监工宿主"],
@@ -340,10 +341,11 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       {
         cmd: "report <派单id>",
-        brief: ["工作进程上报，由工作进程内部调用"],
+        brief: ["工作进程上报，由工作进程内部调用；", "结束状态 done|failed 可直接跟在派单 id 后"],
         opts: [
           { f: "--status done|failed", d: ["结束状态"] },
           { f: '--note "..."', d: ["结束说明"] },
+          { f: '--evidence "..."', d: ["可核对的产出物位置与核对结果"] },
           {
             f: '--outcome "<编号>=<结论>;…"',
             d: [
@@ -364,6 +366,8 @@ const HELP_GROUPS: HelpGroup[] = [
         cmd: 'say "<文本>"',
         brief: ["给派单追加一条消息，写入 .capitalist/ledger/direct.jsonl。", "未开工的派单在启动时并入原派单；执行中的派单由 hook 在", "下一次工具调用前送达，不中断进程，送达后标记已用"],
         opts: [
+          { f: "--target <派单id>", d: ["绑定到指定派单或其同派生链的重派单"] },
+          { f: "--lineage <派生链>", d: ["按派生链定位派单"] },
           { f: "--shard <分片>", d: ["只对目标分片的派单生效"] },
           { f: "--thread <线程>", d: ["用于界面回显归属，不改变生效范围"] },
         ],
@@ -496,7 +500,7 @@ const HELP_GROUPS: HelpGroup[] = [
           "手册写入用户目录；换项目时在该项目目录再执行一次",
         ],
         opts: [
-          { f: "--agent <宿主...>", d: ["指定宿主，取值见宿主表"] },
+          { f: "--agent <宿主...>", d: ["指定宿主，取值见 capitalist hosts 输出"] },
           { f: "--all", d: ["安装到全部已检测宿主"] },
           { f: "--yes", d: ["跳过交互确认"] },
           { f: "--dry-run", d: ["只展示计划，不写入"] },
@@ -580,7 +584,7 @@ export const COMMAND_HELP: Record<string, string> = {
   - --target 将消息绑定到指定派单或其同派生链重派单；绑定到工作进程时不转发给其他派单
   - 不带定位参数时对下一次任意派单生效；带 --shard 时只对目标分片的派单生效
   - --thread 用于界面回显归属，不改变生效范围`,
-  direct: `capitalist direct "<文本>" [--shard <分片>] [--thread <线程>]
+  direct: `capitalist direct "<文本>" [--target <派单id>] [--lineage <派生链>] [--shard <分片>] [--thread <线程>]
 与 capitalist say 等价（同一实现、同一文件、同一生效时机）。
   - 写入 .capitalist/ledger/direct.jsonl；未开工的派单并入原派单，执行中的派单由 hook 送达`,
   takeover: `capitalist takeover [<分片>] [--reason "<原因>"]

@@ -208,7 +208,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     const looksChinese = /[\u4e00-\u9fa5]/.test(raw) && raw.length >= 6;
     if (looksChinese) return { action: "instruct" as SupervisorAction, arg: raw, confirm: false };
     return {
-      error: `未知动作“${head || raw}”：请改用支持的指令`,
+      error: `未知动作“${head || raw}”：请改用支持的指令，可用动作见界面快捷清单`,
     };
   }
 
@@ -285,7 +285,7 @@ export function appendSupervisorDirective(
 
   if (explicit) {
     if (!(CAPITALIST_ACTIONS as readonly string[]).includes(explicit)) {
-      return { ok: false, error: `未知动作“${explicit}”：请改用支持的指令` };
+      return { ok: false, error: `未知动作“${explicit}”：请改用支持的指令，可用动作见界面快捷清单` };
     }
     action = explicit as SupervisorAction;
   } else {

@@ -335,7 +335,7 @@ export function contextUsedOfAssistantMessage(o: unknown): number | null {
  * 与 {@link QUOTA_EXHAUSTED_TEXT} 分开：静默退出只是“没有任何诊断信息”，不等于额度耗尽。
  * 两者混用会让一次误判被写进 quota.json，而该状态不按时间过期，后续调用会直接短路。
  */
-export const NO_OUTPUT_TEXT = "模型没有返回内容：请重试；若持续失败，请检查登录状态";
+export const NO_OUTPUT_TEXT = "模型没有返回内容：请重试；若持续失败，请检查登录状态或通道连接";
 
 /** stderr 过长时取尾部：失败原因通常出现在末尾。 */
 function tailOf(s: string, n = 600): string {
@@ -419,7 +419,7 @@ export async function askModel(opts: AskModelOptions): Promise<AskModelResult> {
   if (!argv) {
     return {
       ok: false,
-      text: "无法传递带换行的提示词，本次调用已中止：请将内容放在单行内",
+      text: "无法传递带换行的提示词，本次调用已中止：宿主入口不支持换行参数",
     };
   }
 
@@ -570,7 +570,7 @@ export async function askModelStream(
   if (!argv) {
     return {
       ok: false,
-      text: "无法传递带换行的提示词，本次调用已中止：请将内容放在单行内",
+      text: "无法传递带换行的提示词，本次调用已中止：宿主入口不支持换行参数",
     };
   }
 

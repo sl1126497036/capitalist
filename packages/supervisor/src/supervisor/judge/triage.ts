@@ -127,7 +127,7 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
     facts,
     actions: [
       { name: "continue", desc: "无需干预：误报、已知问题、可自行解决" },
-      { name: "nudge", desc: "方向或做法有偏差但无需重开：参数里写明纠正内容（二十字以内）" },
+      { name: "nudge", desc: "方向或做法有偏差但无需重开：参数里写明纠正内容（二十字以内，超出部分会被截断）" },
       {
         name: "requeue",
         desc: "本单做法不可行，应重开（要求本身不可行时选 escalate）",

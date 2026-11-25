@@ -116,7 +116,7 @@ export async function generateGuard(opts: {
   const path = opts.out ?? join(dir, `generated-${new Date().toISOString().replace(/[:.]/g, "-")}.policy.json`);
   const skills = loadedSkills(opts.root);
   const prompt = [
-    "本提示词用于为通用任务监工起草守卫。守卫仅声明边界与判据：所禁止的操作、不可修改的位置以及完成判定标准，不安排流程。",
+    "本提示词用于按给定目标为其监工起草守卫。守卫仅声明边界与判据：所禁止的操作以及在完成判定上的标准，不安排流程。",
     "",
     `目标内容：${opts.target || "（未提供，按项目内容判断）"}`,
     "",

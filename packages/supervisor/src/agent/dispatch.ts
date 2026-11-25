@@ -238,7 +238,7 @@ function deliverPendingDirectives(
   recordEvent(ctx, event, { text: rec.text.slice(0, 400), via: "hook" }, "direct_deliver");
   return hook.deny(
     [
-      `【用户追加 · 派单 ${dispatchId}】执行期间收到用户追加的内容，本次工具调用暂停一次以完成送达。`,
+      `【用户追加 · 派单 ${dispatchId}】执行期间收到用户追加的内容，本次工具调用已被拦截，用于先完成本条送达。`,
       `编号：${directiveShortRef(rec)}`,
       "先判断是否属于本单要求，再按结论处理：",
       "  是 -> 按下面的内容调整做法（与原要求冲突时以追加内容为准），随后继续原任务；",
@@ -338,7 +338,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
     });
     return hook.deny(
       `【本机边界拦截】这条命令要访问的位置不允许：${why}\n` +
-        "敏感区一律拒绝访问。需要访问其他范围时，先提交申请由监工裁决。" +
+        "敏感区一律拒绝访问。需要访问其他范围时，先按本单说明【六、受阻时如何申报】提交申请，由监工裁决。" +
         escalation(v.nth),
       event.point,
       event.sessionId,
@@ -599,7 +599,7 @@ function describeBlock(policy: Policy, gate: GateResult, cmd: string): string {
   return (
     `【红线拦截】\n${head}\n命中：…${hit[0]?.snippet ?? cmd.slice(0, 80)}…\n` +
     (fix ? `正确做法：${fix}\n` : "") +
-    "请改用不越界的路径；如有不确定项，以 capitalist ask 登记后由监工裁决。"
+    "请改用不越界的路径；如有不确定项，用 capitalist ask 登记问题，由监工裁决。"
   );
 }
 
@@ -695,7 +695,7 @@ function onStop(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
       `【违规升级】同一问题已经第 ${String(first.nth)} 次：${String(first.label ?? first.rule)}\n` +
         "反复越界时按以下顺序处理：\n" +
         '  1) capitalist ask "<重复原因>" 登记后停止执行，等待监工裁决\n' +
-        "  2) 确认已改正后：capitalist correct --rule <规则>\n" +
+        "  2) 监工裁决放行并确认已改正后：capitalist correct --rule <规则>\n" +
         "继续执行只会让同一问题反复出现。",
       event.point,
       event.sessionId,

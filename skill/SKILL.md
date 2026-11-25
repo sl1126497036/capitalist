@@ -68,7 +68,7 @@ capitalist supervise "<目标>" --agent <宿主>
 
 - WorkBuddy 中的注意事项
   - 无终端可用时处于“受限模式”，需先解除。
-  - 监工不在WorkBuddy的命令通道内启动，由用户在终端执行 `capitalist supervise --agent workbuddy`。
+  - 监工不在 WorkBuddy 的命令通道内启动，由用户在终端执行 `capitalist supervise --agent workbuddy`。
 
 - ClaudeCode
   - 宿主为 ClaudeCode 时，监工通过 `claude -p` 调度。
@@ -203,7 +203,7 @@ capitalist tree rebuild --apply  # 写入重建结果
 - 不删除台账行，不改写历史状态。关闭的派单状态为 `closed`，历史记录保留。
 - 幂等。第二次 `--apply` 输出“没有需要改的行”。
 
-监工启动后在首个 tick 前检查台账：未完工派单（`open` / `claimed` / `review`）超过一张且均无父节点时执行一次重建，输出“已重建 N 棵树（未完工 M 单）”。存在带父节点的未完工派单时不触发。
+监工启动后在首个 tick 前检查台账：未完工派单（`open` / `claimed` / `review`；`reported` 不计入）超过一张且均无父节点时执行一次重建，输出“已重建 N 棵树（未完工 M 单）”。存在带父节点的未完工派单时不触发。
 
 ## 7. 命令速查
 

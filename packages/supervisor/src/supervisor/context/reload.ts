@@ -757,7 +757,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   }
   L.push("## 需求原文（逐字保留，非待办清单）");
   L.push(
-    "> 这些是在途派单与守卫上下文里的原文，可能早于今天的插话（本份简报生成于 " +
+    "> 这些是在途派单与守卫上下文里的原文，可能早于本简报生成之后收到的插话（本份简报生成于 " +
       String(snap.at ?? "").slice(0, 16).replace("T", " ") +
       "）。",
   );
@@ -877,8 +877,8 @@ export function readResumePlan(root: string): ResumePlan | null {
 function reverifyAction(item: ResumeReverifyItem): string {
   return [
     `复验（不是重做）：${item.title}`,
-    `上一轮已报完成，但缺少可核对的确认（${item.why}），不得直接视为完成。`,
-    "执行以下三项：1) 按下方原要求逐条核对是否达成；2) 每条附上证据（命令输出、产出物位置、截图路径），并以 capitalist ledger add 入账结论；",
+    `此前该节点已报完成，但缺少可核对的确认（${item.why}），不得直接视为完成。`,
+    "执行以下三项：1) 按下方原要求逐条核对是否达成；2) 每条附上证据（命令输出、产出物位置、截图路径，并覆盖 baseline / probe / diff / repro 四项），并以 capitalist ledger add 入账结论；",
     "3) 核对成立的，在回报中注明“已验证”，不重写已通过部分，不改动其他分片的作用对象；核对不成立的，逐条列明缺失项。",
     `原要求：${clipText(oneLine(item.action), 1200)}`,
   ].join("\n");
