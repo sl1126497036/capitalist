@@ -407,6 +407,15 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         return;
       }
 
+      /*
+       * 会话先于消息登记。
+       *
+       * 没有会话记录时这里会新建会话，并写一条 `chat_session_new` 作为监工消息流的下界；
+       * 若等到消息登记之后再建，本轮这条消息的时间就落在下界之前，刷新后从对话区消失。
+       * 走工作进程会话的请求不建监工会话，保持原样。
+       */
+      const turnSession =
+        via === SUPERVISOR_VIA || !me ? supervisorChatTurnSessionId(ctx.opts.root) : "";
       const brief = reloadBrief(ctx.opts.root);
       /** 先把指令记入流，再算候选图；顺序反了本条消息的图不在编号表里。 */
       const userMsg = recordUserMessage(ctx.opts.root, {
@@ -571,7 +580,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
        */
       const sessionId =
         via === SUPERVISOR_VIA
-          ? supervisorChatTurnSessionId(ctx.opts.root)
+          ? turnSession || supervisorChatTurnSessionId(ctx.opts.root)
           : me
             ? liveSession ||
               workerSessionId(String(me.shard ?? ""), String(me.dispatch ?? ""))
@@ -579,8 +588,9 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
                * 监工会话（capitalist-chat 系）：每一轮进来先过单轮注入上限。会话记录超限时
                * 换代到 `capitalist-chat-w<ws>-c<gen>`，不让历史与历史轮次的工具输出无限累积重发
                * （reload.ts 的 supervisorChatTurnSessionId；换代时写入 context_compacted 事件）。
+               * 本轮会话已在消息登记前取过一次（见 turnSession），这里复用同一代。
                */
-              supervisorChatTurnSessionId(ctx.opts.root);
+              turnSession || supervisorChatTurnSessionId(ctx.opts.root);
       const leaveChat = enterSupervisorAction("chat");
       /*
        * 模型输出首个 token 前不写入任何字节，界面显示为无回复。
