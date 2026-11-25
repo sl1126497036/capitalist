@@ -68,8 +68,13 @@ export function readJson<T>(file: string, fallback: T): T {
   return value;
 }
 
-/** 原子写文本：临时文件 + rename。 */
-function writeAtomic(file: string, text: string): void {
+/**
+ * 原子写文本：临时文件 + rename。
+ *
+ * 供逐行改写这类无法交给 `writeJson` 的场景使用（改写期间要保留解析不了的行）。
+ * 日常读写优先用 {@link writeJson} / {@link writeJsonl}，它们顺带失效读缓存。
+ */
+export function writeAtomic(file: string, text: string): void {
   // 临时文件放进同级的 `.tmp/` 子目录，而不是与被写文件并排。
   //
   // 并排时启动清理要遍历整个目录才能找出 `.tmp`，而 `.capitalist/` 里同时有几百个

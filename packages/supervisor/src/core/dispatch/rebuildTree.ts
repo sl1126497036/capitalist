@@ -79,7 +79,7 @@ function labelOf(d: Dispatch): string {
 /**
  * 读台账，产出重建计划。纯读，不改盘。
  *
- * 分两阶段是刻意的：先看要关哪些、重开哪些、连哪条边，再决定落不落。
+ * 分两步是刻意的：先看要关哪些、重开哪些、连哪条边，再决定落不落。
  * `capitalist tree rebuild --dry` 打印的就是这份计划。
  */
 export function planRebuild(root: string): RebuildPlan {

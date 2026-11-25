@@ -73,11 +73,16 @@ function main() {
   if (!isDir(assets) || readdirSync(assets).length === 0) fail("dist/board-web/assets", "目录为空");
   else ok("dist/board-web/assets");
 
-  const contracts = isDir(join(PKG, "contracts"))
-    ? readdirSync(join(PKG, "contracts")).filter((n) => n.endsWith(".contract.json"))
-    : [];
-  if (contracts.length === 0) fail("contracts", "没有内置契约，capitalist start 无法按名加载");
-  else ok(`contracts（${contracts.join(" / ")}）`);
+  /* 内置守卫放 `policies/`，发布包缺这个目录时 `capitalist start` 按名加载会找不到守卫。 */
+  const guardFiles = [];
+  const guardDir = join(PKG, "policies");
+  if (isDir(guardDir)) {
+    for (const n of readdirSync(guardDir)) {
+      if (n.endsWith(".policy.json")) guardFiles.push(`policies/${n}`);
+    }
+  }
+  if (guardFiles.length === 0) fail("policies", "没有内置守卫，capitalist start 无法按名加载");
+  else ok(`policies（${guardFiles.join(" / ")}）`);
 
   /* 协议文件随包分发；包内副本与仓库根不一致时，发布物与仓库的授权声明会分叉。 */
   for (const name of ["LICENSE", "NOTICE", "THIRD-PARTY-NOTICES"]) {

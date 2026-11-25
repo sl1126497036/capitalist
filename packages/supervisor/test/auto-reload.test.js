@@ -6,7 +6,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { loadContract } = require(join(PKG, "dist/core/contract/contract.js"));
+const { loadPolicy } = require(join(PKG, "dist/core/policy/policy.js"));
 const {
   CAPITALIST_CTX_RELOAD_RATIO,
   applyResumePlan,
@@ -102,26 +102,13 @@ function makeOrderRoot() {
   mkdirSync(join(root, "out"), { recursive: true });
   writeFileSync(join(root, "out", "b.txt"), "done\n", "utf8");
 
-  const contractPath = join(root, "demo.contract.json");
+  const policyPath = join(root, "demo.policy.json");
   writeFileSync(
-    contractPath,
+    policyPath,
     JSON.stringify({
       name: "demo",
       domain: "test",
       context: "工作根 demo。",
-      stages: [
-        {
-          id: "S1",
-          name: "实施",
-          next: "按分片实施",
-          parallel: [
-            { id: "shard-a", title: "甲片", action: "改 src/a.ts" },
-            { id: "shard-b", title: "乙片", action: "改 src/b.ts" },
-            { id: "shard-c", title: "丙片", action: "改 src/c.ts" },
-          ],
-          done: { type: "file_exists", path: "out/b.txt", msg: "缺 b" },
-        },
-      ],
     }),
     "utf8",
   );
@@ -130,9 +117,8 @@ function makeOrderRoot() {
     JSON.stringify({
       version: 2,
       target: "顺序演示",
-      contract: "demo",
-      contract_path: contractPath,
-      stage: "S1",
+      policy: "demo",
+      policy_path: policyPath,
       next_action: "继续实施",
       created_at: new Date().toISOString(),
       retry_resets: { "*": "" },
@@ -141,10 +127,11 @@ function makeOrderRoot() {
   );
 
   // 台账行序 = 原始下发顺序：c 最先，a 最后。c 与 a 都停在 review（报完成待确认）。
+  // 每单各自一条派生链（lineage 就是自己），节点身份即派单 id。
   const rows = [
-    { id: "D-c1", at: "2026-01-01T00:00:00.000Z", stage: "S1", shard: "shard-c", action: "改 src/c.ts", status: "review", attempt: 1 },
-    { id: "D-b1", at: "2026-01-01T00:01:00.000Z", stage: "S1", shard: "shard-b", action: "改 src/b.ts", status: "done", attempt: 1 },
-    { id: "D-a1", at: "2026-01-01T00:02:00.000Z", stage: "S1", shard: "shard-a", action: "改 src/a.ts", status: "review", attempt: 1 },
+    { id: "D-c1", at: "2026-01-01T00:00:00.000Z", shard: "shard-c", action: "改 src/c.ts", status: "review", attempt: 1, lineage: "D-c1" },
+    { id: "D-b1", at: "2026-01-01T00:01:00.000Z", shard: "shard-b", action: "改 src/b.ts", status: "done", attempt: 1, lineage: "D-b1" },
+    { id: "D-a1", at: "2026-01-01T00:02:00.000Z", shard: "shard-a", action: "改 src/a.ts", status: "review", attempt: 1, lineage: "D-a1" },
   ];
   writeFileSync(join(capitalist, "inbox", "dispatch.jsonl"), rows.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
 
@@ -161,14 +148,14 @@ function makeOrderRoot() {
     "utf8",
   );
 
-  writeFileSync(join(capitalist, "ledger", "thread-no.json"), JSON.stringify({ next: 3, ids: { "S1/shard-a": 1, "S1/shard-c": 2, "S1/shard-b": 3 } }), "utf8");
+  writeFileSync(join(capitalist, "ledger", "thread-no.json"), JSON.stringify({ next: 3, ids: { "shard-a": 1, "shard-c": 2, "shard-b": 3 } }), "utf8");
 
-  return { root, contract: loadContract(contractPath) };
+  return { root, policy: loadPolicy(policyPath) };
 }
 
 test("快照记录在途单的原始下发顺序（台账行序），只收在途单", () => {
-  const { root, contract } = makeOrderRoot();
-  const snap = buildReloadSnapshot(root, contract, 1);
+  const { root, policy } = makeOrderRoot();
+  const snap = buildReloadSnapshot(root, policy, 1);
 
   // dispatch_order：台账行序，且只收在途（review）；done 的 D-b1 不进
   assert.deepEqual(
@@ -179,27 +166,27 @@ test("快照记录在途单的原始下发顺序（台账行序），只收在�
   assert.equal(snap.dispatch_order[1].status, "review");
 
   // resume_order：按第一张派单的行序，未完成条目在前；已完成的不占恢复次序
-  assert.deepEqual(snap.resume_order, ["S1/shard-c", "S1/shard-a"]);
+  assert.deepEqual(snap.resume_order, ["D-c1", "D-a1"]);
 });
 
-test("恢复顺序按原始下发顺序，不按任务编号、不按契约顺序", () => {
-  const { root, contract } = makeOrderRoot();
-  const snap = buildReloadSnapshot(root, contract, 1);
+test("恢复顺序按原始下发顺序，不按任务编号、不按守卫顺序", () => {
+  const { root, policy } = makeOrderRoot();
+  const snap = buildReloadSnapshot(root, policy, 1);
   const plan = buildResumePlan(snap);
 
-  assert.deepEqual(plan.reverify.map((r) => r.key), ["S1/shard-c", "S1/shard-a"]);
+  assert.deepEqual(plan.reverify.map((r) => r.key), ["D-c1", "D-a1"]);
   // 在途单没有被判成 pending：它们已有单，恢复的是复验，不是再派一张业务单
   assert.deepEqual(plan.pending.map((p) => p.key), []);
 });
 
 test("applyResumePlan 按原始下发顺序建复验单（台账里 c 的复验单在 a 前面）", () => {
-  const { root, contract } = makeOrderRoot();
-  const snap = buildReloadSnapshot(root, contract, 1);
+  const { root, policy } = makeOrderRoot();
+  const snap = buildReloadSnapshot(root, policy, 1);
   const plan = buildResumePlan(snap);
   mkdirSync(join(root, ".capitalist", "reload"), { recursive: true });
   writeFileSync(join(root, ".capitalist", "reload", "resume.json"), JSON.stringify(plan), "utf8");
 
-  const made = applyResumePlan(root, "S1", () => {});
+  const made = applyResumePlan(root, () => {});
   assert.equal(made, 2);
   const rows = readFileSync(join(root, ".capitalist", "inbox", "dispatch.jsonl"), "utf8")
     .trim()
@@ -207,7 +194,8 @@ test("applyResumePlan 按原始下发顺序建复验单（台账里 c 的复验�
     .map((l) => JSON.parse(l));
   const reverify = rows.filter((r) => r.source === "reverify");
   assert.equal(reverify.length, 2);
-  const order = reverify.map((r) => (r.action.includes("shard-c") ? "c" : "a"));
+  /* 复验单正文带的是被复验那一单的原要求，节点标识（D-c1）不写进正文，因此按原要求认单。 */
+  const order = reverify.map((r) => (r.action.includes("src/c.ts") ? "c" : "a"));
   assert.deepEqual(order, ["c", "a"], "先给最早下发的 shard-c 建复验单");
 });
 
@@ -220,9 +208,9 @@ test("重载标记带触发来源；自动重载记 context_overflow，结束后
   writeFileSync(join(root, "out", "b.txt"), "done\n", "utf8");
   /* 配置 200k：180k 已用才够 85% 阈值。 */
   writeFileSync(join(capitalist, "runtime", "supervisor.json"), JSON.stringify({ supervisor_context_limit: 200_000 }), "utf8");
-  const contractPath = join(root, "demo.contract.json");
+  const policyPath = join(root, "demo.contract.json");
   writeFileSync(
-    contractPath,
+    policyPath,
     JSON.stringify({
       name: "demo",
       domain: "test",
@@ -236,8 +224,8 @@ test("重载标记带触发来源；自动重载记 context_overflow，结束后
     JSON.stringify({
       version: 2,
       target: "触发来源演示",
-      contract: "demo",
-      contract_path: contractPath,
+      policy: "demo",
+      policy_path: policyPath,
       stage: "S1",
       next_action: "继续",
       created_at: new Date().toISOString(),
@@ -245,10 +233,10 @@ test("重载标记带触发来源；自动重载记 context_overflow，结束后
     }),
     "utf8",
   );
-  const contract = loadContract(contractPath);
+  const policy = loadPolicy(policyPath);
 
   // 手动重载：trigger = manual
-  await beginReload(root, contract, { holdSec: 0 });
+  await beginReload(root, policy, { holdSec: 0 });
   assert.equal(reloadStatus(root).active, false);
   assert.ok(existsSync(join(root, ".capitalist", "reload", "snapshot.json")));
   const events = readFileSync(join(capitalist, "ledger", "events.jsonl"), "utf8")
@@ -261,7 +249,7 @@ test("重载标记带触发来源；自动重载记 context_overflow，结束后
   // 自动重载：trigger = context_overflow
   recordSupervisorContext(root, 180_000, 200_000);
   assert.equal(shouldAutoReload(root).hit, true);
-  await beginReload(root, contract, { holdSec: 0, trigger: "context_overflow" });
+  await beginReload(root, policy, { holdSec: 0, trigger: "context_overflow" });
   const events2 = readFileSync(join(capitalist, "ledger", "events.jsonl"), "utf8")
     .trim()
     .split("\n")

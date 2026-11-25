@@ -55,7 +55,7 @@ export { buildFeed, buildSnapshot } from "./snapshot";
 export type { ThreadCost, ThreadCostRow } from "./stats";
 export { costTotals, threadCostRows, workerCost } from "./stats";
 
-export type { AlertItem, AlertLevel, AlertQuery, BoardMetrics, SupervisorStageView, SupervisorState, SupervisorStatusView, TaskSummary } from "./views";
+export type { AlertItem, AlertLevel, AlertQuery, BoardMetrics, SupervisorState, SupervisorStatusView, TaskSummary } from "./views";
 export { alertLevelOf, buildAlerts, buildMetrics, buildSupervisorStatus, buildTaskSummaries } from "./views";
 
 export type { TaskBucket, TaskCounts } from "./threads";

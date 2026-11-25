@@ -76,7 +76,8 @@ function installableIds(): HostId[] {
 /**
  * 解析一行输入。
  *
- * 接受编号、逗号或空格分隔的多个编号，以及 `all` / `全部`。直接回车或输入“取消”均按取消处理。
+ * 接受编号，编号之间可用空格、逗号、中文逗号或顿号分隔；也可输入 `all` / `全部` 全选。
+ * 直接回车或输入 `0` / `q` / `quit` / `取消` 均按取消处理。
  */
 function parseSelection(raw: string): Selection {
   const text = raw.trim().toLowerCase();
@@ -119,7 +120,7 @@ export async function pickAgents(opts: {
   /* 缩进统一两格：标题、版本行、选项、输入提示同基准。 */
   const lines: string[] = ["", BANNER, ""];
   if (VERSION) lines.push(`  capitalist ${VERSION}`);
-  lines.push("", `  选择要${verb}的宿主（可多选，编号以空格分隔）`, "");
+  lines.push("", `  选择要${verb}的宿主（可多选，编号以空格、逗号、中文逗号或顿号分隔）`, "");
   /* 标签按最大宽度加 2 补齐，最短与最长标签同标记至少隔 4 个空格，标记列保持对齐。 */
   const labelWidth = Math.max(...AGENT_GROUPS.map((group) => group.label.length));
   AGENT_GROUPS.forEach((group, index) => {
@@ -134,7 +135,7 @@ export async function pickAgents(opts: {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const raw = await rl.question(`  请输入编号 [0-${AGENT_GROUPS.length + 1}]：`);
+      const raw = await rl.question(`  请输入编号 [0-${AGENT_GROUPS.length + 1}]，或输入 all / 全部 全选、0 / q / quit / 取消 退出：`);
       const picked = parseSelection(raw);
       if (picked.kind === "cancel") return null;
       if (picked.kind === "agents") return picked.ids;

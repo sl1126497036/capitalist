@@ -16,11 +16,11 @@ const { join, resolve } = require("node:path");
 const PKG = resolve(__dirname, "..");
 const board = require(join(PKG, "dist/supervisor/board"));
 const core = require(join(PKG, "dist/core/record/supervisor"));
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-worker-model-"));
-  createTaskRoot({ target: "换模型", contractSpec: "minimal", root, supervisor: false });
+  createTaskRoot({ target: "换模型", policySpec: "minimal", root, supervisor: false });
   return root;
 }
 
@@ -141,13 +141,12 @@ test("清理只动本分片：别的分片的待生效设定保留", () => {
   assert.equal(kept.shard, "s2");
 });
 
-test("补派沿用用户切过的模型，别的分片与阶段不受影响", () => {
+test("补派沿用用户切过的模型，别的分片不受影响", () => {
   const { pinnedModelOf } = require(join(PKG, "dist/core/dispatch/pinModel.js"));
   const root = sandbox();
   const id = makeDispatch(root);
   switchModel(root, { id, model: "glm-5.3" });
 
-  assert.equal(pinnedModelOf(root, "build", "s1"), "glm-5.3", "同一线程的补派要沿用");
-  assert.equal(pinnedModelOf(root, "build", "s2"), "", "别的分片不受影响");
-  assert.equal(pinnedModelOf(root, "review", "s1"), "", "阶段推进后回到契约取值");
+  assert.equal(pinnedModelOf(root, "s1"), "glm-5.3", "同一线程的补派要沿用");
+  assert.equal(pinnedModelOf(root, "s2"), "", "别的分片不受影响");
 });

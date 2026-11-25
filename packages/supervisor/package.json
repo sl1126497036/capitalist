@@ -1,7 +1,7 @@
 {
   "name": "capitalist",
-  "version": "0.1.51",
-  "description": "Supervise long-running AI tasks from outside the model: contracts, stage gates, redlines, ledgers, and a review queue.",
+  "version": "0.1.52",
+  "description": "Supervise long-running AI tasks from outside the model: guards (redlines and local boundaries), task trees, ledgers, and a review queue.",
   "license": "Apache-2.0",
   "author": {
     "name": "sl1126497036",
@@ -22,11 +22,11 @@
     "agent-orchestration",
     "supervisor",
     "long-running",
-    "stage-gate",
     "redline",
     "hooks",
     "cli",
-    "typescript"
+    "typescript",
+    "task-tree"
   ],
   "engines": {
     "node": ">=18.17"
@@ -48,7 +48,7 @@
   },
   "files": [
     "dist",
-    "contracts",
+    "policies",
     "skill",
     "scripts/vendor-skill.mjs",
     "scripts/clean-dist.mjs",

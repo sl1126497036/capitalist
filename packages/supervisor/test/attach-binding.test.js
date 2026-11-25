@@ -10,7 +10,7 @@ const PKG = resolve(__dirname, "..");
 const { buildThreadMessages } = require(join(PKG, "dist/supervisor/board"));
 const { appendDirective, listDirectives } = require(join(PKG, "dist/core/dispatch/commands.js"));
 const { appendDispatch, readDispatches } = require(join(PKG, "dist/core/record/supervisor.js"));
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const { loadState } = require(join(PKG, "dist/core/record/state.js"));
 const { readJsonl } = require(join(PKG, "dist/core/record/json.js"));
 const { eventsPath } = require(join(PKG, "dist/core/record/ledger.js"));
@@ -135,14 +135,14 @@ const OTHER = ".capitalist/attachments/other.png";
 
 function bindSandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-bind-"));
-  createTaskRoot({ target: "附件绑定", contractSpec: "minimal", root });
+  createTaskRoot({ target: "附件绑定", policySpec: "minimal", root });
   return root;
 }
 
 async function runDirectives(root) {
   await loop.__testing.applySupervisorDirectives({
     root,
-    contract: { stages: [], data: {} },
+    policy: { data: {} },
     state: loadState(root),
     wopts: {},
     concurrency: null,

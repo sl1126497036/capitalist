@@ -8,7 +8,7 @@ import MdBlocks from "./MdBlocks.js";
 
 const props = defineProps({
   text: { type: String, default: "" },
-  /** Map<原始编号, { no, threadId, title, status, stage, dispatch, worker }> */
+  /** Map<原始编号, { no, threadId, title, status, dispatch, worker }> */
   refs: { type: Map, default: () => new Map() },
   /** 是否按受控 Markdown 渲染；结构化事件正文保持纯文本。 */
   md: { type: Boolean, default: false },

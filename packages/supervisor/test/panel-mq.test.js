@@ -6,14 +6,14 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { appendMq } = require("../dist/core/dispatch/mq");
 const { recordEvent } = require("../dist/core/record/ledger");
 const { buildThreadMessages } = require("../dist/supervisor/board");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-mq-"));
-  createTaskRoot({ target: "申报面板", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "申报面板", policySpec: "minimal", root: base });
   for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
   mkdirSync(join(base, ".capitalist", "runtime"), { recursive: true });
   mkdirSync(join(base, ".capitalist", "ledger"), { recursive: true });

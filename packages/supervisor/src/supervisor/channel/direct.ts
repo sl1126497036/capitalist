@@ -40,7 +40,6 @@ export const CAPITALIST_ACTIONS = [
   "wake",
   /* 作废一张单：结束该单、结束进程且不再重派（`DO: cancel #65`）。 */
   "cancel",
-  "skip",
   "ask",
   "instruct",
 ] as const;
@@ -78,6 +77,12 @@ export interface SupervisorDirective {
    * 标题由派单方给出，不从正文摘要推测。缺字段的记录按未写处理，建单侧走摘要兜底。
    */
   title?: string;
+  /**
+   * 本单验收判据（`ACCEPTANCE:` 行），仅 `dispatch` 消费，建单时写入台账 `acceptance` 字段。
+   *
+   * 随派单下发到执行侧，也是审查侧判断报告能否结束的依据。未写时按通用口径审。
+   */
+  acceptance?: string;
   /**
    * 指令来源消息标识与组单时选中的附件。`dispatch` 造单优先用 `atts`；
    * `msg_id` 仅在无 `atts` 时用于回查该消息的附件。
@@ -174,7 +179,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     if (/^(retry|重派|重试)(任务|单)?$/.test(head)) return "retry";
     if (/^(redo|重开|返工|重新执行|重新跑|再来一遍)(任务|单)?$/.test(head)) return "redo";
     if (/^(queue|插队|排前面|排到前面|插到前面)$/.test(head)) return "queue";
-    if (/^(skip|跳过)$/.test(head)) return "skip";
+    if (/^(skip|跳过)$/.test(head)) return null;
     if (/^(diagnose|诊断|自查|排查|查因)$/.test(head)) return "diagnose";
     if (/^(fix|修复|自我修复|修卡点|自修复)$/.test(head)) return "fix";
     if (/^(ask|问|询问|提问)$/.test(head)) return "ask";
@@ -203,7 +208,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     const looksChinese = /[\u4e00-\u9fa5]/.test(raw) && raw.length >= 6;
     if (looksChinese) return { action: "instruct" as SupervisorAction, arg: raw, confirm: false };
     return {
-      error: `未知动作“${head || raw}”：请改用支持的指令`,
+      error: `未知动作“${head || raw}”：请改用支持的指令，可用动作见界面快捷清单`,
     };
   }
 
@@ -214,7 +219,7 @@ export function parseSupervisorCommand(text: string): { action: SupervisorAction
     rest = rest.replace(/(^|\s)(confirm|确认)\s*$/i, "").trim();
   }
 
-  if ((action === "set-next" || action === "retry" || action === "skip") && !rest) {
+  if ((action === "set-next" || action === "retry") && !rest) {
     return { error: `${action} 缺少参数` };
   }
   if (action === "amend" && !rest) {
@@ -255,6 +260,8 @@ export function appendSupervisorDirective(
     target?: string;
     /** 派单标题（只有 dispatch 用，来自 `TITLE:` 行）。超长与空值在建单侧统一处理。 */
     title?: string;
+    /** 验收判据（只有 dispatch 用，来自 `ACCEPTANCE:` 行）。 */
+    acceptance?: string;
     /** 前置派单编号 / id（只有 dispatch 用，来自 `AFTER:` 行）。 */
     after?: string[];
     /** 父派单编号 / id 与挂边理由（只有 dispatch 用，来自 `PARENT:` / `PARENT_REASON:` 行）。 */
@@ -278,7 +285,7 @@ export function appendSupervisorDirective(
 
   if (explicit) {
     if (!(CAPITALIST_ACTIONS as readonly string[]).includes(explicit)) {
-      return { ok: false, error: `未知动作“${explicit}”：请改用支持的指令` };
+      return { ok: false, error: `未知动作“${explicit}”：请改用支持的指令，可用动作见界面快捷清单` };
     }
     action = explicit as SupervisorAction;
   } else {
@@ -315,6 +322,9 @@ export function appendSupervisorDirective(
   /* 标题只存原文，长度与可用性由建单侧 `declaredTitle` 统一判定。 */
   const declared = String(input.title ?? "").trim();
   if (declared) rec.title = declared;
+  /* 验收判据只存原文：怎么写、够不够清楚由审查侧判定，解析层不做语义裁剪。 */
+  const acc = String(input.acceptance ?? "").trim();
+  if (acc && !/^(none|no|无|-|—)$/i.test(acc)) rec.acceptance = acc;
   /* `PARENT: none` 等价于未写，不落字段；`parent_reason` 单独保存，标出建立该树边的依据。 */
   const parentRef = String(input.parent ?? "").trim();
   if (parentRef && !/^(none|no|无|-|—)$/i.test(parentRef)) {

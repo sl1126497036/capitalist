@@ -18,7 +18,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { loadState } = require("../dist/core/record/state");
 const { appendSupervisorDirective, listSupervisorDirectives } = require("../dist/supervisor/channel/direct");
 const { dispatchOfThreadNo } = require("../dist/supervisor/usage/threadNo");
@@ -27,7 +27,7 @@ const loop = require("../dist/supervisor/loop");
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-redo-single-"));
-  createTaskRoot({ target: "重开单飞", contractSpec: "minimal", root });
+  createTaskRoot({ target: "重开单飞", policySpec: "minimal", root });
   for (const dir of [
     "runtime",
     "ledger",
@@ -65,7 +65,7 @@ function seed(root, row) {
 async function runDirectives(root) {
   await loop.__testing.applySupervisorDirectives({
     root,
-    contract: { stages: [], data: {} },
+    policy: { data: {} },
     state: loadState(root),
     wopts: {},
     concurrency: null,

@@ -12,7 +12,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { directPath } = require("../dist/core/dispatch/commands");
 const { buildThreadMessages } = require("../dist/supervisor/board");
 
@@ -33,7 +33,7 @@ const think = (text) =>
  */
 function scenario({ thinking = [], sayOffsets = [], status = "running" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-think-"));
-  createTaskRoot({ target: "思考切块测试", contractSpec: "minimal", root });
+  createTaskRoot({ target: "思考切块测试", policySpec: "minimal", root });
 
   const startedAt = new Date(Date.now() - 60_000).toISOString();
   capitalist.appendDispatch(root, {
@@ -123,7 +123,7 @@ test("插话落在两段思考之间：切成两块，各归各的", () => {
 test("增量请求也要带回思考块：时间是插值，不能按游标过滤", () => {
   /*
    * 思考块的 `at` 是按段序号插值出来的，可能早于游标。按 `> since` 过滤会让界面上永远
-   * 看不到它（只剩工具行），只有整页刷新才出现：这正是“这一段没有思考过程”的来源。
+   * 看不到它（只剩工具行），只有整页刷新才出现：这是“这一段没有思考过程”的来源。
    */
   const s = scenario({ thinking: ["先看结构", "再改代码"], sayOffsets: [30] });
   const since = s.page.next_since;

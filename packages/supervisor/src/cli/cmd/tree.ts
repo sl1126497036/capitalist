@@ -13,10 +13,10 @@ import { cmdTreeGroup, cmdTreeMove } from "./treeGroup";
 /** 派单/组/进程号显示：统一经 nodeRef.label 分派，不在此处各自拼 `#` 或补零。 */
 const noOf = nodeLabel;
 
-/** 只要任务根：树相关命令不依赖 state / 契约，台账在就能看。 */
+/** 只要任务根：树相关命令不依赖 state / 守卫，台账在就能看。 */
 function rootOf(p: Parsed): string {
   const root = flagString(p, "root") ?? findRoot();
-  if (!root) throw new Error("当前不在任何受监督任务内。开工：capitalist start <目标> --contract <任务列表名>");
+  if (!root) throw new Error("当前不在任何受监督任务内。开工：capitalist start <目标> --policy <守卫名>");
   return root;
 }
 

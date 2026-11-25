@@ -1,7 +1,7 @@
 /**
  * 看板服务端共享类型：启动参数、启动结果与路由上下文。
  *
- * 路由处理函数只认这份契约，不引用 index.ts，避免入口与路由互相依赖。
+ * 路由处理函数只认这份守卫，不引用 index.ts，避免入口与路由互相依赖。
  */
 
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
@@ -38,7 +38,7 @@ export interface Served {
  *
  * `clear` 挂在函数上而不是单独加一个 ctx 字段：路由分发每处都手写
  * `{ req, res, url, opts, cachedView }`，多一个字段要改二十处调用点，
- * 挂在已有对象上则写动作只需要 `ctx.cachedView.clear()`。
+ * 挂在已有对象上则写动作调用 `ctx.cachedView.clear()`。
  */
 export type CachedView = (<T>(key: string, ttlMs: number, build: () => T) => T) & { clear: () => void };
 

@@ -1,4 +1,4 @@
-import { hasCustomContract } from "../../core/contract/customContract";
+import { hasCustomPolicy } from "../../core/policy/customPolicy";
 import { loadState } from "../../core/record/state";
 import { listDirectives } from "../../core/dispatch/commands";
 import { isMsgNo, msgIdScope, msgTaskNo } from "../../core/message/msgId";
@@ -10,7 +10,8 @@ import { readWorkerEvents, FRESH_LOG_SEC, logIdleSec, chunkWorkerLines, readJson
 import { fingerprint, maskThreadMessage, toolSummary, verdictText } from "./render";
 import { ThreadMessage } from "./snapshot";
 import { BOARD_READ_TTL_MS, atTs, attachmentsOf, eventsFile, listWorkersBoard, readDispatchesBoard } from "./sources";
-import { taskKeyOf } from "./state";
+import { laneKeyOf } from "../../core/dispatch/commands";
+import { parseThreadKey } from "./state";
 import { viewId } from "./viewId";
 import { eventRef } from "./eventMsg";
 import { directiveDelivery } from "./delivery";
@@ -30,10 +31,10 @@ export interface ThreadContext {
   /** 事件台账的 text 只留前 400 字，任务面板按申报 id 回查原文显示。 */
   mqById: Map<string, Record<string, unknown>>;
   triaged: Set<string>;
-  /** 派单 id 到任务编号只读一次编号表，与任务列表同源。 */
+  /** 派单 id 到任务编号只读一次编号表，与守卫同源。 */
   nos: Map<string, string>;
-  /** 用户是否自己写了任务列表；默认任务列表下不描述阶段推进这类契约过程。 */
-  customContract: boolean;
+  /** 用户是否自己写了守卫；默认守卫下不描述守卫过程。 */
+  customPolicy: boolean;
 }
 
 export const messageContextCache = new Map<string, { at: number; ctx: ThreadContext }>();
@@ -104,7 +105,7 @@ export function buildMessageContext(root: string): ThreadContext {
     mqById,
     triaged,
     nos: dispatchNoTable(root),
-    customContract: hasCustomContract(loadState(root)?.contract),
+    customPolicy: hasCustomPolicy(loadState(root)?.policy),
   };
 }
 
@@ -129,53 +130,34 @@ export function threadMessages(
   shard: string,
   opts: ThreadMessageOptions = {},
 ): { messages: ThreadMessage[]; total: number; next_since: number } {
-  const { customContract } = ctx;
-  let s = shard;
-  let taskStage = "";
-  if (!s && threadId.startsWith("shard:")) s = threadId.slice(6);
-  let lineageTail = "";
-  if (threadId.includes("/")) {
-    const parts = threadId.split("/");
-    /** 阶段从任务键里取，调用方另给 shard 也要能认回原键。 */
-    taskStage = String(parts[0] ?? "").trim().toLowerCase();
-    if (!s) {
-      const tail = String(parts[1] ?? "").trim().toLowerCase();
-      if (tail === "main") {
-        s = "";
-      } else if (/^x[0-9a-z]{3,}$/.test(tail) && !ctx.workers.some((w) => String(w.shard ?? "").trim().toLowerCase() === tail)) {
-        s = "";
-        lineageTail = tail.slice(1);
-      } else {
-        s = tail;
-      }
-    }
-  }
+  const { customPolicy } = ctx;
+  const rawKey = threadId.trim().toLowerCase();
+  const { shard: s, lineageTail } = parseThreadKey(
+    threadId,
+    shard,
+    ctx.workers.map((w) => String(w.shard ?? "")),
+  );
 
   const msgs: ThreadMessage[] = [];
   /** 事件补号器：一次重建内按源顺序取号，重建后不换号。 */
   const nextMsgId = msgIdScope();
   const dispatches = ctx.dispatches;
   const workers = ctx.workers;
-  const sameTask = (w: { stage: string; shard?: string | null }): boolean =>
-    (!taskStage || String(w.stage || "").toLowerCase() === taskStage) &&
+  const sameTask = (w: { shard?: string | null }): boolean =>
     String(w.shard ?? "").toLowerCase() === String(s ?? "").toLowerCase();
   const keyOfWorker = (w: WorkerRecord): string => {
     const d = w.dispatch ? dispatches.find((x) => x.id === w.dispatch) : undefined;
-    /** 与建端同一份实现（taskKeyOf），不另算一份。 */
-    return taskKeyOf(w.stage, w.shard, String((d as { lineage?: string } | undefined)?.lineage ?? ""));
+    /** 与建端同一份实现（laneKeyOf），不另算一份。 */
+    return laneKeyOf({ shard: w.shard, lineage: String((d as { lineage?: string } | undefined)?.lineage ?? "") });
   };
-  const wantKey = threadId.trim().toLowerCase();
-  /** 带斜杠的是任务键，其余是老的工作进程 id 或 shard:xxx。 */
-  const isTaskKey = threadId.includes("/");
-  const byKey = isTaskKey
-    ? [...workers]
-        .filter((w) => keyOfWorker(w) === wantKey)
-        .sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0]
-    : undefined;
+  const wantKey = rawKey;
+  /* 按线程键找最近一个进程；threadId 是进程 id 时这里自然为空，不必先分类型。 */
+  const byKey = [...workers]
+    .filter((w) => keyOfWorker(w) === wantKey)
+    .sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
   const sameLineage = lineageTail
     ? [...workers]
         .filter((w) => {
-          if (taskStage && String(w.stage || "").trim().toLowerCase() !== taskStage) return false;
           if (String(w.shard ?? "").trim()) return false;
           const d = w.dispatch ? dispatches.find((x) => x.id === w.dispatch) : undefined;
           const lin = String((d as { lineage?: string } | undefined)?.lineage ?? "");
@@ -188,25 +170,22 @@ export function threadMessages(
     workers.find((w) => w.id === threadId) ??
     byKey ??
     sameLineage ??
-    (!isTaskKey && (s || taskStage)
+    (s
       ? [...workers].filter(sameTask).sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0]
       : undefined);
   const tid = threadId || worker?.id || (s ? `shard:${s}` : "");
 
   const keyOfDispatch = (d: Dispatch): string =>
-    taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? ""));
+    laneKeyOf({ shard: d.shard, lineage: String((d as { lineage?: string }).lineage ?? "") });
   const related = new Set<string>();
   for (const d of dispatches) {
     if (worker) {
       if (d.worker === worker.id || d.id === worker.dispatch) related.add(d.id);
       continue;
     }
-    if (isTaskKey) {
-      /** 无执行者的任务键线程按同一个键认领派单。 */
-      if (keyOfDispatch(d) === wantKey) related.add(d.id);
-      continue;
-    }
-    if (s && d.shard === s) related.add(d.id);
+    /* 线程键相同的派单归这条线程；老链接只带分片或派单 id 时按两者兼容。 */
+    if (keyOfDispatch(d) === wantKey) related.add(d.id);
+    else if (s && d.shard === s) related.add(d.id);
     else if (!s && d.id === threadId) related.add(d.id);
   }
 
@@ -443,7 +422,7 @@ export function threadMessages(
       continue;
     }
     if (name === "dispatch_open") continue;
-    const text = verdictText(e, ctx.mqById, ctx.nos, { customContract });
+    const text = verdictText(e, ctx.mqById, ctx.nos, { customPolicy });
     if (!text.trim()) continue;
     /* 事件身份与监工事件流同源：自带消息号优先，可引用事件补号，其余按视图块。 */
     const ref = eventRef(e, { taskNo: eventTaskNoOf(e), base: tid, nextId: nextMsgId });
@@ -493,7 +472,8 @@ export function threadMessages(
       for (const d of dispatches) {
         if (String(d.shard ?? "") === rshard) keys.add(keyOfDispatch(d));
       }
-      if (taskStage) keys.add(taskKeyOf(taskStage, rshard));
+      /* 分片上可能暂时没有在册派单，线程键仍要能认领落在该分片上的插话。 */
+      keys.add(laneKeyOf({ shard: rshard }));
     }
     return keys;
   };
@@ -523,7 +503,7 @@ export function threadMessages(
      */
     const delivery = directiveDelivery(r);
     const deliveryText = ((): string => {
-      if (delivery === "bad") return "未投递，所属派单已随阶段推进作废";
+      if (delivery === "bad") return "未投递，所属派单已终结";
       if (delivery === "ok") {
         const base = String(r.consumed_via ?? "") === "hook" ? "已送达执行中的进程" : "已并入派单";
         const outcome = String((r as { outcome?: unknown }).outcome ?? "");

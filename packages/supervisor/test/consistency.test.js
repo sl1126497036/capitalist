@@ -1,4 +1,4 @@
-/** 跨实现一致性：同一份契约、同一批命令，Python 与 TypeScript 必须给出相同结论。 */
+/** 跨实现一致性：同一份守卫、同一批命令，Python 与 TypeScript 必须给出相同结论。 */
 
 const test = require("node:test");
 const assert = require("node:assert");
@@ -10,10 +10,10 @@ const { join, resolve } = require("node:path");
 const PKG = resolve(__dirname, "..");
 const REPO = resolve(PKG, "..", "..");
 // The Python engine is archived rather than shipped. When present, it is used as
-// an independent oracle for the same contract; when absent, the comparison skips.
+// an independent oracle for the same guard; when absent, the comparison skips.
 const PY_SUPERVISOR = join(REPO, "_archive", "python-engine", "supervisor", "scripts", "capitalist.py");
 const TS_CLI = join(PKG, "dist", "cli", "main.js");
-const CONTRACT = join(PKG, "contracts", "minimal.contract.json");
+const POLICY = join(PKG, "policies", "minimal.policy.json");
 
 /** 命令样本：覆盖红线命中、需报批、正常命令三类。 */
 const SAMPLES = [
@@ -39,7 +39,7 @@ const pyCache = new Map();
 function pythonDecision(root, text) {
   const cached = pyCache.get(text);
   if (cached) return cached;
-  const r = spawnSync("python", [PY_SUPERVISOR, "gate", "--text", text, "--json", "--contract", CONTRACT], {
+  const r = spawnSync("python", [PY_SUPERVISOR, "gate", "--text", text, "--json", "--policy", POLICY], {
     cwd: root,
     encoding: "utf8",
   });
@@ -62,7 +62,7 @@ function pythonDecision(root, text) {
 }
 
 function tsDecision(root, text) {
-  const r = spawnSync("node", [TS_CLI, "gate", "--text", text, "--json", "--contract", CONTRACT], {
+  const r = spawnSync("node", [TS_CLI, "gate", "--text", text, "--json", "--policy", POLICY], {
     cwd: root,
     encoding: "utf8",
   });

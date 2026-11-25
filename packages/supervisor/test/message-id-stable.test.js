@@ -16,7 +16,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { isMsgNo } = require("../dist/core/message/msgId");
 const { buildThreadMessages } = require("../dist/supervisor/board");
 const { buildSupervisorLog } = require("../dist/supervisor/board");
@@ -47,7 +47,7 @@ const think = (body) =>
 
 function scenario() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-msgid-"));
-  createTaskRoot({ target: "消息身份稳定性", contractSpec: "minimal", root });
+  createTaskRoot({ target: "消息身份稳定性", policySpec: "minimal", root });
   for (const d of [
     "runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions",
     "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root",

@@ -3,7 +3,6 @@ import { appendDirective, isWorkerRef } from "../../core/dispatch/commands";
 import { recordEvent } from "../../core/record/ledger";
 import { msgId } from "../../core/message/msgId";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
-import { loadState } from "../../core/record/state";
 import { chatDirectionOf } from "./chatDirection";
 import { listWorkers, readDispatches, Dispatch } from "../../core/record/supervisor";
 import { pauseAll, resumeAll, type PauseOutcome, type ResumeOutcome } from "../../core/record/pause";
@@ -94,7 +93,6 @@ export function writeQuotedDirect(
     text: input.text,
     shard: input.shard ? input.shard : null,
     ...(input.thread ? (isWorkerRef(input.thread) ? { thread: input.thread } : { lane: input.thread }) : {}),
-    stage: loadState(root)?.stage ?? "",
     ...(input.lineage ? { lineage: input.lineage } : {}),
     ...(input.target ? { target: input.target } : {}),
     msgId: identity,
@@ -137,7 +135,7 @@ export function reopenDispatch(root: string, thread: string, shard = ""): { ok: 
   if (r.code !== 0) {
     return { ok: false, reason: (r.stderr || "").slice(0, 120) || "update 未返回原因" };
   }
-  /** 唤醒要盖时间戳，否则阶段推进时 supersedeStaleDispatches 会在下一轮作废在途单。 */
+  /** 唤醒要盖时间戳：全局暂停期间监工每轮补暂停标记，靠它跳过用户已单独唤醒的单。 */
   runCli(["update", "inbox/dispatch", String(last.id), "wake_at", new Date().toISOString(), "--root", root]);
   recordEvent(root, "dispatch_wake", {
     dispatch: last.id,

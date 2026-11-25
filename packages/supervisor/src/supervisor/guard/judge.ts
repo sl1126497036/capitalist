@@ -9,7 +9,6 @@
 
 import { existsSync } from "node:fs";
 
-import type { Contract } from "../../core/contract/contract";
 import { appendDirective } from "../../core/dispatch/commands";
 import { appendAsk } from "../../core/dispatch/inbox";
 import {
@@ -21,7 +20,6 @@ import {
 import { normLocal } from "../../core/guard/localGuard";
 import { isInside } from "../../core/record/paths";
 import { loadSupervisor, readDispatches } from "../../core/record/supervisor";
-import type { TaskState } from "../../core/types";
 import { askModel } from "../channel/llm";
 import { parseActions } from "../judge/brain";
 import { brainSessionOf } from "../judge/brainLane";
@@ -34,10 +32,9 @@ const MAX_PER_TICK = 2;
 const ACTIONS = ["allow", "deny", "escalate"] as const;
 
 /** 裁决所需的事实。路径只写位置与存在性，不含文件内容。 */
-function factsOf(root: string, contract: Contract, state: TaskState, rec: GuardRequest): string[] {
+function factsOf(root: string, rec: GuardRequest): string[] {
   const rootNorm = normLocal(root);
   const dispatch = readDispatches(root).find((d) => d.id === rec.dispatch);
-  const stage = contract.stages.find((s) => s.id === (rec.stage || state.stage));
   const paths = rec.paths.map((p) => {
     const np = normLocal(p, root);
     const where = isInside(np, rootNorm) ? "任务根内" : "任务根外";
@@ -55,7 +52,7 @@ function factsOf(root: string, contract: Contract, state: TaskState, rec: GuardR
     `申请理由：${rec.reason || "（未补充）"}`,
     `工作进程：${rec.worker || "未知"}；派单：${rec.dispatch || "无"}`,
     dispatch ? `派单目标：${String(dispatch.action ?? "").slice(0, 300)}` : "派单目标：无记录",
-    `当前阶段：${stage ? `${stage.id} ${stage.name}，目标 ${stage.goal}` : rec.stage || "未知"}`,
+    dispatch ? `所属分片：${String(dispatch.shard ?? "").trim() || "（未划分片）"}` : "",
     `同类申请最近结论：${sameKind.length > 0 ? sameKind.join("；") : "无"}`,
   ];
 }
@@ -75,7 +72,7 @@ function buildPrompt(facts: string[]): string {
     "4. 凭据只看用途是否成立，不要求对方提供内容；用途不成立时拒绝。",
     "5. 无法判定时转给用户，不要默认批准。",
     "",
-    "【输出。只写一条动作，最后一行写理由】",
+    "【输出。三选一写一条 DO 动作，最后一行写 WHY 理由】",
     "  DO allow",
     "  DO deny <替代做法，没有则留空>",
     "  DO escalate <要问用户的一句话>",
@@ -91,14 +88,13 @@ function buildPrompt(facts: string[]): string {
  */
 export function notifyWorker(
   root: string,
-  target: { stage: string; worker: string; dispatch: string; paths: string[] },
+  target: { worker: string; dispatch: string; paths: string[] },
   text: string,
 ): void {
   const dispatch = readDispatches(root).find((d) => d.id === target.dispatch);
   appendDirective(root, {
     text,
     shard: dispatch?.shard ?? null,
-    ...(target.stage ? { stage: target.stage } : {}),
     ...(target.dispatch ? { lineage: target.dispatch } : {}),
     ...(target.dispatch || target.worker ? { target: target.dispatch || target.worker } : {}),
     via: "capitalist",
@@ -108,13 +104,7 @@ export function notifyWorker(
 }
 
 /** 转用户裁决：写进待裁决队列，工作进程停手等回答。 */
-function escalateToUser(
-  root: string,
-  state: TaskState,
-  rec: GuardRequest,
-  question: string,
-  why: string,
-): string {
+function escalateToUser(root: string, rec: GuardRequest, question: string, why: string): string {
   const dispatch = readDispatches(root).find((d) => d.id === rec.dispatch);
   return appendAsk(
     root,
@@ -129,7 +119,6 @@ function escalateToUser(
     ]
       .filter(Boolean)
       .join("\n"),
-    rec.stage || state.stage,
     dispatch?.shard ?? "",
   );
 }
@@ -141,12 +130,10 @@ function escalateToUser(
  */
 async function judgeOne(
   root: string,
-  contract: Contract,
-  state: TaskState,
   rec: GuardRequest,
   out: (line: string) => void,
 ): Promise<boolean> {
-  const facts = factsOf(root, contract, state, rec);
+  const facts = factsOf(root, rec).filter(Boolean);
   const lane = brainSessionOf(root, "guard");
   const r = await askModel({
     prompt: buildPrompt(facts),
@@ -162,7 +149,7 @@ async function judgeOne(
   if (!picked) {
     /* 通道不可用或输出不合格式：不作猜测，交用户裁决。 */
     const why = r.ok ? "监工判定输出无法解析" : String(r.text ?? "判定通道不可用").slice(0, 200);
-    const ask = escalateToUser(root, state, rec, "", why);
+    const ask = escalateToUser(root, rec, "", why);
     appendDecision(root, rec.id, "escalate", "supervisor", why, "", ask);
     out(`[监工] 权限申请 ${rec.id} 转用户裁决：${why}`);
     return true;
@@ -173,7 +160,7 @@ async function judgeOne(
     appendDecision(root, rec.id, "allow", "supervisor", why);
     notifyWorker(
       root,
-      { stage: rec.stage || state.stage, worker: rec.worker, dispatch: rec.dispatch, paths: rec.paths },
+      { worker: rec.worker, dispatch: rec.dispatch, paths: rec.paths },
       `【权限已批准】${rec.paths.join("、")}\n按原命令重试。${why ? `\n理由：${why}` : ""}`,
     );
     out(`[监工] 权限申请 ${rec.id} 批准：${rec.paths.join("、")}`);
@@ -185,7 +172,7 @@ async function judgeOne(
     appendDecision(root, rec.id, "deny", "supervisor", why, alternative);
     notifyWorker(
       root,
-      { stage: rec.stage || state.stage, worker: rec.worker, dispatch: rec.dispatch, paths: rec.paths },
+      { worker: rec.worker, dispatch: rec.dispatch, paths: rec.paths },
       [
         `【权限被拒】${rec.paths.join("、")}`,
         why ? `理由：${why}` : "",
@@ -199,7 +186,7 @@ async function judgeOne(
   }
 
   const question = picked.arg.trim();
-  const ask = escalateToUser(root, state, rec, question, why);
+  const ask = escalateToUser(root, rec, question, why);
   appendDecision(root, rec.id, "escalate", "supervisor", why, "", ask);
   out(`[监工] 权限申请 ${rec.id} 转用户裁决${question ? `：${question}` : ""}`);
   return true;
@@ -214,8 +201,6 @@ async function judgeOne(
  */
 export async function judgeGuardRequests(args: {
   root: string;
-  contract: Contract;
-  state: TaskState;
   out: (line: string) => void;
   max?: number;
 }): Promise<number> {
@@ -223,7 +208,7 @@ export async function judgeGuardRequests(args: {
   let done = 0;
   for (const rec of pending) {
     try {
-      if (await judgeOne(args.root, args.contract, args.state, rec, args.out)) done += 1;
+      if (await judgeOne(args.root, rec, args.out)) done += 1;
     } catch (err) {
       /* 单条失败不阻断其它条；下一轮重试，不写裁决。 */
       args.out(`[监工] 权限申请 ${rec.id} 裁决失败：${String((err as Error).message ?? err)}`);

@@ -10,14 +10,14 @@ import { readJsonlFromTail } from "./logs";
 import { MQ_KIND_LABEL, fingerprint, maskThreadMessage } from "./render";
 import { ThreadRole, ThreadMessage, describeEvent, ledgerOnlyRoot } from "./snapshot";
 import { atTs, attachmentsOf, eventsFile, readDispatchesBoard } from "./sources";
-import { taskKeyOf } from "./state";
+import { laneKeyOf } from "../../core/dispatch/commands";
 import { viewId } from "./viewId";
 import { isMsgNo, msgIdScope, msgTaskNo } from "../../core/message/msgId";
 import { eventRef } from "./eventMsg";
 import { DELIVERED } from "./delivery";
 import { taskNoOfDispatchId } from "../../core/record/tasks";
 import { loadState } from "../../core/record/state";
-import { hasCustomContract } from "../../core/contract/customContract";
+import { hasCustomPolicy } from "../../core/policy/customPolicy";
 
 import { zh } from "./zh";
 import { statSync } from "node:fs";
@@ -33,11 +33,7 @@ export const CAPITALIST_THREAD_ID = "capitalist:main";
 const CAPITALIST_LOG_EVENTS = new Set([
   "dispatch_failed",
   "worker_launch_failed",
-  "debt_settled",
-  "supervisor_advance",
   "supervisor_done",
-  "stage_skipped",
-  "stage_fallback",
   "supervisor_answer",
   "supervisor_chat_ask",
   "supervisor_reply",
@@ -60,7 +56,7 @@ const HEARTBEAT_EVENTS = new Set([
   "worker_looping_killed",
   "worker_heartbeat_rescued", // 心跳恢复
   "worker_reaped",
-  "stage_stalled", // 阶段停滞：看门狗按心跳窗口判的
+  "stalled", // 在途超时：看门狗按心跳窗口判的
 ]);
 
 const CAPITALIST_BAD_EVENTS = new Set([
@@ -69,12 +65,10 @@ const CAPITALIST_BAD_EVENTS = new Set([
 ]);
 
 const CAPITALIST_DECISION_EVENTS = new Set([
-  "stage_skipped",
-  "stage_fallback",
   "retry_held", // 重派审查：卡点未消除时暂不重派。
 ]);
 
-const CAPITALIST_CONCLUSION_EVENTS = new Set(["supervisor_advance", "supervisor_done", "debt_settled"]);
+const CAPITALIST_CONCLUSION_EVENTS = new Set(["supervisor_done"]);
 
 function supervisorTierOf(name: string, e: Record<string, unknown>): "main" | "log" {
   if (name === "supervisor_chat_ask" || name === "supervisor_reply" || name === "supervisor_answer") return "main";
@@ -89,11 +83,10 @@ function supervisorTierOf(name: string, e: Record<string, unknown>): "main" | "l
 
 /** 申报跳转的线程 id 必须与 buildThreadsPage 的 taskKey 逐字一致。 */
 function jumpOf(e: Record<string, unknown>): { jump?: { id: string; label: string } } {
-  const stage = String(e.stage ?? "").trim();
-  if (!stage) return {};
   const shard = String(e.shard ?? "").trim();
   const lineage = String(e.lineage ?? "").trim() || String(e.dispatch ?? "").trim();
-  return { jump: { id: taskKeyOf(stage, shard, lineage), label: shardTitle(shard) || `${stage} 整阶段` } };
+  if (!shard && !lineage) return {};
+  return { jump: { id: laneKeyOf({ shard: shard, lineage: lineage }), label: shardTitle(shard) || "整条任务" } };
 }
 
 function ctxTokenText(n: unknown): string {
@@ -107,11 +100,10 @@ function supervisorEventText(
   name: string,
   e: Record<string, unknown>,
   nos: Map<string, string> | undefined,
-  customContract: boolean,
+  customPolicy: boolean,
 ): string {
   const d = String(e.dispatch ?? "");
   const w = String(e.worker ?? "");
-  const st = String(e.stage ?? "");
   switch (name) {
     case "mq_message": {
       const kind = String(e.kind ?? "");
@@ -139,12 +131,6 @@ function supervisorEventText(
       ]
         .filter(Boolean)
         .join(" - ");
-    }
-    case "gate_eval": {
-      const missing = Array.isArray(e.missing) ? e.missing.map((x) => String(x)) : [];
-      return e.ok === true
-        ? `门槛评估 ${st}：已满足，可以推进`
-        : `门槛评估 ${st}：未达标（${missing.join("；") || "未给出缺失项"}）`;
     }
     case "supervisor_cmd": {
       const ok = e.ok === true;
@@ -184,19 +170,15 @@ function supervisorEventText(
     case "supervisor_reply": {
       return supervisorReplyView(e);
     }
-    case "stage_skipped":
-      /* 默认任务列表下不描述跳步：用户没有阶段这个概念，说了也只是“跳过某一步”的空话。 */
-      return customContract
-        ? `跳过阶段 ${String(e.from ?? "")} -> ${String(e.to ?? "")}（记录待补项，不算达标）`
-        : "";
-    case "contract_reload":
-      return `任务列表热加载：阶段 ${String(e.next_stages ?? "")}，分片 ${String(e.next_shards ?? "?")}`;
-    case "contract_change":
-      return `任务列表变更（编排层）：${String(e.reason ?? "")}`;
-    case "contract_error":
-      return `任务列表解析失败，沿用上一份可用任务列表：${String(e.error ?? "")}`;
-    case "contract_refused":
-      return `任务列表被拒（原因：${zh.kind(e.kind) || "需求层被改动"}），沿用上一份可用任务列表`;
+    /* 旧台账里的 `contract_*` 由 `record/migrate.ts` 在启动时改名，这里只认当前名。 */
+    case "policy_reload":
+      return `守卫热加载：红线 ${String(e.redlines ?? 0)} 条`;
+    case "policy_change":
+      return `守卫变更：${String(e.reason ?? "")}`;
+    case "policy_error":
+      return `守卫解析失败，沿用上一份可用守卫：${String(e.error ?? "")}`;
+    case "policy_refused":
+      return `守卫被拒（原因：${zh.kind(e.kind) || "需求层被改动"}），沿用上一份可用守卫`;
     case "board_serve":
       return `看板已启动：${String(e.url ?? "")}`;
     case "board_reload":
@@ -205,14 +187,12 @@ function supervisorEventText(
       return `${shardTitle(e.shard) || "该分片"}连续重派达到上限 ${String(e.limit ?? "")}，已停下等裁决`;
     case "retry_held":
       return `${shardTitle(e.shard) || "该任务"}卡点未消除，暂不重派：${String(e.why ?? "").slice(0, 120)}`;
-    case "debt_settled":
-      return `补做待补项 ${String(e.count ?? 0)} 条`;
     case "tree_rebuilt":
       return String(e.note ?? "已重建派单树");
     case "gate_eval_placeholder":
       return "";
     default:
-      return describeEvent(e, { customContract });
+      return describeEvent(e, { customPolicy });
   }
 }
 
@@ -290,10 +270,10 @@ export function buildSupervisorLog(
     return ts >= floorTs && ts < cutTs;
   };
   const msgs: ThreadMessage[] = [];
-  /** 单阶段契约没有结束时刻，supervisor_done 整类不上屏，台账照旧保留。 */
+  /** 默认守卫下 supervisor_done 整类不上屏，台账照旧保留。 */
   const ledgerOnly = ledgerOnlyRoot(root);
-  /** 用户是否自己写了任务列表：默认任务列表下不描述阶段推进与跳步。 */
-  const customContract = hasCustomContract(loadState(root)?.contract);
+  /** 用户是否自己写了守卫：默认守卫下不描述守卫过程。 */
+  const customPolicy = hasCustomPolicy(loadState(root)?.policy);
   /** 回执正文里的内部派单 id 按编号表换成界面号。 */
   const nos = dispatchNoTable(root);
   /** 派单消息与 has_older 共用这一份读数。 */
@@ -372,7 +352,7 @@ export function buildSupervisorLog(
         ((e as { from?: unknown }).from as ThreadRole) || (name === "supervisor_chat_ask" ? "user" : "supervisor"),
       kind: name === "supervisor_reply" || name === "supervisor_chat_ask" ? "say" : "verdict",
       /* 脱敏不在本处执行：消息构造完成后统一经 maskThreadMessage 处理，规则集中一处。 */
-      text: supervisorEventText(name, e, nos, customContract),
+      text: supervisorEventText(name, e, nos, customPolicy),
       tool: "",
       cmd: "",
       /** 申报行带状态：待回执/已回执，判定依据是存在 mq_triage。 */

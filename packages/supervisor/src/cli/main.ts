@@ -17,27 +17,19 @@ import { runAuthDiag } from "./cmd/authDiag";
 import { t } from "./lang";
 
 import { buildBrief } from "../core/message/brief";
-import { runCheck } from "../core/contract/checks";
 import { appendDirective, activeTakeover, listDirectives, releaseShard, takeoverShard } from "../core/dispatch/commands";
-import {
-  contractNames,
-  instanceLeaseStatus,
-  isLastStage,
-  leaseTaskName,
-  loadContract,
-  nextStageId,
-  stageById,
-} from "../core/contract/contract";
-import { enterStage, newState } from "../core/contract/init";
+import { policyNames, instanceLeaseStatus, leaseTaskName, loadPolicy } from "../core/policy/policy";
+import { newState } from "../core/policy/init";
 import { INBOX_LEDGER, readInbox } from "../core/dispatch/inbox";
 import { appendJsonl, readJsonl, writeJson } from "../core/record/json";
 import { pauseAll, pausePath, readPause, resumeAll } from "../core/record/pause";
 import { recordEvent, recordViolation } from "../core/record/ledger";
 import { findRoot, isInside, supervisorDir } from "../core/record/paths";
 import { rootDir, inbox as inboxLoc } from "../core/record/locations";
-import { skillDirs } from "../agent/locations";
+import { skillDirs, watchConfigPath } from "../agent/locations";
+import { migrateRoot } from "../core/record/migrate";
 import { describeMode, modeNames, normalizeMode } from "../core/guard/permission";
-import { generateContract, describeGenerated } from "../supervisor/genContract";
+import { generateGuard, describeGenerated } from "../supervisor/genGuard";
 import { loadState, resolveModeFor, saveState, statePath, supervisorDisplayState, SUPERVISOR_STATE_LABEL, updateState } from "../core/record/state";
 import { applyMerges, ensureTaskForDispatch, planMerges, readTasks, summaryLine, syncTaskForDispatch, taskSummary, type TaskState } from "../core/record/tasks";
 import { taskNoLabel } from "../core/record/idMap";
@@ -63,6 +55,7 @@ import { deriveCapabilities } from "../agent/contract";
 import { flagBool, flagNumber, flagString, flagTokens, parse, positionalText, type Parsed } from "./args";
 import { loadOrDie, rootOrDie } from "./cmd/context";
 import { die, write } from "./output";
+import { policyArgOf } from "./policyArg";
 import { COMMAND_HELP, HELP, VERSION } from "./help";
 import { cmdBoard, cmdFeed } from "./cmd/boardCmd";
 import { cmdAuthCheck } from "./cmd/authCheck";
@@ -73,30 +66,30 @@ import { cmdReload } from "./cmd/reloadCmd";
 import { cmdTree } from "./cmd/tree";
 
 function cmdStart(p: Parsed): number {
-  const target = p.positional[0] ?? die(t("Usage: capitalist start <target> --contract <task-list-name>", "用法：capitalist start <目标> --contract <任务列表名>"));
+  const target = p.positional[0] ?? die(t("Usage: capitalist start <target> --policy <guard-name>", "用法：capitalist start <目标> --policy <守卫名>"));
   const rootFlag = flagString(p, "root");
   const existing = findRoot(rootFlag);
 
   if (existing) {
     const st = loadState(existing);
-    write(t(`Existing task root: ${existing}\nTarget: ${st?.target ?? "?"} | Stage: ${st?.stage ?? "?"}\n`, `已有任务根：${existing}\n目标：${st?.target ?? "?"} | 阶段：${st?.stage ?? "?"}\n`));
+    write(t(`Existing task root: ${existing}\nTarget: ${st?.target ?? "?"}\n`, `已有任务根：${existing}\n目标：${st?.target ?? "?"}\n`));
     return cmdStatus({ cmd: "status", positional: [], flags: { root: existing } });
   }
 
-  const spec = flagString(p, "contract");
+  const spec = policyArgOf(p);
   return createRoot(target, spec ?? "minimal", spec === undefined, rootFlag);
 }
 
 function cmdInit(p: Parsed): number {
-  const target = p.positional[0] ?? die(t("Usage: capitalist init <target> --contract <task-list-name>", "用法：capitalist init <目标> --contract <任务列表名>"));
-  const spec = flagString(p, "contract");
+  const target = p.positional[0] ?? die(t("Usage: capitalist init <target> --policy <guard-name>", "用法：capitalist init <目标> --policy <守卫名>"));
+  const spec = policyArgOf(p);
   return createRoot(target, spec ?? "minimal", spec === undefined, flagString(p, "root"));
 }
 
 /** 换目标重开。 */
 function cmdRestart(p: Parsed): number {
   const target = p.positional[0];
-  if (!target) die(t('Usage: capitalist restart "<target>" --contract <task-list-name>', '用法：capitalist restart "<目标>" --contract <任务列表名>'));
+  if (!target) die(t('Usage: capitalist restart "<target>" --policy <guard-name>', '用法：capitalist restart "<目标>" --policy <守卫名>'));
 
   const root = flagString(p, "root") ?? process.cwd();
   const dir = supervisorDir(root);
@@ -108,50 +101,45 @@ function cmdRestart(p: Parsed): number {
     write(t(`Old task root archived: ${dir}.closed.${stamp}\n`, `旧任务根已归档：${dir}.closed.${stamp}\n`));
   }
 
-  const spec = flagString(p, "contract");
-  const contract = loadContract(spec ?? "minimal", skillDirs());
-  if (!contract) die(t(`Task list not found: ${spec ?? "minimal"}`, `未找到任务列表：${spec ?? "minimal"}。`));
+  const spec = policyArgOf(p);
+  const policy = loadPolicy(spec ?? "minimal", skillDirs());
+  if (!policy) die(t(`Guard not found: ${spec ?? "minimal"}`, `未找到守卫：${spec ?? "minimal"}。`));
 
   mkdirSync(rootDir(root), { recursive: true });
   mkdirSync(inboxLoc.dir(root), { recursive: true });
-  saveState(root, newState(target, contract, !spec));
-  write(t(`Task root: ${root}\nTask list: ${contract.name} (${contract.domain || "domain not set"})\nTarget: ${target}\n`, `任务根：${root}\n任务列表：${contract.name}（${contract.domain || "未标注领域"}）\n目标：${target}\n`));
+  saveState(root, newState(target, policy, !spec));
+  write(t(`Task root: ${root}\nGuard: ${policy.name} (${policy.domain || "domain not set"})\nTarget: ${target}\n`, `任务根：${root}\n守卫：${policy.name}（${policy.domain || "未标注领域"}）\n目标：${target}\n`));
   return 0;
 }
 
 /** 建任务根。 */
 function createRoot(target: string, spec: string, fallback: boolean, rootArg?: string): number {
-  const contract = loadContract(spec);
-  if (!contract) {
-    die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `未找到任务列表：${spec}。可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}。`));
+  const policy = loadPolicy(spec);
+  if (!policy) {
+    die(t(`Guard not found: ${spec}\nAvailable: ${policyNames(skillDirs()).join(", ") || "(none)"}`, `未找到守卫：${spec}。可用守卫：${policyNames(skillDirs()).join(", ") || "（无）"}。`));
   }
   const root = rootArg ?? process.cwd();
   if (existsSync(rootDir(root))) die(t(`A supervised task already exists: ${root} (see capitalist status)`, `已存在受监督任务：${root}（用 capitalist status 查看）`));
 
-  const stage = contract.stages[0];
-  if (!stage) die(t(`Task list ${contract.name} defines no stages`, `任务列表 ${contract.name} 没有定义任何阶段`));
-
-  const state = newState(target, contract, fallback);
+  const state = newState(target, policy, fallback);
   mkdirSync(rootDir(root), { recursive: true });
   mkdirSync(inboxLoc.dir(root), { recursive: true });
   saveState(root, state);
 
   write(
-    t(`Task root: ${root}\nTask list: ${contract.name} (${contract.domain || "domain not set"})\n` +
-      `Stage: ${stage.id} ${stage.name}\nNext: ${stage.next ?? ""}\n`,
-    `任务根：${root}\n任务列表：${contract.name}（${contract.domain || "未标注领域"}）\n` +
-      `阶段：${stage.id} ${stage.name}\n下一步：${stage.next ?? ""}\n`),
+    t(`Task root: ${root}\nGuard: ${policy.name} (${policy.domain || "domain not set"})\nNext: ${state.next_action ?? ""}\n`,
+    `任务根：${root}\n守卫：${policy.name}（${policy.domain || "未标注领域"}）\n下一步：${state.next_action ?? ""}\n`),
   );
   if (fallback) {
-    const others = contractNames(skillDirs()).filter((n) => n !== "minimal" && n !== "generic").join("|") || "…";
+    const others = policyNames(skillDirs()).filter((n) => n !== "minimal" && n !== "generic").join("|") || "…";
     write(
       t(
-        `\nNo domain task list specified; the generic one is in use.\n` +
+        `\nNo domain guard specified; the generic one is in use.\n` +
           `      Generic redlines apply, but "what counts as done in this domain" is undefined.\n` +
-          `      For a domain task: capitalist adopt --contract <${others}>\n`,
-        `\n未指定领域任务列表，已使用通用任务列表（generic）。\n` +
+          `      For a domain task: capitalist adopt --policy <${others}>\n`,
+        `\n未指定领域守卫，已使用通用守卫（generic）。\n` +
           `      通用红线生效，但该领域的完成标准未定义。\n` +
-          `      若任务属于明确领域，执行：capitalist adopt --contract <${others}>\n`,
+          `      若任务属于明确领域，执行：capitalist adopt --policy <${others}>\n`,
       ),
     );
   }
@@ -159,100 +147,62 @@ function createRoot(target: string, spec: string, fallback: boolean, rootArg?: s
 }
 
 function cmdAdopt(p: Parsed): number {
-  const spec = flagString(p, "contract") ?? die(t("Usage: capitalist adopt --contract <name|path>", "用法：capitalist adopt --contract <名|路径>"));
+  const spec = policyArgOf(p) ?? die(t("Usage: capitalist adopt --policy <name|path>", "用法：capitalist adopt --policy <名|路径>"));
   const root = rootOrDie(p);
   const { state } = loadOrDie(root);
-  const contract = loadContract(spec, skillDirs());
-  if (!contract) die(t(`Task list not found: ${spec}\nAvailable: ${contractNames(skillDirs()).join(", ") || "(none)"}`, `未找到任务列表：${spec}。可用任务列表：${contractNames(skillDirs()).join(", ") || "（无）"}。`));
+  const policy = loadPolicy(spec, skillDirs());
+  if (!policy) die(t(`Guard not found: ${spec}\nAvailable: ${policyNames(skillDirs()).join(", ") || "(none)"}`, `未找到守卫：${spec}。可用守卫：${policyNames(skillDirs()).join(", ") || "（无）"}。`));
 
-  const prev = state.contract;
-  const keepStage = flagBool(p, "keep-stage");
+  const prev = state.policy;
   const ok = updateState(root, (s) => {
-    s.contract = contract.name;
-    s.contract_path = contract.file;
-    s.contract_fallback = false;
-    if (!keepStage) {
-      const stage = contract.stages[0];
-      if (stage) enterStage(s, stage);
-    }
+    s.policy = policy.name;
+    s.policy_path = policy.file;
+    s.policy_fallback = false;
   });
   if (ok === null) die(t("State write conflict; the retry failed too. Run the command again", "状态写入冲突，重试后仍未成功：请再执行一次"));
 
   const after = loadState(root) ?? state;
   write(
-    `任务列表：${prev} -> ${contract.name}（${contract.domain || "未标注领域"}）\n阶段：${after.stage}\n下一步：${after.next_action}\n`,
-  );
-  return 0;
-}
-
-/** 推进阶段。 */
-function cmdAdvance(p: Parsed): number {
-  const root = rootOrDie(p);
-  const { state, contract } = loadOrDie(root);
-  const sid = state.stage;
-  const stage = stageById(contract, sid);
-  const check = runCheck(stage?.done as Record<string, unknown> | undefined, root);
-  const force = flagBool(p, "force");
-
-  if (!check.ok && !force) {
-    recordViolation(root, {
-      rule: "STAGE_SKIP",
-      label: `${sid} 阶段门槛未达标，不可推进。`,
-      fix: `先把这些门槛项补齐再 advance：${check.missing.slice(0, 5).join("；")}`,
-      evidence: check.missing.join("；"),
-      decision: "REJECT",
-      kind: "flow",
-      session: process.env.CAPITALIST_SESSION_ID ?? "",
-      stage: sid,
-    });
-    process.stderr.write(t(`${sid} ${stage?.name ?? ""} gate not met, not advancing:\n`, `${sid} ${stage?.name ?? ""} 未达门槛，不推进：\n`));
-    for (const m of check.missing) process.stderr.write(`  - ${m}\n`);
-    process.stderr.write(t('\nTo force anyway (recorded in the event log): capitalist advance --force\n', '\n确需强制推进（会记入事件日志）：capitalist advance --force\n'));
-    return 2;
-  }
-
-  if (!check.ok) {
-    recordEvent(root, "force_advance", { from: sid, missing: check.missing });
-    recordViolation(root, {
-      rule: "STAGE_SKIP_FORCE",
-      label: `用 --force 跳过 ${sid} 的阶段验收`,
-      fix: "强制推进前把遗留项与理由写入 memory.md；跳过验收会留下未核对的风险。",
-      evidence: check.missing.join("；"),
-      decision: "FORCED",
-      kind: "flow",
-      session: process.env.CAPITALIST_SESSION_ID ?? "",
-      stage: sid,
-    });
-    write(t(`Forced; ${check.missing.length} gate item(s) unmet\n`, `强制推进，遗留 ${check.missing.length} 项未满足\n`));
-  }
-
-  if (isLastStage(contract, sid)) {
-    write(t(`Already the last stage ${sid}; wrap-up is allowed once its gate passes.\n`, `已是最后阶段 ${sid}；门槛达标后可收工。\n`));
-    return 0;
-  }
-
-  const nid = nextStageId(contract, sid);
-  const next = nid ? stageById(contract, nid) : undefined;
-  if (!next) die(t(`No stage after ${sid} in task list ${contract.name}`, `任务列表 ${contract.name} 未定义 ${sid} 之后的阶段。`));
-
-  if (updateState(root, (s) => enterStage(s, next)) === null) {
-    die(t("State write conflict; the retry failed too. Run the command again", "状态写入冲突，重试后仍未成功：请再执行一次"));
-  }
-  write(
-    t(`Stage advanced: ${sid} -> ${next.id} ${next.name}\n` +
-      (next.goal ? `Goal: ${next.goal}\n` : "") +
-      `Next: ${next.next ?? ""}\n`,
-    `阶段推进：${sid} -> ${next.id} ${next.name}\n` +
-      (next.goal ? `目标：${next.goal}\n` : "") +
-      `下一步：${next.next ?? ""}\n`),
+    `守卫：${prev} -> ${policy.name}（${policy.domain || "未标注领域"}）\n下一步：${after.next_action}\n`,
   );
   return 0;
 }
 
 /**
+ * 旧命名迁移。
+ *
+ * 监工启动时会自动跑一遍；这个命令用于不启动监工就把数据迁干净，或升级后先看看
+ * 还剩什么。`--check` 只报将要改的内容，不落盘。
+ */
+function cmdMigrate(p: Parsed): number {
+  const root = rootOrDie(p);
+  const check = flagBool(p, "check");
+  const rep = migrateRoot(root, { dryRun: check, watchFile: watchConfigPath() });
+
+  if (rep.changed.length === 0 && rep.kept.length === 0 && rep.errors.length === 0) {
+    write(t(`No legacy naming under ${root}\n`, `${root} 下没有旧命名，无需迁移。\n`));
+    return 0;
+  }
+
+  const head = check
+    ? t(`Will migrate under ${root}:\n`, `${root} 下待迁移：\n`)
+    : t(`Migrated under ${root}:\n`, `${root} 下已迁移：\n`);
+  write(head);
+  for (const line of rep.changed) write(`  - ${line}\n`);
+  if (rep.backupDir) {
+    write(check
+      ? t(`  Backup to: ${rep.backupDir}\n`, `  将备份到：${rep.backupDir}\n`)
+      : t(`  Backup: ${rep.backupDir}\n`, `  备份：${rep.backupDir}\n`));
+  }
+  for (const line of rep.kept) write(t(`  Kept: ${line}\n`, `  保留未动：${line}\n`));
+  for (const line of rep.errors) write(t(`  Failed: ${line}\n`, `  失败：${line}\n`));
+  return rep.errors.length > 0 ? 1 : 0;
+}
+
+/**
  * 记录业务数据到 `.capitalist/<名>.jsonl`。
  *
- * 写入点是契约里 `done` 检查读取的同一批文件，因此路径必须落在 `.capitalist/` 内：允许 `../`
+ * 写入点是守卫里 `done` 检查读取的同一批文件，因此路径必须落在 `.capitalist/` 内：允许 `../`
  * 逃逸等于让记录变成任意位置写，与红线层冲突。
  */
 function cmdRecord(p: Parsed): number {
@@ -299,7 +249,6 @@ function cmdAsk(p: Parsed): number {
     status: "open",
     text,
     context: flagString(p, "context") ?? "",
-    stage: state.stage,
     ...(shard ? { shard } : {}),
     session: process.env.CAPITALIST_SESSION_ID ?? "",
   });
@@ -344,7 +293,7 @@ function cmdInbox(p: Parsed): number {
   }
   for (const q of rows) {
     /* 用“问N”不用 `#N`：`#N` 是任务编号（界面与监工共用同一套），两者混用会串号。 */
-    write(t(`${q.id} [${String(q.stage ?? "")}] ${q.text}\n`, `问${q.id} [${String(q.stage ?? "")}] ${q.text}\n`));
+    write(t(`${q.id} ${q.text}\n`, `问${q.id} ${q.text}\n`));
   }
   return 0;
 }
@@ -417,10 +366,8 @@ function cmdTasks(p: Parsed): number {
 
 function cmdStatus(p: Parsed): number {
   const root = rootOrDie(p);
-  const { state, contract } = loadOrDie(root);
-  const mode = resolveModeFor(root, contract, flagString(p, "mode"));
-  const stage = stageById(contract, state.stage);
-  const check = runCheck(stage?.done as Record<string, unknown> | undefined, root);
+  const { state, policy } = loadOrDie(root);
+  const mode = resolveModeFor(root, policy, flagString(p, "mode"));
   const capitalist = supervisorDisplayState(root);
   // 随监工起的那份看板地址：只判一次活就能读，不必再去探测端口。
   // 监工已停（或 --no-board）时没有地址，也就没有这一行。
@@ -429,6 +376,11 @@ function cmdStatus(p: Parsed): number {
   const lease = instanceLeaseStatus(root, leaseTaskName(root));
   // 手动暂停（.capitalist/pause.json）：两种模式同源暴露，脚本与文本行为一致。
   const pause = readPause(root);
+  /* 退出码表达“还能不能继续”：有阻塞项即 2。阻塞由工作进程登记，不由门槛合成。 */
+  const blockers = Array.isArray(state.blockers)
+    ? state.blockers.map((b) => String((b as { reason?: unknown }).reason ?? ""))
+    : [];
+  const exitOk = blockers.length === 0;
 
   if (flagBool(p, "json")) {
     write(
@@ -436,9 +388,8 @@ function cmdStatus(p: Parsed): number {
         {
           root,
           mode,
-          stage: state.stage,
-          exit_ok: check.ok,
-          missing: check.missing,
+          exit_ok: exitOk,
+          blockers,
           paused: pause,
           state,
           supervisor: {
@@ -460,10 +411,10 @@ function cmdStatus(p: Parsed): number {
         2,
       )}\n`,
     );
-    return check.ok ? 0 : 2;
+    return exitOk ? 0 : 2;
   }
 
-  write(`${buildBrief({ root, state, contract, mode, missing: check.missing })}\n`);
+  write(`${buildBrief({ root, state, policy, mode })}\n`);
 
   const supervisorLabel = SUPERVISOR_STATE_LABEL[capitalist.state];
   write(t(`\nSupervisor: ${supervisorLabel}${capitalist.state === "online" ? ` (pid ${capitalist.pid}, ${capitalist.detail})` : ` — ${capitalist.detail}`}\n`, `\n监工：${supervisorLabel}${capitalist.state === "online" ? `（pid ${capitalist.pid}，${capitalist.detail}）` : `：${capitalist.detail}`}\n`));
@@ -515,17 +466,15 @@ function cmdStatus(p: Parsed): number {
     write(t(`\n⚠ Workspace preparation failed (${ws.impl}): ${ws.message}\n${ws.fix}\n`, `\n工作区准备失败（${ws.impl}）：${ws.message}\n${ws.fix}\n`));
   }
 
-  // 退出码表达“门槛过没过”，与 --json 一致：脚本里两种模式行为相同才算说得清
-  return check.ok ? 0 : 2;
+  // 退出码表达“还能不能继续”，与 --json 一致：脚本里两种模式行为相同才算说得清
+  return exitOk ? 0 : 2;
 }
 
 function cmdBrief(p: Parsed): number {
   const root = rootOrDie(p);
-  const { state, contract } = loadOrDie(root);
-  const mode = resolveModeFor(root, contract, flagString(p, "mode"));
-  const stage = stageById(contract, state.stage);
-  const check = runCheck(stage?.done as Record<string, unknown> | undefined, root);
-  let text = `${buildBrief({ root, state, contract, mode, missing: check.missing })}\n`;
+  const { state, policy } = loadOrDie(root);
+  const mode = resolveModeFor(root, policy, flagString(p, "mode"));
+  let text = `${buildBrief({ root, state, policy, mode })}\n`;
   // 暂停期间必须抑制“下一步”：执行侧照常取得 next_action，会误以为可以继续执行。
   const pause = readPause(root);
   if (pause) {
@@ -542,8 +491,8 @@ function cmdBrief(p: Parsed): number {
 
 function cmdMode(p: Parsed): number {
   const root = rootOrDie(p);
-  const { state, contract } = loadOrDie(root);
-  const effective = resolveModeFor(root, contract, flagString(p, "mode"));
+  const { state, policy } = loadOrDie(root);
+  const effective = resolveModeFor(root, policy, flagString(p, "mode"));
 
   const value = p.positional[0];
   if (!value) {
@@ -565,7 +514,7 @@ function cmdMode(p: Parsed): number {
   }
   write(t(`Mode: ${effective} -> ${next} (${describeMode(next)})\n`, `档位：${effective} 改为 ${next}（${describeMode(next)}）\n`));
   if (next === "bypass") {
-    write(t("Bypass relaxes the mode and local-boundary checks; task-list redlines still block as before. For controlled environments only.\n", "bypass 放宽权限档位与本机边界判定，任务列表红线仍按原级别拦截。该档位仅用于受控环境。\n"));
+    write(t("Bypass relaxes the mode and local-boundary checks; task-list redlines still block as before. For controlled environments only.\n", "bypass 放宽权限档位与本机边界判定，守卫红线仍按原级别拦截。该档位仅用于受控环境。\n"));
   }
   return 0;
 }
@@ -579,7 +528,7 @@ function cmdSay(p: Parsed): number {
   const shard = flagString(p, "shard") || null;
   const thread = flagString(p, "thread") || undefined;
   /*
-   * `--thread` 是进程（进程号 `2-P1`），`--lane` 是线程（`阶段/分片`）。
+   * `--thread` 是进程（进程号 `2-P1`），`--lane` 是线程（分片名或 `x` 加派生链尾号）。
    *
    * 两个不是一回事：进程是一次性的，退出即作废；线程随任务走，重派出来的新进程照样
    * 认这条话。落错字段的后果是那句话永久领不到（见 core/commands 的 Directive.thread）。
@@ -592,14 +541,11 @@ function cmdSay(p: Parsed): number {
   /* 消息标识：看板发送时生成，派单建单时按它回查这条消息自己的附件。 */
   const msgId = flagString(p, "msg-id") || undefined;
   const state = loadState(root);
-  /** 阶段取目标派单所属阶段。 */
-  const targetStage = target ? stageOfTarget(root, target) : "";
   const rec = appendDirective(root, {
     text,
     shard,
     thread,
     lane,
-    stage: targetStage || state?.stage || "",
     ...(lineage ? { lineage } : {}),
     ...(target ? { target } : {}),
     ...(msgId ? { msgId } : {}),
@@ -624,17 +570,6 @@ function cmdSay(p: Parsed): number {
       `送达即标记已用，不会重复注入；登记与送达在台账 direct_inject / direct_deliver 事件里可查。\n`),
   );
   return 0;
-}
-
-/** 一条针对某一派单的消息落在哪个阶段。 */
-function stageOfTarget(root: string, target: string): string {
-  const rows = readDispatches(root);
-  const byId = rows.find((d) => String(d.id) === target);
-  if (byId) return String(byId.stage ?? "");
-  const w = loadWorker(root, target);
-  if (!w) return "";
-  const d = rows.find((x) => String(x.id) === String(w.dispatch ?? ""));
-  return String(d?.stage ?? w.stage ?? "");
 }
 
 /**
@@ -703,7 +638,7 @@ function cmdPause(p: Parsed): number {
 }
 
 /**
- * 解除暂停：删除 .capitalist/pause.json，下一轮调度起监工恢复派单（不自动认领契约分片）。
+ * 解除暂停：删除 .capitalist/pause.json，下一轮调度起监工按任务树继续派单。
  *
  * 恢复派单是用户动作。非交互环境（宿主会话里代执行命令）默认拒绝，避免将启动信号
  * 视为用户授权；用户明确要求时通过 `--user` 恢复，看板“恢复调度”按钮调用接口，不经过这里。
@@ -736,9 +671,9 @@ function cmdResume(p: Parsed): number {
   }
   write(
     t(
-      "Resumed: from the next round dispatching starts again; only manually created dispatches run, none are auto-created from the contract.\n" +
+      "Resumed: from the next round dispatching starts again; only manually created dispatches run, none are auto-created.\n" +
         `Unfinished dispatches continue in their original states (${outcome.cleared} released).\n` + (outcome.kept.length ? `${outcome.kept.length} stayed paused because their processes are still running; stop them, then resume again.\n` : ""),
-      `已恢复：监工从下一轮调度起恢复派单，只执行派入的派单，不按契约自动建单。\n` +
+      `已恢复：监工从下一轮调度起恢复派单，只执行派入的派单，不按守卫自动建单。\n` +
         `未完成的派单按原状态继续（${outcome.cleared} 张）。\n` +
         (outcome.kept.length
           ? `另有 ${outcome.kept.length} 张进程未退出，保持暂停；先中断进程再恢复。\n`
@@ -903,10 +838,10 @@ async function main(): Promise<number> {
       write(
         t(`Supervisor-only command; workers cannot run it: ${p.cmd}\n` +
           `Workers may only report and inspect: report / ask / notify / block / say / record / status / tasks.\n` +
-          `To change scheduling (close, pause, dispatch, advance), file it with capitalist notify for the supervisor to judge.\n`,
+          `To change scheduling (close, pause, dispatch), file it with capitalist notify for the supervisor to judge.\n`,
         `这个命令属于监工，工作进程不能执行：${p.cmd}\n` +
           `工作进程能做的只有上报与查看：report / ask / notify / block / say / record / status / tasks。\n` +
-          `要改变调度（关闭、暂停、派单、推进阶段）请用 capitalist notify 说明诉求，由监工裁决。\n`),
+          `要改变调度（关闭、暂停、派单）请用 capitalist notify 说明诉求，由监工裁决。\n`),
       );
       return 3;
     }
@@ -921,8 +856,8 @@ async function main(): Promise<number> {
       return cmdRestart(p);
     case "adopt":
       return cmdAdopt(p);
-    case "advance":
-      return cmdAdvance(p);
+    case "migrate":
+      return cmdMigrate(p);
     case "set-next":
       return cmdSetNext(p);
     case "scope":
@@ -1069,6 +1004,16 @@ async function main(): Promise<number> {
         write(`${running}\n`);
         return 0;
       }
+      /*
+       * 升级路径：先把上一版的落盘数据改到当前命名，再读状态。失败不阻断启动，
+       * 只把失败项打出来：数据没迁干净时监工仍能跑，人工修好再启一次。
+       */
+      const mig = migrateRoot(supervisorRoot, { watchFile: watchConfigPath() });
+      if (mig.changed.length > 0) {
+        write(t(`Migrated legacy data (${mig.changed.length} item(s)); backup: ${mig.backupDir}\n`, `已迁移上一版数据 ${mig.changed.length} 项，备份在 ${mig.backupDir}\n`));
+      }
+      for (const line of mig.errors) write(t(`⚠ Migration failed: ${line}\n`, `迁移失败：${line}\n`));
+
       const ws = checkWorkspacePrepare(supervisorRoot);
       if (!ws.ok) {
         write(t(`⚠ Workspace preparation failed (${ws.impl}): ${ws.message}\n${ws.fix}\n`, `工作区准备失败（${ws.impl}）：${ws.message}\n${ws.fix}\n`));
@@ -1092,7 +1037,7 @@ async function main(): Promise<number> {
             write(
               t(
                 `unknown agent: ${declHost}. Available: ${reg.all().map((x) => x.id).join(" / ")}\n`,
-                `未知 agent：${declHost}。可用取值：${reg.all().map((x) => x.id).join(" / ")}\n`,
+                `未知宿主：${declHost}。可用取值：${reg.all().map((x) => x.id).join(" / ")}\n`,
               ),
             );
             return 1;
@@ -1101,7 +1046,7 @@ async function main(): Promise<number> {
           write(
             t(
               `[supervisor] agent set by --agent: ${impl.id}\n`,
-              `[监工] 已按 --agent 指定 agent：${impl.id}\n`,
+              `[监工] 已按 --agent 指定宿主：${impl.id}\n`,
             ),
           );
         }
@@ -1127,7 +1072,7 @@ async function main(): Promise<number> {
         (h): h is string => !!h && h !== "custom",
       );
       /*
-       * hook 自动补装：非 Windows 默认执行，装完插件直接启动即可，不必先单独跑 install。
+       * hook 自动补装：非 Windows 默认执行，装完插件直接启动，不必先单独跑 install。
        * Windows 保持显式 `--with-hooks`：hook 为每次工具调用起一个短命进程，表现为反复弹出窗口。
        * 两种平台都能用 `--no-hooks` 关掉。
        */
@@ -1168,9 +1113,9 @@ async function main(): Promise<number> {
        * 没有待办就直接待命在线（不派单、不轮询、不退出），等用户派单。
        * 暂停是派单级标记，宿主侧新派入的单不受影响。
        */
-      let contractSpec = flagString(p, "contract") ?? "";
-      if (!contractSpec && loadState(supervisorRoot) === null && String(p.positional[0] ?? "").trim()) {
-        const gen = await generateContract({
+      let policySpec = policyArgOf(p) ?? "";
+      if (!policySpec && loadState(supervisorRoot) === null && String(p.positional[0] ?? "").trim()) {
+        const gen = await generateGuard({
           root: supervisorRoot,
           target: String(p.positional[0] ?? ""),
           ...(detectedWorker ? { host: detectedWorker } : {}),
@@ -1180,15 +1125,14 @@ async function main(): Promise<number> {
             : {}),
         });
         if (flagBool(p, "verbose")) write(describeGenerated(gen) + "\n");
-        if (gen.ok) contractSpec = gen.path;
+        if (gen.ok) policySpec = gen.path;
       }
 
       const { runSupervisor } = await import("../supervisor/loop");
       return runSupervisor({
         root: supervisorRoot,
         target: p.positional[0],
-        contractSpec: contractSpec || undefined,
-        autoDispatch: flagBool(p, "auto-dispatch"),
+        policySpec: policySpec || undefined,
         ...(process.env.CAPITALIST_HOST_TOKEN ? { token: process.env.CAPITALIST_HOST_TOKEN } : {}),
         tickSec: flagNumber(p, "tick"),
         workerTimeoutSec: flagNumber(p, "worker-timeout"),

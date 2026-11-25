@@ -8,7 +8,7 @@ const { spawn } = require("node:child_process");
 
 const capitalist = require("../dist/core/record/supervisor");
 const { writeJsonl, readJsonl } = require("../dist/core/record/json");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { loadState } = require("../dist/core/record/state");
 const loop = require("../dist/supervisor/loop");
 
@@ -20,7 +20,7 @@ process.env.CAPITALIST_WORKER_BIN = join(tmpdir(), "no-such-worker-bin-for-casca
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-cascade-"));
-  createTaskRoot({ target: "失败沿树传导", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "失败沿树传导", policySpec: "minimal", root: base });
   for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
   mkdirSync(join(base, ".capitalist", "runtime"), { recursive: true });
   mkdirSync(join(base, ".capitalist", "ledger"), { recursive: true });

@@ -70,3 +70,42 @@ export function isStructureLive(status: DispatchStatusLike): boolean {
 export function isCompletionOf(d: { status?: unknown; rebuilt_at?: unknown }): boolean {
   return isSettled(String(d.status ?? "")) && !String(d.rebuilt_at ?? "");
 }
+
+/** 一件事的合并状态。 */
+export type AttemptState = "done" | "closed" | "dead" | "pending";
+
+/** 判定一件事的状态所需的字段。 */
+type Attempt = { status?: unknown; retry_verdict?: unknown; cascade_at?: unknown };
+
+/**
+ * 一件事的最后一次尝试。
+ *
+ * 台账按追加顺序落盘，同一件事（同一派生链、或接替过来的链）后写的那张就是最近一次派单：
+ * 重派、重开、监工打回都只在链尾追加，不改旧行。因此“这件事现在是什么状态”必须看最后一张，
+ * 不能按“任一单完成即完成”判定：用户重派一张已验收的任务后，旧单的 `done` 继续
+ * 顶着整条链的完成状态，新单还在跑，下游已经放行。
+ *
+ * @param rows 同一件事的全部派单，按台账顺序。
+ */
+export function lastAttemptOf<T extends Attempt>(rows: readonly T[]): T | undefined {
+  return rows.length > 0 ? rows[rows.length - 1] : undefined;
+}
+
+/**
+ * 一件事的合并状态，以最后一次尝试为准。
+ *
+ * `dead` 只认“失败且不再重试”：`retry_verdict === "give_up"`，或该单被级联判定失败。
+ * 可重试的失败不算终态，它还在等重派。旧单的状态不再参与判定：重派成功后这件事就是
+ * `done`，重派失败后它才回到 `dead`。
+ */
+export function attemptsStateOf(rows: readonly Attempt[]): AttemptState {
+  const head = lastAttemptOf(rows);
+  if (!head) return "pending";
+  const status = String(head.status ?? "");
+  if (status === "done") return "done";
+  if (status === "closed") return "closed";
+  if (!isFailed(status)) return "pending";
+  const verdict = String(head.retry_verdict ?? "");
+  const cascaded = Boolean(String(head.cascade_at ?? ""));
+  return verdict === "give_up" || cascaded ? "dead" : "pending";
+}

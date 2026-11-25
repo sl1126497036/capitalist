@@ -53,7 +53,7 @@ const clearBody = computed(() => {
   const n = counts.value[filter.value] || 0;
   const base = tr("将清空 {n} 个任务卡：派单与进程记录移进归档目录，列表不再显示。", { n });
   if (filter.value === "all") {
-    return `${base}${tr("任务台账一并归档，阶段进度回到首阶段；运行中的进程不会结束。")}`;
+    return `${base}${tr("任务台账一并归档，进度从头开始；运行中的进程不会结束。")}`;
   }
   if (filter.value === "run") return tr("这 {n} 个进程不会结束，记录移出列表，完成后会重新出现。", { n });
   if (filter.value === "queue") return tr("这 {n} 张排队中的派单会从队列撤下，监工不再派发。", { n });
@@ -112,7 +112,16 @@ function cell(t) {
     const no = String(t?.stuck_on_no || "").trim();
     if (no) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(no) }) };
     const id = String(t?.stuck_on || "").trim();
-    if (id) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(id) }) };
+    if (id) {
+      /* 卡点是组时附注首个未完成成员：组是概括，成员号只作细节。 */
+      const m = String(t?.stuck_member_no || "").trim();
+      const isGroup = /^G\d+$/i.test(id.replace(/^#/, ""));
+      const text =
+        isGroup && m
+          ? tr("等待 #{no}（#{m} 未完成）", { no: bareNoLabel(id), m: bareNoLabel(m) })
+          : tr("等待 #{no}", { no: bareNoLabel(id) });
+      return { tone: "warn", kind: "word", text };
+    }
     return { tone: "warn", kind: "word", text: tr("排队") };
   }
   if (s === "suspended") return { tone: "warn", kind: "word", text: tr("已让位") };
@@ -357,14 +366,15 @@ const staleCount = computed(() => props.threads.filter(searchMatch).filter(stale
 /** 按队列顺序统一取号，使任务行与消息引用读到同一个号。 */
 const numbering = computed(() => numberQueue(props.threads));
 
-/* 任务键与后端 taskKeyOf 同口径：有分片按阶段/分片，无分片按派生链；同一任务的重派共用一个键。 */
+/*
+ * 任务键与后端 laneKeyOf 同口径：有分片取分片名，无分片取 x 加派生链尾 6 位，
+ * 两者都没有才落 main。同一任务的重派共用一个键，键里只含分片或派生链。
+ */
 function taskKeyOf(t) {
-  const stage = String(t?.stage || "").trim();
-  const shard = String(t?.shard || "").trim();
-  const lineage = String(t?.lineage || "").trim();
-  if (shard) return `${stage}/${shard}`;
-  if (lineage) return `${stage}/x${lineage.slice(-6)}`;
-  return `${stage}/id${String(t?.id || "")}`;
+  const shard = String(t?.shard || "").trim().toLowerCase();
+  if (shard) return shard;
+  const lineage = String(t?.lineage || t?.id || "").trim();
+  return lineage ? `x${lineage.slice(-6)}` : "main";
 }
 
 function histRowOf(t) {

@@ -11,9 +11,8 @@ import { join } from "node:path";
 import type { HookDecision, HookFacet, UnifiedEvent } from "./contract";
 import { autoAdopt, loadWatchRules } from "../core/platform/autowatch";
 import { buildBrief, type BriefLang } from "../core/message/brief";
-import { runCheck } from "../core/contract/checks";
 import { claimDirectives, directiveShortRef, laneKeyOf } from "../core/dispatch/commands";
-import { type Contract, evaluate, isLastStage, loadContract } from "../core/contract/contract";
+import { type Policy, evaluate, loadPolicy } from "../core/policy/policy";
 import { readJsonl } from "../core/record/json";
 import {
   currentSession,
@@ -53,11 +52,11 @@ const HINT_UNWATCHED: Record<BriefLang, string> = {
   zh:
     "【capitalist 已生效，本会话未纳管】hook 正在运行，当前目录没有任务根。" +
     "普通问答忽略本行；长流程任务可回复“给这个项目开监督”，" +
-    '或执行 `capitalist start "<目标>" --contract <任务列表名>`。',
+    '或执行 `capitalist start "<目标>" --policy <守卫名>`。',
   en:
     "【capitalist active · no task root】The hook is running; this directory has no task root. " +
     'Ignore this line for ordinary questions. For a long-running task, say "set up capitalist ' +
-    'for this project" or run `capitalist start "<goal>" --contract <name>`.',
+    'for this project" or run `capitalist start "<goal>" --policy <name>`.',
 };
 
 const INJECT_HEAD: Record<BriefLang, string> = {
@@ -81,7 +80,7 @@ const INJECT_RULES: Record<BriefLang, string> = {
     "Rules:\n" +
     "- Run every `capitalist` command yourself; never ask the user to type one.\n" +
     "- This state was computed for you. Do not ask what to do next; follow `next`.\n" +
-    '- Unsure: register the question with `capitalist ask "<q>"`, then stop. That is a legitimate pause.',
+    '- When uncertain: register the question with `capitalist ask "<q>"`, then stop. This is a legitimate pause.',
 };
 
 function pickLang(prompt: string): BriefLang {
@@ -100,8 +99,8 @@ interface LockCfg {
   ttlSec: number;
 }
 
-function lockCfg(contract: Contract): LockCfg {
-  const raw = (contract as unknown as Record<string, unknown>).file_locks;
+function lockCfg(policy: Policy): LockCfg {
+  const raw = (policy as unknown as Record<string, unknown>).file_locks;
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const num = (v: unknown, d: number) => (Number.isFinite(Number(v)) ? Number(v) : d);
   return {
@@ -138,11 +137,12 @@ function allowedBy(d: { code: number; stdout?: string | undefined }): boolean {
 const CHAT_SESSION_RX = /^capitalist-chat\b/;
 
 /**
- * 对话层不许执行的动作：只保留改状态机的两个。
+ * 对话层不许执行的边界动作：换守卫。
  *
- * 禁用动作只是权宜之计：根本问题是“一张单都没有就把阶段往下走”，那由 `advanceStage` 的派单
+ * 禁用动作只是权宜之计：根本问题是“用户没下令，任务根与守卫的绑定却变了”，那由建单入口的
  * 判据解决，与对话层能跑什么命令无关。禁用过多会阻断用户口述的需求（登记、派单、结束、
- * 唤醒都是对话层该执行的），所以名单只留 `advance` 与 `adopt`。
+ * 唤醒都是对话层该执行的），所以名单只留 `adopt`。`advance` 已随阶段机制移除，正则里仍
+ * 留着它，是为了拦住照旧版本文案发出的旧命令。
  */
 const CHAT_WRITE_RX = /(^|[\s;&|/])capitalist(\.js)?\s+(advance|adopt)\b/;
 
@@ -151,7 +151,7 @@ export { isJustifyInvocation };
 
 interface Ctx {
   root: string;
-  contract: Contract;
+  policy: Policy;
   state: NonNullable<ReturnType<typeof loadState>>;
   mode: ReturnType<typeof resolveModeFor>;
 }
@@ -161,9 +161,9 @@ function loadCtx(event: UnifiedEvent): Ctx | null {
   if (!root) return null;
   const state = loadState(root);
   if (!state) return null;
-  const contract = loadContract(state.contract_path) ?? loadContract(state.contract, skillDirs());
-  if (!contract) return null;
-  return { root, contract, state, mode: resolveModeFor(root, contract) };
+  const policy = loadPolicy(state.policy_path) ?? loadPolicy(state.policy, skillDirs());
+  if (!policy) return null;
+  return { root, policy, state, mode: resolveModeFor(root, policy) };
 }
 
 /** 记一条动作事件。台账写失败不影响判定。 */
@@ -199,7 +199,6 @@ function recordViolation(
     decision: args.decision,
     kind: args.kind ?? "command",
     session: event.sessionId,
-    stage: ctx.state.stage,
   });
 }
 
@@ -218,12 +217,11 @@ function deliverPendingDirectives(
   try {
     taken = claimDirectives(ctx.root, {
       shard: d.shard ?? "",
-      stage: d.stage || ctx.state.stage,
       dispatchId,
       lineage: d.lineage ?? dispatchId,
       workerId: workerId(),
       /** 线程键：用户在看板某条线程里追加的话落的是这个键，不是派单 id、更不是 worker id。 */
-      lane: laneKeyOf(d as { stage?: string; shard?: string | null; lineage?: string; id?: string }),
+      lane: laneKeyOf(d as { shard?: string | null; lineage?: string; id?: string }),
       via: "hook",
       /*
        * 一次只领一条：这条通道一次只铺一条给模型（下面 `taken[0]`），领多了等于把
@@ -240,11 +238,11 @@ function deliverPendingDirectives(
   recordEvent(ctx, event, { text: rec.text.slice(0, 400), via: "hook" }, "direct_deliver");
   return hook.deny(
     [
-      `【用户追加 · 派单 ${dispatchId}】执行期间收到用户追加的内容，本次工具调用暂停一次以完成送达。`,
+      `【用户追加 · 派单 ${dispatchId}】执行期间收到用户追加的内容，本次工具调用已被拦截，用于先完成本条送达。`,
       `编号：${directiveShortRef(rec)}`,
       "先判断是否属于本单要求，再按结论处理：",
-      "  是 -> 按下面的内容调整做法（与原要求冲突时以追加内容为准），然后继续原任务；",
-      "  不是 -> 不要改这一单的做法，但收尾时必须把这个编号报成 not_mine 并说明该归哪一单。",
+      "  是 -> 按下面的内容调整做法（与原要求冲突时以追加内容为准），随后继续原任务；",
+      "  不是 -> 不调整本单做法，但收尾时须将该编号标注为 not_mine，并说明其归属任务。",
       `回报方式：capitalist report … --outcome "${directiveShortRef(rec)}=done"` +
         "（也可 not_mine / blocked，多条用分号隔开）。未给出结论的本单无法通过收工闸。",
       "被暂停的调用仍需执行时重新发起。",
@@ -286,20 +284,20 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
   const cmd = String(event.toolInput.command ?? "");
   if (!cmd.trim()) return hook.passthrough();
 
-  const gate = evaluate(ctx.contract, cmd);
+  const gate = evaluate(ctx.policy, cmd);
   const act = detectAction(cmd);
 
   /*
    * 看板对话会话只回答问题。
    *
    * 对话模型的职责是解释状态、答疑问，不替用户做决定。历史实现放任它调用 `capitalist record`
-   * 与 `capitalist advance`，结果是一条“回个收到”就能写需求台账并推进阶段，而用户没有下发
-   * 任何任务，阶段已经变了。改台账、动队列、推进阶段一律由用户在面板操作。
+   * 与流程推进命令，结果是一条“回个收到”就能写需求台账并改变执行流程，而用户没有下发
+   * 任何任务。改台账、动队列一律由用户在面板操作。
    */
   if (CHAT_SESSION_RX.test(String(event.sessionId ?? "")) && CHAT_WRITE_RX.test(cmd)) {
     recordEvent(ctx, event, { cmd: cmd.slice(0, 400), decision: "BLOCK", reason: "chat_write" });
     return hook.deny(
-      "【对话层】看板对话只回答问题，不改台账、不推进阶段。\n" +
+      "【对话层】看板对话只回答问题，不改台账、不改变执行流程。\n" +
         "要派单或推进，请用户在面板操作；对话里说明状态与下一步即可。",
       event.point,
       event.sessionId,
@@ -310,7 +308,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
   // 先放行”的死循环。红线仍照判。
   if (isJustifyInvocation(cmd)) {
     recordEvent(ctx, event, { cmd: cmd.slice(0, 400), decision: gate.decision, local: "allow" });
-    return gate.decision === "BLOCK" ? hook.deny(describeBlock(ctx.contract, gate, cmd), event.point, event.sessionId) : hook.passthrough();
+    return gate.decision === "BLOCK" ? hook.deny(describeBlock(ctx.policy, gate, cmd), event.point, event.sessionId) : hook.passthrough();
   }
 
   /*
@@ -319,7 +317,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
    */
   if (act === "delete") return deleteGate(guardBase(ctx, event, hook, offline), cmd);
 
-  const local = localCheck(ctx.contract, ctx.root, extractLocalPaths(cmd, ctx.root), act, skillExtra(ctx.root));
+  const local = localCheck(ctx.policy, ctx.root, extractLocalPaths(cmd, ctx.root), act, skillExtra(ctx.root));
   const localTightened = tightenLocal(ctx.mode, local.decision, act, decide);
 
   recordEvent(ctx, event, {
@@ -340,7 +338,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
     });
     return hook.deny(
       `【本机边界拦截】这条命令要访问的位置不允许：${why}\n` +
-        "敏感区一律拒绝访问。需要访问其他范围时，先提交申请由监工裁决。" +
+        "敏感区一律拒绝访问。需要访问其他范围时，先按本单说明【六、受阻时如何申报】提交申请，由监工裁决。" +
         escalation(v.nth),
       event.point,
       event.sessionId,
@@ -357,7 +355,7 @@ function onAction(hook: HookFacet, event: UnifiedEvent, ctx: Ctx, offline = fals
       decision: "BLOCK",
     });
     return hook.deny(
-      `${describeBlock(ctx.contract, gate, cmd)}${escalation(v.nth)}`,
+      `${describeBlock(ctx.policy, gate, cmd)}${escalation(v.nth)}`,
       event.point,
       event.sessionId,
     );
@@ -443,7 +441,7 @@ function guardFileLock(
   paths: string[],
   act: ActionKind,
 ): { code: number; stdout?: string | undefined } {
-  const cfg = lockCfg(ctx.contract);
+  const cfg = lockCfg(ctx.policy);
   const holder = process.env.CAPITALIST_WORKER_ID ?? "";
   const mode = act === "write" ? "write" : "read";
 
@@ -490,11 +488,11 @@ function guardFileLock(
       recordEvent(ctx, event, { lock: "denied", mode, path: p, holder: who, ahead: r.ahead ?? 0 });
       return hook.deny(
         [
-          `【文件锁】${p} 当前被 ${who} 持有${mode === "write" ? "写锁" : "读锁"}，等待 ${cfg.waitMs}ms 未获锁，排队 ${r.ahead ?? 0} 个。`,
+          `【文件锁】${p} 当前被 ${who} 持有${mode === "write" ? "写锁" : "读锁"}，等待 ${cfg.waitMs}ms 未获锁，前方等待 ${r.ahead ?? 0} 个。`,
           "",
           "不要无限等待，也不要反复重试同一个调用：",
           "  1) 先做与该文件无关的工作（修改其他文件、运行测试）；",
-          "  2) 确实只剩这一件事，过一会儿再试一次；",
+          "  2) 若仅剩此一项待处理，间隔一段时间后重试一次；",
           `  3) 持续无法获取时，capitalist ask "${p} 被 ${who} 长期占用" 登记后停止执行，等待监工裁决。`,
         ].join("\n"),
         event.point,
@@ -518,7 +516,7 @@ function guardFileLock(
           `【文件已被改】${p} 在读取之后被${st.by ? ` ${st.by} ` : "他人"}修改。`,
           st.why ? `· ${st.why}` : "",
           "",
-          "先重新 Read 这个文件，基于新内容再改；不要用旧内容覆盖他人的改动。",
+          "请重新读取该文件，基于最新内容修改；避免以旧内容覆盖他人改动。",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -538,8 +536,7 @@ function guardBase(ctx: Ctx, event: UnifiedEvent, hook: HookFacet, offline: bool
     hook,
     event,
     root: ctx.root,
-    contract: ctx.contract,
-    stage: ctx.state.stage,
+    policy: ctx.policy,
     offline,
     violate: (a) => recordViolation(ctx, event, { ...a, kind: "local" }),
   };
@@ -564,7 +561,7 @@ function judgeLocal(
   act: ActionKind,
   offline: boolean,
 ): HookDecision {
-  const local = localCheck(ctx.contract, ctx.root, paths, act, skillExtra(ctx.root));
+  const local = localCheck(ctx.policy, ctx.root, paths, act, skillExtra(ctx.root));
   const decision: LocalDecision = tightenLocal(ctx.mode, local.decision, act, decide);
   if (decision === "allow") return hook.passthrough();
 
@@ -592,32 +589,30 @@ function judgeLocal(
 }
 
 /** 组装拦截文案。档位收紧导致的拒绝与规则禁止分开标注。 */
-function describeBlock(contract: Contract, gate: GateResult, cmd: string): string {
+function describeBlock(policy: Policy, gate: GateResult, cmd: string): string {
   const hit = gate.hits.filter((h) => !h.defer);
   const head = hit.map((h) => `[${h.id}] ${h.label}`).join("\n");
   const fix = hit
-    .map((h) => h.fix || contract.redlines.find((r) => r.id === h.id)?.fix || "")
+    .map((h) => h.fix || policy.redlines.find((r) => r.id === h.id)?.fix || "")
     .filter(Boolean)
     .join("\n");
   return (
     `【红线拦截】\n${head}\n命中：…${hit[0]?.snippet ?? cmd.slice(0, 80)}…\n` +
     (fix ? `正确做法：${fix}\n` : "") +
-    "换一条不越界的路径；不确定时 capitalist ask 由监工裁决。"
+    "请改用不越界的路径；如有不确定项，用 capitalist ask 登记问题，由监工裁决。"
   );
 }
 
 /** on_idle / on_start：注入简报。工作进程分支同时续写心跳。 */
 function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
   const lang = pickLang(event.prompt);
-  const stage = ctx.contract.stages.find((s) => s.id === ctx.state.stage);
-  const check = runCheck(stage?.done as Record<string, unknown> | undefined, ctx.root);
 
   const wid = workerId();
   if (wid) {
     // 工作进程的存活由监工按心跳判定，不续写心跳时长任务会被当作失效进程回收。
-    touchWorker(ctx.root, wid, { status: "running", stage: ctx.state.stage });
+    touchWorker(ctx.root, wid, { status: "running" });
     /*
-     * 工作进程上下文只含“这一单”，不注入全局简报。全局阶段状态、门槛、下一步属于监工视角，
+     * 工作进程上下文只含“这一单”，不注入全局简报。全局任务树状态、门槛、下一步属于监工视角，
      * 注入工作进程会与派单正文里的任务说明混杂，形成“上面是监工、下面又是工作进程”的杂糅。
      * 派单正文由 worker 启动 argv 的 buildPrompt 生成，与本处注入互不相干。
      *
@@ -629,7 +624,7 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
     return hook.inject(
       `${
         lang === "zh"
-          ? `【capitalist${dlabel ? ` | ${dlabel}` : ""}】（监工已派单；只做这一单，结束时 capitalist report）`
+          ? `【capitalist${dlabel ? ` | ${dlabel}` : ""}】（监工已派单；仅执行本单，完成后执行 capitalist report）`
           : `【capitalist${dlabel ? ` | ${dlabel}` : ""}】(dispatched; do only this task, run \`capitalist report\` when done)`
       }\n${THINK_LANG[lang]}`,
       event.point,
@@ -640,9 +635,8 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
   const brief = buildBrief({
     root: ctx.root,
     state: ctx.state,
-    contract: ctx.contract,
+    policy: ctx.policy,
     mode: ctx.mode,
-    missing: check.missing,
     lang,
   });
   return hook.inject(`${INJECT_HEAD[lang]}\n${brief}\n\n${INJECT_RULES[lang]}`, event.point, event.sessionId);
@@ -655,7 +649,7 @@ function workerId(): string {
 /**
  * 当前会话之外是否有监工在运行，且存在存活的工作进程。
  *
- * 两个条件同时成立时，本会话按监控方处理，收工闸放行。阶段闸只约束执行侧。
+ * 两个条件同时成立时，本会话按监控方处理，收工闸放行。收工闸只约束执行侧。
  */
 function executionElsewhere(root: string): boolean {
   if (!isSupervisorAlive(root)) return false;
@@ -667,29 +661,26 @@ function executionElsewhere(root: string): boolean {
  *
  * 判定顺序：
  *   0. 会话已退役，不再执行，放行
- *   1. 本阶段登记的提问，合法停顿，放行
+ *   1. 有未裁决的提问，合法停顿，放行
  *   2. 登记阻塞，合法停顿，放行
  *   3. 同一问题第 3 次：拦截
- *   4. 阶段闸，末阶段看不达标，中间阶段看有没有该推进却没推进
+ *   4. 其余放行
  *
- * 第 1 步按阶段过滤：登记在旧阶段的提问只豁免该阶段，不影响后续阶段。
+ * 收工本身由工作进程的 `capitalist report` 决定，这里只判“停下是否说得通”。
  */
 function onStop(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
-  // 工作进程的结束由它自己的 `capitalist report` 决定，不由阶段闸决定。
+  // 工作进程的结束由它自己的 `capitalist report` 决定。
   if (workerId()) return hook.passthrough();
 
   // 监工在运行且有存活的工作进程时，本会话按监控方处理。收工闸只约束执行侧。
   if (executionElsewhere(ctx.root)) return hook.passthrough();
-
-  const sid = ctx.state.stage;
-  const stage = ctx.contract.stages.find((s) => s.id === sid);
 
   const cur = currentSession(ctx.root, event.sessionId);
   if (cur?.retired) return hook.passthrough();
 
   const openAsks = readJsonl<Record<string, unknown>>(
     join(supervisorDir(ctx.root), "inbox", "qa.jsonl"),
-  ).filter((q) => q.type === "ask" && q.status === "open" && (!q.stage || q.stage === sid));
+  ).filter((q) => q.type === "ask" && q.status === "open");
   if (openAsks.length > 0) return hook.passthrough();
 
   if (Array.isArray(ctx.state.blockers) && ctx.state.blockers.length > 0) {
@@ -704,45 +695,14 @@ function onStop(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
       `【违规升级】同一问题已经第 ${String(first.nth)} 次：${String(first.label ?? first.rule)}\n` +
         "反复越界时按以下顺序处理：\n" +
         '  1) capitalist ask "<重复原因>" 登记后停止执行，等待监工裁决\n' +
-        "  2) 确认已改正后：capitalist correct --rule <规则>\n" +
-        "继续执行只会将问题带入下一阶段。",
+        "  2) 监工裁决放行并确认已改正后：capitalist correct --rule <规则>\n" +
+        "继续执行只会让同一问题反复出现。",
       event.point,
       event.sessionId,
     );
   }
 
-  const check = runCheck(stage?.done as Record<string, unknown> | undefined, ctx.root);
-
-  if (isLastStage(ctx.contract, sid)) {
-    if (check.ok) return hook.passthrough();
-    recordEvent(ctx, event, { decision: "STOP_BLOCKED", missing: check.missing }, "stop");
-    return hook.deny(
-      `【收工闸】${sid} ${stage?.name ?? ""} 收工条件未满足，先补齐再收工：\n` +
-        `${check.missing.map((m) => `  - ${m}`).join("\n")}\n` +
-        '无法完成时：capitalist ask "<阻塞原因>" 登记后停止执行，等待监工裁决。',
-      event.point,
-      event.sessionId,
-    );
-  }
-
-  if (check.ok) {
-    recordEvent(ctx, event, { decision: "STAGE_NOT_ADVANCED", stage: sid }, "stop");
-    return hook.deny(
-      `【阶段闸】${sid} ${stage?.name ?? ""} 已达标。请先执行 capitalist advance 推进，不要在此停止。`,
-      event.point,
-      event.sessionId,
-    );
-  }
-
-  recordEvent(ctx, event, { decision: "STOP_BLOCKED", missing: check.missing }, "stop");
-  return hook.deny(
-    `【阶段闸】${sid} ${stage?.name ?? ""} 未完成，不得收工。\n` +
-      `缺：\n${check.missing.map((m) => `  - ${m}`).join("\n")}\n` +
-      `下一步：${ctx.state.next_action || stage?.next || "（任务列表未给出）"}\n` +
-      '存在不确定项时：capitalist ask "<问题>" 登记后停止执行，等待监工裁决。',
-    event.point,
-    event.sessionId,
-  );
+  return hook.passthrough();
 }
 
 /** 入口。异常一律放行，并把降级写进事件台账。 */
@@ -761,7 +721,7 @@ export function dispatch(hook: HookFacet, event: UnifiedEvent): HookDecision {
 
     /*
      * 监工不在线时仍要判动作类事件：工作进程由监工拉起，已经脱离宿主沙箱，越界与删除
-     * 只能靠这一层拦。判定所需的契约与任务状态仍在任务根里，读得到。
+     * 只能靠这一层拦。判定所需的守卫与任务状态仍在任务根里，读得到。
      *
      * 其余事件不接管：没有监工就没有派单、没有待裁决，注入简报也无从执行。
      */
@@ -777,7 +737,7 @@ export function dispatch(hook: HookFacet, event: UnifiedEvent): HookDecision {
     }
 
     if (!ctx) {
-      // 只有注入类事件给提示。动作类事件放行：没有任务根就没有可判定的契约。
+      // 只有注入类事件给提示。动作类事件放行：没有任务根就没有可判定的守卫。
       if (event.point === "on_idle" || event.point === "on_start") {
         return hook.inject(HINT_UNWATCHED[pickLang(event.prompt)], event.point, event.sessionId);
       }

@@ -122,7 +122,7 @@ export function verdictText(
   e: Record<string, unknown>,
   mq?: Map<string, Record<string, unknown>>,
   nos?: Map<string, string>,
-  opts: { customContract?: boolean } = {},
+  opts: { customPolicy?: boolean } = {},
 ): string {
   const name = String(e.event ?? e.kind ?? "");
   if (name === "mq_message") return mqMessageText(e, mq?.get(String(e.id ?? "")));

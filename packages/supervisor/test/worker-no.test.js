@@ -7,11 +7,11 @@ const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const cmds = require("../dist/core/dispatch/commands");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-wno-"));
-  createTaskRoot({ target: "进程编号测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "进程编号测试", policySpec: "minimal", root: base });
   return base;
 }
 

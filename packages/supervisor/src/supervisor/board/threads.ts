@@ -5,9 +5,11 @@ import { readJson, writeJson } from "../../core/record/json";
 import { Dispatch, WorkerRecord, loadSupervisor, dispatchPaused, workerLivenessOf, DEFAULT_LOG_STALL_SEC, parentOf } from "../../core/record/supervisor";
 import { isSettled } from "../../core/record/dispatchState";
 import { pendingOf } from "../../core/dispatch/deps";
+import { groupSettled } from "../../core/dispatch/groupGraph";
 import { groupIndexFrom } from "../../core/dispatch/groupOps";
 import { isGroupRef, label } from "../../core/record/nodeRef";
-import { taskKeyOf, readClearedMarks, threadStatusTerminal, threadStatusAbnormal } from "./state";
+import { laneKeyOf } from "../../core/dispatch/commands";
+import { readClearedMarks, threadStatusTerminal, threadStatusAbnormal } from "./state";
 import { readTasks } from "../../core/record/tasks";
 import { WorkerAction, parseWorkerLog } from "../worker/workerLog";
 import { statSync } from "node:fs";
@@ -84,7 +86,7 @@ export const TASK_BUCKETS: readonly TaskBucket[] = [
  * 分档唯一入口：界面筛选、状态计数、按档清空三处都读它。
  *
  * `exited` 有两种结局：派单已结（执行完成或人工结束）归已完成，派单未结（被打回重排、
- * 被重启打断）归排队，与“待重派”词条一致。调用方拿不到线程键的结束判据时按
+ * 被重启打断）归排队，与“待重派”词条一致。调用方取不到线程键的结束判据时按
  * 已结处理，保持旧行为。
  */
 export function taskBucket(status: unknown, settled?: boolean): TaskBucket {
@@ -160,7 +162,7 @@ export function settledThreadKeys(dispatches: readonly Dispatch[]): Set<string> 
   for (const d of dispatches) {
     const s = String(d.status ?? "");
     if (s !== "done" && s !== "closed") continue;
-    keys.add(taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? "")));
+    keys.add(laneKeyOf({ shard: d.shard, lineage: String((d as { lineage?: string }).lineage ?? "") }));
   }
   return keys;
 }
@@ -179,7 +181,7 @@ export function acceptedThreadKeys(root: string, dispatches: readonly Dispatch[]
     if (String(t.state ?? "") !== "accepted") continue;
     const d = byId.get(String(t.dispatch ?? ""));
     if (!d) continue;
-    keys.add(taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? "")));
+    keys.add(laneKeyOf({ shard: d.shard, lineage: String((d as { lineage?: string }).lineage ?? "") }));
   }
   return keys;
 }
@@ -204,7 +206,7 @@ export function taskCounts(root: string): TaskCounts {
 /**
  * 取消判定的默认说明。
  *
- * 只作为写库时的默认 note，**不再作为判定条件**：用户在取消时填的理由会覆盖它，
+ * 只作为写库时的默认 note，不再作为判定条件：用户在取消时填的理由会覆盖它，
  * 按 note 文案判定会让“填了理由的取消”被归入已完成档。
  */
 export const CANCEL_NOTE = "用户手动结束";
@@ -274,7 +276,6 @@ function archivedThread(
     stuck_on_no: "",
     shard: d.shard ?? "",
     lineage: String((d as { lineage?: string }).lineage ?? d.id),
-    stage: d.stage,
     status,
     model: dispatchModel(d),
     worker: "",
@@ -347,7 +348,7 @@ export function buildThreadsPageUncached(
 
   for (const w of workers) {
     const d = w.dispatch ? dispatchById.get(w.dispatch) : undefined;
-    const key = taskKeyOf(w.stage, w.shard, String((d as { lineage?: string } | undefined)?.lineage ?? ""));
+    const key = laneKeyOf({ shard: w.shard, lineage: String((d as { lineage?: string } | undefined)?.lineage ?? "") });
     const prev = threads.get(key);
     /** 同一任务重派多次时留最近启动的那次为当前执行者。 */
     if (prev && String(prev.started_at ?? "") >= String(w.started_at ?? "")) continue;
@@ -367,7 +368,6 @@ export function buildThreadsPageUncached(
       stuck_on_no: "",
       shard: w.shard ?? "",
       lineage: String((d as { lineage?: string } | undefined)?.lineage ?? w.dispatch ?? w.id),
-      stage: w.stage,
       /*
        * 暂停优先于进程状态：进程已按暂停停掉，仍按 `exited` 上屏会显示成“待重派”，
        * 与没有进程记录的暂停单出现两种词。
@@ -408,7 +408,7 @@ export function buildThreadsPageUncached(
       continue;
     }
 
-    const key = taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? ""));
+    const key = laneKeyOf({ shard: d.shard, lineage: String((d as { lineage?: string }).lineage ?? "") });
     const taken = threads.get(key);
     if (taken) {
       if (!taken.dispatch) taken.status = "canceled";
@@ -421,14 +421,14 @@ export function buildThreadsPageUncached(
   /*
    * 作废单补入列表。
    *
-   * 阶段推进作废的单没有工作进程，不会经 worker 循环进入 threads；
+   * 作废单没有工作进程，不会经 worker 循环进入 threads；
    * 单独成档，不与用户取消合并。
    */
   for (const d of dispatches) {
     if (String(d.status ?? "") !== "superseded") continue;
     const supersededAt = Date.parse(String(d.closed_at ?? d.done_at ?? d.at ?? ""));
     if (Number.isFinite(supersededAt) && Date.now() - supersededAt > CANCELED_KEEP_MS) continue;
-    const key = taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? ""));
+    const key = laneKeyOf({ shard: d.shard, lineage: String((d as { lineage?: string }).lineage ?? "") });
     if (threads.has(key)) continue;
     threads.set(key, archivedThread(key, d, "superseded", isHeld(d.shard)));
   }
@@ -437,7 +437,7 @@ export function buildThreadsPageUncached(
     if (d.status !== "open" && d.status !== "claimed") continue;
     const hasWorker = workers.some((w) => w.dispatch === d.id);
     if (hasWorker) continue;
-    const key = taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? ""));
+    const key = laneKeyOf({ shard: d.shard, lineage: String((d as { lineage?: string }).lineage ?? "") });
     const prev = threads.get(key);
     if (prev) {
       const prevTerminal =
@@ -483,7 +483,6 @@ export function buildThreadsPageUncached(
         stuck_on: "",
         stuck_on_no: "",
         shard: d.shard ?? "",
-        stage: d.stage,
         status: threadStatusOf(d),
         model: dispatchModel(d),
         worker: d.worker ?? "",
@@ -497,7 +496,7 @@ export function buildThreadsPageUncached(
         title: dispatchTitle(d),
         output_bytes: 0,
         duration_sec: 0,
-        spawn_count: spawnCountFor(d.stage, d.shard ?? "", dispatches),
+        spawn_count: spawnCountFor(key, dispatches),
         usage: noUsage(d.at, dispatchModel(d)),
       });
       continue;
@@ -515,7 +514,6 @@ export function buildThreadsPageUncached(
       stuck_on: "",
       stuck_on_no: "",
       shard: d.shard ?? "",
-      stage: d.stage,
       status: threadStatusOf(d),
       queued_reason: reason,
       ...(d.promoted_at ? { promoted_at: d.promoted_at } : {}),
@@ -533,25 +531,23 @@ export function buildThreadsPageUncached(
       title: dispatchTitle(d),
       output_bytes: 0,
       duration_sec: 0,
-      spawn_count: spawnCountFor(d.stage, d.shard ?? "", dispatches),
+      spawn_count: spawnCountFor(key, dispatches),
       usage: noUsage(d.at, dispatchModel(d)),
     });
   }
 
   for (const d of dispatches) {
     if (d.status !== "open" && d.status !== "claimed") continue;
-    const key = taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? ""));
+    const key = laneKeyOf({ shard: d.shard, lineage: String((d as { lineage?: string }).lineage ?? "") });
     const t = threads.get(key);
     if (!t) continue;
     if (t.status === "running" || t.status === "starting") continue;
     /** 让位行允许改写：其工作进程记录停在 suspended，不能按启动时刻更晚就跳过。 */
     const suspendedRow = t.status === "suspended";
     if (String(t.started_at ?? "") > String(d.at ?? "") && !suspendedRow) continue;
+    /* 判定“这一单是否已有进程在跑”认派单 id：同分片可能有先后两张单，按分片比会误判为已有进程。 */
     const live = workers.some(
-      (w) =>
-        w.stage === d.stage &&
-        (w.shard ?? "") === (d.shard ?? "") &&
-        (w.status === "running" || w.status === "starting"),
+      (w) => (w.dispatch ?? "") === d.id && (w.status === "running" || w.status === "starting"),
     );
     if (live) continue;
     t.status = threadStatusOf(d);
@@ -594,10 +590,10 @@ export function buildThreadsPageUncached(
   };
   for (const w of workers) {
     const d = w.dispatch ? dispatchById.get(w.dispatch) : undefined;
-    addRef(taskKeyOf(w.stage, w.shard, String(d?.lineage ?? "")), w.id, w.dispatch);
+    addRef(laneKeyOf({ shard: w.shard, lineage: String(d?.lineage ?? "") }), w.id, w.dispatch);
   }
   for (const d of dispatches) {
-    addRef(taskKeyOf(d.stage, d.shard, String(d.lineage ?? "")), d.worker, d.id);
+    addRef(laneKeyOf({ shard: d.shard, lineage: String(d.lineage ?? "") }), d.worker, d.id);
   }
   for (const t of threads.values()) {
     const h = refs.get(t.id);
@@ -667,9 +663,20 @@ export function buildThreadsPageUncached(
      */
     if (why) t.parent_reason = maskBoardText(why, noOfDispatch);
     const stuck = pendingOf(d, dispatches, gidx).filter((id) => id !== "*")[0] ?? "";
-    /* 卡点可能是组号（归一后的 `G1`），显示形态由 `nodeRef.label` 统一补 `#`。 */
-    t.stuck_on = stuck && isGroupRef(stuck) ? label(stuck) : stuck;
-    t.stuck_on_no = stuck ? noOfDispatch.get(stuck) || threadNoOf(root, stuck) : "";
+    /*
+     * 卡点是组时按组上报：落地写 `#G2` 形态，编号位留空，前端走“等待 #G02”。
+     * 组内首个未完成成员另放 `stuck_member_no`，只在需要细节时附注，
+     * 不作为卡点本身 —— 成员号会让人以为只差这一张单。
+     */
+    if (stuck && isGroupRef(stuck)) {
+      t.stuck_on = label(stuck);
+      t.stuck_on_no = "";
+      const member = groupSettled(stuck, dispatches, gidx).pending[0] ?? "";
+      if (member) t.stuck_member_no = noOfDispatch.get(member) || threadNoOf(root, member);
+    } else {
+      t.stuck_on = stuck;
+      t.stuck_on_no = stuck ? noOfDispatch.get(stuck) || threadNoOf(root, stuck) : "";
+    }
   }
 
   const holdByThread = new Map<string, { at: string; why: string }>();
@@ -677,7 +684,7 @@ export function buildThreadsPageUncached(
     if (d.status !== "failed") continue;
     const v = String((d as { retry_verdict?: string }).retry_verdict ?? "");
     if (v !== "hold") continue;
-    const key = taskKeyOf(d.stage, d.shard, String((d as { lineage?: string }).lineage ?? ""));
+    const key = laneKeyOf({ shard: d.shard, lineage: String((d as { lineage?: string }).lineage ?? "") });
     const prev = holdByThread.get(key);
     if (!prev || String(d.at ?? "") >= prev.at) {
       holdByThread.set(key, { at: String(d.at ?? ""), why: String((d as { retry_why?: string }).retry_why ?? "") });
@@ -698,7 +705,6 @@ export function buildThreadsPageUncached(
     all.map((t) => ({
       id: t.id,
       shard: t.shard,
-      stage: t.stage,
       output_bytes: t.output_bytes,
       duration_sec: t.duration_sec,
       spawn_count: t.spawn_count,

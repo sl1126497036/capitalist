@@ -1,8 +1,8 @@
 ---
 name: capitalist
-version: 0.1.5
+version: 0.1.52
 agent_created: true
-description: capitalist（监工进程）。监工是独立进程（capitalist supervise），工作进程由它拉起，各自独立；本会话只启动监工、读取状态、回报结论，不执行派单内的工作。适用于多阶段、跨会话、易偏离、有硬性红线、需持续核验进度的任务。触发词：capitalist、监督、盯着做、自动推进、别中断、开新进程、换进程、上下文太长、上下文压缩、会话一长就糊涂、多进程协调、一个进程执行一个监督、不想每一步都给指令、谁来把关、按流程走、照着流程走、监督这个任务、让它自己跑、装 capitalist、开监督、给我盯一下。
+description: capitalist（监工进程）。监工是独立进程（capitalist supervise），工作进程由它拉起，各自独立；本会话只启动监工、读取状态、回报结论，不执行派单内的工作。适用于多节点、跨会话、易偏离、有硬性红线、需持续核验进度的任务。触发词：capitalist、监督、盯着做、自动推进、别中断、开新进程、换进程、上下文太长、上下文压缩、会话一长就糊涂、多进程协调、一个进程执行一个监督、不想每一步都给指令、谁来把关、按流程走、照着流程走、监督这个任务、让它自己跑、装 capitalist、开监督、给我盯一下。
 ---
 
 # capitalist 监工操作手册
@@ -16,7 +16,7 @@ description: capitalist（监工进程）。监工是独立进程（capitalist s
 | 现象 | 处理 |
 |---|---|
 | `capitalist --version` 输出版本号 | 已安装 |
-| 报 `command not found` | 执行 `npm prefix -g` 取前缀，用 `<前缀>/capitalist`（Windows 为 `<前缀>/capitalist.cmd`）的绝对路径调用 |
+| 返回 `command not found` | 执行 `npm prefix -g` 取前缀，用 `<前缀>/capitalist`（Windows 为 `<前缀>/capitalist.cmd`）的绝对路径调用 |
 | 回复中无 `【capitalist 已生效 …】` 注入行 | 告知用户尚未接入，由用户处理 |
 
 `capitalist supervise` 的 `--agent` 取值：
@@ -29,9 +29,9 @@ description: capitalist（监工进程）。监工是独立进程（capitalist s
 
 ## 2. 启动监工
 
-特别注意：在WorkBuddy中使用时，本会话不启动监工。宿主会话内取得的凭证授权只覆盖单条命令，命令结束即失效，无法支撑常驻进程。
-需要启动时，把命令交给用户在终端执行。
-其他宿主可正常执行启动，监工和Worker进程自动走非交互终端运行：
+注意：在 WorkBuddy 中，本会话不启动监工。宿主会话的凭证授权仅对单条命令有效，命令结束后即失效，不足以支撑常驻进程。
+需要启动时按宿主说明在终端执行（见本节「宿主说明」）。
+其他宿主可正常启动，监工与工作进程自动在非交互终端运行：
 
 ```bash
 capitalist supervise "<目标>" --agent <宿主>
@@ -49,14 +49,14 @@ capitalist supervise "<目标>" --agent <宿主>
 监工运行期间，本会话仍可操作同一任务根：`capitalist status`、`capitalist workers`、`capitalist tasks`、`capitalist inbox` 查询状态，`capitalist ask` 提问，`capitalist answer` 回填裁决。这些命令只读写 `.capitalist` 下的文件，监工下一轮读取。
 
 - 启动后有两种状态，均等待用户动作：
-  - 存在未完成事项：上次退出时未完成的派单（`open` / `claimed` / `reported` / `review`）逐张标记暂停，不执行。暂停是派单级标记：宿主侧新派入的单不受影响，可立即执行；被暂停的单继续占住所属分片，不补派、不重派。该步骤不能跳过。
+  - 存在未完成事项：上次退出时未完成的派单（`open` / `claimed` / `reported` / `review`）逐张标记暂停，不执行。暂停是派单级标记：宿主侧新派入的单不受影响，可立即执行；被暂停的派单继续占用所属分片，不补派、不重派。该步骤不能跳过。
   - 不存在上述事项：进入待命。派单全部结单即为该状态，队列中保留已结单记录不影响判定。此状态不派单，等待用户派单。
 - 两种状态下进程都保持在线，不自动退出。
 - 派单的执行与恢复由用户在监工面板操作。本会话不执行 `capitalist wake`、`capitalist resume`、`capitalist dispatch`，也不代为裁决。
-- 队列里的旧派单可能已过时，按过时口径继续执行会改错文件、覆盖已修内容。用户要求唤醒某张单时，说明该单可能已过时，由用户在面板确认后操作。
+- 队列中的旧派单可能已过时；按过时口径继续执行会改错文件或覆盖已修内容。用户要求唤醒某张派单时，应先说明其可能已过时，由用户在面板确认后操作。
 - `capitalist resume` 解除的是全局暂停（`capitalist pause` 写入的 `.capitalist/pause.json`），不解除逐单暂停。
 - `capitalist start` 只创建任务根，不写入派单，不拉起工作进程，不替代 `capitalist supervise`。
-- 用户未明确要求时严禁派单，保持监工待命，缺省使用 minimal 契约。
+- 用户未明确要求时严禁派单，保持监工待命，缺省使用 minimal 守卫。
 - 确认在线后，汇报面板地址与当前状态；除非用户明确要求，不再做其他工作。
 
 ### 宿主说明
@@ -68,7 +68,7 @@ capitalist supervise "<目标>" --agent <宿主>
 
 - WorkBuddy 中的注意事项
   - 无终端可用时处于“受限模式”，需先解除。
-  - 监工不在WorkBuddy的命令通道内启动，由用户在终端执行 `capitalist supervise --agent workbuddy`。
+  - 监工不在 WorkBuddy 的命令通道内启动，由用户在终端执行 `capitalist supervise --agent workbuddy`。
 
 - ClaudeCode
   - 宿主为 ClaudeCode 时，监工通过 `claude -p` 调度。
@@ -97,7 +97,7 @@ capitalist supervise "<目标>" --agent <宿主>
 
 | 输入                   | 动作                                      |
 | ------------------- | -------------------------------------- |
-| “给这个项目开监督” / “盯着这个项目” | 给出终端启动命令，由用户执行；启动后用 `capitalist status` 确认，回报 pid 与契约名 |
+| “给这个项目开监督” / “盯着这个项目” | 给出终端启动命令，由用户执行；启动后用 `capitalist status` 确认，回报 pid 与守卫名 |
 | “现在到哪了”/“当前状态”       | `capitalist workers` + `capitalist status`，输出摘要，不贴原文 |
 | “验证码 123456”/“授权了”  | 转交该值，再执行 `capitalist unblock --type <类型>`    |
 | “这个先别动”/“只读”        | `capitalist mode plan`                        |
@@ -110,31 +110,32 @@ capitalist supervise "<目标>" --agent <宿主>
 
 | 角色   | 进程                                  | 职责               | 启动方       |
 | ---- | ------------------------------------ | ----------------- | --------- |
-| 监工进程 | `capitalist supervise`，前台常驻                   | 建根、选定契约、派单、验收、回收重派 | 用户终端 |
+| 监工进程 | `capitalist supervise`，前台常驻                   | 建根、选定守卫、派单、验收、回收重派 | 用户终端 |
 | 工作进程 | 独立宿主进程（`claude -p` / `codebuddy -p`） | 执行当前派单           | 监工        |
 | hook | 宿主在工作进程内调用的判定层                       | 拦截红线、注入状态          | 安装时写入     |
 
 ```
 监工进程（capitalist supervise）  ← 派单 / 验收 / 回收
-    │ 读契约
+    │ 读守卫
     ▼
-契约 contract.json         ← 阶段门槛与红线
+守卫 policy.json            ← 红线、本机边界、判据来源
+    │ 读任务树（台账里的 parent / after）
     │ 派单（.capitalist/inbox/dispatch.jsonl）
     ▼
 工作进程 A / B / C         ← 各自独立 pid、会话与上下文，上下文互相隔离
     │ 上报（capitalist report）
     ▼
-监工进程                   ← 验收、阶段推进、下一轮派单
+监工进程                   ← 验收、按任务树派下一张单
 ```
 
-- 无 `parallel` 分片的阶段只有一个工作进程；提高 `--workers` 不增加并行度，监工也拒绝超出分片数的并行度。
+- 并行度只由 `--workers` 决定；在途派单各占一条并发线，空出的位置留待后续派单。
 - 每个工作进程有独立 pid、会话与上下文，记录与日志各自一份。
 
 ## 4. 职责边界
 
 启动监工(非WorkBuddy)：
 ```bash
-capitalist supervise "<目标>" --contract <契约名> --agent <宿主>   # 前台常驻，关闭终端后下线
+capitalist supervise "<目标>" --policy <守卫名> --agent <宿主>   # 前台常驻，关闭终端后下线
 ```
 
 本会话可执行的命令：
@@ -142,7 +143,7 @@ capitalist supervise "<目标>" --contract <契约名> --agent <宿主>   # 前�
 ```bash
 capitalist supervise-stop                                    # 停止监工
 capitalist workers                                           # 工作进程列表与状态
-capitalist status                                            # 阶段与门槛
+capitalist status                                            # 任务树进度与门槛
 capitalist inbox / capitalist answer <id> "<指导>"           # 监工暂停派单时回填裁决
 capitalist mode plan                                         # 切换为 plan 档
 ```
@@ -151,7 +152,7 @@ capitalist mode plan                                         # 切换为 plan �
 
 | 命令 | 归属 |
 |---|---|
-| `capitalist advance` / `capitalist adopt` | 阶段推进与契约切换由监工在验收后执行 |
+| `capitalist adopt` | 更换守卫由用户执行（`capitalist adopt --policy <名|路径>`） |
 | `capitalist wake` / `capitalist resume` / `capitalist dispatch` | 派单的执行与恢复由用户在监工面板确认后操作 |
 | `capitalist report` | 派单上报由工作进程执行 |
 | `capitalist worker <进程号>` | 只读查询单个工作进程的动作时间线 |
@@ -162,11 +163,11 @@ capitalist mode plan                                         # 切换为 plan �
 
 ### 派单内容规范
 
-`capitalist supervise` 目标、契约阶段目标、分片 action 与 `capitalist answer` 回填内容按以下规则编写：
+`capitalist supervise` 目标、派单 action 与 `capitalist answer` 回填内容按以下规则编写：
 
 1. 阅读收到的 skill、文档或任务描述。理解不明确时先澄清，不向工作进程转发原始表述。
 2. 派单内容包含目标、作用对象与完成判据，表述无歧义，不沿用口语原文。
-3. 派单内容只写工作内容。排序、依赖与并行由契约阶段、分片或多次派单安排，不写入工作进程提示词。
+3. 派单内容只写工作内容。排序与依赖用派单的 `PARENT:` / `AFTER:` 行表达，并行由分片与 `--workers` 决定，不写入工作进程提示词。
 4. 派单末尾写入语言要求：工作进程的思考过程、回复与产出文案使用与用户相同的语言，代码与既有标识符除外。
 5. 涉及用户可见文案的派单附措辞标准，其余派单不附。
 6. 按本单工作内容挑选相关技能，在正文里点明技能名与要用的步骤。被点名的技能正文会自动附进工作进程提示词，未点名的只给路径。整份技能不照抄。
@@ -174,18 +175,18 @@ capitalist mode plan                                         # 切换为 plan �
 ## 5. 监工行为
 
 - 心跳写 `.capitalist/supervisor.json`，hook 据此判断监工是否存活。
-- 调度按固定间隔轮询（默认 5 秒，`--tick <秒>` 可改）：每轮刷新心跳与租约、热加载任务列表、消费看板指令；暂停与待命期间不派单。
+- 调度按固定间隔轮询（默认 5 秒，`--tick <秒>` 可改）：每轮刷新心跳与租约、热加载守卫、消费看板指令；暂停与待命期间不派单。
 - 带暂停标记的派单不参与派发与领取（`capitalist next`），也不因同分片缺单而被补派；只有唤醒后重新进入候选。
 - 有未裁决问题（`capitalist ask` 登记的 open 项）时暂停派单，等待 `capitalist answer`。
-- 工作进程心跳超时或 pid 消失时记 `exited` / `failed`，判死该派单并重派。
-- 末阶段门槛达标时记 `supervisor_done`，转入待命，进程不退出；非末阶段达标时推进到下一阶段，只改状态不建单，派单由用户下发（加 `--auto-dispatch` 才自动建单）。
-- 通道不可用时整个任务待命：不派单、不重派、不推进阶段。该状态保留五分钟，恢复后自动继续；重新启动监工立即清除。
+- 工作进程心跳超时或 pid 消失时记 `exited` / `failed`，将该派单判定为失败并重派。
+- 没有在途单、也没有等待退避补派的链时记 `supervisor_done`，转入待命，进程不退出。派单全部结单才进该状态；失败待补派的链仍算未完成。
+- 通道不可用时整个任务待命：不派单、不重派。该状态保留五分钟，恢复后自动继续；重新启动监工立即清除。
 - 该状态下的可见信号是在看板发消息时返回“对话通道不可用”。
 - 监工退出时终止其拉起的工作进程。
 
-## 6. 派单树
+## 6. 任务树
 
-派单台账是一组多节点结构：一张派单最多挂一个父节点，父节点完成后子派单才可启动；父节点相同即兄弟；没有父节点的派单自成一棵树。
+派单台账是一组多节点结构：一张派单最多关联一个父节点‘父节点可以是一组任务，同组任务可并行；父节点完成后子派单才可启动；父节点相同即兄弟；没有父节点的派单自成一棵树。
 
 ```bash
 capitalist tree                  # 输出树结构与节点状态
@@ -202,13 +203,13 @@ capitalist tree rebuild --apply  # 写入重建结果
 - 不删除台账行，不改写历史状态。关闭的派单状态为 `closed`，历史记录保留。
 - 幂等。第二次 `--apply` 输出“没有需要改的行”。
 
-监工启动后在首个 tick 前检查台账：未完工派单（`open` / `claimed` / `review`）超过一张且均无父节点时执行一次重建，输出“已重建 N 棵树（未完工 M 单）”。存在带父节点的未完工派单时不触发。
+监工启动后在首个 tick 前检查台账：未完工派单（`open` / `claimed` / `review`；`reported` 不计入）超过一张且均无父节点时执行一次重建，输出“已重建 N 棵树（未完工 M 单）”。存在带父节点的未完工派单时不触发。
 
 ## 7. 命令速查
 
 | 目的         | 命令                                                               |
 | ---------- | ---------------------------------------------------------------- |
-| 启动监工      | `capitalist supervise "<目标>" --contract <契约名> --agent <宿主> [--workers N]`|
+| 启动监工      | `capitalist supervise "<目标>" --policy <守卫名> --agent <宿主> [--workers N]`|
 | 停止监工      | `capitalist supervise-stop`                                             |
 | 唤醒暂停单     | 由用户在监工面板“已暂停”下逐单唤醒（本会话不执行 `capitalist wake`）              |
 | 工作进程       | `capitalist workers [--json]`                                           |
@@ -224,52 +225,45 @@ capitalist tree rebuild --apply  # 写入重建结果
 
 工作进程侧命令（`capitalist record` / `capitalist ledger` / `capitalist report`）由工作进程执行，本会话不调用。
 
-## 8. 写契约
+## 8. 写守卫
 
-契约是纯 JSON 文件，定义阶段、阶段门槛、红线与本机边界。最小结构：
+守卫是纯 JSON 文件，放在包的 `policies/<名>.policy.json`。它只声明任务边界与判据来源，不声明流程：没有阶段，也没有工序，步骤顺序由任务树表达。最小结构：
 
 ```json
 {
   "name": "my-domain",
   "domain": "领域名",
-  "stages": [
-    { "id": "S0", "name": "阶段名", "goal": "为什么做", "next": "下一步动作",
-      "done": { "type": "file_exists", "path": "docs/plan.md" } }
-  ],
+  "description": "这份守卫约束什么",
+  "context": "完成口径与判据来源",
   "redlines": [
     { "id": "R1", "level": "BLOCK", "label": "禁止项",
       "pattern": "正则", "skip_if": "^(?:grep|rg)\\b", "fix": "正确做法" }
   ],
   "local_guard": {
+    "allow_roots": ["/path/to/work"],
     "sensitive_paths": ["~/.ssh", "/etc"],
     "sensitive_names": [".env", "id_rsa"]
-  }
+  },
+  "env_notes": { "summary": "环境前提，以探测结果为准" }
 }
 ```
 
-### 并行分片（多工作进程）
+| 字段 | 用途 |
+|---|---|
+| `name` | 守卫名，`--policy` 用它引用 |
+| `domain` / `description` | 这份守卫管什么，报错与看板上显示 |
+| `context` | 判据来源：完成口径、用户原话与惯例冲突时以谁为准、报告写到什么程度 |
+| `redlines` | 命令与操作的正则规则，命中后按 `level` 处理 |
+| `local_guard` | 本机路径边界：可以写的范围、敏感路径、敏感文件名与通配 |
+| `env_notes` | 环境前提。只写“以探测结果为准”，不写死平台与工具链 |
 
-阶段声明 `parallel` 后按分片并行：每片一张派单、一个独立进程。
+### 放宽边界
 
-```json
-{
-  "id": "S2",
-  "name": "实现",
-  "parallel": [
-    { "id": "api", "action": "改接口层，完成后 capitalist record changes '{\"shard\":\"api\"}'" },
-    { "id": "ui",  "action": "改界面层，完成后 capitalist record changes '{\"shard\":\"ui\"}'" }
-  ],
-  "done": { "type": "jsonl_min", "file": "changes.jsonl", "min": 2 }
-}
-```
+当边界阻止必须执行的操作时，应放宽边界，并在守卫中写明放宽的代价。放宽入口有三处：
 
-未声明 `parallel` 的阶段并行度固定为 1，传入 `--workers > 1` 不生效。
-
-### 门槛类型判定表
-
-`done.type` 取值如下，未知类型按未达标处理：
-
-`file_exists`、`glob_min`、`jsonl_min`、`jsonl_all_field`、`jsonl_status_min`、`jsonl_status_none`、`json_keys`、`json_eq`、`file_contains_all`、`glob_all_contains`、`mtime_after_stage`、`evidence_complete`、`all_of`、`any_of`。
+1. 改守卫文件：`local_guard.allow_roots` 加目录，或给红线改 `level`、补 `skip_if`。这份守卫下的所有任务根都生效。
+2. `capitalist justify <路径> "<理由>" --ttl <秒>`：临时放行一个越界路径，放行记入待复核。
+3. `capitalist adopt --policy <名|路径>`：给已有任务根更换守卫。
 
 ### 红线级别判定表
 
@@ -279,7 +273,7 @@ capitalist tree rebuild --apply  # 写入重建结果
 | `NEED_USER` | 需当次授权 |
 | `WARN`      | 放行并记录提示 |
 
-标 `defer: "local_delete"` 将删除命令交由路径判定。
+标注 `defer: "local_delete"` 后，删除命令交由路径判定。
 
 ## 9. 故障处理
 
@@ -294,8 +288,8 @@ capitalist tree rebuild --apply  # 写入重建结果
 | 监工进程被系统终止，工作进程一起退出                        | Windows Job 连带终止 `guard`，`.capitalist/guard.log` 无记录。重启监工后重派 |
 | 窗口停在“是否信任此目录”                                       | 交互式启动会提示信任确认，按 1 完成确认；需要无提示时用 `-p` |
 | 报 `EADDRINUSE 127.0.0.1:xxxxx`                      | 宿主环境变量被派生进程继承（`SERVER__PORT`）。当前版本继承整份环境并剔除宿主会话变量；出现该错误表明版本过旧 |
-| 工作进程一直不结束                                           | `capitalist workers` 读取心跳；超时后监工判死重派，也可执行 `capitalist supervise-stop` 后读取日志                                                                |
-| 监工反复派同一单                                            | 门槛未达标而工作进程上报完成：检查 `capitalist status` 的未达项，按需调整契约的 `done`                                                                          |
+| 工作进程一直不结束                                           | `capitalist workers` 读取心跳；超时后监工判定失败并重派，也可执行 `capitalist supervise-stop` 后读取日志                                                                |
+| 监工反复派同一单                                            | 验收未通过而工作进程上报完成：读 `capitalist status` 的未达项与验收判据，补齐判据或补入具体差距后再重派                                                                          |
 | 监工不派单且无 open 问题                                     | 存在 claimed 单且工作进程心跳仍在；等待心跳结束，或结束工作进程由监工重派                                                                                      |
 | 启动后队列有单但不执行                                       | 这些单带暂停标记（上次中断未完成）：`capitalist status` 显示暂停单数，由用户在面板“已暂停”下逐单唤醒；新派单不受影响                                    |
 | 回复中无 `【capitalist 已生效 …】` 注入行                    | 告知用户尚未接入，由用户处理                    |
@@ -308,8 +302,8 @@ capitalist tree rebuild --apply  # 写入重建结果
 
 | 原用途                             | 对应操作                                   |
 | ------------------------------- | --------------------------------------- |
-| `rotate-worker` / `handoff` 换进程 | 监工判死重派；更换宿主时执行 `capitalist supervise-stop` 后重新启动 |
-| `daemon` / `alerts` 实时通道        | 无常驻 IPC；状态在 `.capitalist/`，hook 调用时读           |
-| `pack` 派单                       | 写入契约的 `stage.next` 或 `parallel`，由监工派    |
+| `rotate-worker` / `handoff` 更换工作进程 | 判定失败后重派；更换宿主时执行 `capitalist supervise-stop` 后重新启动 |
+| `daemon` / `alerts` 实时通道        | 无常驻 IPC；状态存放于 `.capitalist/`，在 hook 调用时读取           |
+| `pack` 派单                       | 建单时写 `PARENT:` / `AFTER:` 连成任务树，由监工派发    |
 | `capitalist violations` 查看违规            | 读取 `.capitalist/violations.jsonl`               |
 

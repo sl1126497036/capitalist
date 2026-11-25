@@ -3,7 +3,7 @@
  *
  * 额度耗尽、登录态失效、限流三类结论原先由五处在各自的作用域上跑同一份正则：进程
  * stderr 尾部、stdout 全文、模型正文、工作进程日志、登录检查原文。判定规则相同、作用域
- * 不同，业务文本混进任一作用域就会把正常回复判成上游拒绝。实测：对话层被要求“一到三句”，
+ * 不同，业务文本混进任一作用域就会把正常回复判成上游拒绝。对话层被要求“一到三句”，
  * 正文提到“额度耗尽”即被整段作废，模型真实回答被替换成错误文案。
  *
  * 收口后调用方只声明文本来源（{@link FaultScope}），取多少、能不能判、按什么顺序判由本
@@ -79,7 +79,7 @@ const RATE_HINT = /(\b429\b|rate[_\s-]?limit|too[_\s-]?many[_\s-]?requests|限�
  * 带动作行的正文表明模型仍在执行任务，不可能是上游拒绝说明。该判据专门排除“模型复述失败原因后又给出重派指令”这一常见情形。
  */
 const ACTION_LINE =
-  /^[ \t]*(?:DO|ATT|PARENT|PARENT_REASON|AFTER|GROUP|INSERT|INSERT_MODE|REVOKE|TITLE)[ \t]*[:：]/im;
+  /^[ \t]*(?:DO|ATT|PARENT|PARENT_REASON|ACCEPTANCE|AFTER|GROUP|INSERT|INSERT_MODE|REVOKE|TITLE)[ \t]*[:：]/im;
 
 /** 正文作用域的长度上限：拒绝说明很短，正常回答通常更长。 */
 const REPLY_MAX = 400;

@@ -1,5 +1,5 @@
 /**
- * 用量台账：从工作进程日志读取 token / 成本 / 耗时 / 模型，按进程、派单、阶段三个维度汇总。
+ * 用量台账：从工作进程日志读取 token / 成本 / 耗时 / 模型，按进程与派单两个维度汇总。
  *
  * 无读数的字段为 null，前端显示“未上报”。`contextUsed` 缺失时按会话消息文本估算并标 `context_estimate`，不按日志体积或时长折算。
  */
@@ -79,7 +79,7 @@ export interface ModelUsage {
 
 /** 台账的一行：用量 + 身份 + 重派口径。 */
 export interface UsageRow extends UsageFigures {
-  /** 进程 id / 派单 id / 阶段 id，视维度而定 */
+  /** 进程 id / 派单 id，视维度而定 */
   id: string;
   /** 该行覆盖的运行次数（进程维度恒 1） */
   runs: number;
@@ -87,13 +87,12 @@ export interface UsageRow extends UsageFigures {
   reported_runs: number;
   /** 其中没有读数的次数 */
   unreported_runs: number;
-  /** 进程维度：所属派单；派单/阶段维度为空串 */
+  /** 进程维度：所属派单；派单维度为空串 */
   dispatch: string;
-  stage: string;
   shard: string;
   /** 派单维度：该单的工作进程 id 列表 */
   workers: string[];
-  /** 阶段维度：该阶段的派单数 */
+  /** 该行覆盖的派单数 */
   dispatches: number;
 }
 
@@ -106,7 +105,6 @@ export interface UsageLedger {
   totals: UsageRow;
   by_worker: UsageRow[];
   by_dispatch: UsageRow[];
-  by_stage: UsageRow[];
   balance: BalanceView;
 }
 
@@ -706,7 +704,6 @@ function combine(id: string, rows: readonly UsageRow[]): UsageRow {
     reported_runs: rows.reduce((n, r) => n + r.reported_runs, 0),
     unreported_runs: rows.reduce((n, r) => n + r.unreported_runs, 0),
     dispatch: "",
-    stage: dominant(rows.map((r) => r.stage)),
     shard: dominant(rows.map((r) => r.shard)),
     workers: rows.flatMap((r) => (r.workers.length ? r.workers : [r.id])),
     dispatches: new Set(rows.map((r) => r.dispatch).filter(Boolean)).size,
@@ -758,7 +755,6 @@ export function workerUsageRow(w: WorkerRecord, dispatches: readonly Dispatch[] 
     reported_runs: figs.reported ? 1 : 0,
     unreported_runs: figs.reported ? 0 : 1,
     dispatch: str(w.dispatch),
-    stage: str(w.stage),
     shard: str(w.shard ?? ""),
     workers: [w.id],
     dispatches: 1,
@@ -783,7 +779,6 @@ function supervisorUsageRow(root: string): UsageRow | null {
     reported_runs: 1,
     unreported_runs: 0,
     dispatch: "",
-    stage: "",
     shard: "",
     workers: ["capitalist"],
     dispatches: 1,
@@ -799,7 +794,7 @@ function supervisorUsageRow(root: string): UsageRow | null {
 /** 构建用量台账：三个维度、合计与余额；各行按用量降序，读数为 null 的排最后。 */
 export function buildUsageLedger(root: string): UsageLedger {
   const workers = collectWorkerUsage(root);
-  /* 非工作进程消耗桶不进派单/阶段维度，只在进程维度列出并计入合计。 */
+  /* 非工作进程消耗桶不进派单维度，只在进程维度列出并计入合计。 */
   const supervisorRow = supervisorUsageRow(root);
   const allRows = supervisorRow ? [...workers, supervisorRow] : workers;
 
@@ -812,23 +807,8 @@ export function buildUsageLedger(root: string): UsageLedger {
   }
   const dispatchRows = [...byDispatch.entries()].map(([id, rows]) => {
     const row = combine(id, rows);
-    return { ...row, id, dispatch: id, stage: dominant(rows.map((r) => r.stage)), shard: dominant(rows.map((r) => r.shard)) };
+    return { ...row, id, dispatch: id, shard: dominant(rows.map((r) => r.shard)) };
   });
-
-  const byStage = new Map<string, UsageRow[]>();
-  for (const r of workers) {
-    const key = r.stage || "（未知阶段）";
-    const list = byStage.get(key);
-    if (list) list.push(r);
-    else byStage.set(key, [r]);
-  }
-  const stageRows = [...byStage.entries()].map(([id, rows]) => ({
-    ...combine(id, rows),
-    id,
-    dispatch: "",
-    stage: id,
-    dispatches: new Set(rows.map((r) => r.dispatch).filter(Boolean)).size,
-  }));
 
   const totals: UsageRow = {
     ...combine("total", allRows),
@@ -845,7 +825,7 @@ export function buildUsageLedger(root: string): UsageLedger {
     source: {
       files: [
         ".capitalist/workers/<id>.log（stream-json：type=assistant 的 message.usage、type=result 的汇总）",
-        ".capitalist/workers/<id>.json（started_at / dispatch / stage / shard）",
+        ".capitalist/workers/<id>.json（started_at / dispatch / shard）",
         ".capitalist/inbox/dispatch.jsonl（派单 model 与 done_at）",
         "账号余额与已用积分：本进程不读取宿主令牌，读数不可用（见 balance.ts）。",
       ],
@@ -854,7 +834,6 @@ export function buildUsageLedger(root: string): UsageLedger {
     totals,
     by_worker: sortRows(allRows),
     by_dispatch: sortRows(dispatchRows),
-    by_stage: sortRows(stageRows),
     balance: balanceView(root),
   };
 }

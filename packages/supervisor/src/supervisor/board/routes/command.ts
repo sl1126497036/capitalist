@@ -161,8 +161,8 @@ ctx.req.on("end", () => {
     const cli = process.argv[1] ?? "";
     const target = String(capitalist.target ?? "").trim() || "监工";
     const args = [cli, "supervise", target, "--root", targetRoot];
-    const contract = String(capitalist.contract ?? "").trim();
-    if (contract) args.push("--contract", contract);
+    const policy = String(capitalist.policy ?? "").trim();
+    if (policy) args.push("--policy", policy);
     const workers = Number(capitalist.max_workers);
     if (Number.isFinite(workers) && workers > 0) args.push("--workers", String(workers));
     /*
@@ -189,7 +189,7 @@ ctx.req.on("end", () => {
       });
       launcher.unref();
       launcherPid = launcher.pid ?? 0;
-      recordEvent(targetRoot, "supervisor_restarted", { pid: launcherPid, via: "relauncher", target, contract });
+      recordEvent(targetRoot, "supervisor_restarted", { pid: launcherPid, via: "relauncher", target, policy });
     } catch (e) {
       recordEvent(targetRoot, "supervisor_restart_failed", {
         error: e instanceof Error ? e.message : String(e),
@@ -205,7 +205,7 @@ ctx.req.on("end", () => {
     }
 
     requestSupervisorStop(targetRoot, "看板：用户重启（新进程由启动器接管）");
-    recordEvent(targetRoot, "supervisor_restart_requested", { by: "user", via: "board", target, contract });
+    recordEvent(targetRoot, "supervisor_restart_requested", { by: "user", via: "board", target, policy });
 
     ctx.res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
     ctx.res.end(
@@ -239,7 +239,7 @@ ctx.req.on("end", () => {
         model,
         effective: model
           ? `后续派单将使用 ${model}`
-          : "已清除派单模型，后续派单回到契约/默认模型",
+          : "已清除派单模型，后续派单回到守卫/默认模型",
       }),
     );
     return;
@@ -420,7 +420,6 @@ ctx.req.on("end", () => {
   }
   recordEvent(ctx.opts.root, "dispatch_confirmed", {
     dispatch: id,
-    stage: done.stage,
     shard: done.shard ?? "",
     worker: done.worker ?? "",
   });

@@ -8,14 +8,14 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const board = require(join(PKG, "dist/supervisor/board"));
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const { appendDispatch, registerWorker } = require(join(PKG, "dist/core/record/supervisor.js"));
 const { supervisorDir } = require(join(PKG, "dist/core/record/paths.js"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-stats-"));
   for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
-  createTaskRoot({ target: "统计一致", contractSpec: "minimal", root, supervisor: false });
+  createTaskRoot({ target: "统计一致", policySpec: "minimal", root, supervisor: false });
   return root;
 }
 

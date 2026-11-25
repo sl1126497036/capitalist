@@ -9,7 +9,7 @@ const { spawnSync } = require("node:child_process");
 const capitalist = require("../dist/core/record/supervisor");
 const { writeJsonl } = require("../dist/core/record/json");
 const { loadState } = require("../dist/core/record/state");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const loop = require("../dist/supervisor/loop");
 const { appendSupervisorDirective, listSupervisorDirectives } = require("../dist/supervisor/channel/direct");
 const { parseReply } = require("../dist/supervisor/channel/parseReply");
@@ -17,7 +17,7 @@ const { assignThreadNos } = require("../dist/supervisor/usage/threadNo");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-forest-"));
-  createTaskRoot({ target: "派单多节点结构", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "派单多节点结构", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -155,7 +155,7 @@ async function dispatchViaDirective(root, extra) {
   assert.ok(w.ok, `指令应入列：${w.error || ""}`);
   const res = await loop.__testing.applySupervisorDirectives({
     root,
-    contract: {},
+    policy: {},
     state: loadState(root),
     wopts: {},
     concurrency: null,
@@ -228,7 +228,7 @@ test("挂父节点的派单不参与同类合并：合并会使其承担一条�
     assert.ok(w.ok, w.error || "");
     await loop.__testing.applySupervisorDirectives({
       root,
-      contract: {},
+      policy: {},
       state: loadState(root),
       wopts: {},
       concurrency: null,
@@ -256,7 +256,7 @@ test("挂父节点的派单不参与同类合并：合并会使其承担一条�
     assert.ok(w.ok, w.error || "");
     await loop.__testing.applySupervisorDirectives({
       root: root2,
-      contract: {},
+      policy: {},
       state: loadState(root2),
       wopts: {},
       concurrency: null,

@@ -75,7 +75,8 @@ test("消息登记：方向缺省即失败，不再静默落成 U2W", () => {
 test("消息登记：监工承接的消息落成 U2S", () => {
   const root = sandbox();
   const msg = recordUserMessage(root, { text: "重试一次", direction: userMsgDirectionOf("supervisor") });
-  assert.match(msg.id, /^S0-U2S-\d+$/);
+  /* 同一毫秒内生成多条时末段带序号，判定口径见 msgId.ts 的 `isMsgId`。 */
+  assert.match(msg.id, /^S0-U2S-\d+(?:-\d+)?$/);
 });
 
 test("前端切分：带同毫秒序号的消息编号整段切出", async () => {
@@ -121,17 +122,17 @@ test("用户下发的调度指令方向段是 U2S，监工发给工作进程的�
   const root = sandbox("capitalist-msg-form-");
   const byUser = appendSupervisorDirective(root, { text: "resume", action: "resume" });
   assert.equal(byUser.ok, true);
-  assert.match(byUser.rec.id, /^S0-U2S-\d+$/, "界面上“我：”的气泡必须是用户消息编号");
+  assert.match(byUser.rec.id, /^S0-U2S-\d+(?:-\d+)?$/, "界面上“我：”的气泡必须是用户消息编号");
   const bySupervisor = appendSupervisorDirective(root, { text: "pause", action: "pause", via: "capitalist" });
   assert.equal(bySupervisor.ok, true);
-  assert.match(bySupervisor.rec.id, /^S0-S2W-\d+$/);
+  assert.match(bySupervisor.rec.id, /^S0-S2W-\d+(?:-\d+)?$/);
 });
 
 test("插话对外编号用消息编号，不再用台账行号", () => {
   const root = sandbox("capitalist-directive-ref-");
   const rec = appendSupervisorDirective(root, { text: "resume", action: "resume" }).rec;
   const ref = directiveShortRef(rec);
-  assert.match(ref, /^S0-U2S-\d+$/, "回报与正文都用消息编号");
+  assert.match(ref, /^S0-U2S-\d+(?:-\d+)?$/, "回报与正文都用消息编号");
   assert.ok(!ref.startsWith("@"), "不得再发行号");
 });
 

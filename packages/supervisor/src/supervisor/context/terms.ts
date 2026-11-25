@@ -24,21 +24,16 @@ export const EVENT_ZH: Readonly<Record<string, string>> = Object.freeze({
   worker_heartbeat_rescued: "状态检查恢复",
   worker_reaped: "回收进程",
   worker_launch_failed: "进程启动失败",
-  gate_eval: "门槛评估",
-  supervisor_advance: "阶段推进",
   supervisor_done: "任务完成",
-  stage_skipped: "跳过阶段",
-  stage_fallback: "跳过阶段",
-  stage_stalled: "阶段停滞",
-  contract_reload: "任务列表重载",
-  contract_change: "任务列表变更",
-  contract_error: "任务列表解析失败",
-  contract_refused: "任务列表被拒",
+  stalled: "在途超时而强制收尾",
+  policy_reload: "守卫重载",
+  policy_change: "守卫变更",
+  policy_error: "守卫解析失败",
+  policy_refused: "守卫被拒",
   board_serve: "看板启动",
   board_reload: "看板重启",
   redispatch_capped: "重派达到上限",
   retry_held: "暂不重派",
-  debt_settled: "待补项补清",
   model_fallback: "模型回退",
   supervisor_cmd: "指令回执",
   supervisor_answer: "回答",
@@ -71,10 +66,9 @@ export const CMD_ZH: Readonly<Record<string, string>> = Object.freeze({
   dispatch: "已派单",
   diagnose: "诊断",
   fix: "修复",
-  reload: "重载任务列表",
+  reload: "重载守卫",
   concurrency: "调整并行度",
   retry: "重派任务",
-  skip: "跳过阶段",
   ask: "提问",
   instruct: "自然语言调度",
   say: "留言",
@@ -115,8 +109,8 @@ export const STATUS_ZH: Readonly<Record<string, string>> = Object.freeze({
 /** 未知状态的回落词。 */
 export const STATUS_ZH_FALLBACK = "未知状态";
 
-/** 任务列表被拒的原因 -> 中文。 */
-export const CONTRACT_KIND_ZH: Readonly<Record<string, string>> = Object.freeze({
+/** 守卫被拒的原因 -> 中文。 */
+export const POLICY_KIND_ZH: Readonly<Record<string, string>> = Object.freeze({
   requirement_violation: "需求被删除或降低标准",
 });
 
@@ -155,9 +149,9 @@ export function zhStatus(status: unknown): string {
   return STATUS_ZH[key] ?? STATUS_ZH_FALLBACK;
 }
 
-/** 契约拒绝原因 -> 中文；未知原因原样保留。 */
-export function zhContractKind(kind: unknown): string {
+/** 守卫拒绝原因 -> 中文；未知原因原样保留。 */
+export function zhPolicyKind(kind: unknown): string {
   const key = String(kind ?? "");
   if (!key) return "";
-  return CONTRACT_KIND_ZH[key] ?? key;
+  return POLICY_KIND_ZH[key] ?? key;
 }

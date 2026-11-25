@@ -65,11 +65,10 @@ export function groupIndexFrom(root: string, rows: readonly Dispatch[]): GroupIn
  */
 export function openGroup(
   root: string,
-  input: { title: string; stage?: string | undefined; createdBy?: string | undefined },
+  input: { title: string; createdBy?: string | undefined },
 ): { ok: true; id: string } | { ok: false; error: string } {
   const made = issueGroupNo(root, {
     title: input.title,
-    ...(input.stage ? { stage: input.stage } : {}),
     ...(input.createdBy ? { created_by: input.createdBy } : {}),
   });
   if (!made.ok) return { ok: false, error: `建组失败：${made.error}` };
@@ -129,17 +128,13 @@ export function joinGroup(
 export function applyGroupDecl(
   root: string,
   decl: unknown,
-  input: { parentId: string; stage: string; rows: readonly Dispatch[]; createdBy?: string },
+  input: { parentId: string; rows: readonly Dispatch[]; createdBy?: string },
 ): { ok: true; id: string } | { ok: false; error: string } {
   /* 台账里存的是结构；手写台账可能存原话，两种都认。 */
   const spec = typeof decl === "string" ? parseGroupSpec(decl) : (decl as GroupSpec | null | undefined);
   if (!spec || spec.mode === "none") return { ok: true, id: "" };
   if (spec.mode === "new") {
-    const made = openGroup(root, {
-      title: spec.title,
-      stage: input.stage,
-      createdBy: input.createdBy ?? "llm",
-    });
+    const made = openGroup(root, { title: spec.title, createdBy: input.createdBy ?? "llm" });
     if (!made.ok) return { ok: false, error: made.error };
     return { ok: true, id: made.id };
   }

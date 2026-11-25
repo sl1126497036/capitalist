@@ -987,14 +987,21 @@ function onHotkey(e) {
 
 /* /api/capitalist-chat 为流式响应：正文逐字追加，思考与工具调用各占一行，返回最终的 done 事件供调用方收尾。 */
 async function streamChat(text, thread, onDelta, via = "", quote = null, skills = []) {
+  /*
+   * 监工窗口不绑定任务线程：线程键只对任务线程有效，混进来会让服务端把动作当成线程内要求
+   * 折算成对某张单的追加。这里统一归一：空串或监工选择值都不下发。
+   */
+  const threadKey = String(thread || "").trim();
+  const scoped = threadKey && threadKey !== "capitalist" ? threadKey : "";
   const res = await fetch("./api/capitalist-chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
     /* 请求随带 ref 与首行摘要；后端按 ref 取不到原文时用摘要回落，被引原文拼进发给模型的内容。 */
     body: JSON.stringify({
       text,
-      thread: thread || "",
-      via: via || "",
+      thread: scoped,
+      /* 介入标记只在任务线程里有意义，监工窗口一律不带。 */
+      via: scoped ? via || "" : "",
       ...(quote && quote.ref ? { quote: quote.ref, quote_text: String(quote.text || "").slice(0, 200) } : {}),
       /* 界面选中的技能：后端写进派单正文，工作进程据此加载对应 SKILL.md。 */
       ...(Array.isArray(skills) && skills.length ? { skills } : {}),
@@ -1050,7 +1057,7 @@ async function talkTo(text, thread, via = "", quote = null, skills = []) {
   /* 监工活行只放过程内容：工具调用、思考与生成回复逐条更新、不堆叠，最终回复作为普通消息上屏；工作进程侧优先展示生成中的正文。 */
   let process = "";
   /* 续接会话期间无正文增量，状态帧用于显示等待进度。 */
-  let stage = "";
+  let statusLine = "";
   const isSupervisorTalk = owner === "capitalist";
   /* 过程气泡只写生成中的正文；状态帧归活行，空内容不清空已有输出。 */
   const paintBubble = (t) => {
@@ -1065,7 +1072,7 @@ async function talkTo(text, thread, via = "", quote = null, skills = []) {
   const paint = () => {
     if (mine !== talkSeq) return;
     if (isSupervisorTalk) {
-      notice.value = { text: process || stage || $t("已发出，等待模型回复"), bad: false, thread: owner };
+      notice.value = { text: process || statusLine || $t("已发出，等待模型回复"), bad: false, thread: owner };
       return;
     }
     /* 状态条按正文、工具、思考、过程帧的优先级取当前可显示内容。 */
@@ -1073,7 +1080,7 @@ async function talkTo(text, thread, via = "", quote = null, skills = []) {
       acc ||
       (tool ? $t("正在调用 {tool}", { tool }) : "") ||
       (think ? `${$t("思考中")} ${think.slice(-48)}` : "") ||
-      stage ||
+      statusLine ||
       $t("已发出，等待模型回复");
     notice.value = { text: line, bad: false, thread: owner };
     paintBubble(acc);
@@ -1082,7 +1089,7 @@ async function talkTo(text, thread, via = "", quote = null, skills = []) {
   try {
     const done = await streamChat(text, thread, (d) => {
       if (d.kind === "status") {
-        stage = $t(String(d.text || ""));
+        statusLine = $t(String(d.text || ""));
         paint();
       } else if (d.kind === "text") {
         acc += d.text;
@@ -1447,7 +1454,7 @@ async function copySupervise() {
 }
 
 
-/* 跨监工读数由 OverviewStrip 渲染；当前监工的读数与阶段进度由 ChatPane 按 props.capitalist 计算，App 不搬运。 */
+/* 跨监工读数由 OverviewStrip 渲染；当前监工的读数与任务进度由 ChatPane 按 props.capitalist 计算，App 不搬运。 */
 
 /* 监工自动重载期间 reload.active 为 true，蒙版铺满视口并拦截指针与键盘事件；标记回到 false 后随轮询自动撤除。 */
 /* 用户点重启时 metric-bar 派发 capitalist:restarting，App 接住并铺蒙版；监工重新上线 2 秒后撤除，另设 30 秒上限。 */

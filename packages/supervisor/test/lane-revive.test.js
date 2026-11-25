@@ -13,8 +13,8 @@ const { join } = require("node:path");
 
 const lane = require("../dist/supervisor/judge/sessionLane");
 
-const BASE = "capitalist-s0-65";
-const DISPATCH = { id: "65-1", stage: "S0", shard: "", tags: ["src-worker"], action: "校验文案" };
+const BASE = "capitalist-65";
+const DISPATCH = { id: "65-1", shard: "", tags: ["src-worker"], action: "校验文案" };
 
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-lane-revive-"));

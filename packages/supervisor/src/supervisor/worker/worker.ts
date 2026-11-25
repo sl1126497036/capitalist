@@ -259,11 +259,11 @@ export function parseWorkerCmd(tpl: string, prompt: string): { bin: string; args
 }
 
 /**
- * 派单说明只写这一单的边界，不写领域手法；`advance` / `adopt` / `supervise` 会改流程状态，禁止出现在派单说明里。
- * 契约分片的语义标题随 `dispatch` 原样带入 prompt，工作进程不解析。
+ * 派单说明只写这一单的边界，不写领域手法；`adopt` / `supervise` 会改流程状态，禁止出现在派单说明里。
+ * 派单标题随 `dispatch` 原样带入 prompt，工作进程不解析。
  */
 /**
- * 判定这一单是否续接上一次会话；会话 id 按阶段/分片派生并固定，监工或机器重启都不影响续接。
+ * 判定这一单是否续接上一次会话；会话 id 按分片或派生链派生并固定，监工或机器重启都不影响续接。
  * 宿主用 `--resume <id>` 续接会话。
  */
 export function resolveSession(root: string, dispatch: Dispatch): WorkerSession {
@@ -366,10 +366,10 @@ export function blockerLines(info?: BlockerInfo | null): string[] {
     .map((x) => String(x ?? "").trim())
     .filter(Boolean);
   if (parts.length === 0) {
-    return ["上一轮未记录失败原因。先复现一次，确认卡点位置再开始修改；不重复上一轮的做法；已完成的产出物不重做。"];
+    return ["上一轮未记录失败原因。须先复现一次，确认卡点位置后再修改；避免重复上一轮做法；已完成的产出物不重做。"];
   }
-  const lead = "上一轮卡在：";
-  const how = "不重复上一轮的路径：卡点仍在时改用其它可行路径，已解除时从上次进度继续；已完成的产出物不重做。";
+  const lead = "上一轮中止于：";
+  const how = "不重复上一轮的路径：卡点仍在时改用其他可行路径；卡点已解除时从上次进度继续；已完成的产出物不重做。";
   const budget = Math.max(
     24,
     BLOCKER_MAX_CHARS - BLOCKER_MARKER.length - 1 - lead.length - how.length - 1,
@@ -406,6 +406,22 @@ export function buildAcceptBlock(d: Dispatch): string[] {
   ];
 }
 
+/**
+ * 本单验收判据段（`ACCEPTANCE:` 行随派单落盘）。
+ *
+ * 与 {@link buildAcceptBlock} 的分工：那一段是“上一轮打回的未通过项”，本段是“建单时声明的完成口径”。
+ * 两者都在时先看未通过项，再看本单口径，最后才是通用结束口径。未声明时不占位。
+ */
+export function buildDispatchAcceptBlock(d: Dispatch): string[] {
+  const acc = String((d as { acceptance?: string }).acceptance ?? "").trim();
+  if (!acc) return [];
+  return [
+    "【本单验收判据】建单时声明，优先于下面的通用结束口径",
+    acc,
+    "  报告逐条对照本判据说明如何满足；写法无法核对的，按未完成处理。",
+  ];
+}
+
 /** 结束口径正文在 `closeOut.ts`，与监工判定层共用一份，避免执行侧与审查侧出现两套标准；三个提示词入口都从本导出取用。 */
 export function buildCloseOutRules(heading?: string): string[] {
   return closeOutRules(heading);
@@ -425,12 +441,12 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
     "  2. 派单要求的事情若已完成，不要重做：在报告中指出已完成的位置与要求的差异；",
     "     只做了一半的只补缺，不整体重做。",
     "  3. 本单要求若与已验收的做法相反（要恢复一项已被撤销的做法），先读 `.capitalist/ledger/tasks.jsonl` 里",
-    "     同一线程已结束任务的 `note`（裁决结论写着当时定的口径），按本单最新要求做，",
+    "     同一线程已结束任务的 `note`（记的是当时上报或结束时的说明，不等同于裁决结论），按本单最新要求做，",
     "     并在报告里写明推翻了哪一条，不留两套并存的实现。",
     at
       ? `  4. 本单作用对象为文件时：文件的修改时间晚于本单创建时刻 ${at.iso}，按最新内容处理，不按旧快照覆盖。`
       : "  4. 本单作用对象为文件时：文件在本单创建之后被修改过，按最新内容处理，不按旧快照覆盖。",
-    "  5. 现状与派单描述冲突、或读后无法对应：先用 capitalist ask / capitalist notify question 申报，不猜测处理。",
+    "  5. 现状与派单描述冲突、或读后无法对应：按【六】用 capitalist ask / capitalist notify question 申报并写明冲突点，不猜测处理；其中 capitalist ask 后停止执行。",
   ];
 }
 
@@ -438,14 +454,14 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
 function buildBoundaryBlock(id: string): string[] {
   return [
     "【三、边界】",
-    `  1. 只认这一单：需要复查要求时读 .capitalist/workers/${id}/brief.md；`,
+    `  1. 仅执行本单：需要复查要求时读取 .capitalist/workers/${id}/brief.md；`,
     "     .capitalist/ledger/tasks.jsonl 只读本任务号的行（同一任务此前的结论），按本单派单号的 `任务号-` 前缀过滤，",
     "     不读其他任务的派单记录；不读 .capitalist/inbox/*.jsonl、其他 .capitalist/workers/* 或其他 brief。",
-    "     其他进程的日志与报告不算证据；不把其他任务的产出当作本单产出，本单未做即未完成。",
-    "  2. 本任务台账里 done / closed 的单是历史，不是待办：按历史结论核对已改过什么，",
-    "     不按历史描述“恢复”或“实现”任何东西。产物现状以实际为准，不以截图、旧日志、旧派单正文为准；",
+    "     其他进程的日志与报告不作为证据；不将其他任务的产出视为本单产出，本单未执行即视为未完成。",
+    "  2. 本任务台账里 done / closed 的单属历史，非待办：按历史结论核对已修改的内容，",
+    "     不按历史描述“恢复”或“实现”任何内容。产物现状以实际为准，不以截图、旧日志、旧派单正文为准；",
     "     历史描述与本单冲突时以本单为准，并在报告里写明冲突点。",
-    "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
+    "  3. 不执行 capitalist adopt / capitalist supervise，也不手动修改 .capitalist/ 下的文件。",
     "     那三项属于监工，工作进程代为执行会使执行与验收职责不分。",
     `  4. 因外部条件受阻（验证码、账号、授权）：capitalist block <类型> "<受阻原因>" 后停手。`,
     /*
@@ -453,7 +469,7 @@ function buildBoundaryBlock(id: string): string[] {
      * 在叙述中包含编号，看板出口另设统一改写作为兜底（见 board/render 的
      * maskWorkerIds），两处配合，提示词不单独承担该约束。
      */
-    "  5. 不提进程编号：报告、申报与插话中不写（形如 6-P1）。指代自身用“本进程”，",
+    "  5. 不提进程编号：报告、申报与插话中不写调度用编号。指代自身用“本进程”，",
     "     指代同一任务中先前那次执行用“上一轮进程”；标明归属时用任务号（#06）或派单号（#06-2）。",
   ];
 }
@@ -464,18 +480,18 @@ function buildBoundaryBlock(id: string): string[] {
 function buildHelpBlock(dispatchId: string): string[] {
   return [
     "【六、受阻时如何申报】申报后继续执行剩余部分：",
-    `  capitalist notify stuck "<受阻原因、已经试过什么>"        同一件事连续失败两次、找不到执行入口、报错含义不明`,
-    `  capitalist notify question "<问题>" --needs decision   要求自相矛盾、不知道优先级、不知道该不该动`,
+    `  capitalist notify stuck "<受阻原因、已尝试的措施>"        同一件事连续失败两次、找不到执行入口、报错含义不明`,
+    `  capitalist notify question "<问题>" --needs decision   要求自相矛盾、优先级不明、是否应执行不明`,
     `  capitalist notify risk "<为什么觉得越界>"               可能越界：删数据、改发布配置、修改他人负责的文件`,
-    `  capitalist notify quality "<哪部分没做实>"              能交但质量不足，先如实申报`,
-    `  capitalist notify progress "<走到哪了>"                 只是让监工知道进度，不需要回复`,
+    `  capitalist notify quality "<未落实的部分>"              可交付但质量不足，须先如实申报`,
+    `  capitalist notify progress "<当前进度>"                 只是让监工知道进度，不需要回复`,
     "  监工会据此决定：继续、给出简要纠正、重开或转人工。",
-    `  需人工裁决：capitalist ask "<问题>" 后停手，等监工回填。`,
+    `  需人工裁决：使用 capitalist ask "<问题>" 后停止执行，等待监工回填。`,
     "",
     "【七、完成或失败】",
     `  完成：capitalist report ${dispatchId} done --note "<做了什么>" --evidence "<产出物在哪里 / 核对了什么 / 结果>"`,
     `  无法完成：capitalist report ${dispatchId} failed --note "<受阻原因>"`,
-    `  执行中收到用户追加的消息、你判断属于这一单：报告里加 --added "<新增/更正了什么>"。`,
+    `  执行期间收到用户追加消息、经判断属于本单的：在报告中附加 --added "<新增/更正了什么>"。`,
     `  这只是回报；要求是否成立由判定层确认，报告不改变本单要求。`,
   ];
 }
@@ -493,9 +509,9 @@ export function buildApplyBlock(): string[] {
 /**
  * 派单在提示词里的抬头，例如 `派单 4-1（标题 盘点下所有含中文的文件）：`。
  *
- * 不写阶段号：阶段是契约里的调度分段，工作进程只做这一单，阶段号对它没有可执行含义。
- * 写进去的后果是它被复述回来。申报里出现“S0 盘点：…”，用户读不懂 S0 是什么，
- * 还会以为漏了别的阶段没给它。分片同理，只在确有分片时写。
+ * 不写任务树坐标：工作进程只做这一单，它在树里的位置对它没有可执行含义。
+ * 写进去的后果是它被复述回来。申报里出现“第一层第二个节点：…”，用户还得回头数树。
+ * 分片则只在确有分片时写，它对应会话归属，是可执行信息。
  */
 export function dispatchHead(d: Dispatch, title: string): string {
   const bits = [d.shard ? `分片 ${d.shard}` : "", title ? `标题 ${title}` : ""].filter(Boolean);
@@ -531,21 +547,21 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
   const accept = buildAcceptBlock(d);
   /* 与首次派单同一套七块结构（见 buildPrompt 的说明），块内编号各自从 1 起。 */
   return [
-    "继续上一次被中断的执行，不从零开始。",
+    "继续上一次被中断的执行，无需从头重启。",
     "本提示词自包含：会话上下文丢失或压缩后，仍可凭以下正文与约束继续执行。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
     `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；不要读其他单的说明与台账）`,
     "",
     "【一、这一单要做什么】",
-    "  （下面正文里若再出现【用户插话】【上一轮卡点】【上一轮已完成的部分】【本次验收】，都是这一块的子项，不是新的一节。）",
+    "  （下方出现的【用户插话】【上一轮卡点】【上一轮已完成的部分】【本次验收】均属于这一块，即便各自带【】标题，也不另起一节。）",
     `${dispatchHead(d, title)}这一单的要求原文如下，原样重发，不重写。`,
     baseAction || "（这一单没有留下正文，按下面的验收清单与卡点确定任务；无法判断时使用 capitalist ask。）",
     "继续完成剩余部分；已完成的产出物不重做，开始前先核对当前状态。",
     ...(tail
       ? [
           "",
-          "本次启动前用户追加了要求或未完成的验收项，原文如下，优先执行：",
+          "本次启动前用户追加了要求或未完成的验收项，原文如下；与其他约束不一致时先按本段执行，再按【本单验收判据】与通用结束口径处理：",
           tail,
         ]
       : []),
@@ -556,6 +572,7 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
     ...(hasPreflight(raw) ? [] : [...buildGroundingBlock(d), ""]),
     ...buildBoundaryBlock(opts.id),
     "",
+    ...buildDispatchAcceptBlock(d),
     ...buildCloseOutRules(),
     "",
     ...buildApplyBlock(),
@@ -608,23 +625,24 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     `     全局文件（.capitalist/runtime/state.json、.capitalist/runtime/supervisor.json、.capitalist/ledger/events.jsonl）只按本单 id（${d.id}）取相关行；`,
     `     不要读 .capitalist/ledger/tasks.jsonl、.capitalist/inbox/*.jsonl 里其他单的记录，也不要读其他工作进程的日志与会话。`,
     `  2. 再看实际执行路径：代码项目沿运行时生效的那条链路，不依据注释中的设计（注释可能已过期）。其他项目按实际执行路劲复现。`,
-    `  3. 能复现的复现一次（执行对应命令、脚本或流程），保留真实输出。复现前注意复现可能引发的影响，存在负面影响时需先申报。`,
+    `  3. 可复现的问题应复现一次（执行对应命令、脚本或流程），并保留真实输出；复现前须评估其可能影响，存在负面影响时先申报。`,
     `  4. 根因须能解释问题的必然性；只描述现象不算根因。`,
     ``,
     `【${CN[n]}、边界】`,
-    `  1. 不执行 capitalist advance / capitalist adopt / capitalist supervise，也不手改 .capitalist/ 下的台账；`,
+    `  1. 不执行 capitalist adopt / capitalist supervise，也不手动修改 .capitalist/ 下的台账；`,
     `     台账只按本单 id 取本单的行，其他单不读。`,
-    `  2. 代码项目不擅自重启，其他项目不擅自重跑，需申报或按派单指令执行。`,
+    `  2. 不擅自重启服务、重跑既有流程；需要时申报，或按派单指令执行。`,
     readonly
       ? "  3. 只读：文件、配置、台账均不修改。"
-      : "  3. 可以修改，但只限与这个卡点直接相关的部分；不连带重构，不做其他单的任务。",
+      : "  3. 可以修改，但仅限与本卡点直接相关的部分；不连带重构，不处理其他单的任务。",
     ``,
-    /* 修复单同样按业务单的结束口径验收：不要求执行全部测试或提供截图，证据为修改点及与卡点直接相关的复现或核对。 */
+    /* 修复单同样按业务单的结束口径验收：证据是修改点，以及与卡点直接相关的复现或核对结果。 */
+    ...buildDispatchAcceptBlock(d),
     ...buildCloseOutRules(`【${CN[n + 1]}、怎么算做完】`),
     ``,
     `【${CN[n + 2]}、收尾】`,
     `  ${readonly ? "查清后" : "修完并验证后"}：capitalist report ${d.id} done --note "<${readonly ? "根因" : "修改了什么"}>" --evidence "<${readonly ? "支持这个根因的证据" : "核对了什么、结果如何"}>"`,
-    `排查受阻：capitalist report ${d.id} failed --note "<已排除什么、还差什么>"`,
+    `排查受阻：capitalist report ${d.id} failed --note "<已排除的项、尚缺的项>"`,
     `  需人工裁决：capitalist ask "<问题>" 后停手。`,
   ].join("\n");
 }
@@ -655,7 +673,7 @@ function buildSkillsBlock(root: string, actionText: string): string[] {
   if (named.length === 0) return [];
   const lines = [
     "【本单技能】",
-    "  需要的完整内容按下面路径自取（重点已在派单描述里）：",
+    "  所需完整内容按以下路径获取（要点已在派单描述中）：",
   ];
   for (const s of named) {
     lines.push(`  · ${s.name} — ${s.path}`);
@@ -707,10 +725,10 @@ export function buildPrompt(opts: {
     "你是独立的工作进程，不是监工。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
-    `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；内容与下面正文一致，需要复查时读取该文件）`,
+    `本单说明：.capitalist/workers/${opts.id}/brief.md（仅本份属于你；内容与下方正文一致，需要复查时读取该文件）`,
     ``,
     "【一、这一单要做什么】",
-    "  （下面正文里若再出现【用户插话】【上一轮卡点】【上一轮已完成的部分】【本次验收】，都是这一块的子项，不是新的一节。）",
+    "  （下方出现的【用户插话】【上一轮卡点】【上一轮已完成的部分】【本次验收】均属于这一块，即便各自带【】标题，也不另起一节。）",
     dispatchHead(d, title),
     attPayload.text,
     /* 上一轮结论先于卡点：先了解已完成内容，再查看未完成内容。 */
@@ -725,6 +743,7 @@ export function buildPrompt(opts: {
     ...buildBoundaryBlock(opts.id),
     ``,
     ...buildSkillsBlock(opts.root, attPayload.text),
+    ...buildDispatchAcceptBlock(d),
     ...buildCloseOutRules(),
     ``,
     ...buildApplyBlock(),
@@ -832,7 +851,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
   }
 
   const banner = [
-    `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} stage=${opts.dispatch.stage}`,
+    `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} shard=${opts.dispatch.shard ?? ""}`,
     `[launch] bin=${bin}${shell ? "（经 shell）" : ""}${viaStdin ? " prompt=stdin" : " prompt=argv"}`,
     /* 模型与会话写入日志一行：`.cmd` shim 下 argv 会被包装，命令行不足以核对实际使用的模型与续接的会话。 */
     `[launch] model=${opts.model ?? "（宿主默认）"} session=${session.id}${session.resume ? " resume" : " new"} lane=${session.resume ? "续" : "新"}`,
@@ -946,7 +965,6 @@ export function launchWorker(opts: LaunchOptions): Launched {
     ai_session: session.id,
     dispatch: opts.dispatch.id,
     shard: opts.dispatch.shard ?? "",
-    stage: opts.dispatch.stage,
     started_at: now,
     heartbeat_at: now,
     heartbeat_ts: Date.now() / 1000,
@@ -1080,7 +1098,7 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
     `title capitalist ${id}`,
     `cd /d "${opts.root}"`,
     `echo [capitalist] worker ${id}`,
-    `echo [capitalist] dispatch ${opts.dispatch.id} / stage ${opts.dispatch.stage}`,
+    `echo [capitalist] dispatch ${opts.dispatch.id} / shard ${opts.dispatch.shard ?? "-"}`,
     `echo [capitalist] closing this window does NOT report failure.`,
     `echo [capitalist] if aborted, run: capitalist report ${opts.dispatch.id} failed --note "aborted"`,
     "echo.",
@@ -1126,7 +1144,7 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
     appendFileSync(
       log,
       [
-        `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} stage=${opts.dispatch.stage}`,
+        `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} shard=${opts.dispatch.shard ?? "-"}`,
         `[launch] bin=${bin} 模式=可见窗口（cmd start）`,
         `[launch] prompt=${promptFile}`,
         `[launch] command=cmd /k ${id}.launch.cmd（cwd=${dirname(log)}）`,
@@ -1146,7 +1164,6 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
     ai_session: session.id,
     dispatch: opts.dispatch.id,
     shard: opts.dispatch.shard ?? "",
-    stage: opts.dispatch.stage,
     started_at: now,
     heartbeat_at: now,
     heartbeat_ts: Date.now() / 1000,

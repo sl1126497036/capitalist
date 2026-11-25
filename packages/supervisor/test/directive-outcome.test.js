@@ -7,12 +7,12 @@ const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const cmds = require("../dist/core/dispatch/commands");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-outcome-"));
   for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
-  createTaskRoot({ target: "插话落实测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "插话落实测试", policySpec: "minimal", root: base });
   return base;
 }
 

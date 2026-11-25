@@ -52,7 +52,6 @@ function put(root, id, shard, extra = {}) {
     root,
     composeDispatch({
       id,
-      stage: "S0",
       shard,
       title: id,
       action: `做 ${id}`,
@@ -107,9 +106,9 @@ test("分档只有一处来源：计数与线程的 bucket 一致", () => {
     buildThreeBuckets(root);
     const threads = buildThreads(root);
     const byBucket = Object.fromEntries(threads.map((t) => [t.id, t.bucket]));
-    assert.equal(byBucket["s0/s1"], "done");
-    assert.equal(byBucket["s0/s2"], "canceled");
-    assert.equal(byBucket["s0/s3"], "run");
+    assert.equal(byBucket["s1"], "done");
+    assert.equal(byBucket["s2"], "canceled");
+    assert.equal(byBucket["s3"], "run");
 
     const counts = taskCountsOf(threads);
     assert.equal(counts.done, 1);
@@ -190,15 +189,15 @@ test("单卡清除只影响选中的那一张", () => {
   const root = sandbox();
   try {
     buildThreeBuckets(root);
-    const scope = removeScopeOfKey(root, "s0/s1");
-    assert.deepEqual(scope.keys, ["s0/s1"]);
+    const scope = removeScopeOfKey(root, "s1");
+    assert.deepEqual(scope.keys, ["s1"]);
 
-    const r = runCommand(root, { action: "clear-thread", key: "s0/s1" });
+    const r = runCommand(root, { action: "clear-thread", key: "s1" });
     assert.equal(r.status, 200);
-    assert.equal(r.body.key, "s0/s1");
+    assert.equal(r.body.key, "s1");
 
     const marks = JSON.parse(readFileSync(locations.board.cleared(root), "utf8"));
-    assert.deepEqual(Object.keys(marks), ["s0/s1"], "只写这一张卡的标记");
+    assert.deepEqual(Object.keys(marks), ["s1"], "只写这一张卡的标记");
     assert.equal(readDispatches(root).length, 3, "单卡清除不搬派单，台账保持原样");
   } finally {
     dropRoot(root);

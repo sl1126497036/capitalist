@@ -1,10 +1,10 @@
 /**
- * 任务标题中文化：契约里的每个分片都必须能拿到中文名，两张映射表必须同键。
+ * 任务标题中文化：派单的每个分片都必须能拿到中文名，两张映射表必须同键。
  *
  * 本测试守的是两件容易退化的东西：
  *
  * 1. 不许出现英文代号。分片 id（`ux-chat`）是内部编号，左栏、会话头部、消息署名只显示
- *    中文名。新加一个分片却忘了进映射表时，这里会报出来，契约里那个 `title` 是中文，
+ *    中文名。新加一个分片却忘了进映射表时，这里会报出来，派单里那个 `title` 是中文，
  *    真到了老派单（没有 title 字段）就只剩映射表一条路。
  * 2. 映射表只许有一份。前端 `web/src/lib/taskTitle.js` 直接从服务端
  *    `src/supervisor/usage/taskTitle.ts` 导入（与 `lib/fmt.js` 引 `context/terms.ts` 同一条路径），
@@ -13,7 +13,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const { readFileSync, readdirSync, mkdtempSync, rmSync, existsSync } = require("node:fs");
+const { readFileSync, mkdtempSync, rmSync, existsSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve, dirname } = require("node:path");
 
@@ -22,32 +22,14 @@ const { SHARD_TITLES, TITLE_MAX_CHARS, shardTitle, summarizeTitle, taskTitle } =
 const { parseReply } = require(join(PKG, "dist/supervisor/channel/parseReply.js"));
 const capitalist = require(join(PKG, "dist/core/record/supervisor.js"));
 const { loadState } = require(join(PKG, "dist/core/record/state.js"));
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const loop = require(join(PKG, "dist/supervisor/loop.js"));
 const { appendSupervisorDirective } = require(join(PKG, "dist/supervisor/channel/direct.js"));
 
 const CJK = /[\u4e00-\u9fa5]/;
-const CONTRACT_DIR = join(PKG, "contracts");
 const WEB_TABLE = join(PKG, "web/src/lib/taskTitle.js");
 
-/** 契约文件里出现过的全部分片 id。 */
-function contractShards() {
-  const ids = new Set();
-  for (const f of readdirSync(CONTRACT_DIR)) {
-    if (!f.endsWith(".contract.json")) continue;
-    const c = JSON.parse(readFileSync(join(CONTRACT_DIR, f), "utf8"));
-    for (const stage of c.stages ?? []) {
-      for (const shard of stage.parallel ?? []) {
-        if (shard && typeof shard.id === "string") ids.add(shard.id);
-      }
-    }
-  }
-  return [...ids];
-}
-
-test("契约里的每个分片都有中文短名，且不超过 10 个汉字", () => {
-  const missing = contractShards().filter((id) => !shardTitle(id));
-  assert.deepStrictEqual(missing, [], `这些分片没有中文名：${missing.join("、")}`);
+test("分片中文短名表：每一项都有汉字，且不超过 10 个字", () => {
   for (const [id, title] of Object.entries(SHARD_TITLES)) {
     assert.ok(CJK.test(title), `${id} 的中文名里没有汉字：${title}`);
     assert.ok(title.length <= 10, `${id} 的中文名超过 10 个字：${title}`);
@@ -102,8 +84,7 @@ test("前端摘要算法取自服务端，不在 web 侧另写一份", () => {
   assert.doesNotMatch(src, /const\s+CJK\s*=/, "web/src/lib/taskTitle.js 自带汉字正则，说明又在本地实现了一遍摘要");
 });
 
-test("标题取值顺序：契约 title -> 分片映射 -> 正文摘要，不回退到 id", () => {
-  assert.strictEqual(taskTitle({ contractTitle: "任务标题中文化", shard: "ux-chat" }), "任务标题中文化");
+test("标题取值顺序：分片映射 -> 正文摘要，不回退到 id", () => {
   assert.strictEqual(taskTitle({ shard: "ux-chat" }), "对话修复");
   assert.strictEqual(taskTitle({ shard: "no-such-shard", action: "把左栏的行名改成中文，别显示代号" }), "把左栏的行名改成中文");
   assert.strictEqual(taskTitle({}), "");
@@ -150,7 +131,7 @@ test("顿号不是句读边界，路径与并列项原样保留", () => {
   const listed = summarizeTitle(
     "3. 盘点 packages/supervisor/test、packages/supervisor/scripts、.github 下所有含中文的文件（测试用例名等），按技能规范核对",
   );
-  /* 路径与顿号都在标题里，只是整体超过落盘上限时截断，读者仍能看出处理对象。 */
+  /* 路径与顿号都在标题里，只是整体超过落盘上限时截断，仍能看出处理对象。 */
   assert.ok(listed.startsWith("盘点 packages/supervisor/test、packages/supervisor/scripts"), listed);
   assert.ok(listed.endsWith("…"), "超长标题截断并留省略号，不静默变短");
 
@@ -200,14 +181,14 @@ function cleanup(root) {
 /** 标题只在派单第一次登记时生成：之后的追加、合并、重派一律沿用。 */
 function titleSandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-title-"));
-  createTaskRoot({ target: "标题固定", contractSpec: "minimal", root });
+  createTaskRoot({ target: "标题固定", policySpec: "minimal", root });
   return root;
 }
 
 async function runDirectives(root) {
   await loop.__testing.applySupervisorDirectives({
     root,
-    contract: { stages: [], data: {} },
+    policy: { data: {} },
     state: loadState(root),
     wopts: {},
     concurrency: null,
@@ -246,7 +227,7 @@ test("TITLE 行按 DO 归属，一条消息多单各取各的标题", () => {
     r.acts.map((a) => a.title),
     ["甲的对象", "乙的对象"],
   );
-  /* 多动作时顶层不给标题：整条消息共用一个标题会让读者以为两单是同一件事。 */
+  /* 多动作时顶层不给标题：整条消息共用一个标题会把两单混同。 */
   assert.strictEqual(r.title, undefined);
   /* 未写 TITLE 时不落字段，建单侧据 undefined 走摘要兜底。 */
   assert.strictEqual(parseReply("DO: dispatch 甲").title, undefined);
@@ -274,9 +255,9 @@ test("标题落盘：略超建议字数原样保留，异常长文按上限截�
 });
 
 test("新建派单：标题落库保留完整语句，不按字数截断", async () => {
-  /* 契约取版本库里已有的那份：指向未入库的文件时，干净检出跑不通。 */
+  /* 守卫取版本库里已有的那份：指向未入库的文件时，干净检出跑不通。 */
   const root = mkdtempSync(join(tmpdir(), "capitalist-title-full-"));
-  createTaskRoot({ target: "标题完整", contractSpec: join(PKG, "contracts/minimal.contract.json"), root });
+  createTaskRoot({ target: "标题完整", policySpec: join(PKG, "policies/minimal.policy.json"), root });
   try {
     const body = "撤掉看板聊天区的未建单标记按钮";
     appendSupervisorDirective(root, { action: "dispatch", arg: body });
@@ -313,19 +294,16 @@ test("同类合并追加内容：沿用原单标题，不改成“批次”", as
   }
 });
 
-test("重派建新单：沿用这一片第一次登记时的标题，契约改名也不换", () => {
-  const root = titleSandbox();
-  try {
-    const first = { id: "core", title: "核心层整改", action: "做核心层的事" };
-    loop.__testing.createOpenShardDispatch(root, { stages: [], data: {} }, loadState(root), first, {}, () => {}, 1);
-    const second = { id: "core", title: "后来改过的名字", action: "再做一次核心层的事" };
-    loop.__testing.createOpenShardDispatch(root, { stages: [], data: {} }, loadState(root), second, {}, () => {}, 2);
+test("重派建新单：沿用原单标题，不重新起名", () => {
+  const { composeDispatch, deriveDispatch } = require(join(PKG, "dist/core/dispatch/newDispatch.js"));
+  const first = composeDispatch({ id: "1-1", title: "核心层整改", action: "做核心层的事", shard: "core" });
 
-    const rows = capitalist.readDispatches(root).filter((d) => d.shard === "core");
-    assert.strictEqual(rows.length, 2, "重派产出一张新单");
-    assert.strictEqual(rows[0].title, "核心层整改");
-    assert.strictEqual(rows[1].title, rows[0].title, "重派沿用原单标题，不按新契约重算");
-  } finally {
-    cleanup(root);
-  }
+  /* 重派只换做法，标题跟着原单走：一次重派就换名字，左栏同一件事会显示成两件。 */
+  const second = deriveDispatch(first, { id: "1-2", action: "再做一次核心层的事" });
+  assert.strictEqual(second.title, "核心层整改");
+  assert.strictEqual(second.lineage, first.lineage, "重派落在同一条派生链上");
+
+  /* 显式给标题时以显式为准：重派换的是做法，调用方明确改名就是新名字。 */
+  const third = deriveDispatch(first, { id: "1-3", action: "换做法", title: "改过的名字" });
+  assert.strictEqual(third.title, "改过的名字");
 });

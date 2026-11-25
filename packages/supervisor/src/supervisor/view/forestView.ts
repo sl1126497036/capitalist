@@ -12,6 +12,7 @@ import { board as boardLoc } from "../../core/record/locations";
 import { clipLine } from "../../core/text";
 import { dispatchForest, listWorkers, parentOf, readDispatches, type Dispatch } from "../../core/record/supervisor";
 import { isFailed, isSettled } from "../../core/record/dispatchState";
+import { lineageOf } from "../../core/record/prerequisites";
 import { firstBlocker } from "../../core/dispatch/deps";
 import { groupIndexOf, readGroups, type GroupIndex } from "../../core/record/groups";
 import { normalizeGroupId } from "../../core/record/idMap";
@@ -39,7 +40,6 @@ function clearedDispatches(root: string): Set<string> {
  */
 function dropCleared(rows: Dispatch[], cleared: Set<string>): Dispatch[] {
   if (cleared.size === 0) return rows;
-  const lineageOf = (r: Dispatch): string => String((r as unknown as { lineage?: string }).lineage || r.id);
   const gone = new Set<string>();
   for (const r of rows) if (cleared.has(String(r.id))) gone.add(lineageOf(r));
   if (gone.size === 0) return rows;
@@ -187,7 +187,7 @@ function failureReason(d: Dispatch): string {
 function closeReason(d: Dispatch): string {
   const note = clipLine(String(d.note ?? ""), MAX_REASON);
   if (note) return note;
-  return String(d.status ?? "") === "superseded" ? "阶段已推进，本单的验收口径不再适用" : "";
+  return String(d.status ?? "") === "superseded" ? "已改用新单，本单的验收口径不再适用" : "";
 }
 
 function emptyStats(): ForestTreeStats {
@@ -221,7 +221,7 @@ interface GroupBadge {
   /**
    * 挂在组上的下游单数（`parent` 指向组号）。
    *
-   * 组成员不算子单：成员是组的组成部分，界面上由「组内完成 n/m」表达，
+   * 组成员不算子单：成员是组的组成部分，界面上由“组内完成 n/m”表达，
    * 计入子单数会与成员数重复，也会把组读成一个有四个下游的任务。
    */
   downstream: number;
@@ -424,7 +424,6 @@ export function buildForestView(root: string, noOf?: (id: string) => string): Fo
     byId.set(g.id, {
       id: g.id,
       at: g.at,
-      stage: String(g.stage ?? ""),
       shard: "",
       title: g.title,
       action: "",

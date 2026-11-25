@@ -6,12 +6,12 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { applyRebuild, planRebuild } = require("../dist/core/dispatch/rebuildTree");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-rebuild-"));
-  createTaskRoot({ target: "存量重建树", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "存量重建树", policySpec: "minimal", root: base });
   return base;
 }
 

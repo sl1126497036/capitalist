@@ -6,13 +6,13 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const loop = require("../dist/supervisor/loop");
 const { buildPrompt, buildResumePrompt } = require("../dist/supervisor/worker/worker");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-wake-"));
-  createTaskRoot({ target: "唤醒测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "唤醒测试", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -70,49 +70,3 @@ test("首次启动提示词仍带整段 action（含尾巴）", () => {
   assert.match(p, /把重试间隔改成 5 秒/, "插话也必须发");
 });
 
-const WAKE_CONTRACT = {
-  name: "minimal",
-  data: {},
-  stages: [
-    // 当前阶段是 S1：S0 的在途单按“阶段已推进”本应作废
-    { id: "S1", name: "下一阶段", next: "做点事", parallel: [{ id: "b", action: "改 B" }] },
-  ],
-};
-
-function openStaleDispatch(root, id, extra = {}) {
-  capitalist.appendDispatch(root, {
-    id,
-    at: new Date().toISOString(),
-    stage: "S0",
-    shard: "a",
-    action: "改 A",
-    status: "open",
-    ...extra,
-  });
-}
-
-test("刚唤醒的单有宽限期，不因阶段推进被作废", () => {
-  const root = sandbox();
-  openStaleDispatch(root, "D-woken", { wake_at: new Date().toISOString() });
-
-  loop.__testing.supersedeStaleDispatches(root, WAKE_CONTRACT, "S1", () => {});
-  assert.equal(capitalist.readDispatches(root)[0].status, "open", "宽限期内的在途单必须活着，唤醒不能被下一拍掐死");
-});
-
-test("唤醒宽限期过期后照常按阶段推进作废", () => {
-  const root = sandbox();
-  openStaleDispatch(root, "D-old-wake", {
-    wake_at: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
-  });
-
-  loop.__testing.supersedeStaleDispatches(root, WAKE_CONTRACT, "S1", () => {});
-  assert.equal(capitalist.readDispatches(root)[0].status, "superseded", "宽限期不能变成永久豁免");
-});
-
-test("没盖唤醒章的在途单不享受宽限", () => {
-  const root = sandbox();
-  openStaleDispatch(root, "D-plain");
-
-  loop.__testing.supersedeStaleDispatches(root, WAKE_CONTRACT, "S1", () => {});
-  assert.equal(capitalist.readDispatches(root)[0].status, "superseded");
-});

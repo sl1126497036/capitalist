@@ -7,12 +7,12 @@ const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const cmds = require("../dist/core/dispatch/commands");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-dirmatch-"));
   for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
-  createTaskRoot({ target: "插话匹配测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "插话匹配测试", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -153,12 +153,12 @@ test("老记录只在 thread 里写了线程键：按线程认领", () => {
 
 
 test("线程键规则与看板一致：有分片用分片，无分片用派生链尾号", () => {
-  assert.equal(cmds.laneKeyOf({ stage: "U1", shard: "ui", lineage: "D-abc" }), "u1/ui");
-  assert.equal(cmds.laneKeyOf({ stage: "U1", shard: "", lineage: "D-mw01lmdixjs" }), "u1/xmdixjs");
-  assert.equal(cmds.laneKeyOf({ stage: "U1", id: "D-abcdef123456" }), "u1/x123456");
+  assert.equal(cmds.laneKeyOf({ shard: "ui", lineage: "D-abc" }), "ui");
+  assert.equal(cmds.laneKeyOf({ shard: "", lineage: "D-mw01lmdixjs" }), "xmdixjs");
+  assert.equal(cmds.laneKeyOf({ id: "D-abcdef123456" }), "x123456");
   /* 派生链优先于 id：同一链上不同单必须落到同一个键，否则一次重派就换一条线程。 */
-  assert.equal(cmds.laneKeyOf({ stage: "U1", lineage: "D-zzzzzz999999", id: "D-other" }), "u1/x999999");
-  assert.equal(cmds.laneKeyOf({ stage: "U1", shard: null, lineage: "" }), "u1/main");
+  assert.equal(cmds.laneKeyOf({ lineage: "D-zzzzzz999999", id: "D-other" }), "x999999");
+  assert.equal(cmds.laneKeyOf({ shard: null, lineage: "" }), "main");
 });
 
 

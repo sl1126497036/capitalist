@@ -1,5 +1,5 @@
 /**
- * 宿主契约：一个 agent 提供哪些能力，才可被本引擎监督。
+ * 宿主能力接口：一个 agent 提供哪些能力，才可被本引擎监督。
  *
  * 本文件是 impl 唯一允许依赖的类型来源，因此只写中性词：宿主、impl、facet、能力。
  * 产品名、配置目录名、CLI 参数只出现在 `agent/impl/` 下的实现里，这条由 `test/layering.test.js` 守住。
@@ -120,7 +120,7 @@ export interface InstallFacet {
  * 三十分钟的任务被中断三次，就等于把项目读了三遍。
  */
 export interface WorkerSession {
-  /** 稳定会话 id，按阶段/分片派生，重派之间不变。 */
+  /** 稳定会话 id，按分片或派生链派生，重派之间不变。 */
   id: string;
   /** true = 续接已有会话；false = 新开。要求变过时必须新开：续上会带着旧要求。 */
   resume: boolean;

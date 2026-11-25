@@ -47,11 +47,11 @@ test("旧名兼容：BLOCK/NEED_USER/WARN/justify 都能识别", () => {
   assert.equal(severity("whatever"), "deny");
 });
 
-test("档位优先级：命令行 > 环境变量 > 会话 > 契约", () => {
+test("档位优先级：命令行 > 环境变量 > 会话 > 守卫", () => {
   assert.equal(resolveMode({ cli: "plan", env: "bypass" }), "plan");
   assert.equal(resolveMode({ env: "bypass", session: "plan" }), "bypass");
-  assert.equal(resolveMode({ session: "plan", contract: { mode: "bypass" } }), "plan");
-  assert.equal(resolveMode({ contract: { mode: "accept_edits" } }), "accept_edits");
+  assert.equal(resolveMode({ session: "plan", policy: { mode: "bypass" } }), "plan");
+  assert.equal(resolveMode({ policy: { mode: "accept_edits" } }), "accept_edits");
   assert.equal(resolveMode({}), "default");
   // 非法值不得遮蔽后面的合法来源
   assert.equal(resolveMode({ cli: "bogus", session: "plan" }), "plan");

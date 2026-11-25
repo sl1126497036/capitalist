@@ -83,7 +83,7 @@ test("进程/单号消息：正文没有英文内部词，且每一条都是中�
       { event: "supervisor_cmd", action: "set-next", arg: "收尾", ok: false, reason: "参数缺失" },
       { event: "mq_message", kind: "stuck", from: "W-bbbb2222", stage: "U6", shard: "msg-refs" },
       { event: "gate_eval", stage: "U6", ok: false, missing: ["测试未跑"] },
-      { event: "contract_refused", kind: "requirement_violation" },
+      { event: "policy_refused", kind: "requirement_violation" },
       { event: "redispatch_capped", shard: "msg-refs", limit: 3 },
     ].map((e) => ({ at, ...e }));
     writeFileSync(join(root, ".capitalist", "ledger", "events.jsonl"), events.map((e) => JSON.stringify(e)).join("\n") + "\n");
@@ -139,8 +139,8 @@ test("监工自己落的指令：英文动作名翻成中文，用户原话不�
     assert.ok(capitalist && user, "两条指令都应回显");
     assert.equal(capitalist.role, "supervisor");
     /*
-     * 正文最前的方括号是分类标签（调度用的会话键），只在调度侧使用。界面上写出来会让读者把它
-     * 当成正文的一部分：`插队派单 [supervisor-copy] 按…` 读起来像多了个来历不明的词。
+     * 正文最前的方括号是分类标签（调度用的会话键），只在调度侧使用。界面上写出来会和正文混在一起：
+     * `插队派单 [supervisor-copy] 按…` 多了个来历不明的词。
      */
     assert.match(capitalist.text, /^调度指令：已派单 把消息里的编号做成引用$/, capitalist.text);
     assert.ok(!capitalist.text.includes("[ui]"), "标签不该出现在界面上");
@@ -153,6 +153,6 @@ test("监工自己落的指令：英文动作名翻成中文，用户原话不�
 
 test("标签表只有一份：前端 fmt.js 直接读服务端 terms.ts", () => {
   const fmt = readFileSync(join(PKG, "web/src/lib/fmt.js"), "utf8");
-  assert.match(fmt, /from "\.\.\/\.\.\/\.\.\/src\/supervisor\/terms\.ts"/);
+  assert.match(fmt, /from "\.\.\/\.\.\/\.\.\/src\/supervisor\/context\/terms\.ts"/);
   assert.doesNotMatch(fmt, /const EVT_LABEL\s*=/, "前端又抄了一张事件标签表");
 });

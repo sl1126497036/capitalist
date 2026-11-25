@@ -15,7 +15,7 @@ const { join } = require("node:path");
 const { loadWatchRules, matchWatchDir, autoAdopt } = require("../dist/core/platform/autowatch");
 
 const RULES = [
-  { match: ["cases", "targets"], contract: "dev", exclude: ["tools", "tmp"] },
+  { match: ["cases", "targets"], policy: "dev", exclude: ["tools", "tmp"] },
 ];
 
 function sandbox() {
@@ -30,7 +30,7 @@ test("匹配规则时，匹配段之后的第一级即任务根", () => {
   const base = sandbox();
   const hit = matchWatchDir(join(base, "cases", "targets", "alpha", "docs"), RULES);
   assert.ok(hit, "应当命中");
-  assert.equal(hit.contract, "dev");
+  assert.equal(hit.policy, "dev");
   assert.equal(
     hit.root.toLowerCase(),
     join(base, "cases", "targets", "alpha").replace(/\\/g, "/").toLowerCase(),
@@ -59,7 +59,7 @@ test("Git Bash 风格路径在 Windows 上也能匹配", { skip: process.platfor
   const gitBash = `/${native[0].toLowerCase()}${native.slice(2)}`; // /c/...
   const hit = matchWatchDir(gitBash, RULES);
   assert.ok(hit, `应当命中：${gitBash}`);
-  assert.equal(hit.contract, "dev");
+  assert.equal(hit.policy, "dev");
 });
 
 test("autoAdopt 建根，重复调用不报错", () => {
@@ -73,8 +73,8 @@ test("autoAdopt 建根，重复调用不报错", () => {
     require("node:fs").readFileSync(join(proj, ".capitalist", "runtime", "state.json"), "utf8"),
   );
   assert.equal(state.target, "alpha");
-  assert.equal(state.contract, "dev");
-  assert.equal(state.contract_fallback, false);
+  assert.equal(state.policy, "dev");
+  assert.equal(state.policy_fallback, false);
 
   const second = autoAdopt(proj, RULES);
   assert.ok(second, "已存在的根也应返回路径，而不是报错");
@@ -87,16 +87,16 @@ test("配置文件解析：非法条目被跳过而不是整体失败", () => {
     cfg,
     JSON.stringify({
       rules: [
-        { match: ["bad"] }, // 缺 contract
-        { contract: "dev" }, // 缺 match
-        { match: ["cases", "targets"], contract: "dev" },
+        { match: ["bad"] }, // 缺 policy
+        { policy: "dev" }, // 缺 match
+        { match: ["cases", "targets"], policy: "dev" },
       ],
     }),
     "utf8",
   );
   const rules = loadWatchRules(cfg);
   assert.equal(rules.length, 1);
-  assert.equal(rules[0].contract, "dev");
+  assert.equal(rules[0].policy, "dev");
 });
 
 test("配置文件缺失时返回空规则，不抛异常", () => {

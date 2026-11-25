@@ -6,14 +6,14 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { listDirectives } = require("../dist/core/dispatch/commands");
 const stuckMod = require("../dist/supervisor/worker/stuck");
 const loop = require("../dist/supervisor/loop");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-stuck-"));
-  createTaskRoot({ target: "卡点判定", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "卡点判定", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -293,7 +293,7 @@ test("卡点解除：进程恢复输出后清掉标记，不再追加指导", as
 
 test("输出续心跳：每段输出后刷新心跳，状态从 starting 置为 running", async () => {
   const base = mkdtempSync(join(tmpdir(), "capitalist-stuck-out-"));
-  createTaskRoot({ target: "输出续心跳", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "输出续心跳", policySpec: "minimal", root: base });
   const script = join(base, "fake-out.js");
   writeFileSync(
     script,

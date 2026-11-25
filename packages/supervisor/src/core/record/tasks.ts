@@ -24,7 +24,6 @@ export interface TaskItem {
   dispatch?: string;
   /** 累计派过几次（重派会加）。 */
   attempts: number;
-  stage?: string;
   shard?: string;
   created_at: string;
   updated_at: string;
@@ -157,20 +156,18 @@ function maxDispatchSeqOf(root: string, no: number): number {
  * 这是“任务号 + 派发序”的唯一发行点，派单号本身编码任务号，`ensureTaskForDispatch`
  * 据此对齐，不再靠 `thread-no.json` 事后映射。
  *
- * 新任务与重派的区分由 `originDispatchId` 显式表达，不靠 `stage + shard` 猜测：
+ * 新任务与重派的区分由 `originDispatchId` 显式表达，不靠分片猜测：
  *   - `originDispatchId` 缺省：这是新任务，发行新任务号（`nextTaskNo`），派发序从 1 起；
  *   - `originDispatchId` 给定：这是对原派单（`originDispatchId`）的重派，沿用原任务号，
  *     派发序按派单台账里该任务号已落盘的最大派发序 +1（不依赖任务项的 `attempts`，
  *     避免 attempts 未同步时派单号回退或重复）。
  *
- * `stage + shard` 相同不代表同一任务：一次不可分片阶段（`shard` 为空）里，用户可以
- * 连续派多个互不相干的任务（`dispatch` 命令逐个建的 adhoc 单），它们 `stage` 相同、
- * `shard` 均为空，却各自是独立任务。只有调用方明确说“这是对某张单的重派”，才复用任务号。
+ * 分片相同不代表同一任务：不分片的场景下（`shard` 为空）用户可以连续派多个互不相干
+ * 的任务（`dispatch` 命令逐个建的 adhoc 单），它们都没有分片，却各自是独立任务。
+ * 只有调用方明确说“这是对某张单的重派”，才复用任务号。
  */
 export function resolveDispatchNo(
   root: string,
-  stage: string,
-  shard: string | undefined,
   originDispatchId?: string,
 ): { no: number; attempt: number; dispatchId: string } {
   /*
@@ -225,8 +222,8 @@ export function ensureTaskForDispatch(root: string, d: Dispatch): TaskItem {
   /*
    * 新格式派单号（`2-3`）编码了任务号：按任务号找已有任务项复用，找不到就新建一条。
    * 重派（同一任务号的第 N 次派发）因此挂到同一项上、`attempts` 累计，而不是每次都新建。
-   * 不再按 `stage + shard` 判定“同一任务”。一次不可分片阶段里可以派多个互不相干的
-   * 任务，它们的 `stage` 相同、`shard` 均为空，却不是同一件事。
+   * 不按分片判定“同一任务”：不分片时可以派多个互不相干的任务，它们都没有分片，
+   * 却不是同一件事。
    */
   const sameTask = no > 0 ? rows.find((t) => Number(t.no) === no) : undefined;
   if (sameTask) {
@@ -253,7 +250,6 @@ export function ensureTaskForDispatch(root: string, d: Dispatch): TaskItem {
     state: "dispatched",
     dispatch: d.id,
     attempts: 1,
-    stage: d.stage,
     ...(d.shard ? { shard: d.shard } : {}),
     created_at: nowIso(),
     updated_at: nowIso(),
@@ -356,7 +352,7 @@ export function voidTask(root: string, id: string, note = ""): TaskItem | null {
 /** 人工新建一项（动态追加的需求，尚无对应派单时用）。 */
 export function createTask(
   root: string,
-  input: { title: string; detail?: string; tags?: string[]; stage?: string },
+  input: { title: string; detail?: string; tags?: string[] },
 ): TaskItem {
   /* 手工建任务也要走同一把任务号锁：任务号是全局主键，不能与派单路径各自取号。 */
   return withNoLock(root, "task-no", () => {
@@ -370,7 +366,6 @@ export function createTask(
       tags: input.tags ?? [],
       state: "pending",
       attempts: 0,
-      ...(input.stage ? { stage: input.stage } : {}),
       created_at: nowIso(),
       updated_at: nowIso(),
     };
@@ -462,8 +457,7 @@ export function planMerges(root: string, threshold = 0.62): MergeGroup[] {
     for (const other of rows) {
       if (other.id === base.id || used.has(other.id)) continue;
       const no = normTitle(other.title) || normTitle(String(other.detail ?? ""));
-      const sameShard =
-        base.shard && other.shard && base.stage === other.stage && base.shard === other.shard;
+      const sameShard = Boolean(base.shard && other.shard && base.shard === other.shard);
       if (sameShard || similarity(nb, no) >= threshold) same.push(other);
     }
     if (same.length <= 1) continue;

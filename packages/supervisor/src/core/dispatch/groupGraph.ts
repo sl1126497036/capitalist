@@ -14,13 +14,18 @@
  * 完成数分母撑大（实测一轮重试把 11 项撑成 26 项）。事项是组的计数与判定单位，
  * {@link groupItemsOf} 是唯一聚合入口。
  *
+ * 事项的状态取最后一次尝试（`dispatchState.attemptsStateOf`）。用户重派一张已验收的成员时，
+ * 旧单仍停在 `done`，新单在链尾。若按“任一单完成”判定，组会立即判满、下游提前放行；
+ * 按最后一次尝试判定，组要等重派单了结。
+ *
  * 接替单（`supersedes`）与被接替事项合并为同一事项：补单顶替失败成员时，组的成员数
  * 不变，完成情况以接替单为准。
  */
 
 import type { Dispatch } from "../record/supervisor";
-import { parentOf } from "../record/supervisor";
-import { isFailed } from "../record/dispatchState";
+import { parentOf } from "../record/prerequisites";
+import { attemptsStateOf, isFailed } from "../record/dispatchState";
+import { lineageOf } from "../record/prerequisites";
 import { normalizeGroupId } from "../record/idMap";
 import type { GroupIndex } from "../record/groups";
 
@@ -82,37 +87,8 @@ export interface GroupItem {
   state: "done" | "closed" | "dead" | "pending";
 }
 
-/** 一条派生链（同一件事）的键。 */
-export function lineageOf(d: Dispatch): string {
-  return String((d as { lineage?: unknown }).lineage ?? d.id);
-}
-
-/**
- * 一件事的合并状态。
- *
- * `dead` 只认“失败且不再重试”：`retry_verdict === "give_up"`，或该单被级联判定
- * 失败（`cascade_at` 有值）。可重试的失败不算终态，它还在等重派。
- * 优先级与旧口径一致：完成 > 人工结束 > 断链 > 等待。
- */
-function itemStateOf(rows: readonly Dispatch[]): GroupItem["state"] {
-  let closed = false;
-  let dead = false;
-  for (const d of rows) {
-    const status = String(d.status ?? "");
-    if (status === "done") return "done";
-    if (status === "closed") {
-      closed = true;
-      continue;
-    }
-    if (!isFailed(status)) continue;
-    const verdict = String((d as { retry_verdict?: unknown }).retry_verdict ?? "");
-    const cascaded = Boolean(String((d as { cascade_at?: unknown }).cascade_at ?? ""));
-    if (verdict === "give_up" || cascaded) dead = true;
-  }
-  if (closed) return "closed";
-  if (dead) return "dead";
-  return "pending";
-}
+/** 一条派生链（同一件事）的键。口径在 `core/record/prerequisites`，此处只转出。 */
+export { lineageOf };
 
 /**
  * 把一个组的成员聚合成事项。组的计数、判定、展示都从这里取，不另写推导。
@@ -120,6 +96,8 @@ function itemStateOf(rows: readonly Dispatch[]): GroupItem["state"] {
  * 两步：先按 `supersedes` 把接替单与被接替事项并到同一集合（并查集，键取被接替者的
  * lineage，保证事项键在接替前后不变），再按集合汇总状态。目标已归档或不在本组时跳过
  * 合并，不抛错：建单时已校验，归档是后续变化。
+ *
+ * 事项状态取最后一次尝试：重派单在链尾，旧单的 `done` 不再顶掉新单的在途状态。
  */
 export function groupItemsOf(gid: string, rows: readonly Dispatch[], idx: GroupIndex): GroupItem[] {
   const key = normalizeGroupId(gid);
@@ -168,7 +146,7 @@ export function groupItemsOf(gid: string, rows: readonly Dispatch[], idx: GroupI
     key: k,
     ids: v.ids,
     head: v.ids[v.ids.length - 1] ?? k,
-    state: itemStateOf(v.rows),
+    state: attemptsStateOf(v.rows),
   }));
 }
 

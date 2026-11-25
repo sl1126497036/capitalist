@@ -33,7 +33,7 @@ export function taskNoLines(root: string, threads: readonly ThreadSummary[], lim
   const lines = picked.map((t) => {
     const who = t.worker ? "执行中" : "排队中";
     const title = t.title ? ` - ${t.title}` : "";
-    return `  ${taskNoLabel(Number(t.no))} [${t.shard || t.stage}] ${t.status}${title} - ${who}`;
+    return `  ${taskNoLabel(Number(t.no))} [${t.shard || "不分片"}] ${t.status}${title} - ${who}`;
   });
   if (lines.length === 0 && readGroups(root).length === 0) return [];
   return [

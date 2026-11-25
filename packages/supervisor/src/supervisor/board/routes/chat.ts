@@ -33,7 +33,7 @@ import { taskNoLines, workerRuntimeLines, workerDigest, settledLines } from "../
 import { writeQuotedDirect, runCli, resolveQuoteText, quoteDispatchLabel, sayArgsOf } from "../cmdQuote";
 import { serializeSupervisorChat, supervisorPolicy, workerSessionId } from "../commands";
 import { chatAuthHint } from "../models";
-import { reopenDirective, resolveThreadAction } from "../threadAction";
+import { resolveThreadAction } from "../threadAction";
 import { maskBoardText, maskStream, targetFromText } from "../render";
 import { dispatchNoTable } from "../../usage/threadNo";
 import { dispatchTitle } from "../snapshot";
@@ -42,7 +42,7 @@ import { buildThreads } from "../threads";
 import { buildSupervisorStatus } from "../views";
 import { findSkill, listSkills } from "../../skills";
 import { supervisorModelOf } from "../../judge/supervisorModel";
-import { SUPERVISOR_VIA, chatCarrierOf, chatDirectionOf } from "../chatDirection";
+import { SUPERVISOR_THREAD, SUPERVISOR_VIA, chatCarrierOf, chatDirectionOf } from "../chatDirection";
 
 /**
  * 会携带技能的动作：这些动作最终把正文下发成派单，技能名随正文一起下发。
@@ -94,12 +94,17 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         text = String(body.text ?? "").trim();
         thread = String(body.thread ?? "").trim();
         via = String(body.via ?? "").trim();
+        /*
+         * 监工窗口的会话键不是任务线程：按空串处理。
+         * 带着它往下走会把全局对话里的动作当成“线程内要求”折算成对某张单的追加。
+         */
+        if (thread === SUPERVISOR_THREAD) thread = "";
         quote = cId(body.quote, "quote") ?? "";
         /*
          * 引用目标只认消息编号。
          *
          * 界面已经不给没有编号的卡片引用按钮，这里再挡一次：内容指纹、视图块 id、
-         * 本地回显的临时身份一旦进了提示词，模型会照抄成 `#hhs87c` 这类体系外编号，
+         * 本地回显的临时身份一旦进了提示词，模型会原样写成 `#hhs87c` 这类体系外编号，
          * 再随回复回流到界面，用户看到的编号就此多出一套。
          */
         if (quote && !isMsgNo(quote)) quote = "";
@@ -136,7 +141,6 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       const threadDispatch = threadWorker?.dispatch
         ? readDispatches(ctx.opts.root).find((d) => String(d.id) === String(threadWorker.dispatch))
         : null;
-      const taskStage = String(me?.stage ?? threadDispatch?.stage ?? state?.stage ?? "");
       const taskShard = String(me?.shard ?? threadDispatch?.shard ?? "");
       const taskTitle = String(me?.title ?? (threadDispatch ? dispatchTitle(threadDispatch) : "") ?? "");
       const talkDispatch = String(me?.dispatch ?? threadDispatch?.id ?? "");
@@ -146,12 +150,12 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ? [
             "",
             "【你现在对话的对象】",
-            taskShard || taskStage || taskTitle
+            taskShard || talkDispatch || taskTitle
               ? `任务：${taskTitle || "（未命名）"}`
               : "任务：（未能定位，按全局状态回答）",
             me
               ? `当前状态：${me.status} ｜ 已运行 ${Math.round((me.duration_sec ?? 0) / 60)} 分钟`
-              : "该单的执行进程已退出 ｜ 任务仍在，可以重开",
+              : "该单的执行进程已退出 ｜ 任务仍存在，可重新派单",
             `最近输出：${String(me?.last || "").slice(0, 300) || "（尚无输出）"}`,
             ...(() => {
               if (!me?.worker) return [];
@@ -181,11 +185,11 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
                   talkNo
                     ? `用户说“立即执行 / 马上跑 / 别等”：DO: promote ${taskNoLabel(Number(talkNo))}：抢占并发名额，运行中的派单退回队首，本单结束后继续执行。`
                     : "用户说“立即执行 / 马上跑”：DO: promote #NN：抢占并发名额。",
-                  "要新建派单并立刻抢占并发名额（不等排队）：DO: dispatch --now <内容>（--now 表示立即执行，会挂起运行中的派单）。",
+                  "要新建派单并立刻抢占并发名额（无需等待排队）：DO: dispatch --now [分类] <内容>（--now 表示立即执行并挂起运行中的派单；[分类] 不可省）。",
                   "要继续执行该单：排队中用 queue 或 promote；已结束用 DO: redo #<本单编号>，沿用原单与原会话，不新建单。",
-                  "要补充或更正要求：DO: amend #<本单编号> <内容>；只有用户明确说“另开一单 / 新任务”才 dispatch。",
+                  "要补充或更正要求：DO: amend #<本单编号> <内容>；用户说“另开一单 / 新派一个单 / 追加派单 / 补一张”或判不出来时按 DO: dispatch [分类] <内容> 新建。",
                   "不要为启动某一单而新建派单去改动机制；用户明确要求时除外。",
-                  "不要用 retry：retry 的参数是分片 id，不是任务号，传入 adhoc 单会被拒绝。",
+                  "不要把任务号当作 retry 参数：retry 只接分片 id，传任务号或 adhoc 单会被拒绝；重跑已结束单用 DO: redo #<编号>，重跑分片才用 DO: retry <分片> 并先按下面【重派前先核对卡点】核对。",
                 ]
               : []),
           ]
@@ -325,7 +329,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ).trim();
         const sessionId =
           liveSession ||
-          workerSessionId(String(me?.stage ?? taskStage), String(me?.shard ?? taskShard), talkDispatch);
+          workerSessionId(String(me?.shard ?? taskShard), talkDispatch);
         const prompt = [
           "该线程对应的任务已结束，用户在此会话发来消息时直接回答。",
           "",
@@ -340,13 +344,13 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           "【怎么回答】",
           "- 使用用户语言，简短直接，一到三句；不要使用客套话，不要复述用户的话",
           "- 思考过程也用用户语言写：界面会将推理过程原样展示给用户",
-          "- 只依据本会话已有的上下文和下面这条消息回答；不知道就回答不知道，不编造",
+          "- 只依据本会话已有的上下文和下面这条消息回答；无相关信息时回答不知道，不编造",
           "- 会话归属：本会话续接派单执行进程，与 WorkBuddy 窗口的对话互不共享上下文。",
-          "  被问是否与 WorkBuddy 窗口共用会话时，答不是，并说明这是执行进程的会话；运行环境中的 WorkBuddy 变量继承自启动方，不代表同一会话。",
-          "  用户没问就不主动提。",
-          "- 该单已结束：只回答问题，不改文件、不改派单；需要重派时按当前单的上下文用量判断，上下文充足则直接复用，否则新开一单",
+          "  被问是否与 WorkBuddy 窗口共用会话时，回答：否，并说明这是执行进程的会话；运行环境中的 WorkBuddy 变量继承自启动方，不代表同一会话。",
+          "  用户未询问时不主动说明。",
+          "- 该单已结束：只回答问题，不改文件、不改派单，也不在本轮下发任何动作；需要重派时提示用户在主对话中按该单上下文用量决定复用或新开一单",
           "- 排版用 Markdown：加粗写 **文字**，列表行首写 - 或 1.，代码用反引号包起来；标题写成 ## 文字（井号后留空格），任务编号写作 #12",
-          "- 不要提内部文件名和路径（以 .capitalist/ 开头的路径），也不要提任务列表、分片、收工条件、闸门判据、阻塞编号这类内部词",
+          "- 不要提内部文件名和路径（以 .capitalist/ 开头的路径），也不要提守卫、分片、收工条件、闸门判据、阻塞编号这类内部词",
           "",
           `用户消息：${text}`,
           ...(quote
@@ -403,6 +407,15 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         return;
       }
 
+      /*
+       * 会话先于消息登记。
+       *
+       * 没有会话记录时这里会新建会话，并写一条 `chat_session_new` 作为监工消息流的下界；
+       * 若等到消息登记之后再建，本轮这条消息的时间就落在下界之前，刷新后从对话区消失。
+       * 走工作进程会话的请求不建监工会话，保持原样。
+       */
+      const turnSession =
+        via === SUPERVISOR_VIA || !me ? supervisorChatTurnSessionId(ctx.opts.root) : "";
       const brief = reloadBrief(ctx.opts.root);
       /** 先把指令记入流，再算候选图；顺序反了本条消息的图不在编号表里。 */
       const userMsg = recordUserMessage(ctx.opts.root, {
@@ -421,7 +434,6 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       const idleQueue = running.length === 0 && queued === 0 && failed === 0;
 
       const contextLines = [
-        ...(capitalist.stage_name ? [`阶段：${capitalist.stage_name}`] : []),
         ...mine,
         ...taskNoLines(ctx.opts.root, threads),
         ...workerRuntimeLines(ctx.opts.root),
@@ -430,7 +442,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           return lines.length
             ? [
                 "",
-                "【最近收到的消息（正序，最后一条为当前消息）】派单前先核对：该事项是否已派过、上一轮派的对象是否相同。",
+                "【最近收到的消息（正序，最后一条为当前消息）】派单前先核对：该事项是否已派发、上一轮派的对象是否相同。",
                 ...lines,
               ]
             : [];
@@ -442,11 +454,11 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             ? `（${running.map((t) => `${taskNoLabel(Number(t.no))} ${t.title || t.shard || t.id}${t.worker ? ` - ${t.worker}` : ""}`).join("、")}）`
             : ""
         } ｜ 排队 ${queued} ｜ 异常 ${failed}`,
-        ...(idleQueue ? ["队列状态：空（待命，没有派单在执行，也没有排队项）"] : []),
+        ...(idleQueue ? ["队列状态：空（待命；无执行中派单、无排队项）"] : []),
         `下一步：${state?.next_action ? String(state.next_action).slice(0, 300) : "（空）"}`,
         `线程总数：${threads.length} ｜ 已完成 ${threads.filter((t) => t.status === "done" || t.status === "exited").length}`,
         ...(brief && via !== SUPERVISOR_VIA
-          ? ["", "【重载后继承的上下文（压缩过，已完成且证据齐全的不要重做）】", brief]
+          ? ["", "【重载后继承的上下文（已压缩；已完成且证据齐全的任务不重复执行）】", brief]
           : []),
         ...(() => {
           const lines = memoryLines(ctx.opts.root, `${text} ${mine.join(" ")}`);
@@ -461,7 +473,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       /**
        * 可用技能：技能不专属工作进程。
        *
-       * 监工自己动手的场合（查状态、写契约、改文案）读完 SKILL.md 直接执行；
+       * 监工自己动手的场合（查状态、写守卫、改文案）读完 SKILL.md 直接执行；
        * 需要落地的改动把技能名写进派单正文，工作进程按名加载全文。由模型按技能说明与
        * 用户描述判断归谁，判断不了时问用户，不预设归属。
        */
@@ -503,29 +515,29 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         "  不拟人、不承诺、不陈述自身工作。",
         "- 只依据上面的状态回答；状态里没有的信息就回答“不知道”，不编造",
         "- 会话归属：每轮对话由监工单独启动一个进程，与 WorkBuddy 窗口的对话互不共享上下文。",
-        "  被问是否与 WorkBuddy 窗口共用会话时，答不是，并说明这是监工的对话；运行环境中的 WorkBuddy 变量继承自启动方，不代表同一会话。",
-        "  用户没问就不主动提。",
+        "  被问是否与 WorkBuddy 窗口共用会话时，回答：否，并说明这是监工的对话；运行环境中的 WorkBuddy 变量继承自启动方，不代表同一会话。",
+        "  用户未询问时不主动说明。",
         "- 心跳流水（supervisor_tick）不作为状态来源；用户问“为什么没动 / 卡在哪 / 是不是坏了”时，",
-        "  读台账和日志查明，属对话层职责：直接查比派单更快且更准。",
+        "  读台账和日志查明，属对话层职责：直接查询比派单更高效、更准确。",
         "- 但“对谁做”必须明确到具体对象：以用户所指为准（哪个、哪一处），不按类别推断。",
-        "  写派单前先确认具体对象并给出位置；指不出唯一对象时 capitalist ask，不猜测",
-        "- 用户输入按指令执行；不纠正用户表述，不解释识别规则",
+        "  写派单前先确认具体对象并给出位置；无法指向唯一对象时 capitalist ask，不猜测",
+        "- 用户输入按指令执行；对象明确时不纠正表述、不解释识别规则；对象不明确时按上一条先确认，不自行推断。",
         ...(idleQueue
           ? [
               "",
               "【当前处于待命，队列为空】",
               "- 没有派单在执行，也没有排队项。用户问候或询问状态时，说明当前空闲，并提示可以直接描述要执行的任务，",
               "  或选择一个技能，随消息一起派发。",
-              "- 不写“收工”“条件满足”“可以结束”：没有开工就不存在收工。阶段门槛、占位文件、值守条件这类说法也不写。",
+              "- 不写“收工”“条件满足”“可以结束”：未启动则不存在收工状态。门槛、占位文件、值守条件这类说法也不写。",
             ]
           : []),
         "",
         "【格式硬要求，逐条执行】",
         "1. 排版用 Markdown：加粗写 **文字**，列表行首写 - 或 1.，代码用反引号；不用表格、缩进代码块与 HTML 标签。",
         "2. 标题写成 ## 文字，井号后留空格；任务编号写作 #12，井号后不加空格。",
-        "3. 不要提内部文件名和路径（以 .capitalist/ 开头的路径），也不要提任务列表、分片 id、收工条件、",
-        "   闸门判据、阻塞编号这类内部词。用户要听的是“什么情况、该怎么办”。【可用截图】里的路径供挑图使用，回复里同样不要写出来。",
-        "4. 最多三句，不总结、不追问、不列举选项。",
+        "3. 不要提内部文件名和路径（以 .capitalist/ 开头的路径），也不要提守卫、分片 id、收工条件、",
+        "   闸门判据、阻塞编号这类内部词。应说明当前情况与处理方式。【可用截图】里的路径供挑图使用，回复里同样不要写出来。",
+        "4. 最多三句，不总结、不罗列选项；仅在对象或归属无法唯一确定时按上文向用户确认，其余情况不追问。",
         "5. DO: 行与 ATT: 行各占单独一行，写在正文最后；它们不会显示给用户，写在正文中间会打断语句。",
         "",
         /** 是否工作进程会话只看 thread 有没有值，不看 me 是否存在。 */
@@ -539,7 +551,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
               resolveQuoteText(ctx.opts.root, thread, quote, quoteFallback) || "（原文未取回，仅编号）",
               ...(() => {
                 const hit = quoteDispatchLabel(ctx.opts.root, quote);
-                return hit ? [`该消息已派成 ${hit}：引用用于修正该单。`] : [];
+                return hit ? [`该消息已派发为 ${hit}：引用用于修正该单。`] : [];
               })(),
             ]
           : []),
@@ -568,16 +580,17 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
        */
       const sessionId =
         via === SUPERVISOR_VIA
-          ? supervisorChatTurnSessionId(ctx.opts.root)
+          ? turnSession || supervisorChatTurnSessionId(ctx.opts.root)
           : me
             ? liveSession ||
-              workerSessionId(String(me.stage ?? ""), String(me.shard ?? ""), String(me.dispatch ?? ""))
+              workerSessionId(String(me.shard ?? ""), String(me.dispatch ?? ""))
             : /*
                * 监工会话（capitalist-chat 系）：每一轮进来先过单轮注入上限。会话记录超限时
                * 换代到 `capitalist-chat-w<ws>-c<gen>`，不让历史与历史轮次的工具输出无限累积重发
                * （reload.ts 的 supervisorChatTurnSessionId；换代时写入 context_compacted 事件）。
+               * 本轮会话已在消息登记前取过一次（见 turnSession），这里复用同一代。
                */
-              supervisorChatTurnSessionId(ctx.opts.root);
+              turnSession || supervisorChatTurnSessionId(ctx.opts.root);
       const leaveChat = enterSupervisorAction("chat");
       /*
        * 模型输出首个 token 前不写入任何字节，界面显示为无回复。
@@ -664,7 +677,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         const okTexts: string[] = [];
         const okIds: string[] = [];
         const failNotes: string[] = [];
-        /* 用户在线程里提的要求归属该线程对应的派单，已结束的先重开（见 threadAction.ts）。 */
+        /* 用户在线程里明确表示补充时归属该线程对应的派单；其余按新建，见 threadAction.ts。 */
         const talkTarget = String(talkDispatch ?? "").trim();
         const threadDisp = talkTarget
           ? readDispatchesBoard(ctx.opts.root).find((x) => String(x.id) === talkTarget)
@@ -689,6 +702,13 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
            * 否则会按“两套并存”处理。回执仍用原文，不把该说明写进气泡。
            */
           const withSkill = SKILL_ACTIONS.has(String(act.action)) ? `${arg}${skillLine}` : arg;
+          /*
+           * 树字段只对新节点有意义：带上 PARENT / GROUP / ACCEPTANCE 等的动作按新建处理，
+           * 折算成追加会在执行侧丢掉这些字段。
+           */
+          const structural = Boolean(
+            act.parent || act.group || act.acceptance || act.after?.length || act.supersede || act.insert,
+          );
           const revised = resolveThreadAction({
             text,
             talkTarget,
@@ -696,26 +716,14 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
             action: String(act.action),
             arg: act.revoke ? `${withSkill}\n\n本次作废：${act.revoke}` : withSkill,
             status: String(threadDisp?.status ?? ""),
+            structural,
           });
           const actionName = revised.action;
           const directiveArg = revised.arg;
-          if (revised.reopenFirst) {
-            const r = appendSupervisorDirective(
-              ctx.opts.root,
-              reopenDirective({ talkNo, talkTarget, msgId: userMsg.id }),
-            );
-            if (r.ok) okIds.push(String(r.rec?.id ?? ""));
-            else {
-              const head = String(r.error || "重开失败").split("可用动作")[0] ?? "";
-              failNotes.push(`redo：${head.replace(/[：:，,]\s*$/, "")}`);
-              continue;
-            }
-          }
-          /** skip 把整个阶段记成待补项跳过，不代为确认。 */
           const w = appendSupervisorDirective(ctx.opts.root, {
             action: actionName,
             arg: directiveArg,
-            confirm: actionName !== "skip",
+            confirm: true,
             msg_id: userMsg.id,
             atts: chosen,
             target:

@@ -20,14 +20,14 @@ function emptyRoot() {
   return root;
 }
 
-/* 会话按派单隔离：基名带派单 id，故所有断言以此为准。 */
-const BASE = "capitalist-u1-mwkqez4me4j";
+/* 会话按派单隔离：基名带派单标识（去掉 `D-` 前缀后 slug 化），所有断言以此为准。 */
+const BASE = "capitalist-mwkqez4me4j";
 /* 会话 id 是 v4 UUID，与 base 无字符串包含关系。断言用正则匹配 UUID，不假设具体取值。 */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const idOf = () => UUID_RE;
 
 function aDispatch() {
-  return { id: "D-mwkqez4me4j", stage: "U1", shard: "x", action: "把这件事做完" };
+  return { id: "D-mwkqez4me4j", shard: "x", action: "把这件事做完" };
 }
 
 function laneEvents(root) {
@@ -291,7 +291,7 @@ test("未知占用的续接上限按代重置：新一代重新计数", () => {
 
 test("同阶段、同标签、无分片的两张单：会话必须互相独立", () => {
   const root = emptyRoot();
-  /* 这正是线上出问题的形态：同一阶段下多张单，分片为空，分类标签相同。 */
+  /* 这是线上出问题的形态：同一阶段下多张单，分片为空，分类标签相同。 */
   const a = { id: "D-mwkqez4me4j", stage: "T", shard: "", tags: ["supervisor-copy"], action: "第一件事" };
   const b = { id: "D-mwkqvjqpf2a", stage: "T", shard: "", tags: ["supervisor-copy"], action: "第二件事" };
 

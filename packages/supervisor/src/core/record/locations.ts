@@ -78,10 +78,14 @@ export const board = {
   cleared: (root: string) => join(supervisorDir(root), "board", "cleared.json"),
 };
 
-/** 配置与诊断。 */
+/**
+ * 配置与诊断。
+ *
+ * 上一版的文件名是 `contract-prev.json`，由 `record/migrate.ts` 在启动时改名。
+ */
 export const config = {
   dir: (root: string) => join(supervisorDir(root), "config"),
-  contractPrev: (root: string) => join(supervisorDir(root), "config", "contract-prev.json"),
+  policyPrev: (root: string) => join(supervisorDir(root), "config", "policy-prev.json"),
   authDiag: (root: string) => join(supervisorDir(root), "config", "auth-diag.json"),
   ctxWindow: (root: string) => join(supervisorDir(root), "config", "ctx-window.json"),
   idMap: (root: string) => join(supervisorDir(root), "config", "id-map.json"),
@@ -152,7 +156,12 @@ export const brain = {
   lane: (root: string, base: string) => join(supervisorDir(root), "brain", `${base}.json`),
 };
 
-/** 上下文重载产物。 */
+/**
+ * 上下文重载产物。
+ *
+ * 上一版的文件名是 `contract-seen.json`，由 `record/migrate.ts` 在启动时改名；
+ * 不改名会让重载把同一份守卫当成新变更再走一遍。
+ */
 export const reload = {
   dir: (root: string) => join(supervisorDir(root), "reload"),
   active: (root: string) => join(supervisorDir(root), "reload", "active.json"),
@@ -161,7 +170,7 @@ export const reload = {
   resume: (root: string) => join(supervisorDir(root), "reload", "resume.json"),
   session: (root: string) => join(supervisorDir(root), "reload", "session.json"),
   history: (root: string) => join(supervisorDir(root), "reload", "history"),
-  contractSeen: (root: string) => join(supervisorDir(root), "reload", "contract-seen.json"),
+  policySeen: (root: string) => join(supervisorDir(root), "reload", "policy-seen.json"),
   ctx: (root: string) => join(supervisorDir(root), "reload", "capitalist-ctx.json"),
 };
 

@@ -18,6 +18,7 @@ import { dispatchNoTable } from "../../usage/threadNo";
 import { THREAD_PAGE_LIMIT, ThreadRole, ThreadKind, ThreadMessage, rootFromUrl } from "../snapshot";
 import { eventsFile } from "../sources";
 import { buildThreadsPage, markThreadSeen } from "../threads";
+import { parseThreadKey } from "../state";
 
 /** /api/threads */
 export function handleThreads(ctx: BoardCtx): void {
@@ -98,22 +99,17 @@ export function handleThreadMessage(ctx: BoardCtx): void {
     const base = buildThreadMessages(root, id, q.get("shard") ?? "", { limit, since });
     /** 工作进程会话的对话记在 events.jsonl 并带 thread 标识，需并入消息流。 */
     const talkIds = ((): Set<string> => {
-      if (!id.includes("/")) return new Set([id]);
-      const parts = id.split("/");
-      const st = String(parts[0] ?? "").trim().toLowerCase();
-      const tail = String(parts[1] ?? "").trim().toLowerCase();
       const workers = listWorkers(root);
-      const isLineage =
-        /^x[0-9a-z]{3,}$/.test(tail) &&
-        !workers.some((w) => String(w.shard ?? "").trim().toLowerCase() === tail);
-      const sh = tail === "main" || isLineage ? "" : tail;
-      const linTail = isLineage ? tail.slice(1) : "";
+      const { shard: sh, lineageTail: linTail } = parseThreadKey(
+        id,
+        q.get("shard") ?? "",
+        workers.map((w) => String(w.shard ?? "")),
+      );
       const rows = linTail ? readDispatches(root) : [];
       return new Set([
         id,
         ...workers
           .filter((w) => {
-            if (String(w.stage || "").trim().toLowerCase() !== st) return false;
             if (sh) return String(w.shard ?? "").trim().toLowerCase() === sh;
             if (String(w.shard ?? "").trim()) return false;
             if (!linTail) return true;

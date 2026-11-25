@@ -20,7 +20,7 @@ export function preflightAtOf(d: { at?: string } | null | undefined): { iso: str
 export function buildPreflightBlock(d: { at?: string } | null | undefined): string[] {
   const at = preflightAtOf(d);
   return [
-    `${PREFLIGHT_MARKER}本单正文是派单创建时的快照，先核对代码现状：`,
+    `${PREFLIGHT_MARKER}本单正文是派单创建时的快照，先核对本单作用对象的现状：`,
     "  · 先读本单要改的文件，确认代码现状与派单描述是否一致。",
     "  · 派单要求的事情若已实现，不重做：在结束报告里指出实现位置（文件 + 行号）与差异。",
     "  · 只完成一半的，补齐缺少的部分，不整体重做。",
@@ -32,7 +32,7 @@ export function buildPreflightBlock(d: { at?: string } | null | undefined): stri
       : "  · 目标文件在本单创建之后被改过时，按最新内容做，不按旧快照覆盖。",
     ...(at
       ? [
-          `    核对方法：\`stat -c %Y <文件>\` 与 \`date -d "${at.iso}" +%s\` 比较，前者更大说明文件在本单创建后被改过。`,
+          `    核对方法：在提供 GNU coreutils 的环境，用 \`stat -c %Y <文件>\` 与 \`date -d "${at.iso}" +%s\` 比较，前者更大说明文件在本单创建后被改过；其他平台用等价命令做同一比较。`,
         ]
       : []),
   ];

@@ -6,11 +6,11 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-auth-"));
-  createTaskRoot({ target: "登录态检查测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "登录态检查测试", policySpec: "minimal", root: base });
   return base;
 }
 

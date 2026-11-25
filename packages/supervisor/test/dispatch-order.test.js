@@ -9,7 +9,7 @@ const { spawnSync } = require("node:child_process");
 const capitalist = require("../dist/core/record/supervisor");
 const { writeJsonl } = require("../dist/core/record/json");
 const { loadState } = require("../dist/core/record/state");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const loop = require("../dist/supervisor/loop");
 const { appendSupervisorDirective, listSupervisorDirectives } = require("../dist/supervisor/channel/direct");
 const { parseReply } = require("../dist/supervisor/channel/parseReply");
@@ -19,7 +19,7 @@ const { readJsonl } = require("../dist/core/record/json");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-order-"));
-  createTaskRoot({ target: "派单顺序一致性", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "派单顺序一致性", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -76,14 +76,14 @@ test("派生链解析：前置单失败重派后，重派单完成同样算满�
   assert.deepStrictEqual(queueAfterRestart(root), ["B"], "同一件事的重派完成后，B 解锁");
 });
 
-test("前置是契约分片单：分片重派另起新派生链，重派完成后同样算满足（U1 实测缺口回归）", () => {
+test("前置是分片单：分片重派另起新派生链，重派完成后同样算满足（U1 实测缺口回归）", () => {
   const root = sandbox();
   /* 分片单（有 shard 字段）：planDispatch / shardRetry / 模型回退的重派都另写 lineage。 */
   put(root, "S1", { shard: "s1", lineage: "S1" });
   put(root, "B", { shard: "", after: ["S1"] });
   capitalist.finishDispatch(root, "S1", "failed", "进程崩了");
   assert.deepStrictEqual(queueAfterRestart(root), [], "分片失败，B 继续等");
-  /* 重派单：同 stage+shard，但派生链是新的（分片重派不整链继承派生链）。 */
+  /* 重派单：同分片，但派生链是新的（分片重派不整链继承派生链）。 */
   put(root, "S2", { shard: "s1", lineage: "S2" });
   assert.deepStrictEqual(queueAfterRestart(root), ["S2"], "重派单先进队列，B 仍等");
   capitalist.finishDispatch(root, "S2", "done", "重派完成");
@@ -205,8 +205,8 @@ test("AFTER 行解析：编号进解析结果，不进气泡正文；AFTER: none
 test("dispatch 指令把依赖写进台账 after 字段（编号 -> 派单 id 落数据）", async () => {
   const root = sandbox();
   const a = put(root, "A");
-  /* 编号表：A 的线程键（阶段 / x+派生链尾 6 位）拿 1 号。 */
-  assignThreadNos(root, [`S0/x${String(a.lineage ?? a.id).slice(-6).toLowerCase()}`]);
+  /* 编号表：A 的线程键（无分片时为 x + 派生链尾 6 位）拿 1 号。 */
+  assignThreadNos(root, [`x${String(a.lineage ?? a.id).slice(-6).toLowerCase()}`]);
   const w = appendSupervisorDirective(root, {
     action: "dispatch",
     arg: "[t] 后做的活",
@@ -215,7 +215,7 @@ test("dispatch 指令把依赖写进台账 after 字段（编号 -> 派单 id �
   assert.ok(w.ok, `指令应入列：${w.error || ""}`);
   const res = await loop.__testing.applySupervisorDirectives({
     root,
-    contract: {},
+    policy: {},
     state: loadState(root),
     wopts: {},
     concurrency: null,
@@ -234,7 +234,7 @@ test("AFTER 指向不存在的单：派单被拒并说明原因，不静默丢�
   appendSupervisorDirective(root, { action: "dispatch", arg: "[t] 依赖悬空的活", after: ["D-nope"] });
   await loop.__testing.applySupervisorDirectives({
     root,
-    contract: {},
+    policy: {},
     state: loadState(root),
     wopts: {},
     concurrency: null,
@@ -282,7 +282,7 @@ test("多前置孤儿：AFTER 挂了台账里没有的编号，放行时记 disp
   assert.strictEqual(m3.length, 0, "前置齐全的单不报");
 });
 
-test("场景：立即执行，让位不改台账行序，恢复后与重启后都是原来的顺序", () => {
+test("场景：立即执行，让位不改台账行序，恢复后与重启后都是原有顺序", () => {
   const root = sandbox();
   const preempt = require("../dist/core/dispatch/preempt");
   put(root, "A", { status: "claimed", worker: "W-a" });

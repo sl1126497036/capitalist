@@ -85,14 +85,14 @@ test("严重异常摘要：心跳与过程流水进不来，只有白名单内�
       row({ at: "2026-11-05T01:00:05.000Z", event: "supervisor_done", stage: "WORK" }) +
       row({ at: "2026-11-05T01:00:10.000Z", event: "supervisor_chat_ask", text: "在吗" }) +
       row({ at: "2026-11-05T01:00:20.000Z", event: "worker_killed", worker: "W-1", reason: "worker timeout" }) +
-      row({ at: "2026-11-05T01:00:30.000Z", event: "contract_error", error: "bad json" }) +
+      row({ at: "2026-11-05T01:00:30.000Z", event: "policy_error", error: "bad json" }) +
       row({ at: "2026-11-05T01:00:40.000Z", event: "supervisor_tick", n: 2 }),
   );
   const lines = severeSupervisorEventLines(root);
   assert.strictEqual(lines.length, 2, "只有两条严重异常");
   assert.ok(lines[0].includes("中断进程"), "worker_killed 出中文标签");
   assert.ok(lines[0].includes("W-1"));
-  assert.ok(lines[1].includes("任务列表解析失败"), "contract_error 出中文标签");
+  assert.ok(lines[1].includes("守卫解析失败"), "policy_error 出中文标签");
   /* 心跳与普通事件不出现在摘要里 */
   assert.ok(lines.every((l) => !l.includes("心跳") && !l.includes("在吗")));
 });

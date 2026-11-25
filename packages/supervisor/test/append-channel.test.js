@@ -1,13 +1,14 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const { mkdtempSync } = require("node:fs");
+const { mkdirSync, mkdtempSync } = require("node:fs");
+const { writeJson } = require("../dist/core/record/json");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const cmds = require("../dist/core/dispatch/commands");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { recordEvent } = require("../dist/core/record/ledger");
 const { loadState, updateState } = require("../dist/core/record/state");
 const dispatch = require("../dist/agent/dispatch").dispatch;
@@ -19,9 +20,22 @@ const loop = require("../dist/supervisor/loop");
 
 const hook = byId("generic").hook;
 
+/**
+ * 建沙箱：任务根标记与“监工在线”记录都必须有。
+ *
+ * `findRoot` 认 `.capitalist/.root`，没有标记文件时 hook 直接放行；监工不在线时
+ * hook 也不接管执行中的送达。两者缺一个，本文件测的通道就整条走不到。
+ */
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-append-"));
-  createTaskRoot({ target: "追加消息测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "追加消息测试", policySpec: "minimal", root: base });
+  mkdirSync(join(base, ".capitalist", ".root"), { recursive: true });
+  writeJson(join(base, ".capitalist", "runtime", "supervisor.json"), {
+    status: "running",
+    pid: process.pid,
+    tick_sec: 5,
+    heartbeat_ts: Date.now() / 1000,
+  });
   return base;
 }
 
@@ -169,7 +183,7 @@ test("未开工的单：启动时领取并拼进 action，consumed_via=launch", 
   assert.equal(taken[0].consumed_via, "launch", "默认途径记 launch（随派单启动带入）");
 
   const spliced = cmds.spliceDirectives("改 A", taken);
-  assert.ok(spliced.includes("【用户插话 · 只对本次派单生效】"), "拼进 action 时带插话标记");
+  assert.ok(spliced.includes("【用户插话，只对本次派单生效】"), "拼进 action 时带插话标记");
   assert.ok(spliced.includes("启动时一起带入"));
 });
 
@@ -242,29 +256,24 @@ test("滞留追加补投递：目标派单已终结时翻回 open，并在下一
   assert.deepEqual(loop.drainSettledDirectives(root), [], "在途单不该被翻回 open");
 });
 
-test("追加目标单属已推进阶段：不翻回，追加标记为未投递", () => {
+test("追加目标单已终结：不翻回，追加标记为未投递", () => {
   const root = sandbox();
   seedDispatch(root, { status: "superseded" });
   cmds.appendDirective(root, {
-    text: "阶段推进之后才补的这句",
+    text: "被接替之后才补的这句",
     shard: "a",
     target: "D-append1",
     lineage: "D-append1",
   });
 
-  /* 阶段推进到 S1：S0 的单已经没有执行位，翻回也会被同一轮按阶段作废。 */
-  updateState(root, (s) => {
-    s.stage = "S1";
-  });
-
-  assert.deepEqual(loop.drainSettledDirectives(root), [], "已推进阶段的单不该翻回 open");
+  assert.deepEqual(loop.drainSettledDirectives(root), [], "终态单不该翻回 open");
   const row = capitalist.readDispatches(root).find((d) => d.id === "D-append1");
   assert.equal(row.status, "superseded", "单子保持终态，不再每轮复活");
 
   const d = cmds.listDirectives(root)[0];
   assert.equal(d.consumed, true, "无法投递的追加要标记，否则每轮重复尝试");
   assert.equal(d.consumed_via, "dropped", "去向要能区分于并入派单");
-  assert.ok(String(d.dropped_reason).includes("S0"), "原因里写明所属阶段");
+  assert.ok(String(d.dropped_reason).includes("已终结"), "原因里写明目标单已终结");
 
   assert.deepEqual(loop.drainSettledDirectives(root), [], "已标记的追加不进入复活流程");
 });
@@ -316,7 +325,7 @@ test("同一次追加只画一张卡片：directive_amended 与插话记录同�
 async function runSupervisorDirectives(root) {
   await loop.__testing.applySupervisorDirectives({
     root,
-    contract: { stages: [], data: {} },
+    policy: { data: {} },
     state: loadState(root),
     wopts: {},
     concurrency: null,

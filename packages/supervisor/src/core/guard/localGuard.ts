@@ -18,7 +18,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import type { Contract } from "../contract/contract";
+import type { Policy } from "../policy/policy";
 import { readJsonl } from "../record/json";
 import { isInside, normalizeForCompare } from "../record/paths";
 import { ledger as ledgerLoc } from "../record/locations";
@@ -76,11 +76,11 @@ function collapseDots(s: string): string {
  * 规范成小写正斜杠的绝对路径，供比较使用。
  *
  * 处理四种输入形态：Git Bash 的 `/d/work`、`~` 开头、相对路径（按任务根解析）、
- * 含 `.` 或 `..` 的绝对路径。Git Bash 形态必须还原成 `d:/work`，否则永远和契约里
+ * 含 `.` 或 `..` 的绝对路径。Git Bash 形态必须还原成 `d:/work`，否则永远和守卫里
  * 写的 `D:/...` 对不上，这是 Windows 上最容易出现的一类“判定该拦却没拦”。
  *
  * 本函数是所有路径归属判定的唯一归一入口：判定方各自调 `isInside` 比较，比较的
- * 两个串都由这里产出，因此消点只需在此处做一次。
+ * 两个串都由这里产出，因此消点仅在此处做一次。
  *
  * @param base 相对路径的解析基准，默认取当前工作目录。
  * @returns 归一后的路径；输入为空时返回空串。
@@ -169,7 +169,7 @@ function insideSkillPackage(np: string, cacheRoots: string[]): boolean {
 /**
  * 即便落在技能目录里也不放行的文件名。
  *
- * 凭据不属于“资料”。这条不依赖契约配置：默认契约没有列敏感名时，白名单也不能把技能包里
+ * 凭据不属于“资料”。这条不依赖守卫配置：默认守卫没有列敏感名时，白名单也不能把技能包里
  * 顺手放着的 `.env` 或私钥读出去。
  */
 const HARD_SECRET_RX =
@@ -185,7 +185,7 @@ function baseNameOf(np: string): string {
  *
  * `sensitive_names` 与 `sensitive_globs` 共用这一份实现。早先名字列表里只对 `*.`
  * 前缀做后缀特例，globs 列表则完全没人读，同一类配置出现两种口径且其中一种不生效。
- * 契约里两类写法都按 glob 解释，精确名就是不含通配符的 glob。
+ * 守卫里两类写法都按 glob 解释，精确名就是不含通配符的 glob。
  */
 function matchName(base: string, pattern: string): boolean {
   const p = String(pattern ?? "").trim();
@@ -258,19 +258,19 @@ function inReadAllowlist(
  * 允许提交申请由监工判断，判断只针对路径与用途，不含内容；在任务根外的一律拒绝，
  * 不接受理由。敏感路径（`~/.ssh` 等）无论在哪都拒绝。
  *
- * @param contract 提供 `local_guard` 配置；无该配置时直接放行。
+ * @param policy 提供 `local_guard` 配置；无该配置时直接放行。
  * @param root 任务根。为 null 时不存在“根内”这一免判区域，所有路径都按越界处理。
  * @param paths 待判定的路径列表。为空时直接放行。
  * @param action 动作类型，决定删除类判定是否生效。
  */
 export function localCheck(
-  contract: Contract,
+  policy: Policy,
   root: string | null,
   paths: string[],
   action: ActionKind = "read",
   extra: LocalCheckExtra = {},
 ): LocalCheckResult {
-  const cfg = contract.localGuard;
+  const cfg = policy.localGuard;
   if (!cfg || Object.keys(cfg).length === 0 || paths.length === 0) {
     return { decision: "allow", hits: [] };
   }
@@ -454,17 +454,17 @@ export function extractDeleteArgs(text: string): { targets: string[]; unsafe: bo
  * 删除动作判定：目标必须能确认在任务根内。
  *
  * 与红线层的分工：红线只看“是不是删除命令”，本函数看“删的是哪”。
- * 因此删除类红线在契约里都标了 `defer`，由本函数给出最终结论。
+ * 因此删除类红线在守卫里都标了 `defer`，由本函数给出最终结论。
  *
  * @param root 任务根。为 null 时所有目标都判为根外，删除一律拒。
  * @param text 命令原文；目标含通配符 / 变量或未给目标时同样拒。
  */
 export function localDeleteCheck(
-  contract: Contract,
+  policy: Policy,
   root: string | null,
   text: string,
 ): LocalCheckResult {
-  const cfg = contract.localGuard;
+  const cfg = policy.localGuard;
   if (!cfg || cfg.never_delete_outside_task_root === false) {
     return { decision: "allow", hits: [] };
   }

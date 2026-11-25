@@ -9,7 +9,7 @@
 
 import { createInterface } from "node:readline";
 
-import { createTaskRoot } from "../../core/contract/init";
+import { createTaskRoot } from "../../core/policy/init";
 import { loadState } from "../../core/record/state";
 import { skillDirs } from "../../agent/locations";
 import { t } from "../../cli/lang";
@@ -18,7 +18,7 @@ import { t } from "../../cli/lang";
 export interface BootstrapOptions {
   root: string;
   target?: string | undefined;
-  contractSpec?: string | undefined;
+  policySpec?: string | undefined;
 }
 
 export type BootstrapResult = { ok: true; created: boolean } | { ok: false; message: string };
@@ -48,9 +48,9 @@ export async function ensureRoot(opts: BootstrapOptions): Promise<BootstrapResul
   try {
     createTaskRoot({
       target,
-      contractSpec: opts.contractSpec,
+      policySpec: opts.policySpec,
       root,
-      contractDirs: skillDirs(),
+      policyDirs: skillDirs(),
     });
     return { ok: true, created: true };
   } catch (err) {

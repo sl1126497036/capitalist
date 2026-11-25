@@ -13,7 +13,7 @@ const { join, resolve } = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const PKG = resolve(__dirname, "..");
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const {
   resolveDispatchNo,
   ensureTaskForDispatch,
@@ -31,7 +31,7 @@ const { buildThreadsPage } = require(join(PKG, "dist/supervisor/board/threads.js
 
 function sandbox(name) {
   const base = mkdtempSync(join(tmpdir(), `capitalist-idissue-${name}-`));
-  createTaskRoot({ target: "取号回归", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "取号回归", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -55,9 +55,9 @@ function openDispatch(root, id, title, lineage) {
 
 test("连续取号不撞号：号一发行就占位，未落派单也不复用", () => {
   const root = sandbox("seq");
-  const a = resolveDispatchNo(root, "S0", undefined).dispatchId;
-  const b = resolveDispatchNo(root, "S0", undefined).dispatchId;
-  const c = resolveDispatchNo(root, "S0", undefined).dispatchId;
+  const a = resolveDispatchNo(root).dispatchId;
+  const b = resolveDispatchNo(root).dispatchId;
+  const c = resolveDispatchNo(root).dispatchId;
   assert.deepStrictEqual([a, b, c], ["1-1", "2-1", "3-1"]);
 });
 
@@ -66,9 +66,9 @@ test("重派取号按任务号递增，不跨任务干扰", () => {
   openDispatch(root, "1-1", "任务一");
   openDispatch(root, "2-1", "任务二");
 
-  assert.strictEqual(resolveDispatchNo(root, "S0", undefined, "1-1").dispatchId, "1-2");
-  assert.strictEqual(resolveDispatchNo(root, "S0", undefined, "1-1").dispatchId, "1-3");
-  assert.strictEqual(resolveDispatchNo(root, "S0", undefined, "2-1").dispatchId, "2-2");
+  assert.strictEqual(resolveDispatchNo(root, "1-1").dispatchId, "1-2");
+  assert.strictEqual(resolveDispatchNo(root, "1-1").dispatchId, "1-3");
+  assert.strictEqual(resolveDispatchNo(root, "2-1").dispatchId, "2-2");
 });
 
 test("锁被占用且未到期：连续重试后明确失败，不是静默猜号", () => {
@@ -81,7 +81,7 @@ test("锁被占用且未到期：连续重试后明确失败，不是静默猜�
     JSON.stringify({ key: "task-no", token: "other", pid: process.pid, at: Date.now(), expires_at: Date.now() + 60000 }),
   );
   assert.throws(
-    () => resolveDispatchNo(root, "S0", undefined),
+    () => resolveDispatchNo(root),
     (e) => e instanceof NoLockTimeoutError,
     "取不到锁应抛 NoLockTimeoutError",
   );
@@ -95,10 +95,10 @@ test("锁已到期：后来者自动接管，不需要人工清锁", () => {
     join(dir, "no-task-no.lock"),
     JSON.stringify({ key: "task-no", token: "stale", pid: process.pid, at: Date.now() - 9000, expires_at: Date.now() - 1000 }),
   );
-  assert.strictEqual(resolveDispatchNo(root, "S0", undefined).dispatchId, "1-1");
+  assert.strictEqual(resolveDispatchNo(root).dispatchId, "1-1");
 });
 
-test("锁的持有进程已退出：立即可接管", () => {
+test("锁的持有进程已退出：可立即接管", () => {
   const root = sandbox("dead");
   const dir = join(root, ".capitalist", "locks");
   mkdirSync(dir, { recursive: true });
@@ -106,7 +106,7 @@ test("锁的持有进程已退出：立即可接管", () => {
     join(dir, "no-task-no.lock"),
     JSON.stringify({ key: "task-no", token: "dead", pid: 999999, at: Date.now(), expires_at: Date.now() + 60000 }),
   );
-  assert.strictEqual(resolveDispatchNo(root, "S0", undefined).dispatchId, "1-1");
+  assert.strictEqual(resolveDispatchNo(root).dispatchId, "1-1");
 });
 
 test("嵌套不同锁键：直接拒绝，避免死锁", () => {
@@ -123,7 +123,7 @@ test("跨进程并发取号：六个进程拿到六个不同任务号", () => {
   writeFileSync(
     script,
     `const { resolveDispatchNo } = require(${JSON.stringify(join(PKG, "dist/core/record/tasks.js"))});\n` +
-      `process.stdout.write(resolveDispatchNo(${JSON.stringify(root)}, "S0", undefined).dispatchId + "\\n");\n`,
+      `process.stdout.write(resolveDispatchNo(${JSON.stringify(root)}).dispatchId + "\\n");\n`,
   );
   const out = [];
   for (let i = 0; i < 6; i += 1) {
@@ -188,7 +188,7 @@ test("同一任务多次派单只占一行，派单号仍按任务号派生", ()
   const root = sandbox("oneline");
   openDispatch(root, "1-1", "同一件事");
   /* 第二次派单：同一任务、下一张单。 */
-  const second = resolveDispatchNo(root, "S0", undefined, "1-1").dispatchId;
+  const second = resolveDispatchNo(root, "1-1").dispatchId;
   /* 重派单继承原单的派生链，线程键因此不变。 */
   openDispatch(root, second, "同一件事", "1-1");
 
@@ -205,7 +205,7 @@ test("同一任务多次派单只占一行，派单号仍按任务号派生", ()
 test("任务台账与派单号前缀保持一致", () => {
   const root = sandbox("align");
   for (let i = 1; i <= 3; i += 1) {
-    const id = resolveDispatchNo(root, "S0", undefined).dispatchId;
+    const id = resolveDispatchNo(root).dispatchId;
     openDispatch(root, id, `任务 ${i}`);
   }
   const tasks = readTasks(root);

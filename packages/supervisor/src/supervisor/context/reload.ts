@@ -7,7 +7,7 @@
  * 自动重载：board 把 result 行的 contextUsed / contextWindow 经 {@link recordSupervisorContext} 落到 `capitalist-ctx.json`，主循环用 {@link shouldAutoReload} 判定超限后走同一条 `beginReload` 链路。
  * 恢复计划按 {@link ReloadSnapshot.dispatch_order}（台账行序）与 `resume_order` 排序，不按任务编号排序；编号仅作身份标识，与下发顺序无关。
  *
- * 边界：只写 `.capitalist/reload/` 与复验单，不改 state、不推进阶段、不动契约；阶段推进与门槛判定只在 loop.ts 的 step 里发生。
+ * 边界：只写 `.capitalist/reload/` 与复验单，不改 state、不动守卫；派单与推进只在 loop.ts 的 step 里发生。
  */
 
 import { randomBytes } from "node:crypto";
@@ -29,10 +29,9 @@ import { clipText, sleep } from "../../core/text";
 
 import { dirs } from "../../agent/registry";
 import { hhmmOf } from "../../core/clock";
-import { runCheck, type CheckResult } from "../../core/contract/checks";
 import { listDirectives } from "../../core/dispatch/commands";
 import { composeDispatch } from "../../core/dispatch/newDispatch";
-import { stageById, type Contract } from "../../core/contract/contract";
+import type { Policy } from "../../core/policy/policy";
 import { openInboxAsks } from "../../core/dispatch/inbox";
 import { readJson, readJsonl, writeJson } from "../../core/record/json";
 import { DEFAULT_SUPERVISOR_CONTEXT_LIMIT, readCtxWindow, readCtxWindowChosen, resolveContextWindow } from "../../core/guard/limits";
@@ -54,7 +53,7 @@ import {
   tallyMessage,
   workerUsageRow,
 } from "../usage/usage";
-import type { Stage, TaskState } from "../../core/types";
+import type { TaskState } from "../../core/types";
 
 /** 重载目录：`.capitalist/reload`。所有产物都在这里，归档时不与业务台账混在一起。 */
 function reloadDir(root: string): string {
@@ -94,7 +93,7 @@ export const RELOAD_STALE_MS = 3 * 60_000;
 
 /** 一张单在快照里的状态。 */
 export type ReloadItemState =
-  /** 契约里有这一片，但没有任何派单记录 */
+  /** 守卫里有这一片，但没有任何派单记录 */
   | "not_started"
   /** open / claimed：排队或执行中 */
   | "in_progress"
@@ -116,22 +115,14 @@ export interface ReloadDispatchRef {
   reverify: boolean;
 }
 
-/** 一片（或整阶段的空分片）在快照里的记录。 */
+/** 一个任务节点在快照里的记录。按派生链归并：同一件事的重派单算一个节点。 */
 export interface ReloadItem {
-  /** `${stage}/${shard}` 或 `${stage}/-`；跨阶段唯一 */
+  /** 派生链键：链上第一张派单的 id。 */
   key: string;
-  stage: string;
-  shard: string;
   title: string;
   state: ReloadItemState;
   /** 判定依据。重载后据此核对状态判定。 */
   why: string;
-  /**
-   * 这一片是否仍在当前阶段的契约里。
-   *
-   * false 来自已删分片或上一阶段遗留的 review 单，只作记录、不进复验清单：阶段推进后 `supersedeStaleDispatches` 会把旧阶段的在途单作废，派复验单只会逐轮被作废。
-   */
-  in_contract: boolean;
   /** 需求原文，不压缩。 */
   action: string;
   /** 重派计数：同一片出现过的派单次数 - 1（累计口径，不受裁决重置影响） */
@@ -151,20 +142,11 @@ export interface ReloadRequirement {
   text: string;
 }
 
-/** 一个验收项（契约 done 里的单条检查）。 */
-export interface ReloadGateItem {
-  stage: string;
-  label: string;
-  ok: boolean;
-  missing: string[];
-}
-
 /** 用户插话（`.capitalist/ledger/direct.jsonl` 里未消费的那些）。 */
 export interface ReloadDirective {
   at: string;
   text: string;
   shard: string;
-  stage: string;
 }
 
 /** 未裁决提问。 */
@@ -172,11 +154,10 @@ export interface ReloadAsk {
   id: string;
   at: string;
   text: string;
-  stage: string;
   shard: string;
 }
 
-/** 决策结论：一行一条，来自已回填的裁决与阶段推进记录。 */
+/** 决策结论：一行一条，来自已回填的裁决记录。 */
 export interface ReloadDecision {
   at: string;
   kind: string;
@@ -200,25 +181,25 @@ export interface ReloadMetrics {
   asks: number;
 }
 
-/** 契约超过该时长未更新即视为可能过期；新鲜度写入简报前部。 */
-const CONTRACT_STALE_HOURS = 12;
+/** 守卫超过该时长未更新即视为可能过期；新鲜度写入简报前部。 */
+const POLICY_STALE_HOURS = 12;
 
-/** 契约文件的新鲜度。 */
-export interface ContractFreshness {
-  /** 契约文件绝对路径；state 里没记或读不到时为空串。 */
+/** 守卫文件的新鲜度。 */
+export interface PolicyFreshness {
+  /** 守卫文件绝对路径；state 里没记或读不到时为空串。 */
   path: string;
   /** 文件最后修改时间（ISO）；读不到时为空串。 */
   mtime: string;
   /** 距现在多少小时；读不到时为 null。 */
   age_hours: number | null;
-  /** 超过 {@link CONTRACT_STALE_HOURS} 未更新。 */
+  /** 超过 {@link POLICY_STALE_HOURS} 未更新。 */
   stale: boolean;
 }
 
-/** 以契约文件的 mtime 判断新鲜度；`state.json` 的 `rev` 只记监工写状态次数，不反映外部改动。 */
-export function contractFreshness(root: string): ContractFreshness {
+/** 以守卫文件的 mtime 判断新鲜度；`state.json` 的 `rev` 只记监工写状态次数，不反映外部改动。 */
+export function policyFreshness(root: string): PolicyFreshness {
   const st = loadState(root);
-  const p = String(st?.contract_path ?? "").trim();
+  const p = String(st?.policy_path ?? "").trim();
   if (!p) return { path: "", mtime: "", age_hours: null, stale: false };
   try {
     const mt = statSync(p).mtime;
@@ -227,7 +208,7 @@ export function contractFreshness(root: string): ContractFreshness {
       path: p,
       mtime: mt.toISOString(),
       age_hours: Math.round(age * 10) / 10,
-      stale: age > CONTRACT_STALE_HOURS,
+      stale: age > POLICY_STALE_HOURS,
     };
   } catch {
     return { path: p, mtime: "", age_hours: null, stale: false };
@@ -235,10 +216,10 @@ export function contractFreshness(root: string): ContractFreshness {
 }
 
 /**
- * 比对契约文件 mtime，变化即登记并提示重读。
- * 记录落在 `.capitalist/reload/contract-seen.json`，进程重启后仍可判定。
+ * 比对守卫文件 mtime，变化即登记并提示重读。
+ * 记录落在 `.capitalist/reload/policy-seen.json`，进程重启后仍可判定。
  */
-export interface ContractChange {
+export interface PolicyChange {
   /** 变更前的 mtime；首次见到时为空串。 */
   from: string;
   /** 变更后的 mtime。 */
@@ -247,18 +228,18 @@ export interface ContractChange {
   gap_hours: number | null;
 }
 
-export function noteContractChange(root: string): ContractChange | null {
-  const fresh = contractFreshness(root);
+export function notePolicyChange(root: string): PolicyChange | null {
+  const fresh = policyFreshness(root);
   if (!fresh.path || !fresh.mtime) return null;
-  const seenPath = join(reloadDir(root), "contract-seen.json");
+  const seenPath = join(reloadDir(root), "policy-seen.json");
   const prev = readJson<{ path?: string; mtime?: string; at?: string } | null>(seenPath, null);
   const sameFile = String(prev?.path ?? "") === fresh.path;
   if (sameFile && String(prev?.mtime ?? "") === fresh.mtime) return null;
 
-  /* 首次登记不算变更，否则每个新任务根都会报一次契约变化。 */
+  /* 首次登记不算变更，否则每个新任务根都会报一次守卫变化。 */
   const from = sameFile ? String(prev?.mtime ?? "") : "";
   const prevAt = Date.parse(String(prev?.at ?? ""));
-  const change: ContractChange = {
+  const change: PolicyChange = {
     from,
     to: fresh.mtime,
     gap_hours: Number.isFinite(prevAt) ? Math.round(((Date.now() - prevAt) / 3_600_000) * 10) / 10 : null,
@@ -277,21 +258,17 @@ export interface ReloadSnapshot {
   at: string;
   at_ts: number;
   target: string;
-  contract: string;
-  stage: string;
-  stage_name: string;
-  stage_index: number;
+  policy: string;
   next_action: string;
   requirements: ReloadRequirement[];
-  gates: ReloadGateItem[];
   items: ReloadItem[];
   directives: ReloadDirective[];
   asks: ReloadAsk[];
   decisions: ReloadDecision[];
   /** 文件边界与禁止事项，原文行 */
   boundaries: string[];
-  /** 契约文件新鲜度。 */
-  contract_freshness?: ContractFreshness;
+  /** 守卫文件新鲜度。 */
+  policy_freshness?: PolicyFreshness;
   retries: Record<string, number>;
   /**
    * 在途单按派单台账行序记录，恢复时依此顺序，不按任务编号排序。
@@ -301,7 +278,7 @@ export interface ReloadSnapshot {
   /**
    * 未完成条目的恢复顺序（item key）。
    *
-   * 按“这片第一张派单在台账里的行序”排；从没派过的片按契约顺序排在后面。
+   * 按“这片第一张派单在台账里的行序”排；从没派过的片按守卫顺序排在后面。
    * 恢复计划（buildResumePlan）的 reverify / pending 数组按它排序。
    */
   resume_order: string[];
@@ -311,8 +288,6 @@ export interface ReloadSnapshot {
 /** 恢复计划里的一条待复验项。 */
 export interface ResumeReverifyItem {
   key: string;
-  stage: string;
-  shard: string;
   title: string;
   action: string;
   /** 该片被判定为“已做但未验证”的依据。 */
@@ -332,16 +307,11 @@ export interface ResumePlan {
   gen: number;
   at: string;
   /** done_verified：不重派 */
-  skip: Array<{ key: string; stage: string; shard: string; title: string; why: string }>;
+  skip: Array<{ key: string; title: string; why: string }>;
   /** done_unverified：必须派复验 */
   reverify: ResumeReverifyItem[];
-  /**
-   * 已做但未验证、且不能在本阶段派复验的条目：分片已不在契约，或属于已推进阶段。
-   * `supersedeStaleDispatches` 会逐轮作废这类在途单，保留记录供最终清算。
-   */
-  deferred: Array<{ key: string; stage: string; shard: string; title: string; why: string; reason: string }>;
-  /** 其余（未开始 / 执行中 / 失败）：交给监工原有补派，不在此重复派 */
-  pending: Array<{ key: string; stage: string; shard: string; state: string }>;
+  /** 其余（未开始 / 执行中 / 失败）：交给监工的重派流程，不在此重复派 */
+  pending: Array<{ key: string; state: string }>;
   state: Record<string, ResumeItemState>;
   applied_at?: string;
 }
@@ -349,7 +319,6 @@ export interface ResumePlan {
 /** 快照里一条在途单的原始下发顺序记录。 */
 export interface ReloadOrderEntry {
   id: string;
-  stage: string;
   shard: string;
   status: string;
   at: string;
@@ -441,7 +410,7 @@ function evidenceComplete(e: LedgerEntry): boolean {
 
 /**
  * 台账里有没有“这一片已确认”的记录。
- * 台账结论不绑分片，按 claim 中是否出现分片 id 或派单 id 匹配；阶段 id 是短串，易误匹配，不用于匹配。
+ * 台账结论不绑分片，按 claim 中是否出现分片 id 或派单 id 匹配。
  */
 function confirmedFor(ledger: readonly LedgerEntry[], shard: string, dispatchIds: readonly string[]): LedgerEntry | null {
   for (const e of ledger) {
@@ -455,26 +424,16 @@ function confirmedFor(ledger: readonly LedgerEntry[], shard: string, dispatchIds
 }
 
 /**
- * 该片重派计数的起算点。
+ * 当前连续失败次数。
  *
- * 口径与 loop.ts 的 `retryResetMs` 一致（`*` / `<stage>/` / `<stage>/<shard>` 取最大）。
- * 不共用那个函数是因为 loop 会 import 本模块，反向 import 会成环。
+ * 起算点之前的失败不计（用户已消解）；中途有过一张 done 即清零，否则重派会一路
+ * 累加到上限，把已经好过一次的节点按老账判成“反复失败”。
  */
-function retryResetMs(state: TaskState | null, stage: string, shard: string): number {
-  const map = (state?.retry_resets ?? {}) as Record<string, string>;
-  const pick = (k: string): number => {
-    const t = Date.parse(map[k] ?? "");
-    return Number.isFinite(t) ? t : 0;
-  };
-  return Math.max(pick("*"), pick(`${stage}/`), pick(`${stage}/${shard}`));
-}
-
-/** 失败次数，口径与 loop.ts 的 `shardRetry` 一致：done 之后的失败清零，重置点之前的失败不算。 */
 function retryCount(rows: readonly Dispatch[], resetAtMs: number): number {
   let failures = 0;
   for (const d of rows) {
     if (d.status === "failed") {
-      const ts = Date.parse(d.done_at ?? d.at);
+      const ts = Date.parse(String(d.done_at ?? d.at ?? ""));
       if (Number.isFinite(ts) && ts < resetAtMs) continue;
       failures += 1;
     } else if (d.status === "done") {
@@ -484,42 +443,27 @@ function retryCount(rows: readonly Dispatch[], resetAtMs: number): number {
   return failures;
 }
 
-/** 契约里这一阶段的并行分片。与 loop.ts 的 stageParallel 同口径（只取 id/action/title）。 */
-function stageShards(contract: Contract, stageId: string): Array<{ id: string; title: string; action: string }> {
-  const raw = (stageById(contract, stageId) as unknown as { parallel?: unknown } | undefined)?.parallel;
-  if (!Array.isArray(raw)) return [];
-  const out: Array<{ id: string; title: string; action: string }> = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const r = item as Record<string, unknown>;
-    if (typeof r.id !== "string" || typeof r.action !== "string") continue;
-    out.push({ id: r.id, title: typeof r.title === "string" ? r.title : "", action: r.action });
-  }
-  return out;
+/**
+ * 该片重派计数的起算点。
+ *
+ * 口径与 loop.ts 的 `retryResetMs` 一致（`*` 与分片名两档取最大）。
+ * 不共用那个函数是因为 loop 会 import 本模块，反向 import 会成环。
+ */
+function retryResetMs(state: TaskState | null, shard: string): number {
+  const map = (state?.retry_resets ?? {}) as Record<string, string>;
+  const pick = (k: string): number => {
+    const t = Date.parse(map[k] ?? "");
+    return Number.isFinite(t) ? t : 0;
+  };
+  return Math.max(pick("*"), pick(shard));
 }
 
-/**
- * 把一段 done 规格展开成逐条验收项。
- *
- * `runCheck` 只回答整体过没过、缺什么；而“已达标的验收项”要逐条说得出是哪一条。
- * 这里对 all_of / any_of 的每个子检查单独跑一次，不改变判定，只补明细。
- */
-function gateItems(stage: Stage, root: string): ReloadGateItem[] {
-  const spec = (stage.done ?? {}) as Record<string, unknown>;
-  const list = Array.isArray(spec.checks) ? spec.checks : Array.isArray(spec.of) ? spec.of : null;
-  if (!list) {
-    const r: CheckResult = runCheck(spec, root);
-    return [{ stage: stage.id, label: String(spec.type ?? "done"), ok: r.ok, missing: r.missing }];
-  }
-  return list.map((raw) => {
-    const sub = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-    const r = runCheck(sub, root);
-    const type = String(sub.type ?? "检查");
-    const target = String(sub.path ?? sub.file ?? "");
-    /* 达标项用“类型:目标”，未达标用检查里写的 msg。 */
-    const label = r.ok || !sub.msg ? oneLine(target ? `${type}:${target}` : type) : oneLine(String(sub.msg));
-    return { stage: stage.id, label, ok: r.ok, missing: r.missing };
-  });
+/** 在途状态：这些状态的节点在重载后仍要继续。 */
+const LIVE_STATUS = new Set(["open", "claimed", "reported", "review"]);
+
+/** 派生链键：链上第一张派单的 id。同一件事的重派单归到同一节点。 */
+function chainKeyOf(d: Dispatch): string {
+  return String((d as Dispatch & { lineage?: string }).lineage ?? d.id);
 }
 
 /**
@@ -527,11 +471,8 @@ function gateItems(stage: Stage, root: string): ReloadGateItem[] {
  *
  * @param gen 重载代次（由 {@link beginReload} 递增）。
  */
-export function buildReloadSnapshot(root: string, contract: Contract, gen: number): ReloadSnapshot {
+export function buildReloadSnapshot(root: string, policy: Policy, gen: number): ReloadSnapshot {
   const state = loadState(root);
-  const stageId = String(state?.stage ?? contract.stages[0]?.id ?? "");
-  const stage = stageById(contract, stageId);
-  const stageIndex = contract.stages.findIndex((s) => s.id === stageId);
   const rows = readDispatches(root);
   const ledger = readLedger(root);
   const events = readEvents(root);
@@ -539,20 +480,20 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
   const qa = readJsonl<Record<string, unknown>>(inboxLoc.qa(root));
 
   /*
-   * 需求原文由三部分组成：契约 context（判据与禁止事项的来源）、当前阶段的 next，以及每个分片的 action。
+   * 需求原文由两部分组成：守卫 context（判据与禁止事项的来源），以及在途派单的正文。
    * 全部逐字保存。压缩只针对“过程”，不针对“要求”。
    */
   const requirements: ReloadRequirement[] = [];
-  const freshness = contractFreshness(root);
-  const ctx = contract.data.context;
-  if (typeof ctx === "string" && ctx.trim()) requirements.push({ source: "contract.context", text: ctx });
-  if (stage?.next && stage.next.trim()) requirements.push({ source: `stage ${stageId}.next`, text: stage.next });
-  const shards = stageShards(contract, stageId);
-  for (const s of shards) requirements.push({ source: `shard ${stageId}/${s.id}`, text: s.action });
+  const ctx = policy.data.context;
+  if (typeof ctx === "string" && ctx.trim()) requirements.push({ source: "policy.context", text: ctx });
+  for (const d of rows) {
+    if (!LIVE_STATUS.has(String(d.status ?? ""))) continue;
+    requirements.push({ source: `派单 ${d.id}`, text: String(d.action ?? "") });
+  }
 
   // 文件边界与禁止事项：从 env_notes 与 context 里逐行挑出约束句，保留原文，不改写。
   const boundaries: string[] = [];
-  const summary = contract.data.env_notes?.summary;
+  const summary = policy.data.env_notes?.summary;
   if (typeof summary === "string" && summary.trim()) boundaries.push(summary.trim());
   if (typeof ctx === "string") {
     for (const line of ctx.split(/\r?\n/)) {
@@ -562,53 +503,23 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
     }
   }
 
-  // 已达标的验收项在重载后逐条复跑。
-  const gates: ReloadGateItem[] = [];
-  for (const s of contract.stages) {
-    if (stageIndex >= 0 && contract.stages.indexOf(s) > stageIndex) break;
-    gates.push(...gateItems(s, root));
-  }
-
-  /* 逐片判定范围：当前阶段分片（含已删但仍有派单记录的）、其他阶段处于 review 的单。 */
-  const items: ReloadItem[] = [];
-  const seen = new Set<string>();
-  const pushItem = (sh: { id: string; title: string; action: string }, inContract: boolean): void => {
-    const key = `${stageId}/${sh.id || "-"}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    items.push(classifyItem(state, stageId, sh.id, sh.title, sh.action, rows, ledger, inContract));
-  };
-
-  for (const s of shards) pushItem(s, true);
+  /* 按派生链归并成节点：同一条链只算一个节点，状态取链上最后一单。 */
+  const chains = new Map<string, Dispatch[]>();
   for (const d of rows) {
-    if (d.stage !== stageId) continue;
-    const sid = String(d.shard ?? "");
-    if (!sid || seen.has(`${stageId}/${sid}`)) continue;
-    // 契约里已经删掉的分片：留一条记录，但不复验（派出去也会被当成过期单作废）。
-    pushItem({ id: sid, title: "", action: String(d.action ?? "") }, false);
+    const key = chainKeyOf(d);
+    const list = chains.get(key) ?? [];
+    list.push(d);
+    chains.set(key, list);
   }
-  for (const d of rows) {
-    if (d.status !== "review") continue;
-    // 旧阶段的 review 单不过滤：它们进快照是“已做未验证”的记录，本来就不派复验。
-    if (d.stage === stageId) continue;
-    const key = `${d.stage}/${d.shard || "-"}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    items.push(classifyItem(state, d.stage, String(d.shard ?? ""), "", String(d.action ?? ""), rows, ledger, false));
-  }
+  const items: ReloadItem[] = [...chains].map(([key, chain]) => classifyItem(state, key, chain, ledger));
 
   // 只保留未消费的插话：已消费的已并入某一单，重复带入会使工作进程重做。
   const openDirectives: ReloadDirective[] = directives
     .filter((d) => !d.consumed)
-    .filter((d) => {
-      const ds = String(d.stage ?? "");
-      return !ds || ds === stageId;
-    })
     .map((d) => ({
       at: String(d.at ?? ""),
       text: String(d.text ?? ""),
       shard: String(d.shard ?? ""),
-      stage: String(d.stage ?? ""),
     }));
 
   // 未裁决提问：open 的 ask 全部保留（包括带 shard 的局部提问）。
@@ -616,11 +527,10 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
     id: String(q.id ?? ""),
     at: String(q.at ?? ""),
     text: String(q.text ?? ""),
-    stage: String(q.stage ?? ""),
     shard: String(q.shard ?? ""),
   }));
 
-  // 决策结论：已回填的裁决、用户调度指令、阶段推进；一行一条、去重、最多 20 条，只留结论不留过程。
+  // 决策结论：已回填的裁决与用户调度指令；一行一条、去重、最多 20 条，只留结论不留过程。
   const decisions: ReloadDecision[] = [];
   const seenDecision = new Set<string>();
   const addDecision = (at: string, kind: string, text: string): void => {
@@ -635,24 +545,18 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
   }
   for (const e of events) {
     const kind = String(e.event ?? e.kind ?? "");
-    if (kind === "supervisor_advance") {
-      addDecision(String(e.at ?? ""), "advance", `${String(e.from ?? "?")} -> ${String(e.to ?? "?")}`);
-    } else if (kind === "supervisor_instruct") {
-      addDecision(String(e.at ?? ""), "instruct", String(e.text ?? ""));
-    }
+    if (kind === "supervisor_instruct") addDecision(String(e.at ?? ""), "instruct", String(e.text ?? ""));
   }
   decisions.splice(20);
 
   const retries: Record<string, number> = {};
   for (const it of items) retries[it.key] = it.retries;
 
-  /* 派单台账行序即下发顺序：dispatch_order 只收在途单；resume_order 按首张派单行序排，未派过的片按契约顺序靠后。 */
-  const LIVE_STATUS = new Set(["open", "claimed", "reported", "review"]);
+  /* 派单台账行序即下发顺序：dispatch_order 只收在途单；resume_order 按首次下发行序排。 */
   const dispatchOrder: ReloadOrderEntry[] = rows
     .filter((d) => LIVE_STATUS.has(String(d.status ?? "")))
     .map((d) => ({
       id: String(d.id ?? ""),
-      stage: String(d.stage ?? ""),
       shard: String(d.shard ?? ""),
       status: String(d.status ?? ""),
       at: String(d.at ?? ""),
@@ -660,10 +564,10 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
   const resumeOrder: string[] = [];
   const seenResume = new Set<string>();
   for (const d of rows) {
-    const key = `${String(d.stage ?? "")}/${String(d.shard ?? "") || "-"}`;
+    const key = chainKeyOf(d);
     if (seenResume.has(key)) continue;
     const item = items.find((i) => i.key === key);
-    // 只排“重开后要继续”的条目；已完成的不占恢复次序。
+    // 只排“重开后要继续”的节点；已完成的不占恢复次序。
     if (!item || item.state === "done_verified") continue;
     seenResume.add(key);
     resumeOrder.push(key);
@@ -690,13 +594,9 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
     at: new Date().toISOString(),
     at_ts: Date.now() / 1000,
     target: String(state?.target ?? ""),
-    contract: contract.name,
-    stage: stageId,
-    stage_name: String(stage?.name ?? ""),
-    stage_index: stageIndex,
+    policy: policy.name,
     next_action: String(state?.next_action ?? ""),
     requirements,
-    gates,
     items,
     directives: openDirectives,
     asks,
@@ -723,29 +623,24 @@ export function buildReloadSnapshot(root: string, contract: Contract, gen: numbe
 }
 
 /**
- * 判定一片的状态。
- * 顺序即优先级：在途 > 失败 > 报完成待确认 > done（有证据）> done（无证据） > 未开始。
+ * 判定一个节点的状态。
+ * 顺序即优先级：在途 > 失败 > 报完成待确认 > done（有证据）> done（无证据）> 未开始。
  * “done 但无证据”是复验的输入，不落成 done_verified。
  */
 function classifyItem(
   state: TaskState | null,
-  stage: string,
-  shard: string,
-  title: string,
-  action: string,
-  allRows: readonly Dispatch[],
+  key: string,
+  chain: readonly Dispatch[],
   ledger: readonly LedgerEntry[],
-  inContract: boolean,
 ): ReloadItem {
-  const rows = allRows.filter((d) => d.stage === stage && String(d.shard ?? "") === shard);
-  const business = rows.filter((d) => d.source !== "reverify");
-  const resetAt = retryResetMs(state, stage, shard);
+  const business = chain.filter((d) => d.source !== "reverify");
+  const resetAt = retryResetMs(state, String(chain[chain.length - 1]?.shard ?? ""));
   const failures = retryCount(business, resetAt);
   /* 重派计数取最大 attempt - 1：failed 行只记录过程，重派次数按派单下发回数计。 */
   const maxAttempt = business.reduce((n, d) => Math.max(n, Number(d.attempt ?? 1)), 1);
   const retries = Math.max(0, maxAttempt - 1);
 
-  const refs: ReloadDispatchRef[] = rows.map((d) => ({
+  const refs: ReloadDispatchRef[] = chain.map((d) => ({
     id: String(d.id ?? ""),
     status: String(d.status ?? ""),
     attempt: Number(d.attempt ?? 1),
@@ -759,14 +654,13 @@ function classifyItem(
   const live = business.find((d) => d.status === "open" || d.status === "claimed");
 
   const base = {
-    key: `${stage}/${shard || "-"}`,
-    stage,
-    shard,
-    title: oneLine(title || (last as (Dispatch & { title?: string }) | undefined)?.title || shard || stage),
-    action: clipText(String(action || last?.action || ""), 4000),
+    key,
+    title: oneLine(
+      (last as (Dispatch & { title?: string }) | undefined)?.title || String(last?.action ?? "").slice(0, 40) || key,
+    ),
+    action: clipText(String(last?.action ?? ""), 4000),
     retries,
     failures,
-    in_contract: inContract,
     dispatches: refs,
   };
 
@@ -781,11 +675,10 @@ function classifyItem(
   }
 
   /*
-   * 复验单的结局优先于业务单状态：在途判未验证，已结束判已验证，失败则由 applyResumePlan 重派。
-   * 判定须放在 `review` 之前，否则每次重载都会把已结束的一片重新判成未验证、重复派复验。
-   * 复验单不参与业务完成度判定，从 rows 里单独挑，不从 business 里找。
+   * 复验单的结局优先于业务单状态：在途判未验证，已结束判已验证。
+   * 判定须放在 `review` 之前，否则每次重载都会把已结束的节点重新判成未验证、重复派复验。
    */
-  const reverifies = rows.filter((d) => d.source === "reverify");
+  const reverifies = chain.filter((d) => d.source === "reverify");
   const liveReverify = reverifies.find((d) => d.status === "open" || d.status === "claimed" || d.status === "review");
   if (liveReverify) {
     return { ...base, state: "done_unverified", why: `复验单 ${liveReverify.id} 在途（${liveReverify.status}）` };
@@ -805,7 +698,7 @@ function classifyItem(
     return { ...base, state: "done_unverified", why: `已报完成但仍在待确认（${last.id}），没有裁决结论` };
   }
   if (last.status === "done") {
-    const hit = confirmedFor(ledger, shard, dispatchIds);
+    const hit = confirmedFor(ledger, String(last.shard ?? ""), dispatchIds);
     if (hit) {
       return {
         ...base,
@@ -847,29 +740,28 @@ export interface ReloadContextResult {
 export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   const L: string[] = [];
   L.push(`# 监工重载简报（gen ${snap.gen}）`);
-  L.push(`生成于 ${snap.at}｜目标：${snap.target}｜任务列表：${snap.contract}`);
-  L.push(`当前阶段：${snap.stage} ${snap.stage_name}${snap.stage_index >= 0 ? `（第 ${snap.stage_index + 1} 段）` : ""}`);
+  L.push(`生成于 ${snap.at}｜目标：${snap.target}｜守卫：${snap.policy}`);
   L.push(`下一步：${oneLine(snap.next_action) || "（空）"}`);
   L.push("");
 
-  /* 契约可能数日未更新。简报标明契约新鲜度，并声明冲突时以派单台账为准。 */
-  const fresh = snap.contract_freshness;
+  /* 守卫文件可能数日未更新。简报标明新鲜度，并声明冲突时以派单台账为准。 */
+  const fresh = snap.policy_freshness;
   if (fresh?.stale) {
     L.push(
-      `契约文件已 ${fresh.age_hours} 小时未更新（最后修改 ` +
+      `守卫文件已 ${fresh.age_hours} 小时未更新（最后修改 ` +
         `${String(fresh.mtime).slice(0, 16).replace("T", " ")}）。`,
     );
-    L.push("      下面的阶段目标很可能已经过期。动手前先确认它是不是当前要做的事；");
-    L.push("      过期就更新契约、或 capitalist advance 推进阶段，不要照着旧目标做。");
+    L.push("      下面的边界与判据可能已经过期。执行前先确认其是否为当前有效口径；");
+    L.push("      若已过期，应先更新守卫文件，勿依据旧口径执行。");
     L.push("");
   }
-  L.push("## 阶段目标（契约原文，逐字保留，非待办清单）");
+  L.push("## 需求原文（逐字保留，非待办清单）");
   L.push(
-    "> 以下是**阶段层面**的目标，可能早于今天的派单（本份简报生成于 " +
+    "> 这些是在途派单与守卫上下文里的原文，可能早于本简报生成之后收到的插话（本份简报生成于 " +
       String(snap.at ?? "").slice(0, 16).replace("T", " ") +
       "）。",
   );
-  L.push("> 这些目标并非当前须立即执行的任务：当前任务以派单台账为准。若与下方“未完成”一节冲突，以派单为准；");
+  L.push("> 当前任务以派单台账为准。若与下方“未完成”一节冲突，以派单为准；");
   L.push("> 台账里 done / closed 的派单是历史，不要依据它们恢复任何实现。");
   L.push("");
   if (snap.requirements.length === 0) L.push("（无）");
@@ -878,13 +770,6 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
     L.push(r.text.trim());
     L.push("");
   }
-
-  L.push("## 验收：已达标 / 未达标");
-  const ok = snap.gates.filter((g) => g.ok);
-  const bad = snap.gates.filter((g) => !g.ok);
-  L.push(ok.length ? `已达标：${ok.map((g) => `${g.stage}:${g.label}`).join("；")}` : "已达标：(无)");
-  L.push(bad.length ? `未达标：${bad.map((g) => `${g.stage}:${g.label}`).join("；")}` : "未达标：(无)");
-  L.push("");
 
   if (snap.boundaries.length) {
     L.push("## 文件边界与禁止事项（原文）");
@@ -897,31 +782,28 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   if (unfinished.length === 0) L.push("（无）");
   for (const i of unfinished) {
     const fail = i.failures > 0 ? `｜连续失败 ${i.failures} 次` : "";
-    L.push(`- [${i.state}] ${i.stage}/${i.shard || "-"} ${i.title}：${clipText(i.why, 120)}${fail}｜阶段原要求（历史）：${clipText(oneLine(i.action), 300)}`);
+    L.push(`- [${i.state}] ${i.title}：${clipText(i.why, 120)}${fail}｜原要求（历史）：${clipText(oneLine(i.action), 300)}`);
   }
   L.push("");
 
   const reverify = snap.items.filter((i) => i.state === "done_unverified");
-  L.push("## 待复验（已做但未验证，重载后必须派复验，不得当完成）");
+  L.push("## 待复验（已做但未验证，重载后必须派复验，不得视为完成）");
   if (reverify.length === 0) L.push("（无）");
-  for (const i of reverify) {
-    const can = i.stage === snap.stage && i.in_contract;
-    L.push(`- ${i.stage}/${i.shard || "-"} ${i.title}：${i.why}${can ? "" : "（只记录，不派复验：属于旧阶段或分片已删）"}`);
-  }
+  for (const i of reverify) L.push(`- ${i.title}：${i.why}`);
   L.push("");
 
   const done = snap.items.filter((i) => i.state === "done_verified");
   L.push("## 已完成（不重派；只留标题与依据）");
   if (done.length === 0) L.push("（无）");
-  for (const i of done) L.push(`- ${i.stage}/${i.shard || "-"} ${i.title}（${clipText(i.why, 100)}）`);
+  for (const i of done) L.push(`- ${i.title}（${clipText(i.why, 100)}）`);
   L.push("");
 
-  L.push("## 用户未处理的插话（原话，按它执行）");
+  L.push("## 用户未处理的插话（原话，依原话执行）");
   if (snap.directives.length === 0) L.push("（无）");
   for (const d of snap.directives) L.push(`- ${d.shard ? `[${d.shard}] ` : ""}${d.text}`);
   L.push("");
 
-  L.push("## 未裁决提问（等用户回填，不自行裁决）");
+  L.push("## 未裁决提问（待用户回填，不自行裁决）");
   if (snap.asks.length === 0) L.push("（无）");
   /* 提问编号用“问N”：`#N` 保留给任务编号（`thread-no.json`），避免与任务号混淆。 */
   for (const a of snap.asks) L.push(`- 问${a.id} ${a.shard ? `[${a.shard}] ` : ""}${a.text}`);
@@ -945,7 +827,6 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
 export function buildResumePlan(snap: ReloadSnapshot): ResumePlan {
   const skip: ResumePlan["skip"] = [];
   const reverify: ResumeReverifyItem[] = [];
-  const deferred: ResumePlan["deferred"] = [];
   const pending: ResumePlan["pending"] = [];
   const state: Record<string, ResumeItemState> = {};
 
@@ -957,28 +838,12 @@ export function buildResumePlan(snap: ReloadSnapshot): ResumePlan {
 
   for (const i of snap.items) {
     if (i.state === "done_verified") {
-      skip.push({ key: i.key, stage: i.stage, shard: i.shard, title: i.title, why: i.why });
+      skip.push({ key: i.key, title: i.title, why: i.why });
     } else if (i.state === "done_unverified") {
-      /*
-       * 只有“本阶段 + 仍在契约里”的片能派复验单。
-       *
-       * 另外两种情形派单后也无法维持一个调度轮次：旧阶段的在途单会被 supersedeStaleDispatches 作废，契约中已删除的分片同样因不在当前集合而被作废。因此将其记入 deferred，仅保留信息，不生成每轮调度都会重复产生的无效派单。
-       */
-      if (i.stage === snap.stage && i.in_contract) {
-        reverify.push({ key: i.key, stage: i.stage, shard: i.shard, title: i.title, action: i.action, why: i.why });
-        state[i.key] = { state: "pending" };
-      } else {
-        deferred.push({
-          key: i.key,
-          stage: i.stage,
-          shard: i.shard,
-          title: i.title,
-          why: i.why,
-          reason: i.in_contract ? "所属阶段已推进完毕，复验单会被作废" : "分片已从任务列表中移除",
-        });
-      }
+      reverify.push({ key: i.key, title: i.title, action: i.action, why: i.why });
+      state[i.key] = { state: "pending" };
     } else {
-      pending.push({ key: i.key, stage: i.stage, shard: i.shard, state: i.state });
+      pending.push({ key: i.key, state: i.state });
     }
   }
 
@@ -991,10 +856,15 @@ export function buildResumePlan(snap: ReloadSnapshot): ResumePlan {
       .map((item, idx) => ({ item, idx }))
       .sort((a, b) => orderOf(a.item.key) - orderOf(b.item.key) || a.idx - b.idx)
       .map((x) => x.item);
-  const reverifyOrdered = byOrder(reverify);
-  const pendingOrdered = byOrder(pending);
 
-  return { gen: snap.gen, at: new Date().toISOString(), skip, reverify: reverifyOrdered, deferred, pending: pendingOrdered, state };
+  return {
+    gen: snap.gen,
+    at: new Date().toISOString(),
+    skip,
+    reverify: byOrder(reverify),
+    pending: byOrder(pending),
+    state,
+  };
 }
 
 /** 读恢复计划；没有重载过时返回 null。 */
@@ -1006,21 +876,21 @@ export function readResumePlan(root: string): ResumePlan | null {
 /** 复验单正文须写明“复验不是重做”，避免工作进程按原要求重新实现、改回已通过的实现。 */
 function reverifyAction(item: ResumeReverifyItem): string {
   return [
-    `复验（不是重做）：${item.stage}/${item.shard || "整阶段"} ${item.title}`,
-    `上一轮已报完成，但没有可核对的确认（${item.why}），不能直接当完成。`,
-    "做三件事：1) 按下面的原要求逐条核对是否真的做到；2) 每条给出证据（命令输出、产出物位置、截图路径），结论用 capitalist ledger add 入账；",
-    "3) 成立就在回报里写“已验证”，不重写已经通过的部分，不改动其他分片的作用对象；不成立就写明缺少哪条。",
+    `复验（不是重做）：${item.title}`,
+    `此前该节点已报完成，但缺少可核对的确认（${item.why}），不得直接视为完成。`,
+    "执行以下三项：1) 按下方原要求逐条核对是否达成；2) 每条附上证据（命令输出、产出物位置、截图路径，并覆盖 baseline / probe / diff / repro 四项），并以 capitalist ledger add 入账结论；",
+    "3) 核对成立的，在回报中注明“已验证”，不重写已通过部分，不改动其他分片的作用对象；核对不成立的，逐条列明缺失项。",
     `原要求：${clipText(oneLine(item.action), 1200)}`,
   ].join("\n");
 }
 
 /**
- * 应用恢复计划：为“已做但未验证”的条目补派复验单。
- * 幂等：同一条目已有在途复验单时不再新建；复验单 done 后条目标 verified。只处理当前阶段，避免占满并发槽。
- * @param currentStage 当前阶段 id；为空时处理全部。
+ * 应用恢复计划：为“已做但未验证”的节点补派复验单。
+ * 幂等：同一节点已有在途复验单时不再新建；复验单 done 后节点标 verified。
+ *
  * @returns 新建的复验单数量。
  */
-export function applyResumePlan(root: string, currentStage: string, out: (s: string) => void): number {
+export function applyResumePlan(root: string, out: (s: string) => void): number {
   const plan = readResumePlan(root);
   if (!plan || plan.reverify.length === 0) return 0;
 
@@ -1030,7 +900,6 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
   const before = JSON.stringify(plan);
 
   for (const item of plan.reverify) {
-    if (currentStage && item.stage !== currentStage) continue;
     const st: ResumeItemState = plan.state[item.key] ?? { state: "pending" };
     plan.state[item.key] = st;
     if (st.state === "verified") continue;
@@ -1048,8 +917,6 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
         recordEvent(root, "reverify_confirmed", {
           item: item.key,
           dispatch: d.id,
-          stage: item.stage,
-          shard: item.shard,
           gen: plan.gen,
         });
         out(`[监工] 复验成立：${item.key}（${d.id}）`);
@@ -1058,17 +925,16 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
         delete st.verify_dispatch;
         st.state = "pending";
       } else {
-        /* open / claimed / review：仍在处理中，不重复派单。superseded 也归此类：说明契约在本代重载后发生变化，继续派单只会再次被作废；下一次 reload 会将其判定为 in_contract=false 并移入 deferred，不会陷入停滞。 */
+        /* open / claimed / review：仍在处理中，不重复派单。 */
         continue;
       }
     }
 
-    // 进程重启后，同片已有在途复验单即复用，不重复派。
+    // 进程重启后，同一节点已有在途复验单即复用，不重复派。
     const live = rows.find(
       (r) =>
         r.source === "reverify" &&
-        r.stage === item.stage &&
-        String(r.shard ?? "") === item.shard &&
+        String((r as Dispatch & { lineage?: string }).lineage ?? "") === item.key &&
         (r.status === "open" || r.status === "claimed" || r.status === "review"),
     );
     if (live) {
@@ -1077,24 +943,25 @@ export function applyResumePlan(root: string, currentStage: string, out: (s: str
       continue;
     }
 
-    const id = newDispatchId(root, item.stage, item.shard ?? undefined);
+    const id = newDispatchId(root);
     /* title 是派单上的扩展字段（见 newDispatch.ts 的 ComposedDispatch）：核心 Dispatch 不带它，
        但界面按它显示任务名，因此一并写入。 */
     const d = composeDispatch({
       id,
-      stage: item.stage,
-      shard: item.shard,
       title: `复验：${clipText(item.title, 40)}`,
       action: reverifyAction(item),
       source: "reverify",
       attempt: 1,
+      /*
+       * 复验单挂在被复验的那条链上：快照按派生链归并节点，自成一条链的复验单
+       * 不会回到原节点，下一轮重载又会把原节点判成未验证并重复派单。
+       */
+      lineage: item.key,
       note: `第 ${plan.gen} 次重载派出的复验单：${item.why}`,
     });
     appendDispatch(root, d);
     recordEvent(root, "dispatch_reverify", {
       dispatch: id,
-      stage: item.stage,
-      shard: item.shard,
       item: item.key,
       gen: plan.gen,
     });
@@ -1732,7 +1599,7 @@ export function supervisorChatTurnSessionId(root: string): string {
  * 采用显式登记而非默认放行：新增过程事件默认不进，须在此显式登记，避免漏配后心跳流水挤占上下文。
  */
 const SEVERE_SUPERVISOR_EVENT =
-  /^(worker_killed|worker_looping_killed|worker_gone|worker_launch_failed|dispatch_failed|redispatch_capped|dispatch_forced_finished|contract_error|contract_refused|contract_unstable|stuck_detected|stuck_killed|stuck_escalated|stage_stalled|board_reload_blocked|duplicate_launch_refused|retry_refused)$/i;
+  /^(worker_killed|worker_looping_killed|worker_gone|worker_launch_failed|dispatch_failed|redispatch_capped|dispatch_forced_finished|policy_error|policy_refused|policy_unstable|stuck_detected|stuck_killed|stuck_escalated|stalled|board_reload_blocked|duplicate_launch_refused|retry_refused)$/i;
 
 /** 台账尾部窗口（字节）：严重异常摘要只从这里找，不全量解析台账。 */
 const SEVERE_EVENT_TAIL_BYTES = 512_000;
@@ -1823,7 +1690,7 @@ export function recentUserLines(root: string, max = 6): string[] {
 /**
  * 重载简报：给监工对话层注入的继承上下文。
  * 按段落挑选而非按序截前 N 字：优先保留未完成、待复验、插话、未裁决、结论、重派计数等增量段落，
- * 再把剩余额度给需求原文等存量段落（契约与派单中另有一份）。超出时从占用最大的段落开始截，并在末尾标明。
+ * 再把剩余额度给需求原文等存量段落（守卫与派单中另有一份）。超出时从占用最大的段落开始截，并在末尾标明。
  */
 export function reloadBrief(root: string, maxChars = 12000): string {
   let text = "";
@@ -1840,7 +1707,7 @@ export function reloadBrief(root: string, maxChars = 12000): string {
   const head = parts[0] ?? "";
   const sections = parts.slice(1).map((s) => ({ title: (s.split("\n")[0] ?? "").trim(), body: s }));
 
-  /** 优先级：数字小的先保；需求原文放最后，契约里另有一份。 */
+  /** 优先级：数字小的先保；需求原文放最后，守卫里另有一份。 */
   const rank = (title: string): number => {
     if (/未完成/.test(title)) return 0;
     if (/待复验/.test(title)) return 1;
@@ -1919,8 +1786,6 @@ export interface ReloadSummary {
   items: number;
   skip: number;
   reverify: number;
-  /** 已做但未验证、又不能在本阶段派复验的条目（旧阶段 / 已删分片） */
-  deferred: number;
   pending: number;
 }
 
@@ -1929,12 +1794,12 @@ export interface ReloadSummary {
  * 顺序不可调换：先落盘快照 -> 压缩 -> 换会话 -> 写恢复计划。任一步失败保留 active 标记，由 {@link reloadStatus} 超时清理。
  * @throws 已有重载进行中时抛出（并发重载会互相覆盖快照）。
  */
-export async function beginReload(root: string, contract: Contract, opts: ReloadOptions = {}): Promise<ReloadSummary> {
+export async function beginReload(root: string, policy: Policy, opts: ReloadOptions = {}): Promise<ReloadSummary> {
   const out = opts.out ?? ((s: string) => process.stdout.write(`${s}\n`));
   const running = reloadStatus(root);
   if (running.active) {
     throw new Error(
-      `已有重载在进行中（第 ${running.gen} 次，阶段 ${running.phase}，已 ${running.age_sec} 秒）。等它结束再重载。` +
+      `已有重载在进行中（第 ${running.gen} 次，当前进度 ${running.phase}，已 ${running.age_sec} 秒）。待其结束后再执行重载。` +
         `进程若已退出，${Math.round(RELOAD_STALE_MS / 60000)} 分钟后标记自动失效。`,
     );
   }
@@ -1959,7 +1824,7 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
   writeMarker(root, gen, "snapshot", startedAt, trigger);
 
   // 1. 快照
-  const snap = buildReloadSnapshot(root, contract, gen);
+  const snap = buildReloadSnapshot(root, policy, gen);
 
   /* 压缩简报默认不生成；不压缩时 after_chars 记成 before_chars，避免写 0 被误读为上下文已清空。 */
   const doCompress = opts.compress === true;
@@ -2005,7 +1870,6 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
   recordEvent(root, "supervisor_reload", {
     gen,
     trigger,
-    stage: snap.stage,
     items: snap.items.length,
     skip: plan.skip.length,
     reverify: plan.reverify.length,
@@ -2032,11 +1896,9 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
   }
 
   out(
-    `[监工] 第 ${gen} 次重载完成：快照 ${snap.items.length} 片｜` +
+    `[监工] 第 ${gen} 次重载完成：快照 ${snap.items.length} 个节点｜` +
       `${doCompress ? `上下文 ${snap.metrics.before_chars} 至 ${afterChars} 字（移除 ${snap.metrics.events_dropped} 条状态检查与已完成明细）` : "未压缩（交给宿主）"}｜` +
-      `不重派 ${plan.skip.length}｜待复验 ${plan.reverify.length}` +
-      (plan.deferred.length ? `｜只记录 ${plan.deferred.length}` : "") +
-      `｜继续 ${plan.pending.length}`,
+      `不重派 ${plan.skip.length}｜待复验 ${plan.reverify.length}｜继续 ${plan.pending.length}`,
   );
 
   return {
@@ -2052,7 +1914,6 @@ export async function beginReload(root: string, contract: Contract, opts: Reload
     items: snap.items.length,
     skip: plan.skip.length,
     reverify: plan.reverify.length,
-    deferred: plan.deferred.length,
     pending: plan.pending.length,
   };
 }
