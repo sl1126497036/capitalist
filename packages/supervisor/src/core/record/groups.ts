@@ -30,8 +30,6 @@ export interface Group {
   title: string;
   /** 建组时刻（ISO）。 */
   at: string;
-  /** 建组时所在阶段，仅供排障对照，不参与判定。 */
-  stage?: string;
   /** 建组来源：`llm`（派单指令）或 `user`（命令行）。 */
   created_by?: string;
   /** `closed` 表示人工解散：挂在组下的下游按已收尾放行。缺省按 `open`。 */
@@ -61,7 +59,7 @@ export function groupsPath(root: string): string {
  * 读全部组记录，按文件顺序返回。坏行跳过。
  *
  * 与派单台账同样按 `size + mtime` 缓存：看板每几秒轮询一次，监工每轮都要读一遍，
- * 重复解析没有意义。写路径立即失效缓存，写入后即可读到新值。
+ * 重复解析没有意义。写路径立即失效缓存，写入后可立即读到新值。
  */
 let groupsCache: { root: string; key: string; rows: Group[] } | null = null;
 
@@ -129,7 +127,7 @@ export function looksLikeGroupRef(ref: string): boolean {
  */
 export function issueGroupNo(
   root: string,
-  input: { title: string; stage?: string | undefined; created_by?: string | undefined; at?: string | undefined },
+  input: { title: string; created_by?: string | undefined; at?: string | undefined },
 ): { ok: true; group: Group } | { ok: false; error: string } {
   const title = String(input.title ?? "").trim();
   if (!title) return { ok: false, error: "建组缺少标题" };
@@ -142,7 +140,6 @@ export function issueGroupNo(
         title: title.slice(0, 120),
         at: String(input.at ?? "") || new Date().toISOString(),
         state: "open",
-        ...(input.stage ? { stage: String(input.stage) } : {}),
         ...(input.created_by ? { created_by: String(input.created_by) } : {}),
       };
       if (!appendGroup(root, group)) return { ok: false, error: "组台账写入失败：检查 .capitalist 目录权限" };

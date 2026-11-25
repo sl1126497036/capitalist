@@ -18,7 +18,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const { appendDispatch, dispatchPath, readDispatches } = require(join(PKG, "dist/core/record/supervisor.js"));
 const { writeJsonl } = require(join(PKG, "dist/core/record/json.js"));
 const { assignThreadNos, dispatchOfRef, dispatchOfThreadNo } = require(join(PKG, "dist/supervisor/usage/threadNo.js"));
@@ -36,7 +36,7 @@ function cleanup(p) {
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-ref-"));
-  createTaskRoot({ target: "编号解析", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "编号解析", policySpec: "minimal", root: base });
   return base;
 }
 

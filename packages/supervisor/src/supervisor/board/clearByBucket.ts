@@ -27,7 +27,7 @@ export interface ClearResult {
  * 三份都是任务侧的记录，清空任务卡时一并移出。监工对话台账（插话记录、调度指令、事件流）
  * 不属于任务卡，由“新会话”单独处理；在此归档会使监工对话从界面上消失。
  */
-export function clearRuntimeLedger(root: string): { dir: string; moved: number; stage: string } {
+export function clearRuntimeLedger(root: string): { dir: string; moved: number } {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const dir = archive.clear(root, stamp);
   let moved = 0;
@@ -45,18 +45,11 @@ export function clearRuntimeLedger(root: string): { dir: string; moved: number; 
   } catch {
   }
 
-  let stage = "";
+  /* 任务台账清空后，状态里的“下一步”与阻塞项一并复位：它们描述的是已被清掉的那批单。 */
   try {
-    const st = loadState(root);
-    const specPath = String((st as unknown as { contract_path?: string } | null)?.contract_path ?? "");
-    const spec = specPath ? readJson<{ stages?: { id?: string }[] } | null>(specPath, null) : null;
-    stage = String(spec?.stages?.[0]?.id ?? "");
-    if (st && stage) {
+    if (loadState(root)) {
       updateState(root, (s) =>
         Object.assign(s, {
-          stage,
-          stage_entered_at: new Date().toISOString(),
-          counters: {},
           next_action: "",
           blockers: [],
         }),
@@ -64,7 +57,7 @@ export function clearRuntimeLedger(root: string): { dir: string; moved: number; 
     }
   } catch {
   }
-  return { dir, moved, stage };
+  return { dir, moved };
 }
 
 /**
@@ -97,8 +90,8 @@ export function clearThreadsByBucket(root: string, rawBucket: unknown): ClearRes
 
   const r = archiveRecords(root, { dispatchIds: scope.dispatches, workerIds: scope.workers });
 
-  /** bucket=all 才整根重置任务台账与阶段进度；监工对话由“新会话”单独处理，此处不动。 */
-  let wiped: { dir: string; moved: number; stage: string } | null = null;
+  /** bucket=all 才整根重置任务台账；监工对话由“新会话”单独处理，此处不动。 */
+  let wiped: { dir: string; moved: number } | null = null;
   if (bucket === "all") {
     try {
       wiped = clearRuntimeLedger(root);
@@ -113,7 +106,6 @@ export function clearThreadsByBucket(root: string, rawBucket: unknown): ClearRes
     bits.push(`进程记录 ${r.workers} 个、派单 ${r.dispatches} 张移进归档目录`);
   }
   if (wiped && wiped.moved > 0) bits.push(`任务台账 ${wiped.moved} 份一并归档`);
-  if (wiped?.stage) bits.push(`阶段进度回到 ${wiped.stage}`);
 
   return {
     status: 200,

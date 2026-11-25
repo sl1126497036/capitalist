@@ -7,13 +7,13 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const { appendDispatch, readDispatches, markReported } = require(join(PKG, "dist/core/record/supervisor.js"));
 const { applyVerdict } = require(join(PKG, "dist/supervisor/loop.js"));
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-verdict-fb-"));
-  createTaskRoot({ target: "判定默认", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "判定默认", policySpec: "minimal", root: base });
   return { base, clean: () => rmSync(base, { recursive: true, force: true }) };
 }
 

@@ -63,9 +63,9 @@ const HELP_GROUPS: HelpGroup[] = [
     items: [
       {
         cmd: "start <目标>",
-        brief: ["创建或续用任务根；未指定契约时使用 minimal。"],
+        brief: ["创建或续用任务根；未指定守卫时使用 minimal。"],
         opts: [
-          { f: "--contract <名|路径>", d: ["契约名或路径"] },
+          { f: "--policy <名|路径>", d: ["守卫名或路径"] },
           { f: "--root <目录>", d: ["任务根目录"] },
         ],
       },
@@ -73,7 +73,7 @@ const HELP_GROUPS: HelpGroup[] = [
         cmd: "init <目标>",
         brief: ["新建任务根，已存在时报错"],
         opts: [
-          { f: "--contract <名|路径>", d: ["契约名或路径"] },
+          { f: "--policy <名|路径>", d: ["守卫名或路径"] },
           { f: "--root <目录>", d: ["任务根目录"] },
         ],
       },
@@ -81,24 +81,16 @@ const HELP_GROUPS: HelpGroup[] = [
         cmd: "restart <目标>",
         brief: ["更换目标重开：旧 .capitalist 归档为 .capitalist.closed.<时间>，再就地重建"],
         opts: [
-          { f: "--contract <名>", d: ["新契约"] },
+          { f: "--policy <名>", d: ["新守卫"] },
           { f: "--root <目录>", d: ["任务根目录"] },
         ],
       },
       {
         cmd: "adopt",
-        brief: ["为已有任务根更换契约，此后按新契约执行。"],
-        opts: [
-          { f: "--contract <名|路径>", d: ["新契约"] },
-          { f: "--keep-stage", d: ["保留当前阶段"] },
-        ],
+        brief: ["为已有任务根更换守卫（红线、本机边界、判据来源），此后按新守卫执行。"],
+        opts: [{ f: "--policy <名|路径>", d: ["新守卫"] }],
       },
-      {
-        cmd: "advance",
-        brief: ["门槛达标时推进到下一阶段"],
-        opts: [{ f: "--force", d: ["未达标也推进，写入 FORCED 记录"] }],
-      },
-      { cmd: 'set-next "<下一步>"', brief: ["更新下一步动作，不改阶段"] },
+      { cmd: 'set-next "<下一步>"', brief: ["更新下一步动作"] },
       { cmd: "scope <k=v ...>", brief: ["就绪标记，写入 .capitalist/scope.json（如 scope assets=1 rules=1）"] },
     ],
   },
@@ -250,7 +242,7 @@ const HELP_GROUPS: HelpGroup[] = [
           "WorkBuddy 会话运行在沙箱里，不能在会话内启动；其他宿主可直接启动。",
           "启动等同一次暂停调度：未完成的派单全部显示暂停中，暂停期间新派入的单",
           "同样等待恢复。看板点“恢复调度”后按原状态继续，也可用 capitalist resume。",
-          "监工不自行生成派单：阶段门槛通过只推进状态，不建单。",
+          "监工按任务树派单：树上的节点都交付后转入待命，不自造任务。",
           "派单入口：看板；追加要求用 capitalist say。",
           "看板默认随监工启动（127.0.0.1:7788，端口占用时顺延），启动时输出地址。",
           "令牌缺省不下发，工作进程与对话通道使用宿主 CLI 登录态；",
@@ -292,7 +284,7 @@ const HELP_GROUPS: HelpGroup[] = [
           { f: "--force", d: ["接管并清除熔断"] },
           {
             f: "--verbose",
-            d: ["打印启动参数、守护进程、任务列表热加载等运行细节（环境变量 CAPITALIST_VERBOSE=1）；", "缺省只输出看板地址、运行状态与错误"],
+            d: ["打印启动参数、守护进程、守卫热加载等运行细节（环境变量 CAPITALIST_VERBOSE=1）；", "缺省只输出看板地址、运行状态与错误"],
           },
         ],
       },
@@ -432,7 +424,7 @@ const HELP_GROUPS: HelpGroup[] = [
       },
       {
         cmd: "feed",
-        brief: ["回报流水（工作进程上报、判定失败、阶段推进）最近 N 条"],
+        brief: ["回报流水（工作进程上报、判定失败、重派）最近 N 条"],
         opts: [
           { f: "--limit N", d: ["条数"] },
           { f: "--json", d: ["输出 JSON"] },
@@ -445,8 +437,13 @@ const HELP_GROUPS: HelpGroup[] = [
     items: [
       {
         cmd: "status",
-        brief: ["当前阶段 / 门槛 / 档位"],
+        brief: ["任务树进度 / 门槛 / 档位"],
         opts: [{ f: "--json", d: ["输出 JSON"] }],
+      },
+      {
+        cmd: "migrate",
+        brief: ["把上一版的落盘数据改到当前命名；监工启动时也会自动跑"],
+        opts: [{ f: "--check", d: ["只报告将改什么，不落盘"] }],
       },
       { cmd: "brief", brief: ["极短状态（hook 注入用）"] },
       {
@@ -561,6 +558,17 @@ export const HELP =
  * 条目说明生效时机：未开工的派单并入原派单，执行中的派单由 hook 送达；中断会触发重派。
  */
 export const COMMAND_HELP: Record<string, string> = {
+  migrate: `capitalist migrate [--check]
+把上一版的落盘数据改到当前命名。监工启动时自动执行，本命令用于不启动监工先迁干净。
+  - state.json：contract / contract_path / contract_fallback 改为 policy 系，并清掉已废弃的阶段字段
+  - supervisor.json：contract 改为 policy
+  - config/contract-prev.json、reload/contract-seen.json：改名为 policy-prev.json、policy-seen.json
+  - reload/snapshot.json：contract_freshness 改为 policy_freshness
+  - ledger/events.jsonl：contract_* 事件名改为 policy_*（逐条精确映射）
+  - 自动纳管配置：rules[].contract 改为 policy
+  - state.policy_path 指向的 <名>.contract.json：改名为 <名>.policy.json
+  - 改写前把原文件备份到 .capitalist/archive/migrate-<时间>/；幂等，没有旧数据时立即返回
+  - --check 只报告将改什么，不写盘，也不建备份`,
   say: `capitalist say "<文本>" [--target <派单id>] [--lineage <派生链>] [--shard <分片>] [--thread <线程>]
 给派单追加一条消息。
   - 写入 .capitalist/ledger/direct.jsonl，字段 at / text / target / lineage / shard / thread / consumed
@@ -596,12 +604,12 @@ export const COMMAND_HELP: Record<string, string> = {
   - 存在运行中的进程时，先写 closed 结束再发送 SIGTERM；顺序颠倒会让进程退出回调
     按失败结束，随后重派
   - 写 dispatch_closed 事件到 .capitalist/ledger/events.jsonl（含原状态、是否发送过 SIGTERM）
-  - 监工不再为已关闭分片补单；关闭的分片计入完成数，不阻塞阶段推进
+  - 监工不再为已关闭分片补单；关闭的分片计入完成数，不阻塞后续派单
   - stop-worker 中断进程并触发重派；close 关闭派单且不再补单
   - 目标写法：派单 id（D-…）、worker id（W-…）、分片名或 shard:xxx（排队行）`,
   reload: `capitalist reload [--status] [--hold <秒>] [--json]
 监工上下文重载：从事件台账提取进度，切换会话后继续执行。
-  - 写入 .capitalist/reload/snapshot.json（+ history/ 副本）：当前阶段、已达标的验收项、
+  - 写入 .capitalist/reload/snapshot.json（+ history/ 副本）：任务树进度、已达标的验收项、
     各分片的最后状态与未完成条目、用户未处理的插话、未裁决提问、重派计数
   - 压缩成 .capitalist/reload/context.md：移除心跳 / 重复调度轮次 / 已完成条目详情 / 一次性调试输出；
     保留需求原文、未完成项、决策结论、待复验清单
@@ -609,5 +617,5 @@ export const COMMAND_HELP: Record<string, string> = {
   - 写 .capitalist/reload/resume.json：done_verified 不重派；done_unverified（已做但未验证）
     由监工派 source=reverify 的复验单，不按完成处理
   - 重载期间看板监工面板显示“监工重载中”，结束后隐藏（.capitalist/reload/active.json）
-  - 生效时机：复验单随后由监工补出；阶段推进与门槛判定不受影响`,
+  - 生效时机：复验单随后由监工补出；完成判定不受影响`,
 };

@@ -87,15 +87,15 @@ export interface Directive {
   /**
    * 在 `direct.jsonl` 中的行号（从 1 开始）。
    *
-   * 对外一律用 `@行号` 指代一条插话：消息号既长又无法口头复述，让 worker 在派单正文里
-   * 看到它、再原样抄进回报，只会制造对不上号的错误。行号在文件里稳定（只追加不重排），
-   * 注入正文与回报解析用它即可对上同一条记录。
+   * 对外一律用 `@行号` 指代一条插话：消息号既长又无法口头复述，worker 在派单正文里
+   * 看到它、再原样抄进回报，会产生对不上号的错误。行号在文件里稳定（只追加不重排），
+   * 注入正文与回报解析靠它对应同一条记录。
    */
   no?: number;
   /** 发起这条话的进程（进程号 `2-P1`）。 */
   thread?: string;
   /**
-   * 发起这条话的线程（`阶段/分片`，无分片是 `阶段/x派生链尾号`，见 {@link laneKeyOf}）。
+   * 发起这条话的线程（分片名，无分片是 `x` 加派生链尾号，见 {@link laneKeyOf}）。
    *
    * 线程比分派单长寿：同一线程重派出来的新进程、新单都还认这条话。用户在某条线程里
    * 追加的内容天然属于那条线程，不因为中途换过一次进程就失效。
@@ -143,7 +143,6 @@ export interface Directive {
    * 老记录或取回失败时没有这个字段，拼装时只显示编号。
    */
   quote_text?: string;
-  stage?: string;
   /** 是否已被某次派单取走。缺省按未消费处理（兼容旧记录） */
   consumed?: boolean;
   consumed_at?: string;
@@ -236,7 +235,7 @@ export function splitDirectiveTag(text: string): { tag: string; body: string } {
 /**
  * 把指向同一张派单的未消费追加标记为不再投递。
  *
- * 用于目标单已终结、且其所属阶段已推进的情形：这类追加无法随任何派单带入执行，
+ * 用于目标单已终结的情形：这类追加无法随任何派单带入执行，
  * 保持未消费会让每轮调度重复尝试投递。记录保留在队列文件内，只置消费位并写明原因，
  * 供看板与会话流回溯。
  *
@@ -272,29 +271,27 @@ export function isWorkerRef(v: string): boolean {
 }
 
 /**
- * 派单 -> 它所属线程的键（`阶段/分片`；无分片时 `阶段/x派生链尾号`）。
+ * 派单 -> 它所属线程的键（有分片取分片名；无分片时取 `x派生链尾号`）。
  *
  * 线程键是任务的身份，比分单和进程都长寿：同一任务重派出来的几张单、拉起的几个
  * 进程共用同一个键，编号表（thread-no.json）也按它发行号。所以“用户在哪条线程里说
  * 的这句话”必须落到这个键上，落到派单 id 或进程 id 上，一次重派就换一代身份，
  * 这句话跟着那代一起作废。
  *
- * 规则与看板的 `taskKeyOf` 逐字一致（看板侧已改为调用本函数）。两处各写一遍必然漂，
- * 漂了之后界面上显示的线程和插话归的线程就不是同一条了。
+ * 看板与调度层共用本函数：两处各写一遍必然漂，漂了之后界面上显示的线程
+ * 和插话归的线程就不是同一条了。
  */
 export function laneKeyOf(d: {
-  stage?: string | undefined;
   shard?: string | null | undefined;
   lineage?: string | undefined;
   id?: string | undefined;
 }): string {
-  const st = String(d.stage ?? "").trim().toLowerCase();
   const sh = String(d.shard ?? "").trim().toLowerCase();
-  if (sh) return `${st}/${sh}`;
+  if (sh) return sh;
   /** 用 `||` 不用 `??`：空串也要回退到 id。 */
   const l = String(d.lineage || d.id || "").trim();
   /* x 前缀：避免与真正的分片名冲突（分片名不会以 x 开头）。 */
-  return l ? `${st}/x${l.slice(-6)}` : `${st}/main`;
+  return l ? `x${l.slice(-6)}` : "main";
 }
 
 /**
@@ -313,7 +310,6 @@ export function appendDirective(
     thread?: string | undefined;
     /** 线程键（{@link laneKeyOf} 的取值）。看板按线程发话时落这里，不落 thread。 */
     lane?: string | undefined;
-    stage?: string;
     atts?: string[];
     /** 这条插话对应的用户消息标识（看板发送时生成）。 */
     msgId?: string;
@@ -345,7 +341,6 @@ export function appendDirective(
   if (atts.length) rec.atts = [...new Set(atts)];
   if (input.thread) rec.thread = input.thread;
   if (input.lane) rec.lane = input.lane;
-  if (input.stage) rec.stage = input.stage;
   if (input.lineage) rec.lineage = input.lineage;
   if (input.target) rec.target = input.target;
   if (input.via === "capitalist" || input.via === "user") rec.via = input.via;
@@ -377,12 +372,11 @@ export function listDirectives(root: string): Directive[] {
 /**
  * 一条插话的目标范围：谁在问“这行话是不是给我的”。
  *
- * 四个字段就是判定所需的全部事实：这一单是哪个阶段、哪个分片、哪张单、哪条链，
+ * 这几个字段就是判定所需的全部事实：这一单在哪个分片、是哪张单、属于哪条链，
  * 以及问话的是哪个进程（执行中的送达只有它有值）。
  */
 export interface DirectiveScope {
   shard: string;
-  stage?: string;
   /** 该单的派单 id。 */
   dispatchId?: string;
   /** 该单的派生链（重派链首单 id）。 */
@@ -401,10 +395,6 @@ export interface DirectiveScope {
 }
 
 export function directiveMatches(r: Directive, scope: DirectiveScope): boolean {
-  const rs = String((r as { stage?: string }).stage ?? "");
-  const stage = String(scope.stage ?? "");
-  if (rs && stage && rs !== stage) return false;
-
   const target = String((r as { target?: string }).target ?? "");
   if (target) {
     if (target === String(scope.dispatchId ?? "")) return true;
@@ -464,7 +454,6 @@ export function claimDirectives(
   root: string,
   input: {
     shard: string;
-    stage?: string;
     dispatchId: string;
     lineage?: string;
     workerId?: string;
@@ -479,7 +468,6 @@ export function claimDirectives(
   let chainOf: Map<string, string> | null = null;
   const scope: DirectiveScope = {
     shard: String(input.shard ?? ""),
-    stage: String(input.stage ?? ""),
     ...(input.dispatchId ? { dispatchId: String(input.dispatchId) } : {}),
     ...(input.lineage ? { lineage: String(input.lineage) } : {}),
     ...(input.workerId ? { workerId: String(input.workerId) } : {}),
@@ -872,7 +860,6 @@ export function stopWorker(root: string, id: string, opts: StopWorkerOptions = {
 
 export interface CloseTaskResult {
   dispatch: string;
-  stage: string;
   shard: string;
   worker: string | null;
   pid: number;
@@ -951,7 +938,7 @@ export function closeTask(
   /*
    * 结束后冻住这一片。
    *
-   * 只把这一张单改成 closed 不够：阶段门槛仍未达标，监工下一轮调度会重新建一张单派出去，
+   * 只把这一张单改成 closed 不够：这一片的任务还没做完，监工下一轮调度会重新建一张单派出去，
    * 用户看到的就是“已要求停止，调度仍在派单”。接管态是现成的抑制开关，loop 的 held() 会跳过
    * 该片的派单与自动验收。要恢复自动调度，用户执行 `capitalist release <片>`。
    *
@@ -971,7 +958,6 @@ export function closeTask(
 
   recordEvent(root, "dispatch_closed", {
     dispatch: d.id,
-    stage: d.stage,
     shard: d.shard ?? "",
     worker: worker?.id ?? "",
     from: d.status,
@@ -982,7 +968,6 @@ export function closeTask(
 
   return {
     dispatch: d.id,
-    stage: d.stage,
     shard: d.shard ?? "",
     worker: worker?.id ?? null,
     pid,
@@ -996,7 +981,6 @@ export function closeTask(
 /** 手动插队的结果。 */
 export interface PromoteTaskResult {
   dispatch: string;
-  stage: string;
   shard: string;
   ahead: number;
   already: boolean;
@@ -1043,7 +1027,6 @@ export function promoteTask(
   if (!next) return { ok: false, reason: "置顶写入失败，台账没变" };
   recordEvent(root, "dispatch_promoted", {
     dispatch: d.id,
-    stage: d.stage,
     shard: d.shard ?? "",
     ahead,
     by: opts.by ?? "user",
@@ -1053,7 +1036,6 @@ export function promoteTask(
   return {
     ok: true,
     dispatch: d.id,
-    stage: d.stage,
     shard: d.shard ?? "",
     ahead,
     already,

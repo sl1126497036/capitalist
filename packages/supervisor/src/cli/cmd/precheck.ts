@@ -2,12 +2,12 @@
  * 预检类命令：红线预检（gate）、本机边界预检（local-check）、越界理由登记（justify）。
  *
  * 三者都在动作发生之前回答同一个问题：这条命令能否执行、访问该路径是否需要先说明理由。
- * 放在一起是因为它们共用判定层（core/localGuard、core/contract），且都不改任务阶段。
+ * 放在一起是因为它们共用判定层（core/localGuard、core/policy），且都不改任务树与台账。
  */
 
 import { readFileSync } from "node:fs";
 
-import { evaluate, loadContract } from "../../core/contract/contract";
+import { evaluate, loadPolicy } from "../../core/policy/policy";
 import {
   detectAction,
   extractLocalPaths,
@@ -23,6 +23,7 @@ import { resolveModeFor } from "../../core/record/state";
 import { skillDirs } from "../../agent/locations";
 import { skillAllowRoots } from "../../supervisor/skills";
 import { flagBool, flagString, type Parsed } from "../args";
+import { policyArgOf } from "../policyArg";
 import { loadOrDie, rootOrDie } from "./context";
 import { die, write } from "../output";
 
@@ -37,12 +38,12 @@ export function cmdGate(p: Parsed): number {
   const text = inline || (reqFile ? readFileSync(reqFile, "utf8") : "");
   if (!text) die("用法：capitalist gate --text <命令> 或 --req <请求文件>");
   const root = findRoot(flagString(p, "root"));
-  const spec = flagString(p, "contract") ?? "minimal";
-  const contract = root ? loadOrDie(root).contract : loadContract(spec, skillDirs());
-  if (!contract) die(`未找到任务列表：${spec}。`);
+  const spec = policyArgOf(p) ?? "minimal";
+  const policy = root ? loadOrDie(root).policy : loadPolicy(spec, skillDirs());
+  if (!policy) die(`未找到守卫：${spec}。`);
 
-  const mode = root ? resolveModeFor(root, contract) : "default";
-  const gate = evaluate(contract, text);
+  const mode = root ? resolveModeFor(root, policy) : "default";
+  const gate = evaluate(policy, text);
   gate.rule_decision = gate.decision;
   gate.mode = mode;
   gate.tightened = false;
@@ -50,7 +51,7 @@ export function cmdGate(p: Parsed): number {
   // 删除类红线带 defer：它们只标识“这是一次删除”，判定归更具体的路径检查，
   // 路径检查先跑。
   if (gate.hits.some((h) => h.defer === "local_delete")) {
-    const del = localDeleteCheck(contract, root, text);
+    const del = localDeleteCheck(policy, root, text);
     if (del.decision === "deny") {
       if (flagBool(p, "json")) {
         write(`${JSON.stringify({ decision: "BLOCK", reason: "local_delete", mode, hits: del.hits }, null, 2)}\n`);
@@ -66,7 +67,7 @@ export function cmdGate(p: Parsed): number {
   const act = detectAction(text);
   /* 与 hook 同一口径：技能目录内的读取不算越界，预检不能比实际拦截更严。 */
   const extra = root ? skillExtraOf(root) : {};
-  const local = root ? localCheck(contract, root, extractLocalPaths(text, root), act, extra) : null;
+  const local = root ? localCheck(policy, root, extractLocalPaths(text, root), act, extra) : null;
   const localDecision = local ? tightenLocal(mode, local.decision, act, decide) : null;
 
   if (flagBool(p, "json")) {
@@ -100,13 +101,13 @@ function skillExtraOf(root: string): { skillRoots: string[]; skillCacheRoots: st
  */
 export function cmdLocalCheck(p: Parsed): number {
   const root = rootOrDie(p);
-  const { contract } = loadOrDie(root);
+  const { policy } = loadOrDie(root);
   const one = flagString(p, "path") ?? "";
   if (!one) die("用法：capitalist local-check --path <路径> [--action read|write|delete]");
 
   const action = (flagString(p, "action") ?? "read") as "read" | "write" | "delete";
-  const mode = resolveModeFor(root, contract);
-  const res = localCheck(contract, root, [one], action, skillExtraOf(root));
+  const mode = resolveModeFor(root, policy);
+  const res = localCheck(policy, root, [one], action, skillExtraOf(root));
   const decided = tightenLocal(mode, res.decision, action, decide);
 
   if (flagBool(p, "json")) {

@@ -149,7 +149,7 @@ test("场景一：前后端并行成组，联调挂在组上，测试挂在联�
 
     /*
      * 前端按 `edge` 分段渲染：成员内嵌进组卡片，下游排在组卡片下方。
-     * 两者混成同一层会让下游看起来是又一个成员，故契约固定在此。
+     * 两者混成同一层会让下游看起来是又一个成员，故这条约定固定在此。
      */
     const edgeOfKid = new Map(all.filter((n) => n.parent === gid).map((n) => [n.id, n.edge]));
     assert.strictEqual(edgeOfKid.get("4-1"), "member", "组成员标 member");

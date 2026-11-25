@@ -8,7 +8,7 @@ const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
 const board = require(join(PKG, "dist/supervisor/board"));
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const { supervisorDir } = require(join(PKG, "dist/core/record/paths.js"));
 
 /** 1x1 透明 PNG；接口按扩展名发 content-type，不校验像素内容。 */
@@ -19,7 +19,7 @@ const PNG = Buffer.from(
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-att-"));
-  createTaskRoot({ target: "取图", contractSpec: "minimal", root, supervisor: false });
+  createTaskRoot({ target: "取图", policySpec: "minimal", root, supervisor: false });
   const dir = join(supervisorDir(root), "attachments");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "shot.png"), PNG);

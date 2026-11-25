@@ -11,14 +11,14 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { loadState } = require("../dist/core/record/state");
 const loop = require("../dist/supervisor/loop");
 const board = require("../dist/supervisor/board");
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-pause-"));
-  createTaskRoot({ target: "暂停测试", contractSpec: "minimal", root });
+  createTaskRoot({ target: "暂停测试", policySpec: "minimal", root });
   return root;
 }
 
@@ -72,8 +72,8 @@ test("暂停单不被领取，也不参与填槽", () => {
   assert.strictEqual(capitalist.firstOpenDispatch(root), undefined, "capitalist next 不能领暂停单");
   assert.ok(capitalist.pausedDispatches(root).some((d) => d.id === "D-a"));
 
-  const contract = { name: "minimal", data: {}, stages: [{ id: "S1", name: "执行" }] };
-  loop.__testing.fillSlots(root, contract, loadState(root), "claude", 1, {}, () => {});
+  const policy = { name: "minimal", data: {}, stages: [{ id: "S1", name: "执行" }] };
+  loop.__testing.fillSlots(root, policy, loadState(root), "claude", 1, {}, () => {});
   assert.strictEqual(rowOf(root, "D-a").status, "open", "填槽必须跳过暂停单");
   assert.strictEqual(capitalist.listWorkers(root).length, 0, "暂停单不拉起工作进程");
 });
@@ -138,8 +138,8 @@ test("暂停单算作待办：监工不因它转成待命", () => {
   capitalist.holdDispatch(root, "D-p", "startup", "测试");
 
   const state = loadState(root);
-  const contract = { name: "minimal", data: {}, stages: [{ id: "S1", name: "执行", done: { type: "none" } }] };
-  assert.strictEqual(loop.hasPendingWork(root, contract, state), true, "队列里挂着暂停单不是“无待办”");
+  const policy = { name: "minimal", data: {}, stages: [{ id: "S1", name: "执行", done: { type: "none" } }] };
+  assert.strictEqual(loop.hasPendingWork(root, policy, state), true, "队列里挂着暂停单不是“无待办”");
 });
 
 test("启动后新派单不受旧单暂停影响：仍可被领取与填槽", () => {
@@ -151,8 +151,8 @@ test("启动后新派单不受旧单暂停影响：仍可被领取与填槽", ()
 
   assert.strictEqual(capitalist.firstOpenDispatch(root)?.id, "D-new", "暂停旧单不挡新单领取");
 
-  const contract = { name: "minimal", data: {}, stages: [{ id: "S1", name: "执行" }] };
-  loop.__testing.fillSlots(root, contract, loadState(root), "claude", 1, {}, () => {});
+  const policy = { name: "minimal", data: {}, stages: [{ id: "S1", name: "执行" }] };
+  loop.__testing.fillSlots(root, policy, loadState(root), "claude", 1, {}, () => {});
   assert.strictEqual(rowOf(root, "D-old").status, "open", "旧单保持暂停");
   assert.strictEqual(rowOf(root, "D-new").status, "claimed", "新单立即进入执行");
 });

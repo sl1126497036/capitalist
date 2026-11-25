@@ -24,7 +24,7 @@ export type Mode = "plan" | "default" | "accept_edits" | "bypass";
 /** 动作类型。决定档位是否介入该动作。 */
 export type ActionKind = "command" | "read" | "write" | "delete";
 
-/** 契约里写的红线级别。旧名保留以兼容既有契约。 */
+/** 守卫里写的红线级别。旧名保留以兼容既有守卫。 */
 export type RedlineLevel = "BLOCK" | "NEED_USER" | "WARN";
 
 /** 一次红线命中。`defer` 表示最终判定交给更专门的检查。 */
@@ -62,15 +62,6 @@ export interface LocalHit {
   kind: string;
 }
 
-/** 一个阶段。`done` 由声明式检查器解释，不由引擎直接执行。 */
-export interface Stage {
-  id: string;
-  name: string;
-  goal?: string;
-  next?: string;
-  done?: Record<string, unknown>;
-}
-
 /** 一条红线。 */
 export interface Redline {
   id: string;
@@ -105,20 +96,22 @@ export interface LocalGuardConfig {
   allow_read_paths?: string[];
 }
 
-/** 契约文件内容。未知键原样透传，契约可扩展而不必改代码。 */
-export interface ContractData {
+/**
+ * 守卫文件内容。只声明任务边界：禁止什么、本机哪些位置可以动、判据来源与权限档位。
+ * 流程不在此声明，编排由任务树承担。未知键原样透传，守卫可扩展而不必改代码。
+ */
+export interface PolicyData {
   name: string;
   domain?: string;
   version?: number;
   description?: string;
   permission?: { mode?: string; default_mode?: string };
-  stages?: Stage[];
   redlines?: Redline[];
   redlines_note?: string;
   local_guard?: LocalGuardConfig;
+  /** 判据上下文：写清本领域的完成口径与禁止事项来源，判据排障与交接时引用。 */
   context?: string | Record<string, number>;
   env_notes?: { summary?: string; mistakes?: Mistake[] };
-  reply_checks?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -133,32 +126,26 @@ export interface Mistake {
 /**
  * 任务根状态。
  *
- * `contract_fallback` 标记该任务未指定领域契约，跑的是通用契约。该字段出现在每份简报里，
+ * `policy_fallback` 标记该任务未指定领域守卫，跑的是通用守卫。该字段出现在每份简报里，
  * 使“当前无领域判据”这一状态显式可见，避免被当作已有判据。
  */
 export interface TaskState {
   version: number;
   target: string;
-  contract: string;
-  contract_path: string;
-  contract_fallback?: boolean;
+  /** 守卫名。 */
+  policy: string;
+  policy_path: string;
+  policy_fallback?: boolean;
   permission_mode?: Mode;
   /**
    * 写入代数。读改写用它做冲突检测：写回时磁盘上的值已变，说明有其他进程修改过 state；应重读后再改，避免覆盖对方的字段。
    */
   rev?: number;
-  stage: string;
   /**
-   * 进入当前阶段的时间，同时给 ISO 串与 epoch 秒两种形式。
-   *
-   * `mtime_after_stage` 以它为比对基准。早于该字段出现的任务根（或手写的）两者都没有，
-   * 此时检查器回落到 `created_at`，而不是让该门槛永远不达标。
+   * 监工或用户指定的下一步动作。任务树里已有可执行节点时以节点为准。
    */
-  stage_entered_at?: string;
-  stage_entered_at_ts?: number;
   next_action: string;
   blockers?: unknown[];
-  counters?: { rounds_in_stage?: number };
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -176,6 +163,6 @@ export interface LedgerRecord {
  * 与宿主无关的生命周期点。各 impl 把原生事件映射到这些点上。
  *
  * `HostId` 不在此处定义：`core` 不应知道宿主构成一个封闭集合。注册键是开放字符串，
- * 由 `host/contract.ts` 定义，新增宿主不触及判定层。
+ * 由 `agent/contract.ts` 定义，新增宿主不触及判定层。
  */
 export type LifecyclePoint = "on_start" | "on_idle" | "on_action" | "on_compact" | "on_stop";

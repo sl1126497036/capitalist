@@ -21,7 +21,7 @@ function emptyRoot() {
   mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
   writeFileSync(
     join(root, ".capitalist", "runtime", "state.json"),
-    JSON.stringify({ version: 2, target: "测试", stage: "U1", contract: "", counters: {} }),
+    JSON.stringify({ version: 2, target: "测试", stage: "U1", policy: "", counters: {} }),
   );
   return root;
 }

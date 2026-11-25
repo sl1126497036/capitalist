@@ -1,0 +1,63 @@
+{
+  "name": "minimal",
+  "domain": "通用任务",
+  "description": "未指定领域守卫时的默认档。只声明任务边界：禁止什么、本机哪些位置可操作、判据从哪里来。不含流程，流程由监工按目标拆成任务树推进。",
+  "context": "完成口径：产出物能被用户直接使用或核对。用户能按说明跑通、看到结果、复现结论；只写“已完成”不算完成。\n判据来源：用户原话（派单正文与插话）优先于任何通用惯例；两者冲突时以用户原话为准，并在报告里说明冲突点。\n验收要求：报告里写清产出物位置与核对方式，能指到具体文件、命令输出或结果，不停留在自述。\n回报口径：每单结束时用 capitalist report 交结论，卡点先用 capitalist ask 登记再停，等待裁决。",
+  "redlines": [
+    {
+      "id": "DEL-LOCALSHELL",
+      "level": "BLOCK",
+      "label": "本机删除命令（按路径判定）",
+      "pattern": "(?i)(^|[;&|]\\s*)(rm\\s+-[rf]{1,2}|rm\\s|del\\s+/|rmdir\\s+/s|Remove-Item\\s+-Recurse|shutil\\.rmtree|os\\.remove)",
+      "defer": "local_delete",
+      "fix": "任务根以内的删除允许；以外的一律拒绝。路径不确定时先 capitalist ask。"
+    },
+    {
+      "id": "SQL-DESTRUCTIVE",
+      "level": "BLOCK",
+      "label": "SQL 破坏性语句（DELETE / DROP / TRUNCATE / 清空数据库）",
+      "pattern": "\\bDELETE\\s+FROM\\b|\\bDROP\\s+(?:TABLE|DATABASE|SCHEMA|INDEX|VIEW)\\b|\\bTRUNCATE\\s+(?:TABLE\\s+)?\\w|\\bflushall\\b|\\bflushdb\\b|\\bdropDatabase\\b|\\bdb\\.\\w+\\.drop\\w*\\s*\\(",
+      "skip_if": "^(?:grep|rg|findstr|less|more|head|tail)\\b",
+      "fix": "线上库删除后通常不可恢复。只读查询不受影响。确需删除测试数据时先 capitalist ask，注明库名与环境。"
+    },
+    {
+      "id": "NEED-CREDS",
+      "level": "NEED_USER",
+      "label": "读凭据文件",
+      "pattern": "(?i)(\\.env\\b|\\.ssh/|\\.aws/|id_rsa|credentials|\\.pem\\b|password\\s*=)",
+      "fix": "凭据类操作需当次授权确认。"
+    }
+  ],
+  "local_guard": {
+    "_note": "通用边界。allow_roots 按机器实际情况改；放宽即代表操作者接受对应风险。",
+    "allow_roots": [],
+    "sensitive_paths": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.gnupg",
+      "~/Documents",
+      "C:/Windows",
+      "/etc",
+      "/var/log",
+      "AppData"
+    ],
+    "sensitive_names": [
+      ".env",
+      "id_rsa",
+      "id_ed25519",
+      "credentials",
+      "Login Data",
+      ".npmrc",
+      ".pypirc"
+    ],
+    "sensitive_globs": [
+      "*.pem",
+      "*.key",
+      "*.p12",
+      "*.pfx"
+    ]
+  },
+  "env_notes": {
+    "summary": "引擎不预设操作系统与工具链：环境信息以 uname / ver / systeminfo 的实际输出为准，路径分隔符、包管理器与可用命令同样以探测结果为准，不凭惯例假设。"
+  }
+}

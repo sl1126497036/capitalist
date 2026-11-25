@@ -8,7 +8,7 @@
  * 批准按“动作 + 路径集合”绑定，用一次即作废；监工不在线时不批准。
  */
 
-import type { Contract } from "../core/contract/contract";
+import type { Policy } from "../core/policy/policy";
 import { extractDeleteArgs, localCheck } from "../core/guard/localGuard";
 import {
   appendRequest,
@@ -37,8 +37,7 @@ export interface GuardBase {
   hook: HookFacet;
   event: UnifiedEvent;
   root: string;
-  contract: Contract;
-  stage: string;
+  policy: Policy;
   /** 监工不在线：只拦不放，且不给申请通道。 */
   offline: boolean;
   /** 记一条违规并返回同类第几次，用于重复提醒。 */
@@ -89,7 +88,6 @@ function enqueue(
     paths: args.paths,
     worker: process.env.CAPITALIST_WORKER_ID ?? "",
     dispatch: process.env.CAPITALIST_DISPATCH_ID ?? "",
-    stage: base.stage,
   });
   note(base.root, base.event, { request: id, kind: args.kind, paths: args.paths.join(" ") }, "guard_request");
   return { id, paths: args.paths };
@@ -166,7 +164,7 @@ export function deleteGate(base: GuardBase, cmd: string): HookDecision {
   }
 
   /* 敏感路径与根外凭据不进入申请：这类位置没有可判断的空间。 */
-  const sens = localCheck(base.contract, base.root, targets, "delete");
+  const sens = localCheck(base.policy, base.root, targets, "delete");
   if (sens.decision === "deny") {
     const why = sens.hits.map((h) => `${h.path}（${h.why}）`).join("；");
     const v = base.violate({ rule: "LOCAL-DELETE", label: "删除敏感区", evidence: why, decision: "BLOCK" });

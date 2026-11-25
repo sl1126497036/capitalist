@@ -1,9 +1,9 @@
 /**
- * 契约加载与红线判定。
+ * 守卫加载与红线判定。
  *
- * `evaluate()` 与归档的 Python 实现 `Contract.gate()`
+ * `evaluate()` 与归档的 Python 实现 `Policy.gate()`
  * （`_archive/python-engine/supervisor/scripts/capitalist.py`）判定结果必须一致。两套实现读同一份
- * 契约文件，判定分叉会使“换一套实现复现问题”失去意义。
+ * 守卫文件，判定分叉会使“换一套实现复现问题”失去意义。
  *
  * 对齐点：`requires: "url"` 前置条件、大小写不敏感的 `skip_if`、命中片段前后各取 30 字符、
  * 带 `defer` 的命中不参与严重度计算、严重度次序 BLOCK > NEED_USER > WARN。
@@ -16,28 +16,31 @@ import { readJson, writeJson } from "../record/json";
 import { recordEvent } from "../record/ledger";
 import { config as configLoc, locks as locksLoc } from "../record/locations";
 import { pidAlive } from "../record/supervisor";
-import type { ContractData, GateResult, LocalGuardConfig, Redline, RedlineHit, Stage } from "../types";
+import type { PolicyData, GateResult, LocalGuardConfig, Redline, RedlineHit } from "../types";
 
 /**
- * 契约文件的文件名约定：以 `.contract.json` 结尾。
+ * 守卫文件的文件名约定：`<名>.policy.json`。上一版的后缀 `<名>.contract.json` 仍被识别，
+ * 迁移会把已知文件改名；兼容留着是为了漏网的文件（外部脚本生成的、别处拷来的）
+ * 不至于让任务根起不来。
  *
- * 恰名为 `contract.json` 的文件也按契约对待，由 {@link collectContracts} 单独判断：
- * 该名不带 `.contract` 前缀，无法与上面的后缀规则共用一个正则。
+ * 恰名为 `policy.json` / `contract.json` 的文件也按守卫对待，由 {@link collectPolicies}
+ * 单独判断：该名不带前缀，无法与上面的后缀规则共用一个正则。
  */
-const CONTRACT_BASENAME = /\.contract\.json$/i;
+const POLICY_BASENAME = /\.(policy|contract)\.json$/i;
+/** 恰好叫这两个名字的文件也是守卫（无前缀形态）。 */
+const BARE_POLICY_NAMES = new Set(["policy.json", "contract.json"]);
 
 /**
- * 解析后的契约，判定层只依赖这个结构，不再回读原始 JSON。
+ * 解析后的守卫，判定层只依赖这个结构，不再回读原始 JSON。
  *
  * `localGuard` 缺省为空对象，此时本机边界不设限；`failedRedlines` 非空表示有红线未生效，
  * 调用方应把它报给用户，不能当作“规则齐备”。
  */
-export interface Contract {
-  data: ContractData;
+export interface Policy {
+  data: PolicyData;
   file: string;
   name: string;
   domain: string;
-  stages: Stage[];
   redlines: Redline[];
   localGuard: LocalGuardConfig;
   /** 编译好的正则，按红线 id 索引。 */
@@ -52,18 +55,18 @@ export interface Contract {
 /** 红线级别的严格度排序，用于“多条命中取最严”。 */
 const LEVEL_RANK: Record<string, number> = { BLOCK: 3, NEED_USER: 2, WARN: 1 };
 
-/** 本包自带的契约目录：从 `dist/core/contract` 上跳三级到包根，再进 `contracts/`。目录不存在时返回 undefined。 */
-function packageContractsDir(): string | undefined {
-  const dir = resolve(__dirname, "..", "..", "..", "contracts");
+/** 本包自带的守卫目录：从 `dist/core/policy` 上跳三级到包根，再进 `policies/`。 */
+function packagePoliciesDir(): string | undefined {
+  const dir = resolve(__dirname, "..", "..", "..", "policies");
   return existsSync(dir) ? dir : undefined;
 }
 
 /**
- * 递归收集契约文件。深度上限 3 层，跳过 `node_modules`、`.git` 与以 `.` 开头的目录。
+ * 递归收集守卫文件。深度上限 3 层，跳过 `node_modules`、`.git` 与以 `.` 开头的目录。
  *
- * @returns 收集到的契约文件绝对路径。目录不可读时返回空数组。
+ * @returns 收集到的守卫文件绝对路径。目录不可读时返回空数组。
  */
-function collectContracts(dir: string, depth = 3): string[] {
+function collectPolicies(dir: string, depth = 3): string[] {
   const out: string[] = [];
   if (depth <= 0 || !existsSync(dir)) return out;
   let entries: string[];
@@ -82,8 +85,8 @@ function collectContracts(dir: string, depth = 3): string[] {
       continue;
     }
     if (isDir) {
-      out.push(...collectContracts(full, depth - 1));
-    } else if (CONTRACT_BASENAME.test(name) || basename(name) === "contract.json") {
+      out.push(...collectPolicies(full, depth - 1));
+    } else if (POLICY_BASENAME.test(name) || BARE_POLICY_NAMES.has(basename(name).toLowerCase())) {
       out.push(full);
     }
   }
@@ -91,31 +94,31 @@ function collectContracts(dir: string, depth = 3): string[] {
 }
 
 /**
- * 按优先级产出契约文件路径：本包自带的契约在前，随后是调用方传入的目录
- * （宿主的 `skills/` 目录，由 `host/locations.ts` 解析）。用户安装的领域契约因此不会
- * 因同名而遮蔽本包自带的契约。
+ * 按优先级产出守卫文件路径：本包自带的守卫在前，随后是调用方传入的目录
+ * （宿主的 `skills/` 目录，由 `host/locations.ts` 解析）。用户安装的领域守卫因此不会
+ * 因同名而遮蔽本包自带的守卫。
  *
  * 搜索目录由调用方传入，不在本模块内查找：宿主配置目录名属于宿主层的信息。
  *
  * @param searchDirs 额外的搜索目录。
- * @returns 契约文件绝对路径，本包自带的在前，调用方目录按传入顺序在后；同一文件可能
+ * @returns 守卫文件绝对路径，本包自带的在前，调用方目录按传入顺序在后；同一文件可能
  *   在两组目录里各出现一次，调用方需自行按需去重。
  */
-export function* iterContracts(searchDirs: readonly string[] = []): Generator<string> {
-  const pkg = packageContractsDir();
-  if (pkg) yield* collectContracts(pkg);
+export function* iterPolicies(searchDirs: readonly string[] = []): Generator<string> {
+  const pkg = packagePoliciesDir();
+  if (pkg) yield* collectPolicies(pkg);
   for (const base of searchDirs) {
-    yield* collectContracts(base);
+    yield* collectPolicies(base);
   }
 }
 
 /**
- * 把契约里的正则转成 JS RegExp。
+ * 把守卫里的正则转成 JS RegExp。
  *
- * 契约来自 Python 生态，可能带 `(?i)` 这类行内标志。JS 不接受该语法，直接
+ * 守卫来自 Python 生态，可能带 `(?i)` 这类行内标志。JS 不接受该语法，直接
  * `new RegExp(pattern)` 会抛错；而静默忽略异常、跳过该条规则会让红线静默失效，
  * 调用方无从区分“规则没生效”与“没有规则”。因此失败一律返回 null，由上层计入
- * {@link Contract.failedRedlines} 并上报。
+ * {@link Policy.failedRedlines} 并上报。
  *
  * 行内标志被剥离并翻译为 JS 标志。没有 JS 对应项的标志（`x`，详细模式）无法翻译，
  * 这类情况记为编译失败，由调用方上报。
@@ -162,11 +165,11 @@ function compileRedlines(redlines: Redline[]): { map: Map<string, RegExp>; faile
 }
 
 /**
- * 契约原始数据转成 {@link Contract}。
+ * 守卫原始数据转成 {@link Policy}。
  *
- * 缺 `name` 时取文件所在目录名，`stages` 与 `redlines` 不是数组时按空数组处理。
+ * 缺 `name` 时取文件所在目录名，`redlines` 不是数组时按空数组处理。
  */
-function toContract(data: ContractData, file: string): Contract {
+function toPolicy(data: PolicyData, file: string): Policy {
   const redlines = Array.isArray(data.redlines) ? data.redlines : [];
   const { map, failed } = compileRedlines(redlines);
   return {
@@ -174,7 +177,6 @@ function toContract(data: ContractData, file: string): Contract {
     file,
     name: typeof data.name === "string" && data.name ? data.name : basename(dirname(file)),
     domain: typeof data.domain === "string" ? data.domain : "",
-    stages: Array.isArray(data.stages) ? data.stages : [],
     redlines,
     localGuard: (data.local_guard ?? {}) as LocalGuardConfig,
     compiled: map,
@@ -183,14 +185,14 @@ function toContract(data: ContractData, file: string): Contract {
 }
 
 /**
- * 可用契约名清单，按字典序返回。供报错时列出可选项。
+ * 可用守卫名清单，按字典序返回。供报错时列出可选项。
  *
- * @param searchDirs 额外的搜索目录，含义同 {@link iterContracts}。
+ * @param searchDirs 额外的搜索目录，含义同 {@link iterPolicies}。
  */
-export function contractNames(searchDirs: readonly string[] = []): string[] {
+export function policyNames(searchDirs: readonly string[] = []): string[] {
   const names = new Set<string>();
-  for (const file of iterContracts(searchDirs)) {
-    const d = readJson<ContractData | null>(file, null);
+  for (const file of iterPolicies(searchDirs)) {
+    const d = readJson<PolicyData | null>(file, null);
     if (!d) continue;
     names.add(d.name || basename(dirname(file)));
   }
@@ -198,30 +200,30 @@ export function contractNames(searchDirs: readonly string[] = []): string[] {
 }
 
 /**
- * 该串是否按“文件路径”对待（而不是契约名）：`.contract.json` 或任意 `.json`。
+ * 该串是否按“文件路径”对待（而不是守卫名）：任意 `.json` 后缀。
  *
- * 路径形态的 spec 直接当文件读；其余按契约名 / 末级目录名在搜索目录里找。
+ * 路径形态的 spec 直接当文件读；其余按守卫名 / 末级目录名在搜索目录里找。
  */
 function looksLikePath(spec: string): boolean {
-  return CONTRACT_BASENAME.test(spec) || spec.endsWith(".json");
+  return /\.json$/i.test(spec);
 }
 
 /**
- * 按名字或路径定位契约文件，不读内容。
+ * 按名字或路径定位守卫文件，不读内容。
  *
  * 路径形态原样返回（读不到由调用方给出针对性报错），名字形态遍历
- * {@link iterContracts} 匹配 `name` 或所在目录名。`loadContract` 与
- * `readContractFile` 共用这一份解析，避免两处各自实现后在“同名契约谁优先”
+ * {@link iterPolicies} 匹配 `name` 或所在目录名。`loadPolicy` 与
+ * `readPolicyFile` 共用这一份解析，避免两处各自实现后在“同名守卫谁优先”
  * 上给出不同结论。
  */
-function locateContract(spec: string, searchDirs: readonly string[]): string | null {
+function locatePolicy(spec: string, searchDirs: readonly string[]): string | null {
   const s = String(spec ?? "").trim();
   if (!s) return null;
   if (looksLikePath(s)) return s;
 
   const wanted = s.toLowerCase();
-  for (const file of iterContracts(searchDirs)) {
-    const d = readJson<ContractData | null>(file, null);
+  for (const file of iterPolicies(searchDirs)) {
+    const d = readJson<PolicyData | null>(file, null);
     if (!d) continue;
     const byName = String(d.name ?? "").toLowerCase();
     const byDir = basename(dirname(file)).toLowerCase();
@@ -231,39 +233,37 @@ function locateContract(spec: string, searchDirs: readonly string[]): string | n
 }
 
 /**
- * 按名字或路径加载契约。
+ * 按名字或路径加载守卫。
  *
- * @param spec 契约名、文件路径，或 `minimal`（通用默认契约）
+ * @param spec 守卫名、文件路径，或 `minimal`（通用默认守卫）
  * @param searchDirs 额外的搜索目录（宿主 skills/ 等），由顶层传入
  * @returns 找不到或读不出（文件不存在、JSON 损坏）返回 null，由调用方决定是报错还是改用默认
  */
-export function loadContract(spec: string, searchDirs: readonly string[] = []): Contract | null {
-  const file = locateContract(spec, searchDirs);
+export function loadPolicy(spec: string, searchDirs: readonly string[] = []): Policy | null {
+  const file = locatePolicy(spec, searchDirs);
   if (!file) return null;
-  const d = readJson<ContractData | null>(file, null);
-  return d ? toContract(d, file) : null;
+  const d = readJson<PolicyData | null>(file, null);
+  return d ? toPolicy(d, file) : null;
 }
 
 
-/** 契约元信息：用于 contract_reload 事件的前后对比。 */
-export interface ContractMeta {
-  stages: string[];
-  shardCount: number;
-  thresholdCount: number;
+/** 守卫元信息：用于 policy_reload 事件的前后对比。 */
+export interface PolicyMeta {
+  redlineCount: number;
 }
 
-/** reloadContract 的返回：包含上一份（prev）与这一份（next）的元信息。 */
-export interface HotContract {
-  contract: Contract;
+/** reloadPolicy 的返回：包含上一份（prev）与这一份（next）的元信息。 */
+export interface HotPolicy {
+  policy: Policy;
   file: string;
   mtimeMs: number;
   hash: string;
   /** 与 prev 相比是否发生变化（mtime 或内容哈希任一不同即算变）。 */
   changed: boolean;
-  /** 解析失败时存在：说明沿用了上一份可用契约。 */
+  /** 解析失败时存在：说明沿用了上一份可用守卫。 */
   error?: string;
-  prev?: ContractMeta | undefined;
-  next?: ContractMeta | undefined;
+  prev?: PolicyMeta | undefined;
+  next?: PolicyMeta | undefined;
 }
 
 /** FNV-1a 内容哈希：用于判重，比整段比对便宜，且对内容变化敏感。 */
@@ -276,64 +276,33 @@ function hashContent(raw: string): string {
   return `${h.toString(16)}:${raw.length}`;
 }
 
-/** 递归数门槛条目：leaf 的 `type` 算一条，all_of/any_of 递归。 */
-function countThresholds(contract: Contract): number {
-  let n = 0;
-  const walk = (spec: unknown): void => {
-    if (!spec || typeof spec !== "object") return;
-    const s = spec as Record<string, unknown>;
-    if (typeof s.type === "string") {
-      n += 1;
-      return;
-    }
-    const arr = Array.isArray(s.checks) ? s.checks : Array.isArray(s.of) ? s.of : null;
-    if (arr) for (const c of arr) walk(c);
-  };
-  for (const st of contract.stages) walk((st as unknown as { done?: unknown }).done);
-  return n;
-}
-
-/** 契约全部阶段的分片总数。 */
-function shardTotal(contract: Contract): number {
-  let n = 0;
-  for (const st of contract.stages) {
-    const raw = (st as unknown as { parallel?: unknown }).parallel;
-    if (Array.isArray(raw)) n += raw.length;
-  }
-  return n;
-}
-
-function metaOf(contract: Contract): ContractMeta {
-  return {
-    stages: contract.stages.map((s) => s.id),
-    shardCount: shardTotal(contract),
-    thresholdCount: countThresholds(contract),
-  };
+function metaOf(policy: Policy): PolicyMeta {
+  return { redlineCount: policy.redlines.length };
 }
 
 /**
- * 契约文件的读盘与解析结果。`ok` 为 false 时 `error` 给出可展示的原因。
+ * 守卫文件的读盘与解析结果。`ok` 为 false 时 `error` 给出可展示的原因。
  */
-export type ContractSource =
-  | { ok: true; file: string; raw: string; contract: Contract; mtimeMs: number }
+export type PolicySource =
+  | { ok: true; file: string; raw: string; policy: Policy; mtimeMs: number }
   | { ok: false; error: string };
 
 /**
- * 解析契约文件。读盘与 JSON 解析分两步返回错误，使调用方能在热加载时保留上一份可用契约，
+ * 解析守卫文件。读盘与 JSON 解析分两步返回错误，使调用方能在热加载时保留上一份可用守卫，
  * 而不是抛错中断监工循环。
  *
- * @param spec 契约名或文件路径。
- * @param searchDirs 额外的搜索目录，含义同 {@link iterContracts}。
- * @returns 成功时给出契约与原文；定位不到、读不出或 JSON 损坏时返回 `ok: false` 与原因。
+ * @param spec 守卫名或文件路径。
+ * @param searchDirs 额外的搜索目录，含义同 {@link iterPolicies}。
+ * @returns 成功时给出守卫与原文；定位不到、读不出或 JSON 损坏时返回 `ok: false` 与原因。
  */
-export function readContractFile(spec: string, searchDirs: readonly string[] = []): ContractSource {
-  const file = locateContract(spec, searchDirs);
+export function readPolicyFile(spec: string, searchDirs: readonly string[] = []): PolicySource {
+  const file = locatePolicy(spec, searchDirs);
   if (!file) {
     return {
       ok: false,
       error: looksLikePath(String(spec ?? "").trim())
-        ? `读不到任务列表文件：${String(spec ?? "").trim()}`
-        : `找不到任务列表：${spec}`,
+        ? `读不到守卫文件：${String(spec ?? "").trim()}`
+        : `找不到守卫：${spec}`,
     };
   }
 
@@ -342,14 +311,14 @@ export function readContractFile(spec: string, searchDirs: readonly string[] = [
     raw = readFileSync(file, "utf8");
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code ?? "";
-    return { ok: false, error: `读不到任务列表文件：${file}${code ? `（${code}）` : ""}` };
+    return { ok: false, error: `读不到守卫文件：${file}${code ? `（${code}）` : ""}` };
   }
 
-  let data: ContractData;
+  let data: PolicyData;
   try {
-    data = JSON.parse(raw) as ContractData;
+    data = JSON.parse(raw) as PolicyData;
   } catch (e) {
-    return { ok: false, error: `任务列表 JSON 解析失败：${String((e as Error).message ?? e)}` };
+    return { ok: false, error: `守卫 JSON 解析失败：${String((e as Error).message ?? e)}` };
   }
 
   let mtimeMs = 0;
@@ -358,36 +327,36 @@ export function readContractFile(spec: string, searchDirs: readonly string[] = [
   } catch {
     mtimeMs = 0;
   }
-  return { ok: true, file, raw, contract: toContract(data, file), mtimeMs };
+  return { ok: true, file, raw, policy: toPolicy(data, file), mtimeMs };
 }
 
 /**
- * 每轮调度调用：重读契约，按 mtime 与内容哈希判变化。
+ * 每轮调度调用：重读守卫，按 mtime 与内容哈希判变化。
  *
- * 解析失败且 `prev` 存在时，沿用上一份契约并回报 `error`，不中断调度；
+ * 解析失败且 `prev` 存在时，沿用上一份守卫并回报 `error`，不中断调度；
  * 首读就失败（无 `prev`）则抛错，由调用方决定退出还是改用默认。
  *
- * @param prev 上一份契约的定位信息与哈希，用于比对。
+ * @param prev 上一份守卫的定位信息与哈希，用于比对。
  * @param fallbackFile 按名定位失败时改读的文件（`capitalist adopt` 记下的绝对路径）。
  * @throws 首读即解析失败时抛出。
  */
-export function reloadContract(
+export function reloadPolicy(
   spec: string,
   searchDirs: readonly string[] = [],
-  prev?: { file: string; mtimeMs: number; hash: string; contract: Contract },
+  prev?: { file: string; mtimeMs: number; hash: string; policy: Policy },
   fallbackFile?: string,
-): HotContract {
-  let res = readContractFile(spec, searchDirs);
-  /* 契约文件不一定在宿主 skills 目录下（比如 adopt 时给的是任务根外的路径），
+): HotPolicy {
+  let res = readPolicyFile(spec, searchDirs);
+  /* 守卫文件不一定在宿主 skills 目录下（比如 adopt 时给的是任务根外的路径），
      按名搜不到就退回 adopt 记下的绝对路径，避免每轮调度重复报解析失败。 */
   if (!res.ok && fallbackFile) {
-    const byPath = readContractFile(fallbackFile, []);
+    const byPath = readPolicyFile(fallbackFile, []);
     if (byPath.ok) res = byPath;
   }
   if (!res.ok) {
     if (prev) {
       return {
-        contract: prev.contract,
+        policy: prev.policy,
         file: prev.file,
         mtimeMs: prev.mtimeMs,
         hash: prev.hash,
@@ -403,201 +372,69 @@ export function reloadContract(
   const changed =
     !prev || prev.file !== res.file || prev.mtimeMs !== res.mtimeMs || prev.hash !== hash;
   return {
-    contract: res.contract,
+    policy: res.policy,
     file: res.file,
     mtimeMs: res.mtimeMs,
     hash,
     changed,
-    prev: prev ? metaOf(prev.contract) : undefined,
-    next: metaOf(res.contract),
+    prev: prev ? metaOf(prev.policy) : undefined,
+    next: metaOf(res.policy),
   };
 }
 
 
-/** 契约分两层，所有权不同（R-18）。 */
-
 /**
- * 需求层指纹：仅取需求层字段，序列化后用于比对。
+ * 列出被放宽的红线：被删除的，或级别下调的。
  *
- * @returns JSON 字符串。字段顺序固定，同一份需求层数据始终得到同一结果。
+ * 放宽边界属于操作者的显式决定，这里只报告，不阻断；工作进程自行改守卫文件时，
+ * 这条记录是唯一的痕迹。
  */
-export function requirementFingerprint(data: ContractData): string {
-  const stages = Array.isArray(data.stages) ? data.stages : [];
-  const req = stages.map((s) => ({
-    id: s.id,
-    name: s.name,
-    goal: s.goal,
-    next: s.next,
-    acceptance: (s as unknown as Record<string, unknown>).acceptance,
-  }));
-  return JSON.stringify({ name: data.name, domain: data.domain, stages: req });
-}
-
-/** 需求层违规：删除需求条目、降低验收标准。监工遇到应拒绝并转 ask。 */
-export interface RequirementViolation {
-  kind: "delete_stage" | "lower_acceptance";
-  stage?: string;
-  detail: string;
-}
-
-/**
- * 检测需求层违规。只针对“删除需求条目”与“降低验收标准”两种明确禁止的动作：
- *
- * - 阶段被删：需求条目消失；
- * - 验收标准被删或大幅削弱（文本被砍掉一半以上，视为降低标准）。
- *
- * 普通的 goal/name 微调、acceptance 增补不在其列，避免良性编辑被误拒。
- *
- * @returns 违规列表，无违规时返回空数组。
- */
-export function detectRequirementViolation(prev: ContractData, next: ContractData): RequirementViolation[] {
-  const out: RequirementViolation[] = [];
-  const prevStages = Array.isArray(prev.stages) ? prev.stages : [];
-  const nextStages = Array.isArray(next.stages) ? next.stages : [];
-  const nextById = new Map(nextStages.map((s) => [s.id, s]));
-  for (const ps of prevStages) {
-    const ns = nextById.get(ps.id);
-    if (!ns) {
-      out.push({ kind: "delete_stage", stage: ps.id, detail: `需求条目对应的阶段 ${ps.id} 被删除` });
+export function weakenedRedlines(prev: PolicyData, next: PolicyData): string[] {
+  const before = Array.isArray(prev.redlines) ? prev.redlines : [];
+  const after = new Map((Array.isArray(next.redlines) ? next.redlines : []).map((r) => [r.id, r]));
+  const out: string[] = [];
+  for (const r of before) {
+    const now = after.get(r.id);
+    if (!now) {
+      out.push(`${r.id} 已删除`);
       continue;
     }
-    const pa = (ps as unknown as Record<string, unknown>).acceptance;
-    const na = (ns as unknown as Record<string, unknown>).acceptance;
-    if (pa != null && (na == null || na === "")) {
-      out.push({ kind: "lower_acceptance", stage: ps.id, detail: `阶段 ${ps.id} 的验收标准被删除（降低）` });
-    } else if (typeof pa === "string" && typeof na === "string") {
-      if (na.length < pa.length * 0.5 && pa.length > 20) {
-        out.push({
-          kind: "lower_acceptance",
-          stage: ps.id,
-          detail: `阶段 ${ps.id} 的验收标准被大幅削弱（由 ${pa.length} 字减为 ${na.length} 字）`,
-        });
-      }
-    }
+    const was = LEVEL_RANK[String(r.level)] ?? 0;
+    const is = LEVEL_RANK[String(now.level)] ?? 0;
+    if (is < was) out.push(`${r.id} 由 ${r.level} 降为 ${now.level}`);
   }
   return out;
 }
 
-/** 单个分片的编排层差异。 */
-export interface ShardOrchDiff {
-  id: string;
-  added?: boolean;
-  removed?: boolean;
-  model?: { prev?: string | undefined; next?: string | undefined };
-  required?: { prev: boolean; next: boolean };
+export function prevPolicyPath(root: string): string {
+  return configLoc.policyPrev(root);
 }
 
-/** 编排层差异。`stages` 只含有差异的阶段。 */
-export interface OrchestrationDiff {
-  stageOrder?: { prev: string[]; next: string[] };
-  defaultModel?: { prev?: string | undefined; next?: string | undefined };
-  stages: Array<{
-    id: string;
-    shardCount?: { prev: number; next: number };
-    shards: ShardOrchDiff[];
-    thresholdChanged?: boolean;
-  }>;
+export function savePrevPolicy(root: string, data: PolicyData): void {
+  writeJson(prevPolicyPath(root), data);
+}
+
+export function readPrevPolicy(root: string): PolicyData | null {
+  return readJson<PolicyData | null>(prevPolicyPath(root), null);
 }
 
 /**
- * 编排层差异：阶段顺序、default_model、分片增删/模型/required、门槛检查项。
- *
- * 删除阶段属需求层，不在此处描述。
- *
- * @returns 差异结构。无差异时 `stages` 为空数组，且不含 `stageOrder` 与 `defaultModel`。
- */
-export function orchestrationDiff(prev: ContractData, next: ContractData): OrchestrationDiff {
-  const prevStages = Array.isArray(prev.stages) ? prev.stages : [];
-  const nextStages = Array.isArray(next.stages) ? next.stages : [];
-  const nextMap = new Map(nextStages.map((s) => [s.id, s]));
-
-  const shardList = (s?: Stage): { id: string; model?: string | undefined; required: boolean }[] => {
-    const p = (s as unknown as { parallel?: unknown })?.parallel;
-    if (!Array.isArray(p)) return [];
-    return p
-      .map((it) => {
-        const r = it as Record<string, unknown>;
-        return {
-          id: String(r.id ?? ""),
-          model: typeof r.model === "string" ? r.model : undefined,
-          required: r.required === false ? false : true,
-        };
-      })
-      .filter((x) => x.id);
-  };
-
-  const stages: OrchestrationDiff["stages"] = [];
-  for (const ps of prevStages) {
-    const ns = nextMap.get(ps.id);
-    if (!ns) continue; // 删阶段属需求层，不在此处描述
-    const pa = shardList(ps);
-    const na = shardList(ns);
-    const paMap = new Map(pa.map((x) => [x.id, x]));
-    const naMap = new Map(na.map((x) => [x.id, x]));
-    const shards: ShardOrchDiff[] = [];
-    for (const a of pa) {
-      const b = naMap.get(a.id);
-      if (!b) {
-        shards.push({ id: a.id, removed: true });
-      } else {
-        const sd: ShardOrchDiff = { id: a.id };
-        if (a.model !== b.model) sd.model = { prev: a.model, next: b.model };
-        if (a.required !== b.required) sd.required = { prev: a.required, next: b.required };
-        if (sd.model || sd.required) shards.push(sd);
-      }
-    }
-    for (const b of na) {
-      if (!paMap.has(b.id)) {
-        shards.push({ id: b.id, added: true, model: { prev: undefined, next: b.model }, required: { prev: true, next: b.required } });
-      }
-    }
-    const thresholdChanged =
-      JSON.stringify((ps as unknown as Record<string, unknown>).done) !==
-      JSON.stringify((ns as unknown as Record<string, unknown>).done);
-    if (shards.length > 0 || thresholdChanged) {
-      stages.push({ id: ps.id, shardCount: { prev: pa.length, next: na.length }, shards, thresholdChanged });
-    }
-  }
-
-  const diff: OrchestrationDiff = { stages };
-  const prevOrder = prevStages.map((s) => s.id);
-  const nextOrder = nextStages.map((s) => s.id);
-  if (JSON.stringify(prevOrder) !== JSON.stringify(nextOrder)) diff.stageOrder = { prev: prevOrder, next: nextOrder };
-  const pdm = (prev as Record<string, unknown>).default_model;
-  const ndm = (next as Record<string, unknown>).default_model;
-  if (pdm !== ndm) diff.defaultModel = { prev: pdm as string | undefined, next: ndm as string | undefined };
-  return diff;
-}
-
-export function prevContractPath(root: string): string {
-  return configLoc.contractPrev(root);
-}
-
-export function savePrevContract(root: string, data: ContractData): void {
-  writeJson(prevContractPath(root), data);
-}
-
-export function readPrevContract(root: string): ContractData | null {
-  return readJson<ContractData | null>(prevContractPath(root), null);
-}
-
-/**
- * 把契约数据原子写回文件（回滚与监工自行调整编排层时使用）。
+ * 把守卫数据原子写回文件（回滚与监工自行调整编排层时使用）。
  *
  * @throws 落盘失败时抛出。
  */
-export function writeContractFile(file: string, data: ContractData): void {
+export function writePolicyFile(file: string, data: PolicyData): void {
   writeJson(file, data);
 }
 
-export function rollbackContract(root: string, file: string): ContractData | null {
-  const prev = readPrevContract(root);
+export function rollbackPolicy(root: string, file: string): PolicyData | null {
+  const prev = readPrevPolicy(root);
   if (!prev) return null;
   try {
-    writeContractFile(file, prev);
+    writePolicyFile(file, prev);
     return prev;
   } catch (err) {
-    recordEvent(root, "contract_rollback_failed", {
+    recordEvent(root, "policy_rollback_failed", {
       file,
       error: String((err as Error).message ?? err),
     });
@@ -607,7 +444,7 @@ export function rollbackContract(root: string, file: string): ContractData | nul
 
 
 /**
- * 分片级模型优先级链：分片 model -> 契约 default_model -> 命令行 --worker-model -> 宿主默认。
+ * 分片级模型优先级链：分片 model -> 守卫 default_model -> 命令行 --worker-model -> 宿主默认。
  *
  * 返回“去重后的非空候选 + 末尾一个 undefined（宿主默认）”。{@link resolveShardModel} 取首项，
  * {@link resolveShardModelFallback} 取次项（即上一档失败时的默认值）。前导 undefined 会被跳过，
@@ -617,12 +454,12 @@ export function rollbackContract(root: string, file: string): ContractData | nul
  */
 export function shardModelChain(
   shard: { model?: string | undefined },
-  contract: Contract,
+  policy: Policy,
   cliModel?: string | undefined,
 ): (string | undefined)[] {
   const raw = [
     shard?.model,
-    (contract.data as { default_model?: string }).default_model,
+    (policy.data as { default_model?: string }).default_model,
     cliModel,
   ];
   const chain: (string | undefined)[] = [];
@@ -641,10 +478,10 @@ export function shardModelChain(
  */
 export function resolveShardModel(
   shard: { model?: string | undefined },
-  contract: Contract,
+  policy: Policy,
   cliModel?: string | undefined,
 ): string | undefined {
-  return shardModelChain(shard, contract, cliModel)[0];
+  return shardModelChain(shard, policy, cliModel)[0];
 }
 
 /**
@@ -654,55 +491,11 @@ export function resolveShardModel(
  */
 export function resolveShardModelFallback(
   shard: { model?: string | undefined },
-  contract: Contract,
+  policy: Policy,
   cliModel?: string | undefined,
 ): string | undefined {
-  const c = shardModelChain(shard, contract, cliModel);
+  const c = shardModelChain(shard, policy, cliModel);
   return c.length > 1 ? c[1] : undefined;
-}
-
-/**
- * 按阶段 id 取阶段定义。
- *
- * @returns 阶段定义；id 不存在时返回 undefined。
- */
-export function stageById(contract: Contract, id: string): Stage | undefined {
-  return contract.stages.find((s) => s.id === id);
-}
-
-/**
- * 阶段 id 顺序，严格按契约数组顺序。
- *
- * 契约里没有“下一阶段”字段：`next` 是给使用者的动作说明，不是流程指针。顺序推进与
- * 归档的 Python 实现 `stage_ids()` 一致，两边对顺序的理解不同，同一条 `capitalist advance`
- * 会走到不同阶段，已有任务就无法在两套实现之间接手。
- */
-export function stageIds(contract: Contract): string[] {
-  return contract.stages.map((s) => s.id);
-}
-
-/**
- * 下一阶段 id。与归档的 Python 实现 `next_stage()` 逐条对齐：未知 id 改用首阶段，
- * 已在末阶段时返回自身（调用方应先查 {@link isLastStage}）。
- *
- * @returns 下一阶段 id；契约没有阶段时返回 null。
- */
-export function nextStageId(contract: Contract, id: string): string | null {
-  const ids = stageIds(contract);
-  if (ids.length === 0) return null;
-  const i = ids.indexOf(id);
-  /*
-   * 当前阶段不在契约里时返回 null，不返回第一阶段：返回会让状态机“推进”到原阶段，
-   * 事件记为 X -> X，看板显示一次并不存在的推进，实际是状态与契约对不上。
-   */
-  if (i < 0) return null;
-  return ids[i + 1] ?? ids[ids.length - 1] ?? null;
-}
-
-/** 判断给定阶段是否为契约的最后一阶段。契约没有阶段时返回 false。 */
-export function isLastStage(contract: Contract, id: string): boolean {
-  const ids = stageIds(contract);
-  return ids.length > 0 && ids[ids.length - 1] === id;
 }
 
 /**
@@ -710,8 +503,8 @@ export function isLastStage(contract: Contract, id: string): boolean {
  *
  * @returns 红线 `fix` 字段的文本；该红线不存在或未写 `fix` 时返回中性说明，不臆造领域表述。
  */
-export function redlineFix(contract: Contract, id: string): string {
-  const r = contract.redlines.find((x) => x.id === id);
+export function redlineFix(policy: Policy, id: string): string {
+  const r = policy.redlines.find((x) => x.id === id);
   return r?.fix || "换一条不越界的做法；不确定时用 capitalist ask 由监工裁决。";
 }
 
@@ -916,12 +709,12 @@ export function instanceLeaseStatus(root: string, task: string): LeaseStatus {
  * @param text 被检查的命令文本。
  * @returns 判定结果与命中的红线列表。`skip_if` 正则非法时按“不跳过”处理。
  */
-export function evaluate(contract: Contract, text: string): GateResult {
+export function evaluate(policy: Policy, text: string): GateResult {
   const src = String(text ?? "");
   const hits: RedlineHit[] = [];
   const hasUrl = /[A-Za-z][A-Za-z0-9+.\-]*:\/\//.test(src);
 
-  for (const r of contract.redlines) {
+  for (const r of policy.redlines) {
     if (!r.id) continue;
 
     // 只作用于对外请求的红线：同一个词出现在本机命令里不构成证据
@@ -937,7 +730,7 @@ export function evaluate(contract: Contract, text: string): GateResult {
       }
     }
 
-    const rx = contract.compiled.get(r.id);
+    const rx = policy.compiled.get(r.id);
     if (!rx) continue;
     const m = rx.exec(src);
     if (!m) continue;

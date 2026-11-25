@@ -12,7 +12,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { laneKeyOf } = require("../dist/core/dispatch/commands");
 const { buildForestView } = require("../dist/supervisor/view/forestView");
 const { assignThreadNos, dispatchNoTable } = require("../dist/supervisor/usage/threadNo");
@@ -20,7 +20,7 @@ const { assignThreadNos, dispatchNoTable } = require("../dist/supervisor/usage/t
 /** 一条前置单（执行中）+ 一条等它的单；编号按台账顺序分配。 */
 function scene() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-forest-"));
-  createTaskRoot({ target: "等待编号测试", contractSpec: "minimal", root });
+  createTaskRoot({ target: "等待编号测试", policySpec: "minimal", root });
   const at = new Date(Date.now() - 60_000).toISOString();
   const pre = { id: "D-pre1", stage: "S0", shard: "", lineage: "D-pre1" };
   const next = { id: "D-next1", stage: "S0", shard: "", lineage: "D-next1" };

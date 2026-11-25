@@ -61,7 +61,7 @@ export function setNextModel(root, model) {
 
 /**
  * 更换当前派单的对话模型：后端结束当前进程，监工重派时以 `--resume` 接回历史。
- * 传空串回到契约或启动参数指定的模型。
+ * 传空串回到守卫或启动参数指定的模型。
  */
 export function setWorkerModel(root, thread, model) {
   /* /api/command 处理针对单个工作进程的动作；/api/capitalist-command 只处理监工级指令。 */

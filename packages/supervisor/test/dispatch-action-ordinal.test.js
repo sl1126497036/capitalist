@@ -41,7 +41,7 @@ test("首个非空行之前的空行不吞掉，序号从第二行开始也不�
 });
 
 test("整段每行都带序号：这是分步清单，保留", () => {
-  const list = "1. 读 contracts 目录\n2. 读 src 目录\n3. 汇总问题清单";
+  const list = "1. 读 policies 目录\n2. 读 src 目录\n3. 汇总问题清单";
   assert.strictEqual(stripLeadOrdinal(list), list);
 });
 

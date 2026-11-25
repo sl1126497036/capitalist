@@ -1,9 +1,9 @@
 /**
- * 派单标记行：`TITLE:` / `PARENT:` / `PARENT_REASON:` / `AFTER:` / `GROUP:` / `SUPERSEDE:` /
- * `INSERT:` / `INSERT_MODE:`。
+ * 派单标记行：`TITLE:` / `ACCEPTANCE:` / `PARENT:` / `PARENT_REASON:` / `AFTER:` / `GROUP:` /
+ * `SUPERSEDE:` / `INSERT:` / `INSERT_MODE:`。
  *
  * 抽成一处的理由：这些正则与提示词里的语法一一对应，改语法时若只改提示词不改正则，
- * 模型写了新写法却被无提示地当作正文。放同一个文件，改一处即可对照。
+ * 模型写了新写法却被无提示地当作正文。放同一个文件，改一处就能对照。
  *
  * 只认行首（允许前导空白）。行中出现的 `PARENT:` 属于正文，不当作标记。
  * 工作进程常在自己的说明里引用这些字样，误切会把正文内容写入树字段。
@@ -17,6 +17,14 @@
  * 缺该行时建单侧仍按正文摘要兜底，不阻塞派单。
  */
 export const TITLE_LINE = /^\s*(?:TITLE|标题)[:：]\s*(.*)$/i;
+
+/**
+ * 验收判据行：`ACCEPTANCE: <怎样算完成>`。
+ *
+ * 随派单下发，是审查侧判断报告能否结束的依据，也是执行侧自检的口径。不写时审查退回通用口径，
+ * 因此这一行不强制；但结构复杂、产出物不直观的单应当写。
+ */
+export const ACCEPTANCE_LINE = /^\s*(?:ACCEPTANCE|验收判据|验收标准)[:：]\s*(.*)$/i;
 
 /** 树边行：`PARENT: #03` / `PARENT: none`。 */
 export const PARENT_LINE = /^\s*(?:PARENT|父节点)[:：]\s*(.*)$/i;

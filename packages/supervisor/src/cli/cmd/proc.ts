@@ -101,11 +101,10 @@ export function cmdSuperviseStop(p: Parsed): number {
   return 0;
 }
 
-/** 从派单台账取这张单的阶段/分片/派生链，收工闸靠它判断“哪些插话属于这一片”。 */
-function loadDispatchScope(root: string, id: string): { stage: string; shard: string; lineage: string } {
+/** 从派单台账取这张单的分片与派生链，收工闸靠它判断“哪些插话属于这一片”。 */
+function loadDispatchScope(root: string, id: string): { shard: string; lineage: string } {
   const d = readDispatches(root).find((x) => String(x.id) === id);
   return {
-    stage: String(d?.stage ?? ""),
     shard: String(d?.shard ?? ""),
     lineage: String((d as { lineage?: string } | undefined)?.lineage ?? id),
   };
@@ -264,7 +263,6 @@ export async function cmdReport(p: Parsed): Promise<number> {
       if (!isDirectiveOpen(x)) return false;
       const mine = directiveMatches(x, {
         shard: target.shard,
-        stage: target.stage,
         dispatchId: id,
         lineage: target.lineage,
         ...(me ? { workerId: me } : {}),
@@ -316,7 +314,6 @@ export async function cmdReport(p: Parsed): Promise<number> {
       if (fw) saveWorker(root, { ...fw, status: "done" });
       recordEvent(root, "dispatch_done", {
         dispatch: id,
-        stage: forced.stage,
         shard: forced.shard ?? "",
         worker: forced.worker ?? "",
         note: why,
@@ -355,7 +352,6 @@ export async function cmdReport(p: Parsed): Promise<number> {
       patchDispatch(root, id, { added_reqs: lines });
       recordEvent(root, "dispatch_added_reqs", {
         dispatch: id,
-        stage: rv.stage,
         shard: rv.shard ?? "",
         worker: rv.worker ?? "",
         reqs: lines,
@@ -363,7 +359,6 @@ export async function cmdReport(p: Parsed): Promise<number> {
     }
     recordEvent(root, "dispatch_reported", {
       dispatch: id,
-      stage: rv.stage,
       shard: rv.shard ?? "",
       worker: rv.worker ?? "",
       note: note ?? "",
@@ -375,7 +370,6 @@ export async function cmdReport(p: Parsed): Promise<number> {
       appendMq(root, {
         from: String(rv.worker ?? ""),
         dispatch: rv.id,
-        stage: rv.stage,
         shard: String(rv.shard ?? ""),
         kind: "done",
         severity: "warn",
@@ -433,7 +427,6 @@ export async function cmdReport(p: Parsed): Promise<number> {
 
   recordEvent(root, "dispatch_failed", {
     dispatch: id,
-    stage: d.stage,
     shard: d.shard ?? "",
     worker,
     note: note ?? "",
@@ -471,7 +464,6 @@ export function cmdNext(p: Parsed): number {
     session,
     dispatch: claimed.id,
     shard: claimed.shard ?? "",
-    stage: claimed.stage,
     started_at: now,
     heartbeat_at: now,
     heartbeat_ts: Date.now() / 1000,
@@ -480,7 +472,7 @@ export function cmdNext(p: Parsed): number {
   });
 
   write(
-    t(`Dispatch ${claimed.id} (${claimed.stage}${claimed.shard ? `/${claimed.shard}` : ""})\n`, `派单 ${claimed.id}（${claimed.stage}${claimed.shard ? `/${claimed.shard}` : ""}）\n`) +
+    t(`Dispatch ${claimed.id} (${claimed.shard || "no shard"})\n`, `派单 ${claimed.id}（${claimed.shard || "不分片"}）\n`) +
       `${claimed.action}\n\n` +
       `${buildGroundingBlock(claimed).join("\n")}\n\n` +
       t(`When done: capitalist report ${claimed.id} done --note "<what was done>" --evidence "<deliverable / checks / result>"\n`, `完成后：capitalist report ${claimed.id} done --note "<做了什么>" --evidence "<产出物在哪里 / 核对了什么 / 结果>"\n`) +
@@ -493,7 +485,7 @@ export function cmdNext(p: Parsed): number {
  * 唤醒暂停的派单。
  *
  * 省略目标时唤醒本任务根全部暂停单。目标写法与 `capitalist close` 一致：派单 id、分片名
- * 或 `shard:<名>`。唤醒只解除暂停标记，不改阶段、不清重派计数；唤醒后的单按正常队列顺序
+ * 或 `shard:<名>`。唤醒只解除暂停标记，不改任务树、不清重派计数；唤醒后的单按正常队列顺序
  * 参与调度，失败仍按原有退避与上限重派。
  */
 export function cmdWake(p: Parsed): number {
@@ -542,7 +534,6 @@ export function cmdWake(p: Parsed): number {
     lines.push(`${r.id}  ${r.from === r.to ? r.to : t(`${r.from} -> ${r.to}`, `${r.from} 改为 ${r.to}`)}`);
     recordEvent(root, "dispatch_wake", {
       dispatch: r.id,
-      stage: d.stage,
       shard: d.shard ?? "",
       from: r.from,
       to: r.to,
@@ -577,7 +568,7 @@ export function cmdWorkers(p: Parsed): number {
   for (const w of rows) {
     const mode = w.mode === "visible" ? t("  [window]", "  [窗口]") : "";
     write(
-      `${w.id}  ${w.status.padEnd(8)}  pid ${String(w.pid).padEnd(7)}  ${w.host.padEnd(9)}  ${w.stage}  ${w.dispatch}${mode}\n`,
+      `${w.id}  ${w.status.padEnd(8)}  pid ${String(w.pid).padEnd(7)}  ${w.host.padEnd(9)}  ${w.shard || "-"}  ${w.dispatch}${mode}\n`,
     );
     // 退出/失败的 worker 附一句原因：只显示 exited 等于让人去翻日志。
     if (w.status === "exited" || w.status === "failed") {
@@ -664,7 +655,7 @@ export function cmdClose(p: Parsed): number {
     writeJson({ ok: true, ...r });
     return 0;
   }
-  const where = r.shard ? `${r.shard}` : t("(whole stage)", "整阶段");
+  const where = r.shard ? `${r.shard}` : t("(whole task)", "整条任务");
   write(
     t(`Closed ${r.dispatch} (${where}), ${r.from} -> closed.\n`, `已结束 ${r.dispatch}（${where}），原状态 ${r.from} -> closed。\n`) +
       (r.worker
@@ -695,7 +686,7 @@ export function cmdPromote(p: Parsed): number {
     writeJson({ ...r });
     return 0;
   }
-  const where = r.shard ? `${r.shard}` : t("(whole stage)", "整阶段");
+  const where = r.shard ? `${r.shard}` : t("(whole task)", "整条任务");
   const live = listWorkers(root).filter((w) => w.status === "running" || w.status === "starting").length;
   const cap = Math.max(1, Number(loadSupervisor(root)?.max_workers ?? 1) || 1);
   write(

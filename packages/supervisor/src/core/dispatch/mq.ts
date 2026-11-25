@@ -24,7 +24,6 @@ export interface MqMessage {
   /** 发件的工作进程号（`2-P1`）。 */
   from: string;
   dispatch: string;
-  stage: string;
   shard: string;
   kind: MqKind;
   severity: MqSeverity;
@@ -51,7 +50,7 @@ function cursorPath(root: string): string {
 
 function newId(dispatch: string): string {
   /* 申报由工作进程发给监工，方向 `W2S`；归属任务号从派单号反解。 */
-  const no = taskNoOfDispatchId(dispatch) || "S0";
+  const no = taskNoOfDispatchId(dispatch) || "0";
   return msgId(no, "W2S");
 }
 
@@ -66,7 +65,6 @@ export function appendMq(
     at_ts: Date.now() / 1000,
     from: input.from,
     dispatch: input.dispatch,
-    stage: input.stage,
     shard: input.shard,
     kind: input.kind,
     severity: input.severity,

@@ -16,7 +16,7 @@ const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const cmds = require("../dist/core/dispatch/commands");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { loadState } = require("../dist/core/record/state");
 const { appendSupervisorDirective, listSupervisorDirectives } = require("../dist/supervisor/channel/direct");
 const { directiveOwnId } = require("../dist/core/message/msgIdentity");
@@ -24,7 +24,7 @@ const loop = require("../dist/supervisor/loop");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-amend-scope-"));
-  createTaskRoot({ target: "追加作用域测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "追加作用域测试", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -41,7 +41,7 @@ function seedDispatch(root, extra) {
 async function runDirectives(root) {
   await loop.__testing.applySupervisorDirectives({
     root,
-    contract: { stages: [], data: {} },
+    policy: { data: {} },
     state: loadState(root),
     wopts: {},
     concurrency: null,

@@ -51,7 +51,14 @@ export type InheritKey =
   /** 角色（work / diagnose / fix）。 */
   | "role"
   /** 多前置（遗留 `after`）。 */
-  | "after";
+  | "after"
+  /**
+   * 本单验收判据。
+   *
+   * 重派要带上：重派换的是做法，不是完成口径；丢掉它审查就退回通用口径，
+   * 重做出来的东西与前一次按两套标准衡量。
+   */
+  | "acceptance";
 
 /** 继承的默认清单：重派场景的常规组合。 */
 export const DEFAULT_INHERIT: readonly InheritKey[] = [
@@ -62,14 +69,16 @@ export const DEFAULT_INHERIT: readonly InheritKey[] = [
   "model",
   "role",
   "after",
+  "acceptance",
 ];
 
-/** 组装输入。除 `id` / `stage` / `action` 外都可省略。 */
+/** 组装输入。除 `id` / `action` 外都可省略。 */
 export interface ComposeInput {
   /** 派单 id（落盘形式 `2-3`），由取号入口发行后传入。 */
   id: string;
-  stage: string;
   action: string;
+  /** 验收判据：做到什么程度算完成。随派单下发，也是审查侧的打回依据。 */
+  acceptance?: string | undefined;
   at?: string | undefined;
   shard?: string | undefined;
   title?: string | undefined;
@@ -87,7 +96,7 @@ export interface ComposeInput {
   /** 接替的目标派单 id（落盘 `supersedes`）。 */
   supersedes?: string | undefined;
   model?: string | undefined;
-  /** 标记模型由用户显式指定；后续补派按该值沿用，不再回到契约分片模型。 */
+  /** 标记模型由用户显式指定；后续补派按该值沿用，不再回到启动参数的默认模型。 */
   modelBy?: "user" | undefined;
   modelFallback?: string | undefined;
   /** 附件路径。传空数组表示显式无附件。 */
@@ -125,6 +134,7 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
   const modelSrc = from("model");
   const roleSrc = from("role");
   const afterSrc = from("after");
+  const acceptanceSrc = from("acceptance");
 
   const picked = <T>(v: T | undefined, alt: T | undefined): T | undefined => (v !== undefined ? v : alt);
 
@@ -138,6 +148,7 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
     nonEmpty((supersedeSrc as { supersedes?: string } | undefined)?.supersedes) || undefined,
   );
   const after = picked(input.after, Array.isArray(afterSrc?.after) ? afterSrc.after : undefined);
+  const acceptance = picked(input.acceptance, nonEmpty(acceptanceSrc?.acceptance) || undefined);
   const model = picked(input.model, nonEmpty((modelSrc as { model?: string } | undefined)?.model) || undefined);
   /*
    * `model_by` 与 `model` 是一对：显式改了 model 就不继承标记（那是本次新定的口径），
@@ -156,7 +167,6 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
   const d: ComposedDispatch = {
     id: String(input.id),
     at: String(input.at ?? "") || new Date().toISOString(),
-    stage: String(input.stage ?? ""),
     /*
      * 正文行首的列表序号在建单时去掉：一条消息派多单时，模型会把“第几条”写进每单正文，
      * 而单是分头交给各自的进程的，上下文互相隔离。只拿到 `2.` 的那个会以为前面还有一条
@@ -166,6 +176,7 @@ export function composeDispatch(input: ComposeInput): ComposedDispatch {
     status: input.status ?? "open",
   };
 
+  if (nonEmpty(acceptance)) d.acceptance = String(acceptance);
   if (input.shard !== undefined) d.shard = String(input.shard);
   if (nonEmpty(title)) d.title = String(title);
   if (input.source) d.source = input.source;

@@ -6,13 +6,13 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { promoteTask } = require("../dist/core/dispatch/commands");
 const { runCommand } = require("../dist/supervisor/board");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-promote-"));
-  createTaskRoot({ target: "插队测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "插队测试", policySpec: "minimal", root: base });
   return base;
 }
 

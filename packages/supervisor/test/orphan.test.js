@@ -17,7 +17,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { reapOrphans, describePid } = require("../dist/supervisor/worker/reapOrphans");
 const { registerDisposer, disposeAll, __resetDisposers } = require("../dist/supervisor/dispose");
 const { launchWorker } = require("../dist/supervisor/worker/worker");
@@ -60,7 +60,7 @@ function deadPid() {
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-orphan-"));
-  createTaskRoot({ target: "强杀监工后不留孤儿", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "强杀监工后不留孤儿", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -222,7 +222,7 @@ test("被强制结束的监工不视为在线：心跳未过期，但 pid 已不
     heartbeat_at: now,
     heartbeat_ts: Date.now() / 1000,
     target: "强杀监工后不留孤儿",
-    contract: "minimal",
+    policy: "minimal",
     tick_sec: 5,
     worker_timeout_sec: 900,
     ticks: 3,

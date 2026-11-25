@@ -15,7 +15,7 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const { appendDispatch, readDispatches } = require(join(PKG, "dist/core/record/supervisor.js"));
 const { assignThreadNos, dispatchOfThreadNo } = require(join(PKG, "dist/supervisor/usage/threadNo.js"));
 const { laneKeyOf } = require(join(PKG, "dist/core/dispatch/commands.js"));
@@ -26,7 +26,7 @@ const loop = require(join(PKG, "dist/supervisor/loop.js"));
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-promote-no-"));
-  createTaskRoot({ target: "按号置顶", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "按号置顶", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -89,7 +89,7 @@ test("监工发出“立即执行 #N”：指令落实后置顶生效", async ()
     appendSupervisorDirective(root, { action: "promote", arg: `#${no}` });
     await loop.__testing.applySupervisorDirectives({
       root,
-      contract: { stages: [], data: {} },
+      policy: { data: {} },
       state: loadState(root),
       wopts: {},
       concurrency: null,
@@ -113,7 +113,7 @@ test("监工发出“立即执行 #N”但该编号不存在时：返回明确�
     appendSupervisorDirective(root, { action: "promote", arg: "#999" });
     await loop.__testing.applySupervisorDirectives({
       root,
-      contract: { stages: [], data: {} },
+      policy: { data: {} },
       state: loadState(root),
       wopts: {},
       concurrency: null,

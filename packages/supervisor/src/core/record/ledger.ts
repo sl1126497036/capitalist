@@ -214,7 +214,6 @@ export interface ViolationRecord {
   at_ts?: number;
   session?: string;
   role?: string;
-  stage?: string;
   kind?: string;
   rule?: string;
   label?: string;
@@ -239,7 +238,6 @@ export interface ViolationInput {
   decision?: string | undefined;
   kind?: string;
   session?: string;
-  stage?: string;
   /**
    * 回复类内容每轮都会被重新扫描，同一句话因此会被反复命中；若按句子去重，计数会立刻
    * 升到第 3 次。这类调用传 true：同一内容只记一次，直到被 resolve。
@@ -315,7 +313,6 @@ export function recordViolation(
     at_ts: Date.now() / 1000,
     session,
     role: currentSession(root, session)?.role ?? "unknown",
-    stage: v.stage ?? "",
     kind: v.kind ?? "",
     rule: v.rule,
     label: v.label,
@@ -327,7 +324,7 @@ export function recordViolation(
     resolved: false,
   });
   // appendJsonl 在写入失败时返回 false 且不抛：这里必须把真实结果透传出去，
-  // 否则调用方会以为违规已入账，实际台账里什么都没有。
+  // 否则调用方误判违规已入账，实际台账里什么都没有。
   return { nth, level, recorded: written };
 }
 
@@ -438,7 +435,7 @@ export function resolveReviews(root: string, match: string): number {
   const raw = String(match ?? "").trim();
   const idx = Number(raw);
   const byIndex = raw !== "" && Number.isInteger(idx) && idx >= 0;
-  // 空匹配是任何字符串的子串：不挡住就会把整个队列一次消完，且看起来像“匹配成功”。
+  // 空匹配是任何字符串的子串：不挡住就会把整个队列一次消完，且表现为“匹配成功”。
   const needle = normEvidence(raw);
   if (!byIndex && !needle) return 0;
 

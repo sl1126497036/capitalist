@@ -17,7 +17,10 @@ import type { Dispatch } from "../../core/record/supervisor";
 interface ThreadNoFile {
   /** 下一个待分配的号。缺省时按已有最大值 +1 推出。 */
   next?: number;
-  /** 线程 id -> 号。线程 id 是 `阶段/分片`（无分片为 `阶段/x派生链尾号`）。 */
+  /**
+   * 线程 id -> 号。线程 id 是分片名（无分片为 `x` 加派生链尾号）。
+   * 旧档里还留着带阶段前缀的键，读取时按后段匹配。
+   */
   ids?: Record<string, number>;
 }
 
@@ -133,7 +136,6 @@ export function threadIdByNo(root: string, no: number | string): string {
     .sort((a, b) => String(b.at ?? "").localeCompare(String(a.at ?? "")))[0];
   if (hit) {
     return laneKeyOf({
-      stage: String(hit.stage ?? ""),
       shard: hit.shard,
       lineage: String((hit as Dispatch & { lineage?: string }).lineage ?? hit.id),
       id: hit.id,
@@ -154,7 +156,7 @@ export function threadIdByNo(root: string, no: number | string): string {
  * 新编号体系里派单号是 `任务号-派发序`（落盘无 `#`，如 `2-2`），任务号直接编码在派单号里，
  * 不再靠 `thread-no.json` 反查线程键。按派单 id 前缀 `2-` 匹配，取派发序最大的在途单。
  *
- * 默认只认在途状态，用于“该编号当前执行到哪一步”。重开（redo）要的恰恰是已经结束的那张单，
+ * 默认只认在途状态，用于“该编号当前执行到哪一步”。重开（redo）要的是已经结束的那张单，
  * 该场合把 `includeDone` 打开，否则会被 live 过滤掉，表现为“没有编号 #01”。
  *
  * 只取终态时用 `settledOnly`：取“派发序最大的单”可能命中同批新建的替代单，
@@ -180,7 +182,7 @@ export function dispatchOfThreadNo(
     if (["open", "claimed", "reported", "review"].includes(s)) return true;
     /*
      * 重开要的是已经结束的单，而“结束”有三种终态：done、closed（用户结束）、failed。
-     * 仅依据 done 会让用户点“重开”时得到“没有编号 #NN”，而那张单就在看板上。
+     * 仅依据 done，用户点“重开”时会得到“没有编号 #NN”，而那张单就在看板上。
      */
     return opts.includeDone === true && ["done", "closed", "failed"].includes(s);
   };
@@ -212,7 +214,7 @@ export function dispatchOfThreadNo(
   if (wanted.size === 0) return undefined;
   const lineageKeyOf = (d: Dispatch): string => {
     const lin = norm((d as Dispatch & { lineage?: string }).lineage || d.id);
-    return `${norm(d.stage)}/x${lin.slice(-6)}`;
+    return `x${lin.slice(-6)}`;
   };
   return pick(
     rows.filter(
@@ -220,7 +222,6 @@ export function dispatchOfThreadNo(
         wanted.has(
           norm(
             laneKeyOf({
-              stage: String(d.stage ?? ""),
               shard: d.shard,
               lineage: String((d as Dispatch & { lineage?: string }).lineage ?? ""),
               id: d.id,
@@ -229,6 +230,26 @@ export function dispatchOfThreadNo(
         ) || wanted.has(lineageKeyOf(d)),
     ),
   );
+}
+
+/**
+ * 按任务号取一条追加（amend）的目标单。
+ *
+ * 在途优先：这条任务的追加应落到正在跑的那张单上。全部已终结时取最近一张终态单，
+ * 由调用方重开——用户对已验收的任务提出更正或返工，是明确的重派意图，不能因为
+ * “已完成”把追加拒掉；监工对已完成的验收也不一定正确。
+ *
+ * 与 `redo` 共用 `settledOnly` 口径：都取“派发序最大的已终结单”，不命中同批新建的替代单。
+ *
+ * @param rows 传入已读的台账可省一次 IO。
+ * @returns 命中的单；该任务号不存在时为 undefined。
+ */
+export function amendTargetOf(
+  root: string,
+  no: number,
+  rows: Dispatch[] = readDispatches(root),
+): Dispatch | undefined {
+  return dispatchOfThreadNo(root, no, rows) ?? dispatchOfThreadNo(root, no, rows, { settledOnly: true });
 }
 
 /**
@@ -312,7 +333,6 @@ export function dispatchNoTable(root: string): Map<string, string> {
       }
       /* 非新格式的派单 id：按线程键查旧编号表，仅兜底。 */
       const key = laneKeyOf({
-        stage: String(d.stage ?? ""),
         shard: d.shard,
         lineage: String((d as Dispatch & { lineage?: string }).lineage ?? ""),
         id,

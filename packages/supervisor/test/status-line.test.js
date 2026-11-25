@@ -14,12 +14,12 @@ const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const pause = require("../dist/core/record/pause");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { createStatusReporter, describeStatusLine } = require("../dist/supervisor/statusLine");
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-status-line-"));
-  createTaskRoot({ target: "状态行", contractSpec: "minimal", root });
+  createTaskRoot({ target: "状态行", policySpec: "minimal", root });
   return root;
 }
 

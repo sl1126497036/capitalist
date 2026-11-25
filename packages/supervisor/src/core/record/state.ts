@@ -1,15 +1,17 @@
 /**
  * 任务根状态。
  *
- * 只存事实：当前阶段、下一步动作、契约指针、档位。理由与对话历史不入状态，
+ * 只存事实：任务树进度、下一步动作、守卫指针、档位。理由与对话历史不入状态，
  * 它们无法校验，且长度无上限。
  */
 
 import { join } from "node:path";
 
-import type { Contract } from "../contract/contract";
+import type { Policy } from "../policy/policy";
 import { readJson, writeJson } from "./json";
 import { resolveMode } from "../guard/permission";
+import { migrateRoot } from "./migrate";
+import { recordEvent } from "./ledger";
 import { runtime } from "./locations";
 import { loadSupervisor, pidAlive, supervisorStaleSec } from "./supervisor";
 import type { Mode, TaskState } from "../types";
@@ -19,14 +21,41 @@ export function statePath(root: string): string {
   return runtime.state(root);
 }
 
+/** 本进程内已尝试过迁移的任务根。迁移失败（目录只读等）时不必每次读状态都重试。 */
+const migrationTried = new Set<string>();
+
 /**
  * 读任务根状态。
  *
- * @returns 状态；文件缺失、内容损坏或缺 `contract` 字段时返回 null，调用方需自行判空。
+ * 上一版把守卫名写在 `contract` 里。改名的升级路径上，磁盘上仍可能是旧结构：读到这里
+ * 就把整个任务根的旧数据迁掉，再重读一次。迁移是幂等的，没有旧数据时只多做几次 stat，
+ * 换来的好处是**没有"兼容读"分支长期留在每个调用方**。
+ *
+ * @returns 状态；文件缺失、内容损坏或缺守卫字段时返回 null，调用方需自行判空。
  */
 export function loadState(root: string): TaskState | null {
   const st = readJson<TaskState | null>(statePath(root), null);
-  return st && typeof st === "object" && st.contract ? st : null;
+  if (!st || typeof st !== "object") return null;
+  if (st.policy) return st;
+  if (!(st as { contract?: unknown }).contract) return null;
+
+  if (!migrationTried.has(root)) {
+    migrationTried.add(root);
+    const rep = migrateRoot(root);
+    if (rep.errors.length > 0) {
+      /*
+       * 这里的迁移是静默的（没人传 `--check` 也没人在看启动输出），失败会在之后
+       * 表现为"守卫读不到"。留一条台账，`capitalist feed` 与日志页能看到原因。
+       */
+      try {
+        recordEvent(root, "migration_failed", { errors: rep.errors });
+      } catch {
+        /* 台账本身就写不进去时只能放弃：迁移失败不该让读状态变成抛异常。 */
+      }
+    }
+  }
+  const again = readJson<TaskState | null>(statePath(root), null);
+  return again && typeof again === "object" && again.policy ? again : null;
 }
 
 /**
@@ -75,12 +104,12 @@ export function updateState<T>(root: string, fn: (state: TaskState) => T, retrie
 /**
  * 解析当前生效档位。
  *
- * 优先级：命令行 > 环境变量 > 会话状态 > 契约默认 > 内置默认。
- * 会话状态放在契约之前：一次会话的显式选择比领域惯例更具体。
+ * 优先级：命令行 > 环境变量 > 会话状态 > 守卫默认 > 内置默认。
+ * 会话状态放在守卫之前：一次会话的显式选择比领域惯例更具体。
  */
 export function resolveModeFor(
   root: string | null,
-  contract: Contract | null,
+  policy: Policy | null,
   cliMode?: string,
 ): Mode {
   const state = root ? loadState(root) : null;
@@ -88,14 +117,8 @@ export function resolveModeFor(
     cli: cliMode,
     env: process.env.CAPITALIST_MODE,
     session: state?.permission_mode,
-    contract: contract?.data.permission,
+    policy: policy?.data.permission,
   });
-}
-
-/** 当前阶段；状态缺失时回落到契约首段，避免调用方到处判空。 */
-export function currentStageId(state: TaskState | null, contract: Contract | null): string {
-  if (state?.stage) return state.stage;
-  return contract?.stages[0]?.id ?? "S0";
 }
 
 /** 监工显示三态。 */

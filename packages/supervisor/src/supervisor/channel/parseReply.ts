@@ -10,6 +10,7 @@
 
 import { ATT_LINE, parseShots } from "./attShots";
 import {
+  ACCEPTANCE_LINE,
   AFTER_LINE,
   GROUP_LINE,
   INSERT_LINE,
@@ -25,7 +26,7 @@ import {
 } from "./treeLines";
 
 /** 仅剥离 `ACTION:` 开头的一个已知动作词，不处理句中词，也不做语义判断。 */
-const LEGACY_VERB = /^\s*(pause|resume|concurrency|retry|skip|set-next|dispatch|ask|instruct|intervene)\s+/i;
+const LEGACY_VERB = /^\s*(pause|resume|concurrency|retry|set-next|dispatch|ask|instruct|intervene)\s+/i;
 
 /** 监工会话的动作行：`DO: dispatch 查一下长列表卡顿` -> `{action:"dispatch", arg:"查一下…"}`。只认行首（允许前导空白），避免误切正文。 */
 const DO_LINE = /^\s*DO:\s*([a-zA-Z-]+)\s*([\s\S]*)$/;
@@ -50,6 +51,13 @@ export interface TreeFieldBag {
    * 优先级高于正文摘要：摘要判断不出哪一段是任务本体。
    */
   title?: string;
+  /**
+   * 本单验收判据（`ACCEPTANCE:` 行）。
+   *
+   * 与标题同属“跟着最近的 `DO:`”的一组，但它描述的是这一单怎样算完成，
+   * 随派单下发后既是执行侧自检的口径，也是审查侧打回或放行的依据。
+   */
+  acceptance?: string;
   parent?: string;
   parentReason?: string;
   after?: string[];
@@ -102,9 +110,11 @@ export interface ParsedReply {
   after?: string[];
   /**
    * 模型写的父节点（`PARENT:` 行）：编号 / id 或 `none`。
-   * `undefined` 与 `none` 同义；`none` 在解析阶段不落字段，故不会出现 `""`。
+   * `undefined` 与 `none` 同义；`none` 解析时不落字段，故不会出现 `""`。
    */
   parent?: string;
+  /** 本单验收判据（`ACCEPTANCE:` 行）。未写时审查退回通用口径。 */
+  acceptance?: string;
   /** 挂父节点的理由（`PARENT_REASON:` 行）。写了 `parent` 却没写它，建单会被拒。 */
   parentReason?: string;
   /** 分组声明（`GROUP:` 行）原话：`new <标题>` / `#G1`。由调用方解析并落成结构。 */
@@ -189,6 +199,12 @@ export function parseReply(raw: string): ParsedReply {
         if (cur) cur.shots = picked;
         else leadShots = picked;
       }
+      continue;
+    }
+    const accM = ACCEPTANCE_LINE.exec(line);
+    if (accM) {
+      const t = String(accM[1] ?? "").trim();
+      if (t && !/^(none|no|无|-|—)$/i.test(t)) treeBag().acceptance = t;
       continue;
     }
     /* 理由行先于父节点行判定，避免前缀规则误匹配。 */
@@ -280,6 +296,7 @@ export function parseReply(raw: string): ParsedReply {
     /* `shots` 为兼容字段：单动作时取首单的 ATT；未写 ATT 由调用方按消息自带图处理。 */
     ...(attSeen ? { shots: firstShots ?? leadShots ?? [] } : {}),
     ...(solo.title ? { title: solo.title } : {}),
+    ...(solo.acceptance ? { acceptance: solo.acceptance } : {}),
     ...(solo.after ? { after: solo.after } : {}),
     ...(solo.parent ? { parent: solo.parent } : {}),
     ...(solo.parentReason ? { parentReason: solo.parentReason } : {}),
@@ -298,6 +315,7 @@ export function parseReply(raw: string): ParsedReply {
  */
 export function treeDirectiveFields(p: TreeFieldBag): {
   title?: string;
+  acceptance?: string;
   parent?: string;
   parent_reason?: string;
   after?: string[];
@@ -308,6 +326,7 @@ export function treeDirectiveFields(p: TreeFieldBag): {
 } {
   return {
     ...(p.title ? { title: p.title } : {}),
+    ...(p.acceptance ? { acceptance: p.acceptance } : {}),
     ...(p.parent ? { parent: p.parent } : {}),
     ...(p.parentReason ? { parent_reason: p.parentReason } : {}),
     ...(p.after ? { after: p.after } : {}),

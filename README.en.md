@@ -20,8 +20,8 @@ The project is still in testing and not yet stable.
 |----|---|
 | Long tasks getting interrupted | The supervisor plays the user: it breaks long tasks down, decides on its own, and lets tasks pass, blocks them, or reports for acceptance |
 | Long contexts getting polluted | Every work process is separate, each with its own session and context, sharing nothing |
-| Parallel work colliding | Parallel file operations are locked; for tasks with a contract, each shard maps to one work process and the change scope is isolated per shard |
-| Instructions having to be repeated | The host hook injects the current stage, unmet items and the next action at input submission. The supervisor generates and optimizes prompts automatically from the work content, with no user intervention needed |
+| Parallel work colliding | Parallel file operations are locked; within one task, each shard maps to one work process and the change scope is isolated per shard |
+| Instructions having to be repeated | The host hook injects in-flight dispatches, unmet items and the next action at input submission. The supervisor generates and optimizes prompts automatically from the work content, with no user intervention needed |
 
 
 ## Install
@@ -54,13 +54,13 @@ Send these to a host with the plugin installed (selecting the `capitalist` skill
 - Start a supervisor process and then leave it on standby.
 - Start a supervisor process and finish the billing service refactor.
 - Add a login-page integration task to the supervisor.
-- Open a supervisor for this project and create a contract following the "xxx" skill workflow.
+- Open a supervisor for this project and break the work into a task tree following the "xxx" skill workflow.
 
 The host runs `capitalist supervise`, which creates the task root in the current directory and starts a resident supervisor; "add task" requests are appended with `capitalist say` and merged into the existing dispatch when work has not started, or delivered by the hook before the next tool call while it runs. See `skill/SKILL.md` for the trigger table.
 
-When a third-party skill is referenced in a host, the supervisor can either generate a contract automatically following that skill's workflow, or split the skill by work content and attach the full skill address so work processes can fetch it themselves.
+When a third-party skill is referenced in a host, the supervisor can either generate the guard and the task tree automatically following that skill's workflow, or split the skill by work content and attach the full skill address so work processes can fetch it themselves.
 
-The supervisor panel is recommended for task supervision and scheduling. The startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address can be read from `board_url` in `capitalist status`. From the panel you can resume dispatches, inspect stages, interact with running work processes, write new instructions and adjudicate questions. The access key is not checked by default, but leaving it unchecked may pose an intranet security risk; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
+The supervisor panel is recommended for task supervision and scheduling. The startup log prints the board address, for example `http://127.0.0.1:7788/`, and the same address can be read from `board_url` in `capitalist status`. From the panel you can resume dispatches, inspect the task tree, interact with running work processes, write new instructions and adjudicate questions. The access key is not checked by default, but leaving it unchecked may pose an intranet security risk; starting with `--secure` prints an address carrying `?key=`, and the key changes on every start.
 
 ## Security policy
 
@@ -89,12 +89,12 @@ For literary creation, the historical setting, story outline, character relation
 
 For coding tasks the supervisor can let frontend and backend proceed independently and start integration and automated-test processes once both are done.
 
-You can: create a custom contract with frontend and backend as two `parallel` shards, one dispatch and one work process each; put integration and automated tests in later stages, which advance automatically once the previous stage is done.
+Dispatch frontend and backend as two parallel dispatches, one work process each; hang integration and automated tests behind them with `AFTER`, and they are released once the prerequisites are delivered.
 
 ### 3. Security tasks: batch dispatch and split by domain
 
 For security tasks a skill can drive vulnerability hunting across several sites in one dispatch, with the supervisor enforcing redlines and accepting results as the skill requires; alternatively, split by site and dispatch by subdomain once asset collection is done.
-You can split multiple sites into shards per site, split a single site into later-stage shards per subdomain, or dispatch several src hunting instructions in one go.
+Multiple sites can be split into parallel dispatches per site, a single site into follow-up nodes per subdomain, or several src hunting instructions issued in one dispatch.
 
 
 
@@ -105,34 +105,33 @@ You can split multiple sites into shards per site, split a single site into late
 
 | Role | How it starts | Responsibility |
 |---|---|---|
-| Supervisor process | `capitalist supervise`, resident | Creates the task root, draws up the contract, dispatches, accepts, reclaims and re-dispatches |
+| Supervisor process | `capitalist supervise`, resident | Creates the task root, selects the guard, dispatches, accepts, reclaims and re-dispatches |
 | Work process | Separate host process (`claude -p` / `codebuddy -p`) | Executes dispatches; holds its own pid, session and context, and reports back to the supervisor for acceptance once the task is done |
-| Host hook | Called by the host at session lifecycle points | Injects state, judges commands against contract redlines and local boundaries |
+| Host hook | Called by the host at session lifecycle points | Injects state, judges commands against guard redlines and local boundaries |
 
 `capitalist` ships three executables: the main command `capitalist`, the short alias `cap`, and the hook entry `capitalist-hook`. `capitalist board` serves a local board on `127.0.0.1:7788` (the port shifts when occupied, loopback only).
 
 ### Lifecycle of one task
 
-1. In the project directory run `capitalist supervise "<target>" --contract minimal`. The command creates `.capitalist/`, writes `state.json` and `inbox/`, and starts the resident supervisor and the local board.
-2. Click "resume dispatch" on the board or issue a new task there. The supervisor writes dispatches from the current stage's `next` / `parallel`, and each dispatch starts a separate work process.
-3. In the work process session the host calls the hook on input submission, injecting the current stage, unmet items and the next action; before each tool call it judges the command against contract redlines and local boundaries and rejects it on a `BLOCK` hit.
-4. The work process writes acceptance evidence with `capitalist record` and closes the dispatch with `capitalist report`. The supervisor accepts per stage; only when the gate passes does it advance, otherwise it re-dispatches.
+1. In the project directory run `capitalist supervise "<target>" --policy minimal`. The command creates `.capitalist/`, writes `state.json` and `inbox/`, and starts the resident supervisor and the local board.
+2. Click "resume dispatch" on the board or issue a new task there. The supervisor writes dispatches from the task tree, and each dispatch starts a separate work process.
+3. In the work process session the host calls the hook on input submission, injecting in-flight dispatches, unmet items and the next action; before each tool call it judges the command against guard redlines and local boundaries and rejects it on a `BLOCK` hit.
+4. The work process writes acceptance evidence with `capitalist record` and closes the dispatch with `capitalist report`. The supervisor accepts against the dispatch's acceptance criteria: when unmet it re-dispatches, when met it releases the next dispatch in the tree.
 5. State stays on disk after the session ends or the process exits. Running `capitalist supervise` again reuses the same task root; `capitalist reload` produces a snapshot and a resume plan, and the next dispatch adds a re-verification dispatch.
 
-### Contracts and task trees
+### Guards and task trees
 
-1. Contract: a plain JSON file defining stages, gates, redlines and local boundaries. The supervisor can generate a contract from a user instruction or from a skill; when none is specified, the built-in contract is used:
-`packages/supervisor/contracts/minimal.contract.json`. The built-in contract provides a basic three-stage flow (requirements, execution, review and delivery).
-`--contract` accepts a built-in name or a path to a contract JSON, falling back to the built-in contract on failure.
+1. Guard: a plain JSON file declaring redlines, local boundaries and where acceptance criteria come from. It carries no workflow. The supervisor can generate one from a user instruction or from a skill; when none is specified, the built-in guard is used:
+`packages/supervisor/policies/minimal.policy.json`.
+`--policy` accepts a built-in name or a path to a guard JSON, falling back to the built-in guard on failure.
 
 
-2. Task tree: the task tree and the contract are independent. The contract drives stage advancement; the task tree manages task structure. One contract may cover several task trees.
+2. Task tree: the only authority on workflow. Each dispatch carries at most one parent, or names the dispatches it must wait for; a dispatch is not issued until its prerequisites are delivered.
 The supervisor can break a task down on user instruction and build the task tree. Parallel slices are placed in groups, and when a later task depends on an earlier group, it is released only after every task in that group finishes.
 A task that cannot succeed can be removed or re-dispatched to avoid blocking. The figure below is a simple copy-editing task tree:
 ![work-tree.png](work_tree.png)
 
-3. How to use: you can use a contract to define the workflow. You can also keep the default contract and shape the workflow through the task tree instead.
-   On the whole, contract-driven advancement is stricter, while the task tree is flexible. For a complex multi-stage task, draw up the contract first, then build a multi-stage task tree to carry it out.
+3. How to use: when you need a workflow, build a task tree; the nodes are the steps. Chain dependent work with `PARENT` / `AFTER`, leave independent work side by side, and let `--workers` decide how much runs at once.
 
 ### Task root and data
 
@@ -140,7 +139,7 @@ A task that cannot succeed can be removed or re-dispatched to avoid blocking. Th
 
 | File | Content |
 |---|---|
-| `state.json` | Target, contract, current stage, next action |
+| `state.json` | Target, guard, task tree progress, next action |
 | `inbox/dispatch.jsonl` / `inbox/qa.jsonl` | Dispatch queue / pending questions |
 | `events.jsonl` / `tasks.jsonl` / `review.jsonl` | Event log / task pool / items awaiting review |
 | `violations.jsonl` / `justify.jsonl` | Redline hits / registered out-of-bound reasons |
@@ -153,16 +152,16 @@ The directory is ignored by the repository `.gitignore`, so task data never ente
 
 | Purpose | Command |
 |---|---|
-| Start and stop | `capitalist supervise "<target>" --contract minimal`, `capitalist supervise-stop` |
+| Start and stop | `capitalist supervise "<target>" --policy minimal`, `capitalist supervise-stop` |
 | Pause and resume | `capitalist pause`, `capitalist resume` |
 | Wake old dispatches | `capitalist wake [<dispatch id\|shard>]` (add `--user` on a non-interactive terminal) |
 | Inspect state | `capitalist status`, `capitalist workers`, `capitalist board` |
-| Advance and adjudicate | `capitalist advance`, `capitalist ask "<question>"`, `capitalist answer <id> "<guidance>"` |
+| Dispatch and adjudicate | `capitalist tree`, `capitalist say "<text>"`, `capitalist ask "<question>"`, `capitalist answer <id> "<guidance>"` |
 | Intervene in running work | `capitalist say "<text>"`, `capitalist takeover [shard]`, `capitalist promote <target>` |
 | Evidence and pre-checks | `capitalist record <name> <json>`, `capitalist ledger <add\|list\|assert>`, `capitalist gate --text '<command>'` |
 | Context reload | `capitalist reload` |
 | Install and remove | `capitalist install --agent <host>`, `capitalist uninstall`, `capitalist hosts` |
-| Login state | `capitalist auth-check`, `capitalist auth status` (token source and expiry) |
+| Login state | `capitalist auth-check` (whether the host can call models) |
 
 All subcommands and flags are listed in `capitalist --help`; the split of duties between supervisor side and work-process side is in section 4 of `skill/SKILL.md`.
 
@@ -172,13 +171,13 @@ All subcommands and flags are listed in `capitalist --help`; the split of duties
 |---|---|
 | Host / hook | The agent CLI providing model calls and login state; the hook is the judging entry point it calls at session lifecycle points |
 | Task root | A project directory containing `.capitalist/state.json`; commands search upward for the nearest one |
-| Contract | Defines stages, gates, redlines and local boundaries |
-| Stage / gate | Ordered steps in a contract and their `done` judgement; `capitalist advance` is rejected while a gate is unmet |
-| Dispatch / shard | A work unit written by the supervisor to `inbox/dispatch.jsonl`; each `parallel` shard maps to one work process |
-| Redline / local boundary | Command-text regex rules and path scope in a contract; levels are `BLOCK` / `NEED_USER` / `WARN` |
+| Guard | A plain JSON file: redlines, local boundaries and where criteria come from, with no workflow |
+| Task tree | A directed graph formed by each dispatch's `parent` / `after`; the supervisor issues a dispatch only after its prerequisites are delivered |
+| Dispatch / shard | A work unit written by the supervisor to `inbox/dispatch.jsonl`; dispatches of the same shard share one session and one context |
+| Redline / local boundary | Command-text regex rules and path scope in a guard; levels are `BLOCK` / `NEED_USER` / `WARN` |
 | Permission mode | `plan` / `default` / `accept_edits` / `bypass`, changing how strictly rules are judged |
 | Acceptance evidence | JSONL files under `.capitalist/` recording requirements, changes, conclusions and violations |
-| Board | A local HTTP visual page showing stages, dispatches, work processes and report history |
+| Board | A local HTTP visual page showing the task tree, dispatches, work processes and report history |
 
 ### Supported hosts
 
@@ -201,7 +200,7 @@ All subcommands and flags are listed in `capitalist --help`; the split of duties
 
 ### Scope and limits
 
-Applicable: coding tasks spanning several sessions; tasks with stages and acceptance criteria; tasks that must retain changes and conclusions; tasks that change different files in parallel shards; agent sessions that need uniform blocking of destructive commands.
+Applicable: coding tasks spanning several sessions; tasks with explicit acceptance criteria and dependencies; tasks that must retain changes and conclusions; tasks that change different files in parallel shards; agent sessions that need uniform blocking of destructive commands.
 
 Not applicable: single-turn Q&A and one-off scripts; actions run directly in a terminal; judging the quality of the work. The hook only covers agent sessions that have it installed, and redlines only judge command text.
 
@@ -212,7 +211,7 @@ packages/supervisor/    npm package: engine, host implementations, CLI, installe
   src/core/             base layer everything depends on
     record/             on-disk protocol, task root state, ledger, paths, file locks
     dispatch/           dispatch queue, tree rebuild, inbox, preemption
-    contract/           contract loading, redline checks, task root creation
+    policy/             guard loading, redline checks, task root creation
     guard/              permissions, quotas, context window, local boundaries
     message/            messages, attachments, channel state
     platform/           HTTP, launcher channel, auto-adoption
@@ -226,7 +225,7 @@ packages/supervisor/    npm package: engine, host implementations, CLI, installe
     context/            reload context, project memory, terms
     channel/            model calls, directive channel, subprocess tokens
     view/               projections shared by board and CLI
-  contracts/            built-in contracts: minimal
+  policies/             built-in guards: minimal
 skill/                  agent manual (installed into each host's skills directory)
 ```
 

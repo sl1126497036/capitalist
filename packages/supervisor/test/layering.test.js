@@ -26,14 +26,14 @@ function labels(file) {
   return HOST_TOKENS.filter((t) => readFileSync(file, "utf8").toLowerCase().includes(t));
 }
 
-test("规则1：impl 不得 import 注册表 / 编排 / core 契约", () => {
+test("规则1：impl 不得 import 注册表 / 编排 / core 守卫", () => {
   const forbidden = [
     /from "\.\.\/registry"/,
     /from "\.\.\/dispatch"/,
     /from "\.\.\/main"/,
     /from "\.\.\/locations"/,
-    /from "\.\.\/\.\.\/core\/contract"/,
-    /from "\.\.\/\.\.\/core\/init"/,
+    /* 守卫的读取、判定与初始化都在 core/policy，宿主的 impl 不得旁路。 */
+    /from "(?:\.\.\/)+core\/policy(\/|")/,
   ];
   const offenders = [];
   for (const file of walk(IMPL)) {

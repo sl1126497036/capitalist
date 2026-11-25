@@ -1,4 +1,4 @@
-import { BoardSnapshot, signature, ageSec, describeEvent, buildSnapshot, contractDirs, ledgerOnlyRoot, stageViewOf } from "./snapshot";
+import { BoardSnapshot, signature, ageSec, describeEvent, buildSnapshot, ledgerOnlyRoot } from "./snapshot";
 import { buildThreads, TaskCounts, taskCountsOf, settledThreadKeys, acceptedThreadKeys, taskCounts } from "./threads";
 import { clipText } from "../../core/text";
 import { maskBoardText } from "./render";
@@ -6,14 +6,12 @@ import { dispatchNoTable } from "../usage/threadNo";
 import { readJsonlFromTail } from "./logs";
 import { eventsFile, atTs, readDispatchesBoard } from "./sources";
 import { openInboxAsks } from "../../core/dispatch/inbox";
-import { Stage } from "../../core/types";
-import { runCheck } from "../../core/contract/checks";
 import { ReloadStatus, SupervisorContextView, reloadStatus, buildSupervisorContextView } from "../context/reload";
 import { SupervisorActivityKind, SupervisorAction, supervisorActivityOf, currentSupervisorAction } from "../worker/activity";
 import { loadSupervisor, listWorkers, pidAlive, supervisorStaleSec, readDispatches } from "../../core/record/supervisor";
 import { loadState } from "../../core/record/state";
-import { hasCustomContract } from "../../core/contract/customContract";
-import { loadContract, stageById } from "../../core/contract/contract";
+import { hasCustomPolicy } from "../../core/policy/customPolicy";
+import { loadPolicy } from "../../core/policy/policy";
 import { tokenTotals, usageTotalsOf, type UsageTotals, ThreadCostRow, costRowsWith, pickCurrentCostRows, costTotals } from "./stats";
 import { readPendingMq } from "../../core/dispatch/mq";
 import { balanceView, BalanceView } from "../usage/balance";
@@ -35,10 +33,6 @@ import { poolSummaryForMetrics } from "./supervisorLog";
 export interface TaskSummary {
   root: string;
   target: string;
-  stage: string;
-  stage_name: string;
-  stage_index: number;
-  stage_total: number;
   running: number;
   blocked: number;
   level: "ok" | "warn" | "bad";
@@ -58,15 +52,11 @@ export function buildTaskSummaries(roots: string[]): TaskSummary[] {
       const running = snap.workers.filter((w) => w.status === "running" || w.status === "starting").length;
       const liveWorker = snap.workers.filter((w) => w.status === "running" || w.status === "starting").pop();
       const doing = liveWorker
-        ? `${liveWorker.id} 运行中 ${liveWorker.stage}${liveWorker.dispatch ? ` | ${liveWorker.dispatch}` : ""}`
+        ? `${liveWorker.id} 运行中${liveWorker.dispatch ? ` | ${liveWorker.dispatch}` : ""}`
         : snap.diagnosis.title;
       return {
         root,
         target: snap.target,
-        stage: snap.stage,
-        stage_name: snap.stage_name,
-        stage_index: snap.stage_index,
-        stage_total: snap.stage_total,
         running,
         blocked: snap.blockers.length,
         level: snap.diagnosis.level,
@@ -80,10 +70,6 @@ export function buildTaskSummaries(roots: string[]): TaskSummary[] {
       return {
         root,
         target: "",
-        stage: "",
-        stage_name: "",
-        stage_index: -1,
-        stage_total: 0,
         running: 0,
         blocked: 0,
         level: "warn" as const,
@@ -108,7 +94,7 @@ export function alertLevelOf(name: string): AlertLevel | null {
     case "supervisor_advance":
     case "supervisor_done":
     case "dispatch_done":
-    case "contract_change":
+    case "policy_change":
     case "dispatch_orphan":
     case "dispatch_retry":
       return "P1";
@@ -159,8 +145,8 @@ export function buildAlerts(
   };
 
   const ledgerOnly = ledgerOnlyRoot(root);
-  /* 默认任务列表下不描述契约过程：阶段推进按中性说法上屏。 */
-  const customContract = hasCustomContract(loadState(root)?.contract);
+  /* 默认守卫下不描述守卫过程：按中性说法上屏。 */
+  const customPolicy = hasCustomPolicy(loadState(root)?.policy);
   /*
    * 告警正文与线程消息使用同一口径：`describeEvent` 会把执行进程写入括号，
    * ask 正文由工作进程填写，两处都可能包含进程号。
@@ -174,7 +160,7 @@ export function buildAlerts(
     if (!lvl) continue;
     const at = String(e.at ?? "");
     const id = `evt:${name}:${at}:${String(e.dispatch ?? "")}:${String(e.worker ?? "")}`;
-    push({ id, level: lvl, at, event: name, text: clipText(show(describeEvent(e, { customContract })), ALERT_TEXT_CHARS) });
+    push({ id, level: lvl, at, event: name, text: clipText(show(describeEvent(e, { customPolicy })), ALERT_TEXT_CHARS) });
   }
 
   for (const q of openInboxAsks(root)) {
@@ -218,53 +204,6 @@ export function buildAlerts(
 /** online 要求 supervisor.json 存在、状态 running 且心跳在判活窗口内；heartbeat-timeout 表示记录存在但心跳超时。 */
 export type SupervisorState = "online" | "stopped" | "heartbeat-timeout";
 
-export interface SupervisorStageView {
-  id: string;
-  name: string;
-  /** 本阶段分片数取契约 parallel 数组长度，0 表示没有分片。 */
-  shards: number;
-  gate_passed: boolean;
-  done: boolean;
-  current: boolean;
-}
-
-const gateCache = new Map<string, { at: number; ok: boolean }>();
-const GATE_CACHE_MS = 2_000;
-
-function stageGateOk(root: string, contractName: string, stage: Stage): boolean {
-  const key = `${root}\u0000${contractName}\u0000${stage.id}`;
-  const now = Date.now();
-  const hit = gateCache.get(key);
-  if (hit && now - hit.at < GATE_CACHE_MS) return hit.ok;
-  let ok = false;
-  try {
-    ok = runCheck(stage.done as Record<string, unknown> | undefined, root).ok;
-  } catch {
-    /** 检查抛错按未达标算。 */
-    ok = false;
-  }
-  if (gateCache.size > 256) gateCache.clear();
-  gateCache.set(key, { at: now, ok });
-  return ok;
-}
-
-/** 契约阶段按契约数组顺序，不排序不去重。默认任务列表返回空：阶段是流程壳子，界面不展示。 */
-function stageViews(root: string, contract: { name: string; stages: Stage[] } | null, stageIndex: number): SupervisorStageView[] {
-  if (!contract) return [];
-  if (!hasCustomContract(contract.name)) return [];
-  return contract.stages.map((s, i) => {
-    const raw = (s as unknown as { parallel?: unknown }).parallel;
-    return {
-      id: s.id,
-      name: s.name,
-      shards: Array.isArray(raw) ? raw.length : 0,
-      gate_passed: stageGateOk(root, contract.name, s),
-      done: stageIndex >= 0 && i < stageIndex,
-      current: i === stageIndex,
-    };
-  });
-}
-
 export interface SupervisorStatusView {
   status: SupervisorState;
   /**
@@ -283,17 +222,10 @@ export interface SupervisorStatusView {
   running: number;
   queued: number;
   tasks: TaskCounts;
-  /** 当前阶段与进度 0 起，契约里找不到为 -1。 */
-  stage: string;
-  stage_name: string;
-  stage_index: number;
-  stage_total: number;
-  stages: SupervisorStageView[];
   parallel: number;
   inflight: number;
   tick: number;
   board_url: string;
-  debt_count: number;
   pending_asks: number;
   heartbeat_note: string;
   reload: ReloadStatus;
@@ -327,7 +259,7 @@ function heartbeatSummary(root: string, hours: number): string {
       name === "dispatch_retry" ||
       name === "dispatch_forced_finished" ||
       name === "redispatch_capped" ||
-      name === "stage_stalled"
+      name === "stalled"
     )
       redispatch += 1;
   }
@@ -351,11 +283,6 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
   const queued = taskStats.queued;
 
   const state = loadState(root);
-  const contract = state?.contract ? loadContract(String(state.contract), contractDirs(root)) : null;
-  const stageId = String(state?.stage ?? "");
-  const stageIndex = contract && stageId ? contract.stages.findIndex((s) => s.id === stageId) : -1;
-  const stage = contract && stageId ? stageById(contract, stageId) : undefined;
-  const debt = state && Array.isArray(state.debt) ? state.debt.length : 0;
   const pendingAsks = openInboxAsks(root).length;
   const inflight = listWorkers(root).filter(
     (w) => (w.status === "running" || w.status === "starting") && (w.mode === "visible" || pidAlive(w.pid)),
@@ -377,13 +304,9 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
   const activity = supervisorActivityOf({ reloading: reload.active, action: currentSupervisorAction(), hasPendingReceipt, running });
 
   const base = {
-    /* 默认任务列表下阶段读数整体置空，与 buildSnapshot 同一处口径。 */
-    ...stageViewOf(String(state?.contract ?? ""), stageId, stage?.name ?? "", stageIndex, contract ? contract.stages.length : 0),
-    stages: stageViews(root, contract, stageIndex),
     inflight,
     tasks: taskStats,
     board_url: capitalist?.board_url ?? "",
-    debt_count: debt,
     pending_asks: pendingAsks,
     heartbeat_note: heartbeatSummary(root, 6),
     reload,
@@ -463,8 +386,7 @@ export function buildSupervisorStatus(root: string): SupervisorStatusView {
 /** 监工线程固定 id，左栏与 /api/capitalist-events 用同一个值。 */
 export interface BoardMetrics {
   at: string;
-  /** 当前阶段契约分片数，契约读不到时为 0。 */
-  scheduled: number;
+  /** 工作进程记录总数（含已退出）。 */
   total: number;
   done: number;
   tasks: TaskPoolSummary;
@@ -497,21 +419,6 @@ export interface BoardMetrics {
 }
 
 export function buildMetrics(root: string): BoardMetrics {
-  // scheduled 与 loop 的 stageParallel 同一形状判定（id 与 action 都得是字符串）。
-  const state = loadState(root);
-  const contract = state?.contract ? loadContract(String(state.contract), contractDirs(root)) : null;
-  const stage = contract && state?.stage ? stageById(contract, String(state.stage)) : undefined;
-  const raw = (stage as unknown as { parallel?: unknown } | undefined)?.parallel;
-  const scheduled = Array.isArray(raw)
-    ? raw.filter(
-        (x) =>
-          x !== null &&
-          typeof x === "object" &&
-          typeof (x as Record<string, unknown>).id === "string" &&
-          typeof (x as Record<string, unknown>).action === "string",
-      ).length
-    : 0;
-
   // alive 要求记录为 running/starting 且 pid 真实存活。
   const workers = listWorkers(root);
   const alive = workers.filter(
@@ -533,7 +440,6 @@ export function buildMetrics(root: string): BoardMetrics {
   const stats = taskCounts(root);
   return {
     at: new Date().toISOString(),
-    scheduled,
     total: workers.length,
     done: stats.done,
     tasks: poolSummaryForMetrics(root),

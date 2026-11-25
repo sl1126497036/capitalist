@@ -45,7 +45,7 @@ export function reopenSettledDispatch(root: string, id: string, why: string): Di
 
   let issued: { no: number; attempt: number; dispatchId: string };
   try {
-    issued = resolveDispatchNo(root, src.stage, src.shard ?? undefined, src.id);
+    issued = resolveDispatchNo(root, src.id);
   } catch (e) {
     /* 取号失败按“没有重开”处理，由调用方下一轮再试，不猜号。 */
     if (e instanceof NoLockTimeoutError) return null;

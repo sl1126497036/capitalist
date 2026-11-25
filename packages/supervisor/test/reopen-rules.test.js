@@ -14,7 +14,7 @@ const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { appendDispatch, readDispatches, requeueDispatch } = require("../dist/core/record/supervisor");
 const { dispatchOfThreadNo } = require("../dist/supervisor/usage/threadNo");
 
@@ -23,21 +23,20 @@ const LINEAGE = "D-abc123";
 /** 一个任务根：一张指定状态的单，并在编号表里给它 #1。 */
 function scenario(status) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-reopen-"));
-  createTaskRoot({ target: "重开规则", contractSpec: "minimal", root });
+  createTaskRoot({ target: "重开规则", policySpec: "minimal", root });
   appendDispatch(root, {
     id: LINEAGE,
     at: new Date(Date.now() - 60_000).toISOString(),
-    stage: "S0",
     shard: "",
     action: "同一件事",
     status,
     lineage: LINEAGE,
   });
-  /* 线程键 = 阶段/x + lineage 尾 6 位，与 laneKeyOf 的派生一致。 */
+  /* 线程键 = x + lineage 尾 6 位，与 laneKeyOf 的派生一致。 */
   for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(root, ".capitalist", _d), { recursive: true });
   writeFileSync(
     join(root, ".capitalist", "ledger", "thread-no.json"),
-    JSON.stringify({ next: 2, ids: { "s0/xabc123": 1 } }),
+    JSON.stringify({ next: 2, ids: { "xabc123": 1 } }),
   );
   return root;
 }

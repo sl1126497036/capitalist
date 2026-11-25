@@ -13,12 +13,12 @@ const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const pause = require("../dist/core/record/pause");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const board = require("../dist/supervisor/board");
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-pause-resume-"));
-  createTaskRoot({ target: "暂停恢复", contractSpec: "minimal", root });
+  createTaskRoot({ target: "暂停恢复", policySpec: "minimal", root });
   return root;
 }
 

@@ -215,7 +215,7 @@ function ensureWatchConfig(dryRun: boolean): string | null {
     _说明:
       "自动纳管规则：当前工作目录的路径段连续匹配 match 时，把匹配段之后的第一级目录作为任务根。"
       + "在该目录（或它的子目录）里第一次发送消息就会建立任务根，之后不需要 capitalist start。",
-    _示例: { match: ["projects", "web"], contract: "minimal", exclude: ["node_modules", "dist"] },
+    _示例: { match: ["projects", "web"], policy: "minimal", exclude: ["node_modules", "dist"] },
     rules: [],
   };
   if (!dryRun) {

@@ -11,18 +11,18 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { readJson } from "../record/json";
-import { createTaskRoot, RootExistsError } from "../contract/init";
+import { createTaskRoot, RootExistsError } from "../policy/init";
 import { normalizeForCompare, toNativePath } from "../record/paths";
 
 /** 一条纳管规则。`match` 与 `exclude` 的段名一律转小写。 */
 export interface WatchRule {
   match: string[];
-  contract: string;
+  policy: string;
   exclude?: string[];
 }
 
 interface WatchFile {
-  rules?: Array<{ match?: unknown; contract?: unknown; exclude?: unknown }>;
+  rules?: Array<{ match?: unknown; policy?: unknown; exclude?: unknown }>;
 }
 
 /**
@@ -44,7 +44,7 @@ export function defaultWatchConfigPath(): string {
  * 读用户级规则。
  *
  * @param file 规则文件路径，默认取 {@link defaultWatchConfigPath}。
- * @returns 规则列表。文件缺失或内容损坏时返回空列表；`match` 为空或 `contract`
+ * @returns 规则列表。文件缺失或内容损坏时返回空列表；`match` 为空或 `policy`
  *   不是字符串的条目被跳过。
  */
 export function loadWatchRules(file = defaultWatchConfigPath()): WatchRule[] {
@@ -52,10 +52,10 @@ export function loadWatchRules(file = defaultWatchConfigPath()): WatchRule[] {
   const out: WatchRule[] = [];
   for (const raw of data.rules ?? []) {
     const match = Array.isArray(raw.match) ? raw.match.map((m) => String(m).toLowerCase()) : [];
-    if (match.length === 0 || typeof raw.contract !== "string") continue;
+    if (match.length === 0 || typeof raw.policy !== "string") continue;
     out.push({
       match,
-      contract: raw.contract,
+      policy: raw.policy,
       exclude: Array.isArray(raw.exclude) ? raw.exclude.map((e) => String(e).toLowerCase()) : [],
     });
   }
@@ -66,7 +66,7 @@ export function loadWatchRules(file = defaultWatchConfigPath()): WatchRule[] {
 export interface WatchMatch {
   /** 任务根的原生路径。 */
   root: string;
-  contract: string;
+  policy: string;
 }
 
 /**
@@ -75,7 +75,7 @@ export interface WatchMatch {
  * 返回第一条命中的规则。段下标在归一化后的副本上计算，再应用到原始路径，
  * 以保留原始大小写，Windows 的比较不区分大小写，路径本身区分。
  *
- * @returns 命中的任务根与契约名；没有规则命中时返回 null。
+ * @returns 命中的任务根与守卫名；没有规则命中时返回 null。
  */
 export function matchWatchDir(cwd: string, rules = loadWatchRules()): WatchMatch | null {
   if (!cwd) return null;
@@ -91,7 +91,7 @@ export function matchWatchDir(cwd: string, rules = loadWatchRules()): WatchMatch
       const next = segments[j];
       if (!next) break; // 规则后没有下一段：分类层本身不构成项目，不匹配任何目录
       if (rule.exclude?.includes(next)) continue;
-      return { root: original.slice(0, j + 1).join("/"), contract: rule.contract };
+      return { root: original.slice(0, j + 1).join("/"), policy: rule.policy };
     }
   }
   return null;
@@ -112,7 +112,7 @@ function noteAdoptFailure(root: string, err: unknown): void {
 export function autoAdopt(
   cwd: string,
   rules = loadWatchRules(),
-  contractDirs: readonly string[] = [],
+  policyDirs: readonly string[] = [],
 ): string | null {
   const hit = matchWatchDir(cwd, rules);
   if (!hit) return null;
@@ -120,7 +120,7 @@ export function autoAdopt(
 
   try {
     const target = hit.root.replace(/\\/g, "/").split("/").pop() ?? "task";
-    createTaskRoot({ target, contractSpec: hit.contract, root: hit.root, contractDirs });
+    createTaskRoot({ target, policySpec: hit.policy, root: hit.root, policyDirs });
     return hit.root;
   } catch (err) {
     if (err instanceof RootExistsError) return hit.root;

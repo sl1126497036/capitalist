@@ -33,7 +33,7 @@ function makeRoot(workers) {
   mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
   writeFileSync(
     join(root, ".capitalist", "runtime", "state.json"),
-    JSON.stringify({ version: 2, target: "测试", stage: "U1", contract: "", counters: {} }),
+    JSON.stringify({ version: 2, target: "测试", stage: "U1", policy: "", counters: {} }),
   );
   const index = [];
   for (const w of workers) {
@@ -211,7 +211,7 @@ test("追写日志：增量解析只读新增的整行，数继续上涨且不�
   assert.equal(usage.collectWorkerUsage(root)[0].output_tokens, 50);
 });
 
-test("三个维度的合计对得上：by_worker -> by_dispatch -> by_stage -> totals", () => {
+test("三个维度的合计对得上：by_worker -> by_dispatch -> totals", () => {
   usage.__resetUsageCache();
   const root = makeRoot([
     { id: "W-1", dispatch: "D-1", stage: "U1", shard: "a", log: assistant("m1", 100, 10, 0) },
@@ -222,10 +222,8 @@ test("三个维度的合计对得上：by_worker -> by_dispatch -> by_stage -> t
   const sum = (rows, k) => rows.reduce((n, r) => n + (r[k] ?? 0), 0);
   assert.equal(ledger.by_worker.length, 3);
   assert.equal(ledger.by_dispatch.length, 2);
-  assert.equal(ledger.by_stage.length, 2);
   assert.equal(sum(ledger.by_worker, "total_tokens"), 330);
   assert.equal(sum(ledger.by_dispatch, "total_tokens"), 330);
-  assert.equal(sum(ledger.by_stage, "total_tokens"), 330);
   assert.equal(ledger.totals.total_tokens, 330);
   assert.equal(ledger.totals.reported_runs, 2);
   assert.equal(ledger.totals.unreported_runs, 1);
@@ -250,17 +248,17 @@ test("/api/metrics 与 /api/threads 的用量字段：有读数填数，无读�
   assert.equal(typeof m.context.used, "number", "上下文取有读数的那条");
   assert.equal(m.context.used, 9000);
 
-  const threadE = m.threads.find((t) => t.id === "W-e");
+  const threadE = m.threads.find((t) => t.shard === "x");
   assert.equal(threadE.usage.total_tokens, 1100);
   assert.equal(threadE.usage.model_version, "v4.1-flash");
-  const threadF = m.threads.find((t) => t.id === "W-f");
+  const threadF = m.threads.find((t) => t.shard === "y");
   assert.equal(threadF.usage.reported, false);
 
   const page = board.buildThreadsPage(root, 50);
   assert.equal(page.totals.total_tokens, 1100);
   assert.equal(page.totals.usage_reported, 1);
   assert.equal(page.totals.usage_unreported, 1);
-  assert.equal(page.threads.find((t) => t.stage === "U1" && t.shard === "x").usage.context_window, 200000);
+  assert.equal(page.threads.find((t) => t.shard === "x").usage.context_window, 200000);
 });
 
 test("总看板：跨根累加 token，余额仍是同一个账号口径", () => {

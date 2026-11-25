@@ -44,7 +44,7 @@ export function killProcess(pid: number): "gone" | "term" | "kill" | "unconfirme
 /**
  * 结束进程树：Windows 的 `.cmd` shim 使台账 pid 指向 cmd.exe，仅结束该 pid 会留下宿主 CLI 与其拉起的工具进程，需按进程树处理。
  *
- * 软阶段只对 pid 发信号；超时后 Windows 用 `taskkill /T /F` 递归整棵树，POSIX 先用 `pkill -P` 结束下级进程再结束自身。
+ * 第一步只对 pid 发终止信号；超时后 Windows 用 `taskkill /T /F` 递归整棵树，POSIX 先用 `pkill -P` 结束下级进程再结束自身。
  */
 export function killTree(pid: number): "gone" | "term" | "kill" | "unconfirmed" {
   if (!Number.isInteger(pid) || pid <= 0) return "gone";

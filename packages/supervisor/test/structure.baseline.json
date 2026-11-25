@@ -6,7 +6,6 @@
   "src/supervisor/worker/worker.ts": 1218,
   "src/supervisor/channel/llm.ts": 1105,
   "src/core/dispatch/commands.ts": 1073,
-  "src/core/contract/contract.ts": 972,
   "src/agent/dispatch.ts": 956,
   "src/supervisor/usage/usage.ts": 935,
   "src/supervisor/board/commands.ts": 806,

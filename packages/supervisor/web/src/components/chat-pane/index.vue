@@ -76,9 +76,6 @@ const props = defineProps({
   total: {type: Number, default: 0},
   truncated: {type: Boolean, default: false},
   canLoadOlder: {type: Boolean, default: false},
-  stages: {type: Array, default: () => []},
-  stageIndex: {type: Number, default: -1},
-  stageName: {type: String, default: ""},
   /** 选中的线程；监工态为 null。 */
   thread: {type: Object, default: null},
   threads: {type: Array, default: () => []},
@@ -410,7 +407,7 @@ const HEARTBEAT_EVENTS = new Set([
   "worker_looping_killed",
   "worker_heartbeat_rescued",
   "worker_reaped",
-  "stage_stalled",
+  "stalled",
 ]);
 const isTick = (m) => HEARTBEAT_EVENTS.has(String(m?.event || ""));
 
@@ -424,11 +421,7 @@ const CAPITALIST_SESSION_EVENTS = new Set([
   "supervisor_reply",
   "supervisor_answer",
   "mq_message",
-  "supervisor_advance",
   "supervisor_done",
-  "debt_settled",
-  "stage_skipped",
-  "stage_fallback",
   "dispatch_failed",
   "worker_launch_failed",
   "contract_error",
@@ -1178,33 +1171,6 @@ onUnmounted(() => {
   window.removeEventListener("resize", onZoomResize);
 });
 
-const stageIds = computed(() =>
-  props.stages.map((s, i) => {
-    const id = String(s.id || `#${i + 1}`);
-    /* 完成度按派单台账计算：总片为该阶段出现过的 shard 去重数，已做为其中落成 closed/done 的 shard 数，failed 不计入。 */
-    const ds = (props.dispatches || []).filter((d) => String(d.stage || "") === id);
-    const all = new Set(ds.map((d) => String(d.shard || "")).filter(Boolean));
-    const ok = new Set(
-      ds
-        .filter((d) => ["closed", "done"].includes(String(d.status)))
-        .map((d) => String(d.shard || ""))
-        .filter(Boolean),
-    );
-    const left = [...all].filter((x) => !ok.has(x));
-    return {
-      id,
-      name: String(s.name || s.title || s.id || ""),
-      shards: typeof s.shards === "number" ? s.shards : Array.isArray(s.shards) ? s.shards.length : null,
-      total: all.size,
-      doneCount: ok.size,
-      leftTip: left.length ? tr("未完成：{list}", { list: left.join(tr("、")) }) : tr("本阶段任务均已完成"),
-      gate: Boolean(s.gate_passed ?? s.gate_ok ?? s.done),
-      done: Boolean(s.done) || i < props.stageIndex,
-      cur: i === props.stageIndex,
-    };
-  }),
-);
-
 /** 线程到派单的匹配先按 id 再按同分片，与左栏、App 一致。 */
 function dispatchOf(t) {
   if (!t) return null;
@@ -1279,7 +1245,7 @@ const groups = computed(() => {
 /* 模型切换后先按所选值显示，等标题观测值追上再放开；与派单模型的回填同一套做法。 */
 const modelPending = ref(null);
 
-/** 标题右侧在工作进程会话报模型；监工的阶段与任务数由顶栏展示。 */
+/** 标题右侧在工作进程会话报模型；监工的任务数由顶栏展示。 */
 const headInfo = computed(() => {
   const observed = String(props.thread?.usage?.model || props.thread?.model || "");
   if (modelPending.value !== null && modelPending.value !== observed) {
@@ -2674,7 +2640,6 @@ const refIndex = computed(() => {
       threadId: t.id,
       title: taskTitle(t),
       status: endedWord(t) || (THREAD_WORD[String(t.status || "")] ? tr(THREAD_WORD[String(t.status || "")]) : ""),
-      stage: String(t.stage || ""),
       dispatch: String(t.dispatch || ""),
       worker: String(t.worker || ""),
     };
@@ -2689,11 +2654,7 @@ const refIndex = computed(() => {
     if (!d || ix.has(d.id)) continue;
     const t =
       threads.find((x) => x.dispatch === d.id) ||
-      threads.find(
-        (x) =>
-          String(x.stage || "") === String(d.stage || "") &&
-          (!d.shard || String(x.shard || "") === String(d.shard)),
-      );
+      threads.find((x) => !d.shard || String(x.shard || "") === String(d.shard));
     if (!t) continue;
     const ent = ix.get(t.id);
     if (!ent) continue;

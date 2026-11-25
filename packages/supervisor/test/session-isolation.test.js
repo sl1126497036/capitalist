@@ -6,7 +6,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { recordEvent } = require("../dist/core/record/ledger");
 const {
   buildSupervisorLog,
@@ -32,7 +32,7 @@ const HEARTBEAT = [
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-iso-"));
-  createTaskRoot({ target: "会话隔离", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "会话隔离", policySpec: "minimal", root: base });
   for (const _d of ["runtime", "ledger", "model", "board", "config", "meta", "workers", "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root"]) mkdirSync(join(base, ".capitalist", _d), { recursive: true });
   mkdirSync(join(base, ".capitalist", "runtime"), { recursive: true });
   mkdirSync(join(base, ".capitalist", "ledger"), { recursive: true });
@@ -159,7 +159,7 @@ test("心跳异常合并成状态行的一行摘要", () => {
   recordEvent(root, "dispatch_orphan", { dispatch: "D-x" });
   recordEvent(root, "dispatch_orphan", { dispatch: "D-y" });
   recordEvent(root, "redispatch_capped", { shard: "a", limit: 3 });
-  recordEvent(root, "stage_stalled", { stage: "S0" });
+  recordEvent(root, "stalled", {});
 
   const st = buildSupervisorStatus(root);
   assert.match(st.heartbeat_note, /心跳超时 1/);

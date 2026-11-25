@@ -18,12 +18,8 @@ const EVT_NAMES = new Set([
   "worker_killed",
   "worker_reaped",
   "worker_launch_failed",
-  "gate_eval",
-  "supervisor_advance",
   "supervisor_done",
-  "stage_skipped",
-  "stage_fallback",
-  "stage_stalled",
+  "stalled",
   "contract_reload",
   "contract_change",
   "contract_error",
@@ -31,7 +27,6 @@ const EVT_NAMES = new Set([
   "board_serve",
   "board_reload",
   "redispatch_capped",
-  "debt_settled",
   "model_fallback",
   "supervisor_cmd",
   "supervisor_answer",
@@ -49,16 +44,14 @@ const EVT_NAMES = new Set([
 const FAIL_EVENTS = new Set([
   "dispatch_failed", // 派单回报失败
   "worker_launch_failed", // 进程启动失败
-  "contract_error", // 契约解析失败，沿用上一份
+  "contract_error", // 守卫解析失败，沿用上一份
   "tick_window", // 心跳稀疏，监工可能受阻
 ]);
 
 /** 待确认（琥珀）。第二列为块头标签文案，用“待确认 / 未达标 / 记待补项”，不写“错误”。 */
 const PENDING_NOTE = new Map([
   ["redispatch_capped", "待确认"], // 重派达到上限，等待裁决
-  ["stage_skipped", "记待补项"], // 跳过阶段，进度推进但该阶段未达标
-  ["stage_fallback", "记待补项"],
-  ["contract_refused", "待确认"], // 契约被拒，沿用上一份
+  ["contract_refused", "待确认"], // 守卫被拒，沿用上一份
 ]);
 
 /** 事件名来源：监工流写 `event`，工作进程裁定块写 `status`。 */

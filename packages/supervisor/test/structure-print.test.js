@@ -57,9 +57,9 @@ function tree(dir, prefix = "") {
 
 test("打印 .capitalist 目录结构，根级归零、子目录归类", () => {
   const root = emptyRoot();
-  const d = { id: "4-1", stage: "S0", shard: "", action: "做一件事" };
+  const d = { id: "4-1", shard: "", action: "做一件事" };
 
-  // 建立会话映射（基名 capitalist-s0-4）。
+  // 建立会话映射（基名 capitalist-4：会话按任务号续接，重派不换会话）。
   const s = lane.pickLane(root, d);
   assert.strictEqual(s.resume, false, "首次新开会话");
   assert.match(s.id, UUID_RE, "会话 id 是 v4 UUID");
@@ -96,7 +96,7 @@ test("打印 .capitalist 目录结构，根级归零、子目录归类", () => {
   assert.ok(existsSync(locations.rootIndex.worker(root)), "worker 索引在 .root/index.jsonl");
 
   // 会话映射：sessions/<base>.json 存在，current 是 UUID。
-  const base = "capitalist-s0-4";
+  const base = "capitalist-4";
   const laneFile = locations.sessions.lane(root, base);
   assert.ok(existsSync(laneFile), "会话映射文件存在");
   const st = JSON.parse(readFileSync(laneFile, "utf8"));

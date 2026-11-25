@@ -28,7 +28,7 @@ function tmpRoot(extra = {}) {
       version: 2,
       target: "t",
       contract: "minimal",
-      contract_path: "x",
+      policy_path: "x",
       stage: "S0",
       next_action: "",
       rev: 0,

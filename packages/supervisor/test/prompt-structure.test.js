@@ -83,13 +83,13 @@ test("核对现状块可以指定标题：修复单传自己的序号", () => {
   assert.equal(buildGroundingBlock(DISPATCH)[0], "【二、动手前先核对现状】", "默认值给业务单用");
 });
 
-test("派单抬头不写阶段号：阶段是契约的调度分段，工作进程只做这一单", () => {
+test("派单抬头不写阶段号：工作进程只做这一单", () => {
   const text = buildPrompt(ARGS);
   assert.ok(text.includes("派单 D-test1"), "抬头要保留派单编号");
   /*
    * 抬头写过“派单 4-1（阶段 S0，标题 …）”。工作进程会把它复述回申报
    * （“S0 盘点：…”），而它只拿到自己这一单，写阶段号既无执行含义，
-   * 又让读的人以为还有别的阶段没给它。
+   * 还会暗示还有别的阶段没给它。
    */
   const leaked = text.split("\n").filter((l) => /阶段\s*S\d/.test(l));
   assert.deepStrictEqual(leaked, [], `提示词里不该出现阶段号：${leaked.join(" / ")}`);

@@ -17,14 +17,14 @@ const { join } = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { loadState, saveState } = require("../dist/core/record/state");
 const loop = require("../dist/supervisor/loop");
 const { detectWorkerHost, buildPrompt, resolveSession } = require("../dist/supervisor/worker/worker");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-sv-"));
-  createTaskRoot({ target: "重构计费服务", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "重构计费服务", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -145,36 +145,6 @@ test("每个调度节拍回收所有 claimed 僵尸单，不只最后一张", ()
   assert.equal(capitalist.loadWorker(root, "W-dead").status, "exited");
 });
 
-test("契约没有 parallel 时，同时执行的派单数就是 1", () => {
-  const root = sandbox();
-  const contract = {
-    name: "minimal",
-    stages: [{ id: "S0", name: "澄清" }],
-  };
-  assert.equal(loop.__testing.stageParallel(contract, "S0").length, 0);
-});
-
-test("有 parallel 时按分片派多张单", () => {
-  const contract = {
-    name: "dev",
-    stages: [
-      {
-        id: "S1",
-        name: "实现",
-        next: "整段推进",
-        parallel: [
-          { id: "api", action: "改接口" },
-          { id: "ui", action: "改界面" },
-        ],
-      },
-    ],
-  };
-  const shards = loop.__testing.stageParallel(contract, "S1");
-  assert.deepEqual(
-    shards.map((s) => s.id),
-    ["api", "ui"],
-  );
-});
 
 test("worker prompt 只给这一单的边界，并禁止代监工推进", () => {
   const prompt = buildPrompt({
@@ -185,14 +155,16 @@ test("worker prompt 只给这一单的边界，并禁止代监工推进", () => 
   });
   assert.match(prompt, /独立的工作进程/);
   assert.match(prompt, /capitalist report D-1/, "报告命令要用派单 id，不是进程 id");
-  assert.match(prompt, /不要执行 capitalist advance/);
+  assert.match(prompt, /不要执行 capitalist adopt/);
   assert.match(prompt, /动手前先核对现状/);
   assert.match(prompt, /现状与派单描述冲突/);
   assert.match(prompt, /交付生效/);
   assert.match(prompt, /尚未重载/);
   assert.match(prompt, /怎么算做完/);
-  assert.match(prompt, /全量测试、端到端长跑、全量构建校验/);
-  assert.match(prompt, /不要求截图/);
+  /* 结束口径与领域无关：判据是产出物，不预设“必须先跑全量测试/必须交截图”。 */
+  assert.match(prompt, /不扩大核对范围/);
+  assert.match(prompt, /产出物形态由任务性质决定/);
+  assert.doesNotMatch(prompt, /全量构建校验/);
 });
 
 test("续跑提示词同样带上下文约束与生效要求", () => {
@@ -236,7 +208,6 @@ process.stdin.on("end", () => {
   const env = { ...process.env, CAPITALIST_WORKER_BIN: fake };
   delete env.CAPITALIST_WORKER_ID;
   delete env.CAPITALIST_DISPATCH_ID;
-  delete env.CAPITALIST_STAGE;
   /*
    * 用异步 spawn + 主动等待，不用 spawnSync：Windows 上同步子进程会连带清理它拉起的
    * 后代，`--once` 又只跑一拍就退，假 worker 常常还没执行就被一起带走。异步拉起后
@@ -244,7 +215,7 @@ process.stdin.on("end", () => {
    */
   const child = spawn(
     process.execPath,
-    [cli, "supervise", "重构计费服务", "--contract", "minimal", "--max-ticks", "3", "--auto-dispatch"],
+    [cli, "supervise", "重构计费服务", "--policy", "minimal", "--max-ticks", "3"],
     { cwd: base, env, stdio: "ignore" },
   );
   const settled = new Promise((resolve) => child.once("exit", resolve));
@@ -371,19 +342,17 @@ function failedDispatch(root, id, shard, minutesAgo) {
   });
 }
 
-const SHARD_CONTRACT = {
-  name: "minimal",
-  data: {},
-  stages: [
-    { id: "S0", name: "澄清", next: "做点事", parallel: [{ id: "a", action: "改 A" }] },
-  ],
-};
+/*
+ * 调度轮次用到的守卫：只提供红线与本机边界，不声明流程。
+ * 派什么由台账里的派单决定，不由守卫决定。
+ */
+const MINIMAL_GUARD = { name: "minimal", data: { redlines: [], local_guard: {} } };
 
 test("刚失败的单按退避等待，不会每个调度节拍重新启动进程", () => {
   const root = sandbox();
   failedDispatch(root, "D-now", "a", 0);
 
-  const verdict = loop.__testing.step(root, SHARD_CONTRACT, "claude", 0, {}, () => {});
+  const verdict = loop.__testing.step(root, MINIMAL_GUARD, "claude", 0, {}, () => {});
   assert.equal(verdict, "continue");
   assert.equal(capitalist.readDispatches(root).filter((d) => d.status === "open").length, 0);
 });
@@ -392,13 +361,12 @@ test("失败的单在退避后重派，分片不会永久缺失", () => {
   const root = sandbox();
   failedDispatch(root, "D-old", "a", 5);
 
-  loop.__testing.step(root, SHARD_CONTRACT, "claude", 0, {}, () => {});
+  loop.__testing.step(root, MINIMAL_GUARD, "claude", 0, {}, () => {});
 
   const open = capitalist.readDispatches(root).filter((d) => d.status === "open");
-  assert.equal(open.length, 1, "退避到期后必须重新派这一片");
-  assert.equal(open[0].shard, "a");
+  assert.equal(open.length, 1, "退避到期后必须把这件事重新派出去");
+  assert.equal(open[0].lineage, "D-old", "重派落在同一条派生链上，不另起一件事");
   assert.equal(open[0].attempt, 2, "重派要记第几次，供事后追溯");
-  assert.equal(loadState(root).stage, "S0", "不能因为一次失败就推进或退出");
 });
 
 test("已报完成等确认（review）的片不再派新单", () => {
@@ -414,13 +382,13 @@ test("已报完成等确认（review）的片不再派新单", () => {
     review_until: new Date(Date.now() + 180_000).toISOString(),
   });
 
-  loop.__testing.step(root, SHARD_CONTRACT, "claude", 0, {}, () => {});
+  loop.__testing.step(root, MINIMAL_GUARD, "claude", 0, {}, () => {});
 
   const open = capitalist.readDispatches(root).filter((d) => d.status === "open");
   assert.equal(open.length, 0, "review 是在途：确认前再派一张等于把同一件事做两遍");
 });
 
-test("复验单的正文不被契约刷新覆盖（否则复验退化成重做）", () => {
+test("复验单的正文不被守卫刷新覆盖（否则复验退化成重做）", () => {
   const root = sandbox();
   const action = "复验（不是重做）：S0/a 改 A\n原要求：改 A";
   capitalist.appendDispatch(root, {
@@ -434,7 +402,7 @@ test("复验单的正文不被契约刷新覆盖（否则复验退化成重做�
     source: "reverify",
   });
 
-  loop.__testing.step(root, SHARD_CONTRACT, "claude", 0, {}, () => {});
+  loop.__testing.step(root, MINIMAL_GUARD, "claude", 0, {}, () => {});
 
   const d = capitalist.readDispatches(root).find((x) => x.id === "D-ver");
   assert.equal(d.action, action, "复验单带着自己的核对口径，不该被换成裸分片文字");
@@ -475,7 +443,7 @@ function runningRecord() {
     heartbeat_at: now,
     heartbeat_ts: Date.now() / 1000,
     target: "重构计费服务",
-    contract: "minimal",
+    policy: "minimal",
     tick_sec: 5,
     worker_timeout_sec: 900,
     ticks: 2,
@@ -491,7 +459,7 @@ test("立即执行：一个调度节拍内腾出槽位并启动，运行中的�
   const boardMod = require("../dist/supervisor/board");
 
   const base = mkdtempSync(join(tmpdir(), "capitalist-preempt-"));
-  createTaskRoot({ target: "立即执行", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "立即执行", policySpec: "minimal", root: base });
 
   /* 假 worker：不读命令、只保持存活，等测试结束时被结束。 */
   const fake = join(base, "fake-worker.js");
@@ -545,12 +513,12 @@ test("立即执行：一个调度节拍内腾出槽位并启动，运行中的�
     /* 会话记录：先按正常派单算一次，记下它将来该续接的会话 id。 */
     const sessBefore = resolveSession(base, capitalist.readDispatches(base).find((d) => d.id === "D-run"));
 
-    const contract = { name: "minimal", data: {}, stages: [{ id: "S0", name: "澄清" }] };
+    const policy = { name: "minimal", data: {} };
     const saved = process.env.CAPITALIST_WORKER_BIN;
     process.env.CAPITALIST_WORKER_BIN = fake;
     const out = [];
     try {
-      loop.__testing.fillSlots(base, contract, loadState(base), "claude", 1, {}, (s) => out.push(s));
+      loop.__testing.fillSlots(base, policy, loadState(base), "claude", 1, {}, (s) => out.push(s));
     } finally {
       if (saved === undefined) delete process.env.CAPITALIST_WORKER_BIN;
       else process.env.CAPITALIST_WORKER_BIN = saved;
@@ -596,7 +564,7 @@ test("立即执行：一个调度节拍内腾出槽位并启动，运行中的�
       status: "open",
       promoted_at: new Date().toISOString(),
     });
-    loop.__testing.fillSlots(base, contract, loadState(base), "claude", 1, {}, () => {});
+    loop.__testing.fillSlots(base, policy, loadState(base), "claude", 1, {}, () => {});
     assert.strictEqual(
       capitalist.readDispatches(base).find((d) => d.id === "D-imm2").status,
       "open",

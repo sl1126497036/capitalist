@@ -7,11 +7,11 @@ const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const preempt = require("../dist/core/dispatch/preempt");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-queue-"));
-  createTaskRoot({ target: "插队语义测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "插队语义测试", policySpec: "minimal", root: base });
   return base;
 }
 

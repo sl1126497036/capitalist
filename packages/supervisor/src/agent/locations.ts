@@ -1,5 +1,5 @@
 /**
- * 宿主派生路径：契约搜索目录、自动纳管配置位置。
+ * 宿主派生路径：技能包目录、自动纳管配置位置。
  *
  * 这些路径从宿主配置目录派生，目录名一律来自 `registry.dirs()`，本文件不写宿主名。
  * 纯路径原语（`findRoot` / `isInside` / `expandHome`）在 `core/record/paths.ts`。
@@ -13,7 +13,9 @@ import { normalizeForCompare } from "../core/record/paths";
 import { existingDirs } from "./registry";
 
 /**
- * 契约搜索目录，按优先级：`CAPITALIST_SKILLS_DIR` > 各宿主 `skills/` > 仓库根（开发态）。
+ * 技能包目录，按优先级：`CAPITALIST_SKILLS_DIR` > 各宿主 `skills/` > 仓库根（开发态）。
+ *
+ * 守卫文件随技能包分发，按名查找守卫时也从这些目录里找。
  *
  * 不存在的目录会被过滤，重复目录只保留第一个。
  */

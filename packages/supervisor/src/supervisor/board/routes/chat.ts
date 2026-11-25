@@ -99,7 +99,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
          * 引用目标只认消息编号。
          *
          * 界面已经不给没有编号的卡片引用按钮，这里再挡一次：内容指纹、视图块 id、
-         * 本地回显的临时身份一旦进了提示词，模型会照抄成 `#hhs87c` 这类体系外编号，
+         * 本地回显的临时身份一旦进了提示词，模型会原样写成 `#hhs87c` 这类体系外编号，
          * 再随回复回流到界面，用户看到的编号就此多出一套。
          */
         if (quote && !isMsgNo(quote)) quote = "";
@@ -136,7 +136,6 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       const threadDispatch = threadWorker?.dispatch
         ? readDispatches(ctx.opts.root).find((d) => String(d.id) === String(threadWorker.dispatch))
         : null;
-      const taskStage = String(me?.stage ?? threadDispatch?.stage ?? state?.stage ?? "");
       const taskShard = String(me?.shard ?? threadDispatch?.shard ?? "");
       const taskTitle = String(me?.title ?? (threadDispatch ? dispatchTitle(threadDispatch) : "") ?? "");
       const talkDispatch = String(me?.dispatch ?? threadDispatch?.id ?? "");
@@ -146,7 +145,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ? [
             "",
             "【你现在对话的对象】",
-            taskShard || taskStage || taskTitle
+            taskShard || talkDispatch || taskTitle
               ? `任务：${taskTitle || "（未命名）"}`
               : "任务：（未能定位，按全局状态回答）",
             me
@@ -325,7 +324,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
         ).trim();
         const sessionId =
           liveSession ||
-          workerSessionId(String(me?.stage ?? taskStage), String(me?.shard ?? taskShard), talkDispatch);
+          workerSessionId(String(me?.shard ?? taskShard), talkDispatch);
         const prompt = [
           "该线程对应的任务已结束，用户在此会话发来消息时直接回答。",
           "",
@@ -346,7 +345,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           "  用户没问就不主动提。",
           "- 该单已结束：只回答问题，不改文件、不改派单；需要重派时按当前单的上下文用量判断，上下文充足则直接复用，否则新开一单",
           "- 排版用 Markdown：加粗写 **文字**，列表行首写 - 或 1.，代码用反引号包起来；标题写成 ## 文字（井号后留空格），任务编号写作 #12",
-          "- 不要提内部文件名和路径（以 .capitalist/ 开头的路径），也不要提任务列表、分片、收工条件、闸门判据、阻塞编号这类内部词",
+          "- 不要提内部文件名和路径（以 .capitalist/ 开头的路径），也不要提守卫、分片、收工条件、闸门判据、阻塞编号这类内部词",
           "",
           `用户消息：${text}`,
           ...(quote
@@ -421,7 +420,6 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       const idleQueue = running.length === 0 && queued === 0 && failed === 0;
 
       const contextLines = [
-        ...(capitalist.stage_name ? [`阶段：${capitalist.stage_name}`] : []),
         ...mine,
         ...taskNoLines(ctx.opts.root, threads),
         ...workerRuntimeLines(ctx.opts.root),
@@ -461,7 +459,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
       /**
        * 可用技能：技能不专属工作进程。
        *
-       * 监工自己动手的场合（查状态、写契约、改文案）读完 SKILL.md 直接执行；
+       * 监工自己动手的场合（查状态、写守卫、改文案）读完 SKILL.md 直接执行；
        * 需要落地的改动把技能名写进派单正文，工作进程按名加载全文。由模型按技能说明与
        * 用户描述判断归谁，判断不了时问用户，不预设归属。
        */
@@ -516,14 +514,14 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
               "【当前处于待命，队列为空】",
               "- 没有派单在执行，也没有排队项。用户问候或询问状态时，说明当前空闲，并提示可以直接描述要执行的任务，",
               "  或选择一个技能，随消息一起派发。",
-              "- 不写“收工”“条件满足”“可以结束”：没有开工就不存在收工。阶段门槛、占位文件、值守条件这类说法也不写。",
+              "- 不写“收工”“条件满足”“可以结束”：没有开工就不存在收工。门槛、占位文件、值守条件这类说法也不写。",
             ]
           : []),
         "",
         "【格式硬要求，逐条执行】",
         "1. 排版用 Markdown：加粗写 **文字**，列表行首写 - 或 1.，代码用反引号；不用表格、缩进代码块与 HTML 标签。",
         "2. 标题写成 ## 文字，井号后留空格；任务编号写作 #12，井号后不加空格。",
-        "3. 不要提内部文件名和路径（以 .capitalist/ 开头的路径），也不要提任务列表、分片 id、收工条件、",
+        "3. 不要提内部文件名和路径（以 .capitalist/ 开头的路径），也不要提守卫、分片 id、收工条件、",
         "   闸门判据、阻塞编号这类内部词。用户要听的是“什么情况、该怎么办”。【可用截图】里的路径供挑图使用，回复里同样不要写出来。",
         "4. 最多三句，不总结、不追问、不列举选项。",
         "5. DO: 行与 ATT: 行各占单独一行，写在正文最后；它们不会显示给用户，写在正文中间会打断语句。",
@@ -571,7 +569,7 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
           ? supervisorChatTurnSessionId(ctx.opts.root)
           : me
             ? liveSession ||
-              workerSessionId(String(me.stage ?? ""), String(me.shard ?? ""), String(me.dispatch ?? ""))
+              workerSessionId(String(me.shard ?? ""), String(me.dispatch ?? ""))
             : /*
                * 监工会话（capitalist-chat 系）：每一轮进来先过单轮注入上限。会话记录超限时
                * 换代到 `capitalist-chat-w<ws>-c<gen>`，不让历史与历史轮次的工具输出无限累积重发
@@ -711,11 +709,10 @@ export function handleCapitalistChat(ctx: BoardCtx): void {
               continue;
             }
           }
-          /** skip 把整个阶段记成待补项跳过，不代为确认。 */
           const w = appendSupervisorDirective(ctx.opts.root, {
             action: actionName,
             arg: directiveArg,
-            confirm: actionName !== "skip",
+            confirm: true,
             msg_id: userMsg.id,
             atts: chosen,
             target:

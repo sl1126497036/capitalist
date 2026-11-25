@@ -18,7 +18,7 @@ export const DELIVERED: Delivery = "ok";
 /**
  * 插话台账记录的送达档位。
  *
- * 未被领取为待送达；领取后按投递路径判定，因阶段推进而作废的记录无进程接收，判为未送达。
+ * 未被领取为待送达；领取后按投递路径判定，目标单已终结而无法投递的记录无进程接收，判为未送达。
  */
 export function directiveDelivery(r: { consumed?: unknown; consumed_via?: unknown }): Delivery {
   if (r.consumed !== true) return "pending";

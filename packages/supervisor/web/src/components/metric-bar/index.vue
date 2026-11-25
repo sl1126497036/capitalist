@@ -154,7 +154,7 @@ function confirmYes() {
 function restartSupervisor() {
   confirmAsk.value = {
     title: t("重启监工"),
-    text: t("当前进程立即退出，正在执行的工作进程一并结束，随后自动重启；任务记录、阶段与看板地址不变"),
+    text: t("当前进程立即退出，正在执行的工作进程一并结束，随后自动重启；任务记录、任务树与看板地址不变"),
     ok: t("重启"),
     danger: false,
     /* 先铺蒙版再发请求：监工收到命令即退场，期间界面无反馈；事件由 App 接住铺满视口，/api/supervisor 恢复后撤除。 */

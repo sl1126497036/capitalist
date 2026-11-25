@@ -1,12 +1,7 @@
 /** 简报：每轮注入的短状态块。 */
 
-import { join } from "node:path";
-
-import type { Contract } from "../contract/contract";
-import { hasCustomContract } from "../contract/customContract";
+import type { Policy } from "../policy/policy";
 import { openInboxAsks } from "../dispatch/inbox";
-import { readJsonl } from "../record/json";
-import { supervisorDir } from "../record/paths";
 import type { Mode, TaskState } from "../types";
 
 /** 简报语言。 */
@@ -16,10 +11,8 @@ export type BriefLang = "zh" | "en";
 export interface BriefInput {
   root: string;
   state: TaskState;
-  contract: Contract;
+  policy: Policy;
   mode: Mode;
-  /** 门槛未满足的项；空数组表示已达标 */
-  missing: string[];
   /** 缺省中文 */
   lang?: BriefLang;
 }
@@ -28,45 +21,34 @@ interface Texts {
   fallbackHead: string;
   fallbackBody: string[];
   mode: (m: string) => string;
-  head: (domain: string, target: string, stage: string, name: string) => string;
-  goal: (g: string) => string;
+  head: (domain: string, target: string) => string;
   next: (n: string) => string;
-  missing: string;
-  satisfied: string;
   asks: (n: number) => string;
   genericDomain: string;
 }
 
 const TEXTS: Record<BriefLang, Texts> = {
   zh: {
-    fallbackHead: "通用任务列表，无领域判据（不阻断）",
+    fallbackHead: "通用守卫，无领域判据（不阻断）",
     fallbackBody: [
-      "  未指定领域任务列表，使用通用三阶段：通用红线（破坏性删除、SQL 清库、凭据）生效，",
-      "  但该领域的完成判据与禁止动作未定义。",
-      "  若这是明确领域任务：capitalist adopt --contract <任务列表名>",
+      "  未指定领域守卫，只启用通用红线（破坏性删除、SQL 清库、凭据）。",
+      "  若这是明确领域任务：capitalist adopt --policy <守卫名>",
     ],
-    mode: (m) => `权限档位：${m}（非默认）。动作被拦截可能与档位有关，而非任务列表红线。`,
-    head: (domain, target, stage, name) => `【capitalist | ${domain}】${target} | 阶段 ${stage} ${name}`,
-    goal: (g) => `  本阶段目标：${g}`,
+    mode: (m) => `权限档位：${m}（非默认）。动作被拦截可能与档位有关，而非守卫红线。`,
+    head: (domain, target) => `【capitalist | ${domain}】${target}`,
     next: (n) => `  下一步：${n}`,
-    missing: "  未达门槛：",
-    satisfied: "  门槛：已满足，可用 capitalist advance 推进",
     asks: (n) => `  待裁决 ${n} 条，答复后才能继续：`,
     genericDomain: "通用任务",
   },
   en: {
-    fallbackHead: "▸ generic contract — no domain criteria (it will not block, but do not rely on it)",
+    fallbackHead: "▸ generic guard — no domain criteria (it will not block, but do not rely on it)",
     fallbackBody: [
-      "  No domain contract was selected, so the generic three-stage flow runs. Generic redlines",
-      "  (destructive deletes / SQL drops / credentials) apply, but what counts as done for this",
-      "  domain is undefined. If this is a domain task: capitalist adopt --contract <name>",
+      "  No domain guard was selected, so only the generic redlines apply (destructive deletes,",
+      "  SQL drops, credentials). If this is a domain task: capitalist adopt --policy <name>",
     ],
     mode: (m) => `▸ mode: ${m} (non-default — a blocked action may come from the mode, not a redline)`,
-    head: (domain, target, stage, name) => `[capitalist · ${domain}] ${target} | stage ${stage} ${name}`,
-    goal: (g) => `  stage goal: ${g}`,
+    head: (domain, target) => `[capitalist · ${domain}] ${target}`,
     next: (n) => `  next: ${n}`,
-    missing: "  gate not met:",
-    satisfied: "  gate satisfied — run `capitalist advance`",
     asks: (n) => `  ${n} open question(s) — answer before continuing:`,
     genericDomain: "general",
   },
@@ -75,14 +57,14 @@ const TEXTS: Record<BriefLang, Texts> = {
 /**
  * 生成简报正文。调用方负责把它包进注入结构。
  *
- * @returns 多行文本。未达门槛项最多列 6 条，未决问题最多列 3 条。
+ * @returns 多行文本。未决问题最多列 3 条。
  */
 export function buildBrief(input: BriefInput): string {
-  const { root, state, contract, mode, missing } = input;
+  const { root, state, policy, mode } = input;
   const t = TEXTS[input.lang ?? "zh"];
   const lines: string[] = [];
 
-  if (state.contract_fallback) {
+  if (state.policy_fallback) {
     lines.push(t.fallbackHead, ...t.fallbackBody, "");
   }
 
@@ -90,34 +72,12 @@ export function buildBrief(input: BriefInput): string {
     lines.push(t.mode(mode), "");
   }
 
-  /*
-   * 只有用户自己定了契约，才提阶段与门槛。
-   *
-   * 默认的 `generic` 是调度层的容器键，`minimal` 是引擎自带的默认工序，都不对应用户定义的过程。
-   * 未指定契约时不显示阶段与推进提示，只输出目标、任务池与在途进度。
-   */
-  const custom = hasCustomContract(state.contract);
-  const stage = custom ? contract.stages.find((s) => s.id === state.stage) : undefined;
-  lines.push(
-    custom
-      ? t.head(contract.domain || t.genericDomain, state.target, state.stage, stage?.name ?? "")
-      : `【capitalist | ${contract.domain || t.genericDomain}】${state.target}`,
-  );
+  lines.push(t.head(policy.domain || t.genericDomain, state.target));
+  if (state.next_action) lines.push(t.next(state.next_action));
 
-  if (custom && stage?.goal) lines.push(t.goal(stage.goal));
-  if (custom && state.next_action) lines.push(t.next(state.next_action));
-
-  if (custom && missing.length > 0) {
-    lines.push(t.missing);
-    for (const m of missing.slice(0, 6)) lines.push(`    - ${m}`);
-  } else if (custom && contract.stages.length > 0) {
-    lines.push(t.satisfied);
-  }
-
-  // 只列本阶段的提问：旧阶段的提问已失效，继续显示会在每轮简报中重复提示已完成事项。
   // 走校验读取：缺 id / 空 text / status 越界的记录不参与，它们无法识别其提问内容，
   // 却足以让监工判定“有待裁决”而停派。
-  const open = openInboxAsks(root).filter((q) => !q.stage || q.stage === state.stage);
+  const open = openInboxAsks(root);
   if (open.length > 0) {
     lines.push(t.asks(open.length));
     for (const q of open.slice(0, 3)) lines.push(`    - ${String(q.text ?? "")}`);

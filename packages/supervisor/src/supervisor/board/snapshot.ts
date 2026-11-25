@@ -19,9 +19,7 @@ import { loadState } from "../../core/record/state";
 import { workerCost } from "./stats";
 import { clipText } from "../../core/text";
 import { openInboxAsks } from "../../core/dispatch/inbox";
-import { hasCustomContract } from "../../core/contract/customContract";
-import { loadContract, stageById } from "../../core/contract/contract";
-import { runCheck } from "../../core/contract/checks";
+import { hasCustomPolicy } from "../../core/policy/customPolicy";
 import { byId, workerHosts } from "../../agent/registry";
 import { eventsFile, listTaskRoots } from "./sources";
 import { readdirSync, existsSync } from "node:fs";
@@ -29,15 +27,10 @@ import { readdirSync, existsSync } from "node:fs";
 export interface BoardSnapshot {
   root: string;
   at: string;
-  stage: string;
   target: string;
-  contract: string;
+  /** 生效的守卫名（未指定时为空串，按内置默认守卫处理）。 */
+  policy: string;
   next_action: string;
-  stage_goal: string;
-  stage_name: string;
-  stage_index: number;
-  stage_total: number;
-  gate: string[];
   blockers: string[];
   diagnosis: BoardDiagnosis;
   supervisor: {
@@ -76,7 +69,6 @@ export interface BoardWorker {
   status: string;
   host: string;
   pid: number;
-  stage: string;
   dispatch: string;
   mode: string;
   heartbeat_at: string;
@@ -94,7 +86,6 @@ export interface BoardWorker {
 export interface BoardDispatch {
   id: string;
   status: string;
-  stage: string;
   shard: string;
   title: string;
   action: string;
@@ -107,7 +98,6 @@ export interface BoardDispatch {
 export interface BoardAsk {
   text: string;
   at: string;
-  stage: string;
   status: string;
 }
 
@@ -148,7 +138,7 @@ export interface ThreadMessage {
   atts?: string[];
   /** 随带的技能名，气泡上按标签展示；缺失表示没选技能。 */
   skills?: string[];
-  /** id 必须与 buildThreadsPage 的线程 id 一致（阶段/分片，空分片用 main）。 */
+  /** id 必须与 buildThreadsPage 的线程 id 一致（分片名或 `x` 加派生链尾号，都没有用 main）。 */
   jump?: { id: string; label: string };
   /** 曝光层级由服务端按事件类型判定，前端不另判。 */
   tier?: "main" | "log";
@@ -185,7 +175,6 @@ export interface ThreadSummary {
   no: string;
   shard: string;
   lineage?: string;
-  stage: string;
   status: string;
   bucket?: "run" | "queue" | "paused" | "bad" | "done" | "canceled" | "closed"; /* 由 taskBucket 算定，前端直接读 */
   settled?: boolean;
@@ -324,19 +313,18 @@ export function brief(value: unknown, max = 120): string {
 /**
  * 事件的一句话说明。
  *
- * `customContract` 为 false 表示当前是引擎默认任务列表：阶段推进、跳步、门槛这些
- * 契约过程对用户没有含义，改成不带阶段号的陈述，或直接不上面板。
+ * `customPolicy` 为 false 表示当前是引擎默认守卫：作废、跳步、门槛这类
+ * 守卫过程对用户没有含义，改成中性陈述，或直接不上面板。
  * 缺省按 true 处理，历史记录与只读视图保持原样。
  */
 export function describeEvent(
   e: Record<string, unknown>,
-  opts: { customContract?: boolean } = {},
+  opts: { customPolicy?: boolean } = {},
 ): string {
-  const custom = opts.customContract !== false;
+  const custom = opts.customPolicy !== false;
   const name = String(e.event ?? e.kind ?? "");
   const d = String(e.dispatch ?? "");
   const w = String(e.worker ?? "");
-  const st = String(e.stage ?? "");
   const shard = shardTitle(e.shard);
   const shardOf = (value: unknown): string => {
     const raw = String(value ?? "");
@@ -346,8 +334,8 @@ export function describeEvent(
   switch (name) {
     case "dispatch_open":
       /*
-       * 不写阶段号：派单是分头交给各自的进程做，阶段号对读者与执行方都没有可执行含义，
-       * 写出来只会被复述进申报（“S0 盘点：…”），读的人还得反查 S0 是什么。
+       * 不写任务树坐标：派单是分头交给各自的进程做，它在树里的位置对读者与执行方都没有可执行含义，
+       * 写出来只会被复述进申报（“第一层第二个节点：…”），读的人还得回头数树。
        */
       return `派发任务 ${d}${shard ? `（${shard}）` : ""}：${String(e.action ?? "")}`;
     case "dispatch_done":
@@ -397,26 +385,10 @@ export function describeEvent(
        * 记录：同一条消息出现两处回执，会使人误以为监工参与过这条对话。
        */
       return "";
-    case "supervisor_advance": {
-      const from = String(e.from ?? "");
-      const to = String(e.to ?? "");
-      /* 起止相同不是推进：界面出现 X -> X 只会使人误以为流程在推进。 */
-      if (!from || !to || from === to) return "";
-      if (!custom) return "进入下一步";
-      return `阶段推进 ${from} 到 ${to}`;
-    }
     case "supervisor_done":
-      return custom ? `任务完成（${st}）` : "任务完成";
+      return "任务完成";
     case "hook_error":
       return `钩子异常：${String(e.error ?? "")}`;
-    case "gate_eval": {
-      const missing = Array.isArray(e.missing) ? e.missing.map((x) => String(x)) : [];
-      /* 门槛评估是契约的判据，默认任务列表下没有可描述的契约过程，整条不上面板。 */
-      if (!custom) return "";
-      return e.ok === true
-        ? `门槛评估 ${st}：已满足，可以推进`
-        : `门槛评估 ${st}：未达标（${missing.join("；") || "未给出缺失项"}）`;
-    }
     case "dispatch_merged": {
       const into = String(e.into ?? d ?? "");
       const tag = String(e.tag ?? "");
@@ -482,7 +454,6 @@ export function buildSnapshot(root: string): BoardSnapshot {
       status: w.status,
       host: w.host,
       pid: w.pid,
-      stage: w.stage,
       dispatch: w.dispatch,
       mode: w.mode ?? "background",
       heartbeat_at: w.heartbeat_at,
@@ -510,7 +481,6 @@ export function buildSnapshot(root: string): BoardSnapshot {
     .map((d: Dispatch) => ({
       id: d.id,
       status: d.status,
-      stage: d.stage,
       shard: d.shard ?? "",
       title: dispatchTitle(d),
       action: clipText(d.action, ACTION_PREVIEW_CHARS),
@@ -524,14 +494,13 @@ export function buildSnapshot(root: string): BoardSnapshot {
   const asks: BoardAsk[] = openInboxAsks(root).map((q) => ({
     text: String(q.text ?? ""),
     at: String(q.at ?? ""),
-    stage: String(q.stage ?? ""),
     status: String(q.status ?? ""),
   }));
 
   // 事件窗口需容纳 tool 事件，否则派单与回报事件会被挤出尾部窗口。
   const ledgerOnly = ledgerOnlyRoot(root);
-  /* 默认任务列表下，阶段推进这类契约过程按中性说法上屏。 */
-  const customContract = hasCustomContract(state?.contract);
+  /* 默认守卫下，守卫过程按中性说法上屏。 */
+  const customPolicy = hasCustomPolicy(state?.policy);
   const feed: BoardEvent[] = readJsonlFromTail(ledgerLoc.events(root), 512_000)
     .filter((e) => FEED_EVENTS.has(String(e.event ?? e.kind ?? "")))
     .filter((e) => !(ledgerOnly && String(e.event ?? e.kind ?? "") === "supervisor_done"))
@@ -540,7 +509,7 @@ export function buildSnapshot(root: string): BoardSnapshot {
     .map((e) => ({
       at: String(e.at ?? ""),
       event: String(e.event ?? e.kind ?? ""),
-      text: clipText(describeEvent(e, { customContract }), FEED_TEXT_CHARS),
+      text: clipText(describeEvent(e, { customPolicy }), FEED_TEXT_CHARS),
     }));
 
   const active = activeDispatch(root);
@@ -549,29 +518,12 @@ export function buildSnapshot(root: string): BoardSnapshot {
     ? `${readTailText(lastWorker.log)}\n${readTailText(`${lastWorker.log}.err`)}`.trim()
     : "";
 
-  const contract = state?.contract ? loadContract(String(state.contract), contractDirs(root)) : null;
-  const stage = contract && state?.stage ? stageById(contract, String(state.stage)) : undefined;
-  const gate = stage?.done ? runCheck(stage.done, root).missing : [];
-  const stageIndex = contract && state?.stage
-    ? contract.stages.findIndex((s) => s.id === String(state.stage))
-    : -1;
-
   return {
     root,
     at: new Date().toISOString(),
-    ...stageViewOf(
-      String(state?.contract ?? ""),
-      String(state?.stage ?? ""),
-      stage?.name ?? "",
-      stageIndex,
-      contract ? contract.stages.length : 0,
-    ),
     target: state?.target ?? "",
-    contract: state?.contract ?? "",
+    policy: state?.policy ?? "",
     next_action: state?.next_action ?? "",
-    stage_goal: stage?.goal ?? "",
-    /* 门槛属于契约过程，默认任务列表下不对外给出。 */
-    gate: hasCustomContract(state?.contract) ? gate : [],
     blockers: Array.isArray(state?.blockers)
       ? state?.blockers.map((b) => String((b as { reason?: unknown }).reason ?? ""))
       : [],
@@ -622,7 +574,7 @@ export function buildSnapshot(root: string): BoardSnapshot {
 export function buildFeed(root: string, limit = 40): BoardEvent[] {
   const n = Math.max(1, Math.min(Math.floor(limit) || 40, 200));
   const ledgerOnly = ledgerOnlyRoot(root);
-  const customContract = hasCustomContract(loadState(root)?.contract);
+  const customPolicy = hasCustomPolicy(loadState(root)?.policy);
   return readJsonlFromTail(eventsFile(root), 512_000)
     .filter((e) => FEED_EVENTS.has(String(e.event ?? e.kind ?? "")))
     .filter((e) => !(ledgerOnly && String(e.event ?? e.kind ?? "") === "supervisor_done"))
@@ -631,7 +583,7 @@ export function buildFeed(root: string, limit = 40): BoardEvent[] {
     .map((e) => ({
       at: String(e.at ?? ""),
       event: String(e.event ?? e.kind ?? ""),
-      text: clipText(describeEvent(e, { customContract }), FEED_TEXT_CHARS),
+      text: clipText(describeEvent(e, { customPolicy }), FEED_TEXT_CHARS),
     }));
 }
 
@@ -644,40 +596,9 @@ export function rootFromUrl(url: string, fallback: string): string {
   return listTaskRoots(fallback).includes(abs) ? abs : fallback;
 }
 
-export function contractDirs(root: string): string[] {
-  const dirs = [join(root, "contracts"), join(root, "packages", "supervisor", "contracts")];
-  try {
-    for (const name of readdirSync(root)) {
-      if (!name.startsWith(".")) continue;
-      const p = join(root, name, "contracts");
-      if (existsSync(p)) dirs.push(p);
-    }
-  } catch {
-  }
-  return dirs;
-}
-
+/** 是否只有内置默认守卫：默认档的守卫内容通用，界面按中性说法上屏，不展开细节。 */
 export function ledgerOnlyRoot(root: string): boolean {
-  const state = loadState(root);
-  const contract = state?.contract ? loadContract(String(state.contract), contractDirs(root)) : null;
-  return !!contract && contract.stages.length <= 1;
-}
-
-/**
- * 对外的阶段读数。默认任务列表下全部置空：阶段号会让读者反查“S0 是什么”，
- * 而一张单落在哪一步不影响用户要看的结果。两处快照共用这一处口径。
- */
-export function stageViewOf(
-  contractName: string,
-  stageId: string,
-  stageName: string,
-  stageIndex: number,
-  stageTotal: number,
-): { stage: string; stage_name: string; stage_index: number; stage_total: number } {
-  if (!hasCustomContract(contractName)) {
-    return { stage: "", stage_name: "", stage_index: -1, stage_total: 0 };
-  }
-  return { stage: stageId, stage_name: stageName, stage_index: stageIndex, stage_total: stageTotal };
+  return !hasCustomPolicy(loadState(root)?.policy);
 }
 
 export interface DiagnoseInput {
@@ -699,7 +620,7 @@ export function diagnose(i: DiagnoseInput): BoardDiagnosis {
       level: "bad",
       title: "当前目录没有任务根",
       detail: "看板读不到 .capitalist/runtime/state.json。",
-      fix: 'capitalist start "<目标>" --contract <任务列表名>',
+      fix: 'capitalist start "<目标>" --policy <守卫名>',
     };
   }
 

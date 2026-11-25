@@ -6,14 +6,14 @@ const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
 const PKG = resolve(__dirname, "..");
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 const { appendDispatch, readDispatches } = require(join(PKG, "dist/core/record/supervisor.js"));
 const { bindAttachments } = require(join(PKG, "dist/core/message/attachments.js"));
 const { spliceDirectives } = require(join(PKG, "dist/core/dispatch/commands.js"));
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-attlimit-"));
-  createTaskRoot({ target: "附件不设上限", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "附件不设上限", policySpec: "minimal", root: base });
   return base;
 }
 

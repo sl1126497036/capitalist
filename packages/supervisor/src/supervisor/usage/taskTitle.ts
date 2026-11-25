@@ -1,7 +1,7 @@
 /**
- * 任务标题中文化：按契约 title、分片映射、正文摘要、阶段名的顺序取中文名，均不可用时返回空串。
+ * 任务标题中文化：按守卫 title、分片映射、正文摘要的顺序取中文名，均不可用时返回空串。
  *
- * 契约 title 原样保留不截断，标题写入台账后截掉的部分无法补回；显示宽度由前端渐隐省略处理。
+ * 守卫 title 原样保留不截断，标题写入台账后截掉的部分无法补回；显示宽度由前端渐隐省略处理。
  */
 
 import { stripListMark } from "../../core/text";
@@ -34,13 +34,13 @@ export const SHARD_TITLES: Readonly<Record<string, string>> = Object.freeze({
   "drop-notify": "去掉通知铃",
   "engine-api": "线程消息接口",
   "engine-cli": "指令中断命令",
-  "engine-core": "任务列表热加载",
+  "engine-core": "守卫热加载",
   "engine-guard": "进程回收",
   "engine-stream": "输出流式落盘",
   "final-cleanup": "兼容层清除",
   "fix-ask-scope": "提问按片停派",
   "fix-credential-visibility": "凭证可见",
-  "fix-redispatch": "重派取任务列表",
+  "fix-redispatch": "重派取守卫",
   "fix-task-title": "任务标题中文化",
   host: "宿主层整改",
   "icon-polish": "图标统一化",
@@ -77,7 +77,7 @@ export const SHARD_TITLES: Readonly<Record<string, string>> = Object.freeze({
   "stream-client": "前端推流",
   "stream-server": "服务端推流",
   "capitalist-reload": "监工上下文重载",
-  "capitalist-task-list": "任务列表整理",
+  "capitalist-task-list": "守卫整理",
   "capitalist-term-rename": "术语统一",
   "supervisor-entry": "监工条目",
   "tab-panel-layout": "选项卡联动",
@@ -163,28 +163,18 @@ function clipTitle(text: string): string {
 }
 
 export interface TitleInput {
-  /** 契约里该分片的中文 `title`。 */
-  contractTitle?: string | undefined;
   /** 分片 id，用来查映射表。 */
   shard?: string | undefined;
   /** 派单正文，最后一级回落。 */
   action?: string | undefined;
-  /** 整阶段派单时用阶段名。 */
-  stageName?: string | undefined;
 }
 
 export function taskTitle(input: TitleInput): string {
-  const contract = String(input.contractTitle ?? "").trim();
-  if (cjkCount(contract) > 0) return contract;
-
   const mapped = shardTitle(input.shard);
   if (mapped) return mapped;
 
   const summarized = summarizeTitle(String(input.action ?? ""));
   if (summarized) return summarized;
-
-  const stage = String(input.stageName ?? "").trim();
-  if (cjkCount(stage) > 0) return stage;
 
   return "";
 }

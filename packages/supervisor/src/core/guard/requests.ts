@@ -39,7 +39,6 @@ export interface GuardRequest {
   paths: string[];
   worker: string;
   dispatch: string;
-  stage: string;
   /** 工作进程补充的理由；未补充时为空串。 */
   reason: string;
   status: GuardStatus;
@@ -89,7 +88,6 @@ type Row =
       paths: string[];
       worker: string;
       dispatch: string;
-      stage: string;
     }
   | { type: "reason"; id: string; at_ts: number; reason: string; paths?: string[] }
   | {
@@ -123,7 +121,6 @@ export function readGuardRequests(root: string): GuardRequest[] {
         paths: Array.isArray(raw.paths) ? raw.paths.map(String) : [],
         worker: String(raw.worker ?? ""),
         dispatch: String(raw.dispatch ?? ""),
-        stage: String(raw.stage ?? ""),
         reason: "",
         status: "open",
         used: false,
@@ -173,7 +170,7 @@ export function appendRequest(
   root: string,
   req: Pick<
     GuardRequest,
-    "id" | "at" | "atTs" | "kind" | "action" | "tool" | "command" | "paths" | "worker" | "dispatch" | "stage"
+    "id" | "at" | "atTs" | "kind" | "action" | "tool" | "command" | "paths" | "worker" | "dispatch"
   >,
 ): void {
   appendJsonl(guardLedgerPath(root), {
@@ -188,7 +185,6 @@ export function appendRequest(
     paths: req.paths,
     worker: req.worker,
     dispatch: req.dispatch,
-    stage: req.stage,
   });
 }
 

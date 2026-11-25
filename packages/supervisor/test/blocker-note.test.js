@@ -6,13 +6,13 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { appendSection } = require("../dist/core/dispatch/commands");
 const worker = require("../dist/supervisor/worker/worker");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-blocker-"));
-  createTaskRoot({ target: "卡点测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "卡点测试", policySpec: "minimal", root: base });
   return base;
 }
 
@@ -35,7 +35,7 @@ test("卡点段只写卡点与处置方式，长度不超过上限", () => {
   assert.ok(text.length <= worker.BLOCKER_MAX_CHARS, `卡点段 ${text.length} 字，超过上限`);
 });
 
-test("拿不到失败原因时如实说明，并让 worker 先复现", () => {
+test("缺少失败原因时如实说明，并让 worker 先复现", () => {
   const text = worker.buildSkipBlocker({});
   assert.match(text, /未记录失败原因/);
   assert.match(text, /复现/);
@@ -59,7 +59,7 @@ test("同一张单连续重派两次，卡点段跟着台账里最新的失败�
   fail(root, { id: "D-1", back: 3000, note: "第一次：测试进程挂住。" });
   const first = worker.buildSkipBlocker(worker.findPreviousBlocker(root, { shard: "a" }));
 
-  fail(root, { id: "D-2", back: 1000, note: "第二次：契约里这一片已被删掉，找不到入口。" });
+  fail(root, { id: "D-2", back: 1000, note: "第二次：这一片已被删掉，找不到入口。" });
   const second = worker.buildSkipBlocker(worker.findPreviousBlocker(root, { shard: "a" }));
 
   assert.match(first, /第一次/);
@@ -72,7 +72,7 @@ test("没有失败前身时不追加卡点段", () => {
   assert.equal(worker.findPreviousBlocker(root, { shard: "a" }), null);
 });
 
-test("续跑提示词与重派共用同一份卡点段，正文重发一次且卡点只说一次", () => {
+test("续跑提示词与重派共用同一份卡点段，正文重发一次且卡点只出现一次", () => {
   const root = sandbox();
   fail(root, { id: "D-1", note: "npm test 卡住，十分钟没有输出。" });
   const body = "把重派提示词改成追加卡点段。";

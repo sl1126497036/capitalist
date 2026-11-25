@@ -8,11 +8,11 @@ const { join, resolve } = require("node:path");
 const PKG = resolve(__dirname, "..");
 const { readNextModel } = require(join(PKG, "dist/supervisor/loop.js"));
 const board = require(join(PKG, "dist/supervisor/board"));
-const { createTaskRoot } = require(join(PKG, "dist/core/contract/init.js"));
+const { createTaskRoot } = require(join(PKG, "dist/core/policy/init.js"));
 
 function sandbox() {
   const root = mkdtempSync(join(tmpdir(), "capitalist-next-model-"));
-  createTaskRoot({ target: "派单模型", contractSpec: "generic", root, supervisor: false });
+  createTaskRoot({ target: "派单模型", policySpec: "generic", root, supervisor: false });
   return root;
 }
 

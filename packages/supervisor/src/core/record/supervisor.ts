@@ -3,7 +3,7 @@
  *
  * 三种角色对应三类进程，彼此不共享上下文：
  *
- *   监工进程      长驻，独立进程。建根、定契约、派单、验收、判定失败后重新派发。
+ *   监工进程      长驻，独立进程。建根、定守卫、派单、验收、判定失败后重新派发。
  *   工作进程      监工拉起的独立宿主进程，一个 worker 一个上下文，互不可见。
  *   hook          宿主在 worker 进程内调用的判定层，不占 worker 上下文。
  *
@@ -26,15 +26,15 @@ import { join } from "node:path";
 import { attachmentsIn, withAttachmentLines } from "../message/attachments";
 import { readJson, readJsonl, appendJsonl, writeJson, writeJsonl } from "./json";
 import { statCached } from "./fsCache";
-import { isFailed, isSettled, isTerminal } from "./dispatchState";
-import { isGroupRef } from "./nodeRef";
+import { isTerminal } from "./dispatchState";
+import { parentOf } from "./prerequisites";
 import { runtime, meta, workers, inbox, model, rootIndex, archive, ledger } from "./locations";
 import { pidAlive } from "./process";
 import { resolveDispatchNo, syncTaskForDispatch, taskNoOfDispatchId } from "./tasks";
 import { readIdMap, registerWorker as registerIdMapWorker } from "./idMap";
 import { withNoLock } from "./noLock";
 
-/** 监工进程状态。`done` 表示末阶段门槛已达标，监工据此退出。 */
+/** 监工进程状态。`done` 表示末节点已交付、没有在途单，监工据此退出。 */
 export type SupervisorStatus = "running" | "stopped" | "done";
 
 /** 监工记录。写入 `.capitalist/runtime/supervisor.json`，供监工判活与看板展示。 */
@@ -46,7 +46,8 @@ export interface SupervisorRecord {
   /** epoch 秒；判活用它，不解析 heartbeat_at */
   heartbeat_ts: number;
   target: string;
-  contract: string;
+  /** 守卫名。 */
+  policy: string;
   tick_sec: number;
   worker_timeout_sec: number;
   /**
@@ -56,7 +57,7 @@ export interface SupervisorRecord {
    */
   stuck_sec?: number;
   ticks: number;
-  /** 并行度上限。实际能开几个由契约的分片决定。 */
+  /** 并行度上限。每张在途派单占一条并发线。 */
   max_workers: number;
   worker_host: string;
   /**
@@ -112,18 +113,23 @@ export type DispatchStatus = "open" | "claimed" | "reported" | "review" | "done"
 export interface Dispatch {
   id: string;
   at: string;
-  stage: string;
-  /** 这一单要做什么。取自契约，监工不自行生成领域描述。 */
+  /** 这一单要做什么。由派单方写入，引擎不生成。 */
   action: string;
+  /**
+   * 本单的验收判据：做到什么程度算完成。随派单下发给工作进程，也是审查侧的打回依据。
+   * 空表示未声明，审查侧按产出物证据判定。
+   */
+  acceptance?: string;
   status: DispatchStatus;
-  /** 分片标识。空表示该阶段不可分片，一次只能派一个 worker。 */
+  /** 分片标识。同分片的派单串行，空表示占用整条并发线。 */
   shard?: string;
   worker?: string;
   session?: string;
   claimed_at?: string;
   done_at?: string;
   note?: string;
-  source?: "stage" | "requeue" | "reverify" | "adhoc";
+  /** `stage` 是阶段机制遗留的历史值，只读兼容，不再写入。 */
+  source?: "plan" | "requeue" | "reverify" | "adhoc" | "stage";
   /** 插队标记。`fillSlots` 找下一张 open 单时先看它。 */
   urgent?: boolean;
   /**
@@ -182,7 +188,7 @@ export interface Dispatch {
   /**
    * 最近一次被点名唤醒的时刻（ISO）。
    *
-   * 全局暂停期间，监工每轮补暂停标记时跳过该派单：用户已单独解除其暂停，重新标记会使唤醒回执与界面不一致。阶段推进的作废宽限期同样读这个字段。
+   * 全局暂停期间，监工每轮补暂停标记时跳过该派单：用户已单独解除其暂停，重新标记会使唤醒回执与界面不一致。
    */
   wake_at?: string;
   /**
@@ -316,7 +322,6 @@ export interface WorkerRecord {
   session: string;
   dispatch: string;
   shard?: string;
-  stage: string;
   started_at: string;
   heartbeat_at: string;
   heartbeat_ts: number;
@@ -615,12 +620,12 @@ export function newWorkerId(root: string, dispatchId: string): string {
       const used = usedWorkerSeqs(root, taskNo);
       const maxSeq = used.size > 0 ? Math.max(...used) : 0;
       const id = `${taskNo}-P${maxSeq + 1}`;
-      /* 先占位再返回：号离开临界区就已被占住，并发取号拿不到同一个。 */
+      /* 先占位再返回：号离开临界区就已被占住，并发取号取不到同一个。 */
       markWorkerNo(root, id, "held");
       return id;
     });
   }
-  /* 拿不到任务号（旧 `D-` 单）时退回旧的自增 id，仅作为后备方案。 */
+  /* 取不到任务号（旧 `D-` 单）时退回旧的自增 id，仅作为后备方案。 */
   const file = meta.workerNo(root);
   const data = readJson<{ next?: number }>(file, {});
   let n = Math.max(1, Number(data?.next ?? 1) || 1);
@@ -954,8 +959,8 @@ let dispatchCache: { root: string; key: string; rows: Dispatch[] } | null = null
  *
  * @param originDispatchId 重派时传入原派单号，复用其任务号、派发序 +1；新任务不传，发行新任务号。
  */
-export function newDispatchId(root: string, stage: string, shard?: string, originDispatchId?: string): string {
-  return resolveDispatchNo(root, stage, shard, originDispatchId).dispatchId;
+export function newDispatchId(root: string, originDispatchId?: string): string {
+  return resolveDispatchNo(root, originDispatchId).dispatchId;
 }
 
 /** 追加一张派单。 */
@@ -1052,14 +1057,12 @@ export function pausedDispatches(root: string): Dispatch[] {
 function carryAttachments(rows: Dispatch[], d: Dispatch): Dispatch {
   /** 只有“重派”才继承：同一片的任务未完成，重发一单时不能丢失用户提供的图。 */
   if (d.source !== "requeue") return d;
-  const stage = String(d.stage ?? "");
-  const shard = String(d.shard ?? "");
   /* 还要是同一条派生链：同一片上的另一件事（另一次派单）不是这张单的前身。 */
   const chain = String((d as { lineage?: string }).lineage ?? "");
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const prev = rows[i];
     if (!prev || prev.id === d.id) continue;
-    if (String(prev.stage ?? "") !== stage || String(prev.shard ?? "") !== shard) continue;
+    if (String(prev.shard ?? "") !== String(d.shard ?? "")) continue;
     const prevChain = String((prev as { lineage?: string }).lineage ?? "");
     if (chain && prevChain && chain !== prevChain) continue;
     /* 只看最近一张同片单：再往前的都被它继承过一次了，继续往前找会把陈年附件翻出来。 */
@@ -1168,7 +1171,7 @@ export function claimDispatch(root: string, id: string, worker: string, session 
   };
   /*
    * 让位标记到此为止：这一单已经被领走，恢复顺序与“已让位”都不再是它的事。
-   * 留着不清会让界面在它跑起来之后仍然标“已让位”，也会让下一次排队继续吃旧序号。
+   * 留着不清会让界面在它启动之后仍然标“已让位”，也会让下一次排队继续沿用旧序号。
    */
   delete next.yielded_at;
   delete next.yielded_by;
@@ -1256,140 +1259,19 @@ export function openQueue(root: string): Dispatch[] {
     .map((x) => x.d);
 }
 
-/** 一张派单的父节点 id：`parent` 优先；老台账里只有一个 `after` 的记录按父节点处理。 */
-export function parentOf(d: { id?: string; parent?: string; after?: string[] }): string {
-  const p = String(d.parent ?? "").trim();
-  if (p) return p;
-  const after = Array.isArray(d.after) ? d.after.map((x) => String(x ?? "").trim()).filter(Boolean) : [];
-  if (after.length === 1 && after[0] !== "*") return after[0] as string;
-  return "";
-}
-
-/** 前置集合：父节点 + 遗留 `after` 里的多前置。`barrier` 表示带 `"*"`（等所有其它单到终态）。 */
-export function prerequisitesOf(d: {
-  id?: string;
-  parent?: string;
-  after?: string[];
-}): { ids: string[]; barrier: boolean } {
-  const after = Array.isArray(d.after) ? d.after.map((x) => String(x ?? "").trim()).filter(Boolean) : [];
-  const ids = [...new Set([parentOf(d), ...after.filter((x) => x !== "*")].filter(Boolean))];
-  return { ids, barrier: after.includes("*") };
-}
-
-/**
- * 这张单挂的前置里，哪些编号在台账里根本找不到（孤儿前置）。
- *
- * {@link dependenciesSettled} 对孤儿前置按“已满足”放行（等一个不存在的编号就是永久
- * 等待），但放行必须留痕：调度层每拍拿这个函数核对，有孤儿就记
- * `dispatch_parent_missing` 事件，否则台账被归档/重写之后，依赖静默失效，
- * 顺序错了却没人知道是哪张单、缺了哪个编号。
+/*
+ * 前置判定、“同一件事”的身份与内容指纹迁到 `./prerequisites`：它们只回答“下游能不能
+ * 放行”，不读写落盘。这里保留同名导出，调用方无需改 import。
  */
-export function missingPrerequisites(
-  d: { id: string; parent?: string; after?: string[] },
-  rows: Dispatch[],
-): string[] {
-  const { ids } = prerequisitesOf(d);
-  if (ids.length === 0) return [];
-  const byId = new Set(rows.map((x) => String(x.id)));
-  /*
-   * 组号不是派单，不按“派单孤儿”计：组的缺失由组索引的 `dangling` 单独上报
-   * （`group_missing`）。若合并统计，每张挂组的派单都会记一条误报的孤儿事件。
-   */
-  return ids.filter((id) => !isGroupRef(id) && !byId.has(id));
-}
-
-/** 一条链的身份：`lineage` 为空的单自成一链。 */
-function lineageOf(x: Dispatch): string {
-  return String(x.lineage ?? x.id);
-}
-
-/**
- * 一张单的任务内容指纹：剥掉附件行、压平空白后的正文。
- *
- * 台账里同一件事会有多条记录（每次重派一条），它们只有 `action` 尾部可能被追加
- * 插话/验收清单。做归组（重建树）和认亲（派生链匹配）都靠这个指纹，口径必须同一份。
- *
- * 正文为空时退回 `stage/shard`，再为空退回标题。
- */
-export function workKeyOf(d: { action?: string; title?: unknown; stage?: string; shard?: string }): string {
-  const body = String(d.action ?? "")
-    .split(/\r?\n/)
-    .filter((line) => !/^\s*\[附件]/.test(line))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 160);
-  if (body) return body;
-  const shard = `${String(d.stage ?? "")}/${String(d.shard ?? "")}`;
-  if (shard !== "/") return `shard:${shard}`;
-  return `title:${String(d.title ?? "").trim()}`;
-}
-
-function sameWork(a: Dispatch, b: Dispatch): boolean {
-  if (workKeyOf(a) === workKeyOf(b)) return true;
-  /* 正文被模型微调过、但标题整条继承的情况：重派路径同样会带过来。 */
-  const ta = String((a as { title?: unknown }).title ?? "").trim();
-  const tb = String((b as { title?: unknown }).title ?? "").trim();
-  return Boolean(ta) && ta === tb;
-}
-
-export function pendingPrerequisites(
-  d: { id: string; parent?: string; after?: string[] },
-  rows: Dispatch[],
-): string[] {
-  const { ids, barrier } = prerequisitesOf(d);
-  const pending: string[] = [];
-
-  if (barrier) {
-    /* 除自己以外，还有没有活着的单：有就等，没有才轮到我。 */
-    const alive = rows.some(
-      (x) => x.id !== d.id && x.status !== "done" && x.status !== "closed" && x.status !== "failed",
-    );
-    if (alive) pending.push("*");
-  }
-  if (ids.length === 0) return pending;
-
-  const settled = rows.filter((x) => isSettled(String(x.status)));
-  const settledIds = new Set(settled.map((x) => String(x.id)));
-  /* 派生链 -> 已完成的那些记录。判据是“同一件事的后续尝试”，不是“同一条链上任一张”。 */
-  const settledByLineage = new Map<string, Dispatch[]>();
-  for (const x of settled) {
-    const k = lineageOf(x);
-    const list = settledByLineage.get(k);
-    if (list) list.push(x);
-    else settledByLineage.set(k, [x]);
-  }
-  const settledShards = new Set(
-    settled
-      .filter((x) => String(x.shard ?? "").trim())
-      .map((x) => `${String(x.stage ?? "")}/${String(x.shard)}`),
-  );
-  const byId = new Map(rows.map((x) => [String(x.id), x] as const));
-
-  for (const id of ids) {
-    if (settledIds.has(id)) continue;
-    const ref = byId.get(id);
-    if (!ref) continue; // 孤儿前置：放行并留痕，见上面的说明
-    const refShard = String(ref.shard ?? "").trim();
-    if (refShard !== "" && settledShards.has(`${String(ref.stage ?? "")}/${refShard}`)) continue;
-    if (settledByLineage.get(lineageOf(ref))?.some((x) => sameWork(x, ref))) continue;
-    pending.push(id);
-  }
-  return pending;
-}
-
-/**
- * 依赖判定：派单的前置是否都到终态。
- *
- * 判定逻辑在 {@link pendingPrerequisites}，此处为“无剩余前置”的简写；
- * 调度层与森林视图共用该判定。
- */
-export function dependenciesSettled(
-  d: { id: string; parent?: string; after?: string[] },
-  rows: Dispatch[],
-): boolean {
-  return pendingPrerequisites(d, rows).length === 0;
-}
+export {
+  parentOf,
+  prerequisitesOf,
+  missingPrerequisites,
+  lineageOf,
+  workKeyOf,
+  pendingPrerequisites,
+  dependenciesSettled,
+} from "./prerequisites";
 
 /** 森林视图：一棵树一个根，`children` 是直接子节点，`depth` 是相对根的层数。 */
 export interface DispatchForest {

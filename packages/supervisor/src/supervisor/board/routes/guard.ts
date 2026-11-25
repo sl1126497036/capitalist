@@ -34,7 +34,6 @@ function view(rec: GuardRequest, nos?: Map<string, string>): Record<string, unkn
     reason: text(rec.reason),
     worker: rec.worker,
     dispatch: rec.dispatch,
-    stage: rec.stage,
     status: rec.status,
     why: text(rec.why),
     alternative: text(rec.alternative),
@@ -125,14 +124,9 @@ export function handleGuardDecision(ctx: BoardCtx): void {
 
     notifyWorker(
       ctx.opts.root,
-      {
-        stage: rec.stage,
-        worker: rec.worker,
-        dispatch: rec.dispatch,
-        paths: rec.paths,
-      },
+      { worker: rec.worker, dispatch: rec.dispatch, paths: rec.paths },
       verdict === "allow"
-        ? `【用户已批准】${rec.paths.join("、")}\n按原命令重试一次即可。`
+        ? `【用户已批准】${rec.paths.join("、")}\n按原命令重试一次。`
         : [
             `【用户已拒绝】${rec.paths.join("、")}`,
             alternative ? `改用这个做法：${alternative}` : "没有可替代的做法时，停下等用户进一步说明。",

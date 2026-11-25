@@ -12,8 +12,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { runCheck } from "../../core/contract/checks";
-import { evaluate, loadContract, type Contract } from "../../core/contract/contract";
+import { evaluate, loadPolicy, type Policy } from "../../core/policy/policy";
 import { appendJsonl, readJsonl, writeJson, writeJsonl } from "../../core/record/json";
 import {
   loadSessions,
@@ -41,7 +40,7 @@ import { flagBool, flagString, type Parsed } from "../args";
 interface CmdCtx {
   root: string;
   state: TaskState;
-  contract: Contract;
+  policy: Policy;
 }
 
 /** 台账里证据的四项。少一项就不算“已证实”。 */
@@ -49,12 +48,12 @@ const EVIDENCE_FIELDS = ["baseline", "probe", "diff", "repro"] as const;
 
 function ctxOrDie(p: Parsed): CmdCtx {
   const root = flagString(p, "root") ?? findRoot();
-  if (!root) throw new Error("当前不在任何受监督任务内。开工：capitalist start <目标> --contract <任务列表名>");
+  if (!root) throw new Error("当前不在任何受监督任务内。开工：capitalist start <目标> --policy <守卫名>");
   const state = loadState(root);
   if (!state) throw new Error(`${root} 下没有可用的 .capitalist/runtime/state.json`);
-  const contract = loadContract(state.contract_path) ?? loadContract(state.contract, skillDirs());
-  if (!contract) throw new Error(`任务列表文件丢失：${state.contract_path}`);
-  return { root, state, contract };
+  const policy = loadPolicy(state.policy_path) ?? loadPolicy(state.policy, skillDirs());
+  if (!policy) throw new Error(`守卫文件丢失：${state.policy_path}`);
+  return { root, state, policy };
 }
 
 function qaPath(root: string): string {
@@ -88,7 +87,7 @@ export function cmdAnswer(p: Parsed): number {
   const hitText = res.text;
 
   // 重派上限这类 ask，裁决本身就是“放行该片”：将该批失败排除在统计外。不排除的话重派计数
-  // 仍超上限时，监工下一轮调度会重新登记同一条 ask，答复未登记即视为未答复，阶段持续停滞。
+  // 仍超上限时，监工下一轮调度会重新登记同一条 ask，答复未登记即视为未答复，任务持续停滞。
   const capLabel = /重派上限\s+([^\s：:，,]+)/.exec(hitText)?.[1] ?? null;
   if (capLabel) {
     updateState(root, (s) => {
@@ -276,14 +275,14 @@ export function cmdReview(p: Parsed): number {
 /**
  * 通用就绪标记，写 `.capitalist/scope.json`。
  *
- * 契约用 `json_keys` 检查它，因此这条命令是阶段能不能推进的前置。
+ * 守卫可用 `json_keys` 检查它，作为任务的验收证据之一。
  * 形式是 `key=value`（与 Python 一致）。
  */
 export function cmdScope(p: Parsed): number {
   const pairs = p.positional.filter((x) => x.includes("="));
   if (pairs.length === 0) throw new Error("用法：capitalist scope assets=1 rules=1 grading=1");
 
-  const { root, state, contract } = ctxOrDie(p);
+  const { root, state, policy } = ctxOrDie(p);
   const file = configLoc.scope(root);
   const cur = readJsonlSafe(file);
 
@@ -308,11 +307,6 @@ export function cmdScope(p: Parsed): number {
     process.stdout.write(`  ${v ? "[x]" : "[ ]"} ${k} = ${String(v)}\n`);
   }
 
-  const stage = contract.stages.find((s) => s.id === state.stage);
-  const check = runStageCheck(stage?.done, root);
-  process.stdout.write(
-    `\n本阶段门槛：${check.ok ? "已满足 -> capitalist advance" : `未满足：${check.missing.slice(0, 3).join("；")}`}\n`,
-  );
   return 0;
 }
 
@@ -328,7 +322,7 @@ function readJsonlSafe(file: string): Record<string, unknown> {
 
 
 /**
- * 只改“下一步”这一句，不动阶段与计数。
+ * 只改“下一步”这一句，不动任务树与计数。
  */
 export function cmdSetNext(p: Parsed): number {
   const text = p.positional.join(" ") || flagString(p, "text");
@@ -422,7 +416,6 @@ export function cmdLedger(p: Parsed): number {
           decision: "DOWNGRADED",
           kind: "flow",
           session: envSession(),
-          stage: state.stage,
         });
       }
     }
@@ -495,7 +488,6 @@ export async function cmdNotify(p: Parsed): Promise<number> {
   const msg = appendMq(root, {
     from: wid,
     dispatch: String(process.env.CAPITALIST_DISPATCH_ID ?? w?.dispatch ?? ""),
-    stage: String(w?.stage ?? ""),
     shard: String(w?.shard ?? ""),
     kind,
     severity,
@@ -516,7 +508,7 @@ export async function cmdNotify(p: Parsed): Promise<number> {
 }
 
 /** 读 worker 记录，读不到返回 null（`notify` 不该因为记录缺失就失败）。 */
-function loadWorkerSafe(root: string, id: string): { stage?: string; shard?: string; dispatch?: string } | null {
+function loadWorkerSafe(root: string, id: string): { shard?: string; dispatch?: string } | null {
   try {
     return loadWorker(root, id) ?? null;
   } catch {
@@ -577,8 +569,8 @@ export function cmdFire(p: Parsed): number {
   if (!existsSync(reqFile)) throw new Error(`未找到请求文件：${reqFile}。`);
 
   const text = readFileSync(reqFile, "utf8");
-  const { root, state, contract } = ctxOrDie(p);
-  const res = evaluate(contract, text);
+  const { root, state, policy } = ctxOrDie(p);
+  const res = evaluate(policy, text);
   const hits = res.hits.filter((h) => !h.defer);
 
   if (res.decision === "BLOCK") {
@@ -586,11 +578,10 @@ export function cmdFire(p: Parsed): number {
       recordViolation(root, {
         rule: h.id,
         label: h.label,
-        fix: contract.redlines.find((r) => r.id === h.id)?.fix ?? "",
+        fix: policy.redlines.find((r) => r.id === h.id)?.fix ?? "",
         evidence: text,
         decision: "BLOCK",
         session: envSession(),
-        stage: state.stage,
       });
     }
     reportHits(hits);
@@ -605,11 +596,10 @@ export function cmdFire(p: Parsed): number {
         recordViolation(root, {
           rule: h.id,
           label: h.label,
-          fix: contract.redlines.find((r) => r.id === h.id)?.fix ?? "",
+          fix: policy.redlines.find((r) => r.id === h.id)?.fix ?? "",
           evidence: text,
           decision: "NEED_USER",
           session: envSession(),
-          stage: state.stage,
         });
       }
       reportHits(hits);
@@ -623,7 +613,6 @@ export function cmdFire(p: Parsed): number {
       req: basename(reqFile),
       user_words: authorized,
       hit_ids: hits.map((h) => h.id),
-      stage: state.stage,
     });
     for (const h of hits) {
       recordReview(root, {
@@ -675,14 +664,4 @@ function readEvidence(v: string): string {
   } catch {
     return v;
   }
-}
-
-/**
- * 阶段门槛检查。
- */
-function runStageCheck(
-  done: Record<string, unknown> | undefined,
-  root: string,
-): { ok: boolean; missing: string[] } {
-  return runCheck(done, root);
 }

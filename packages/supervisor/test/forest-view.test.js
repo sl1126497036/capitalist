@@ -7,12 +7,12 @@ const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
 const { writeJsonl } = require("../dist/core/record/json");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { buildForestView } = require("../dist/supervisor/view/forestView");
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-forest-view-"));
-  createTaskRoot({ target: "工作树看板", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "工作树看板", policySpec: "minimal", root: base });
   return base;
 }
 

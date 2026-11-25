@@ -10,6 +10,7 @@ import { closeSync, openSync, readSync } from "node:fs";
 import { statCached } from "../../core/record/fsCache";
 import { effectiveCtxWindow, readCtxWindowChosen } from "../../core/guard/limits";
 import type { Dispatch, WorkerRecord } from "../../core/record/supervisor";
+import { laneKeyOf } from "../../core/dispatch/commands";
 import { creditOfWorker } from "../usage/creditLedger";
 import { noUsage, workerUsageRow, type UsageFigures } from "../usage/usage";
 import { atTs, dispatchModel, listWorkersBoard, readDispatchesBoard } from "./sources";
@@ -23,7 +24,6 @@ export interface ThreadCost {
 export interface ThreadCostRow extends ThreadCost {
   id: string;
   shard: string;
-  stage: string;
   usage: UsageFigures;
 }
 
@@ -51,10 +51,9 @@ export function launchBannerBytes(file: string): number {
   }
 }
 
-export function spawnCountFor(stage: string, shard: string, dispatches: readonly Dispatch[]): number {
-  return shard
-    ? dispatches.filter((d) => (d.shard ?? "") === shard).length
-    : dispatches.filter((d) => d.stage === stage && !d.shard).length;
+/** 该线程已开工的次数：按线程键归并，与其他地方认线程的口径一致。 */
+export function spawnCountFor(laneKey: string, dispatches: readonly Dispatch[]): number {
+  return dispatches.filter((d) => laneKeyOf(d) === laneKey).length;
 }
 
 export const logStatsCache = new Map<string, { key: string; size: number; banner: number }>();
@@ -87,7 +86,7 @@ export function workerCost(w: WorkerRecord, dispatches: Dispatch[], nowSec = Dat
   return {
     output_bytes: Math.max(0, stats.size - stats.banner),
     duration_sec: start > 0 && end > start ? Math.round(end - start) : 0,
-    spawn_count: spawnCountFor(w.stage, w.shard ?? "", dispatches),
+    spawn_count: spawnCountFor(laneKeyOf(d ?? { shard: w.shard ?? "", id: w.dispatch }), dispatches),
   };
 }
 
@@ -119,7 +118,6 @@ export function costRowOf(w: WorkerRecord, dispatches: Dispatch[], nowSec = Date
   const row: ThreadCostRow = {
     id: w.id,
     shard: w.shard ?? "",
-    stage: w.stage,
     ...workerCost(w, dispatches, nowSec),
     usage: workerUsageRow(w, dispatches, root),
   };
@@ -144,10 +142,9 @@ export function costRowsWith(workers: readonly WorkerRecord[], dispatches: reado
     rows.push({
       id: key,
       shard: d.shard ?? "",
-      stage: d.stage,
       output_bytes: 0,
       duration_sec: 0,
-      spawn_count: spawnCountFor(d.stage, d.shard ?? "", dispatches),
+      spawn_count: spawnCountFor(laneKeyOf(d), dispatches),
       usage: noUsage(d.at, dispatchModel(d)),
     });
   }

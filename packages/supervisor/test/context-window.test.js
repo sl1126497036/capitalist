@@ -23,7 +23,7 @@ function emptyRoot() {
   mkdirSync(join(root, ".capitalist", "inbox"), { recursive: true });
   writeFileSync(
     join(root, ".capitalist", "runtime", "state.json"),
-    JSON.stringify({ version: 2, target: "测试", stage: "U1", contract: "", counters: {} }),
+    JSON.stringify({ version: 2, target: "测试", stage: "U1", policy: "", counters: {} }),
   );
   return root;
 }
@@ -178,9 +178,9 @@ test("超限判定用同一个生效上限：900k / 1M = 90% 触发", () => {
 
 test("会话判定按 1M 的 60% 判断，不再在 180k 就换代", () => {
   const root = emptyRoot();
-  const dispatch = { id: "D-1", stage: "U1", shard: "x", action: "做点事" };
-  /* 会话按派单派生：基名带派单 id。 */
-  const laneBase = "capitalist-u1-1";
+  const dispatch = { id: "D-1", shard: "x", action: "做点事" };
+  /* 会话按派单派生：基名取任务号。 */
+  const laneBase = "capitalist-1";
   const first = lane.pickLane(root, dispatch);
   assert.equal(first.resume, false);
 

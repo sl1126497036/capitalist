@@ -1,5 +1,5 @@
 /**
- * Claude Code impl。参照实现，其余几家的事件契约与它一致。
+ * Claude Code impl。参照实现，其余几家的事件协议与它一致。
  *
  * 写入位置：
  * - 安装器写 `~/.claude/settings.json` 的 `hooks` 键，挂四个生命周期点。

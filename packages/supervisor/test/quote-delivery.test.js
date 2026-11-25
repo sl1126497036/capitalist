@@ -6,7 +6,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { claimDirectives, spliceDirectives, listDirectives } = require("../dist/core/dispatch/commands");
 const { runCommand, buildThreadMessages } = require("../dist/supervisor/board");
 
@@ -20,7 +20,7 @@ delete process.env.CAPITALIST_WORKER_ID;
 
 function sandbox() {
   const base = mkdtempSync(join(tmpdir(), "capitalist-quote-"));
-  createTaskRoot({ target: "引用测试", contractSpec: "minimal", root: base });
+  createTaskRoot({ target: "引用测试", policySpec: "minimal", root: base });
   return base;
 }
 

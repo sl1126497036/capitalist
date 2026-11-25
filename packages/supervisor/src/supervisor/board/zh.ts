@@ -4,7 +4,7 @@
  * 前端复用同一份术语表，这里只做一层容错包装，避免各处自行写映射。
  */
 
-import { zhCommandLabel, zhContractKind, zhStatus } from "../context/terms";
+import { zhCommandLabel, zhPolicyKind, zhStatus } from "../context/terms";
 
 export function zhCall(fn: unknown, value: unknown, extra?: unknown): string {
   if (typeof fn !== "function") return String(value ?? "");
@@ -18,6 +18,6 @@ export function zhCall(fn: unknown, value: unknown, extra?: unknown): string {
 export const zh = {
   status: (v: unknown): string => zhCall(zhStatus, v),
   cmd: (a: unknown, u?: unknown): string => zhCall(zhCommandLabel, a, u),
-  kind: (k: unknown): string => zhCall(zhContractKind, k),
+  kind: (k: unknown): string => zhCall(zhPolicyKind, k),
 };
 

@@ -51,7 +51,7 @@ export function modelRulesOf(
 
 /**
  * @param opts.host 宿主 id；没有模型策略的宿主原样返回。
- * @param opts.wanted 调用方指定的模型，来自命令行、契约分片或看板换模型。
+ * @param opts.wanted 调用方指定的模型，来自命令行、面板换模型或启动参数。
  * @param opts.root 任务根，用于读取 `.capitalist/runtime/supervisor.json` 覆盖配置；缺省时不读。
  */
 export function resolveModel(opts: {

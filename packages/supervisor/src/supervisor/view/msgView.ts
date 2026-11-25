@@ -9,7 +9,7 @@ const CONTROL_LINE_RE = /^\s*(?:DO|ACTION|ATT|PARENT_REASON|PARENT|AFTER)\s*[:�
 
 /** 行内动作行须跟已知动作名，否则正文里普通的 `action:` 会被误截。 */
 const INLINE_CONTROL_RE =
-  /[ \t]*(?:DO|ACTION)\s*[:：]\s*(?:dispatch|amend|pause|resume|concurrency|retry|skip|set-next|ask|instruct|intervene)\b[^\n]*/gi;
+  /[ \t]*(?:DO|ACTION)\s*[:：]\s*(?:dispatch|amend|pause|resume|concurrency|retry|set-next|ask|instruct|intervene)\b[^\n]*/gi;
 
 /** 只复述派单动作的短句；“追加 / 改口”为 amend 的动作词。 */
 const DISPATCH_ECHO_RE =

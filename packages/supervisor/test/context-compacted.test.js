@@ -14,7 +14,7 @@ const {
   recordSupervisorContext,
   readSupervisorContext,
 } = require(join(PKG, "dist/supervisor/context/reload.js"));
-const { loadContract } = require(join(PKG, "dist/core/contract/contract.js"));
+const { loadPolicy } = require(join(PKG, "dist/core/policy/policy.js"));
 const { zhEvent } = require(join(PKG, "dist/supervisor/context/terms.js"));
 const { supervisorActivityOf } = require(join(PKG, "dist/supervisor/worker/activity.js"));
 const { buildSupervisorLog } = require(join(PKG, "dist/supervisor/board"));
@@ -124,7 +124,7 @@ function reloadSandbox() {
       version: 2,
       target: "演示任务",
       contract: "demo",
-      contract_path: contractPath,
+      policy_path: contractPath,
       stage: "S1",
       next_action: "继续实施",
       created_at: new Date().toISOString(),
@@ -132,7 +132,7 @@ function reloadSandbox() {
     }),
     "utf8",
   );
-  return { root, contract: loadContract(contractPath) };
+  return { root, contract: loadPolicy(contractPath) };
 }
 
 test("重载 -> reload 来源的压缩事件，进入监工流并显示“已压缩”", async () => {

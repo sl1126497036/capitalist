@@ -14,7 +14,7 @@ const { join, resolve } = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const capitalist = require("../dist/core/record/supervisor");
-const { createTaskRoot } = require("../dist/core/contract/init");
+const { createTaskRoot } = require("../dist/core/policy/init");
 const { directPath } = require("../dist/core/dispatch/commands");
 const { buildThreadMessages } = require("../dist/supervisor/board");
 
@@ -31,7 +31,7 @@ const WORKER = "W-say1";
 /** 造任务根，按给定记录写进插话台账。 */
 function scenario(rows) {
   const root = mkdtempSync(join(tmpdir(), "capitalist-say-"));
-  createTaskRoot({ target: "插话送达档位", contractSpec: "minimal", root });
+  createTaskRoot({ target: "插话送达档位", policySpec: "minimal", root });
   for (const d of [
     "runtime", "ledger", "model", "board", "config", "meta", "workers",
     "sessions", "inbox", "mq", "guard", "brain", "reload", "locks", "archive", ".root",

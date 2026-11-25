@@ -150,7 +150,7 @@ export function openInboxAsks(root: string): InboxRecord[] {
 /**
  * 登记一条待裁决问题到 `qa.jsonl`。
  *
- * `shard` 必须写：缺省会被调度层当成全阶段级问题，连带暂停其它分片；只有全阶段问题
+ * `shard` 必须写：缺省会被调度层当成全局问题，连带暂停其它分片；只有全局问题
  * 才留空。
  *
  * @returns 问题 id，供裁决方记录与本条问题的对应关系。
@@ -159,7 +159,6 @@ export function appendAsk(
   root: string,
   question: string,
   detail = "",
-  stage = "",
   shard = "",
 ): string {
   const id = `Q${Math.floor(Date.now() / 1000) % 100000}-${Math.random().toString(36).slice(2, 6)}`;
@@ -172,7 +171,6 @@ export function appendAsk(
     at_ts: Date.now() / 1000,
     text: question,
     context: detail,
-    stage,
     ...(shard ? { shard } : {}),
   });
   return id;

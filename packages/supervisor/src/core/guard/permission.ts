@@ -5,7 +5,7 @@ import type { ActionKind, Mode, Verdict } from "../types";
 /** 判定强度排序，用于取最严一档。 */
 const SEVERITY: Record<Verdict, number> = { allow: 0, ask: 1, deny: 2 };
 
-/** 既有契约里的旧判定名，映射到三值形式。 */
+/** 既有守卫里的旧判定名，映射到三值形式。 */
 const ALIASES: Record<string, Verdict> = {
   BLOCK: "deny",
   NEED_USER: "ask",
@@ -33,7 +33,7 @@ export const MODES: Record<Mode, ModeSpec> = {
     enforce: false,
     // 只停用档位层。红线在 `dispatch` 里于任何档位生效之前就已执行，
     // 红线在 `dispatch` 里先于档位生效：bypass 不改变 BLOCK 的拦截结果。
-    desc: "不拦截档位与本机边界，但仍记录；任务列表红线照旧生效",
+    desc: "不拦截档位与本机边界，但仍记录；守卫红线照旧生效",
   },
 };
 
@@ -109,19 +109,19 @@ export function decide(mode: unknown, requested: unknown, kind: ActionKind = "co
 }
 
 /**
- * 解析生效档位：命令行、环境变量、会话状态、契约默认，依次取第一个合法值。
+ * 解析生效档位：命令行、环境变量、会话状态、守卫默认，依次取第一个合法值。
  *
- * 会话状态排在契约之前：一次会话的显式选择比领域惯例更具体。
+ * 会话状态排在守卫之前：一次会话的显式选择比领域惯例更具体。
  */
 export function resolveMode(opts: {
   cli?: unknown;
   env?: unknown;
   session?: unknown;
-  contract?: { mode?: string; default_mode?: string } | undefined;
+  policy?: { mode?: string; default_mode?: string } | undefined;
 }): Mode {
   for (const candidate of [opts.cli, opts.env, opts.session]) {
     const m = normalizeMode(candidate);
     if (m) return m;
   }
-  return normalizeMode(opts.contract?.mode ?? opts.contract?.default_mode) ?? DEFAULT_MODE;
+  return normalizeMode(opts.policy?.mode ?? opts.policy?.default_mode) ?? DEFAULT_MODE;
 }

@@ -5,7 +5,7 @@ import { writeFileSync } from "node:fs";
 import { readJson } from "../record/json";
 import { config as configLoc } from "../record/locations";
 
-/** 一条待裁决问题（ask）最多能让阶段停多久。 */
+/** 一条待裁决问题（ask）最多能让调度停多久。 */
 export const ASK_BLOCK_MS = 15 * 60 * 1000;
 
 /** 一条插话/指令生效超过多久后不再拦截“报完成”。 */
@@ -18,9 +18,6 @@ export const MAX_SAY_CHARS = 8000;
 
 /** 一张单“已上报、等监工裁决”期间，最多还能占住并发槽位多久。 */
 export const VERDICT_HOLD_MS = 10 * 60 * 1000;
-
-/** 被用户消息唤醒的派单，多久之内不因“阶段已推进”被作废。 */
-export const WAKE_GRACE_MS = 30 * 60 * 1000;
 
 /** 监工对话上下文的配置上限（token），缺省 600k；面板显式设置的值优先。 */
 export const DEFAULT_SUPERVISOR_CONTEXT_LIMIT = 600_000;

@@ -259,11 +259,11 @@ export function parseWorkerCmd(tpl: string, prompt: string): { bin: string; args
 }
 
 /**
- * 派单说明只写这一单的边界，不写领域手法；`advance` / `adopt` / `supervise` 会改流程状态，禁止出现在派单说明里。
- * 契约分片的语义标题随 `dispatch` 原样带入 prompt，工作进程不解析。
+ * 派单说明只写这一单的边界，不写领域手法；`adopt` / `supervise` 会改流程状态，禁止出现在派单说明里。
+ * 派单标题随 `dispatch` 原样带入 prompt，工作进程不解析。
  */
 /**
- * 判定这一单是否续接上一次会话；会话 id 按阶段/分片派生并固定，监工或机器重启都不影响续接。
+ * 判定这一单是否续接上一次会话；会话 id 按分片或派生链派生并固定，监工或机器重启都不影响续接。
  * 宿主用 `--resume <id>` 续接会话。
  */
 export function resolveSession(root: string, dispatch: Dispatch): WorkerSession {
@@ -406,6 +406,22 @@ export function buildAcceptBlock(d: Dispatch): string[] {
   ];
 }
 
+/**
+ * 本单验收判据段（`ACCEPTANCE:` 行随派单落盘）。
+ *
+ * 与 {@link buildAcceptBlock} 的分工：那一段是“上一轮打回的未通过项”，本段是“建单时声明的完成口径”。
+ * 两者都在时先看未通过项，再看本单口径，最后才是通用结束口径。未声明时不占位。
+ */
+export function buildDispatchAcceptBlock(d: Dispatch): string[] {
+  const acc = String((d as { acceptance?: string }).acceptance ?? "").trim();
+  if (!acc) return [];
+  return [
+    "【本单验收判据】建单时声明，优先于下面的通用结束口径",
+    acc,
+    "  报告逐条对照本判据说明如何满足；写法无法核对的，按未完成处理。",
+  ];
+}
+
 /** 结束口径正文在 `closeOut.ts`，与监工判定层共用一份，避免执行侧与审查侧出现两套标准；三个提示词入口都从本导出取用。 */
 export function buildCloseOutRules(heading?: string): string[] {
   return closeOutRules(heading);
@@ -445,7 +461,7 @@ function buildBoundaryBlock(id: string): string[] {
     "  2. 本任务台账里 done / closed 的单是历史，不是待办：按历史结论核对已改过什么，",
     "     不按历史描述“恢复”或“实现”任何东西。产物现状以实际为准，不以截图、旧日志、旧派单正文为准；",
     "     历史描述与本单冲突时以本单为准，并在报告里写明冲突点。",
-    "  3. 不要执行 capitalist advance / capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
+    "  3. 不要执行 capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
     "     那三项属于监工，工作进程代为执行会使执行与验收职责不分。",
     `  4. 因外部条件受阻（验证码、账号、授权）：capitalist block <类型> "<受阻原因>" 后停手。`,
     /*
@@ -493,9 +509,9 @@ export function buildApplyBlock(): string[] {
 /**
  * 派单在提示词里的抬头，例如 `派单 4-1（标题 盘点下所有含中文的文件）：`。
  *
- * 不写阶段号：阶段是契约里的调度分段，工作进程只做这一单，阶段号对它没有可执行含义。
- * 写进去的后果是它被复述回来。申报里出现“S0 盘点：…”，用户读不懂 S0 是什么，
- * 还会以为漏了别的阶段没给它。分片同理，只在确有分片时写。
+ * 不写任务树坐标：工作进程只做这一单，它在树里的位置对它没有可执行含义。
+ * 写进去的后果是它被复述回来。申报里出现“第一层第二个节点：…”，用户还得回头数树。
+ * 分片则只在确有分片时写，它对应会话归属，是可执行信息。
  */
 export function dispatchHead(d: Dispatch, title: string): string {
   const bits = [d.shard ? `分片 ${d.shard}` : "", title ? `标题 ${title}` : ""].filter(Boolean);
@@ -556,6 +572,7 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
     ...(hasPreflight(raw) ? [] : [...buildGroundingBlock(d), ""]),
     ...buildBoundaryBlock(opts.id),
     "",
+    ...buildDispatchAcceptBlock(d),
     ...buildCloseOutRules(),
     "",
     ...buildApplyBlock(),
@@ -612,14 +629,15 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     `  4. 根因须能解释问题的必然性；只描述现象不算根因。`,
     ``,
     `【${CN[n]}、边界】`,
-    `  1. 不执行 capitalist advance / capitalist adopt / capitalist supervise，也不手改 .capitalist/ 下的台账；`,
+    `  1. 不执行 capitalist adopt / capitalist supervise，也不手改 .capitalist/ 下的台账；`,
     `     台账只按本单 id 取本单的行，其他单不读。`,
-    `  2. 代码项目不擅自重启，其他项目不擅自重跑，需申报或按派单指令执行。`,
+    `  2. 不擅自重启服务、重跑既有流程；需要时申报，或按派单指令执行。`,
     readonly
       ? "  3. 只读：文件、配置、台账均不修改。"
       : "  3. 可以修改，但只限与这个卡点直接相关的部分；不连带重构，不做其他单的任务。",
     ``,
-    /* 修复单同样按业务单的结束口径验收：不要求执行全部测试或提供截图，证据为修改点及与卡点直接相关的复现或核对。 */
+    /* 修复单同样按业务单的结束口径验收：证据是修改点，以及与卡点直接相关的复现或核对结果。 */
+    ...buildDispatchAcceptBlock(d),
     ...buildCloseOutRules(`【${CN[n + 1]}、怎么算做完】`),
     ``,
     `【${CN[n + 2]}、收尾】`,
@@ -725,6 +743,7 @@ export function buildPrompt(opts: {
     ...buildBoundaryBlock(opts.id),
     ``,
     ...buildSkillsBlock(opts.root, attPayload.text),
+    ...buildDispatchAcceptBlock(d),
     ...buildCloseOutRules(),
     ``,
     ...buildApplyBlock(),
@@ -832,7 +851,7 @@ export function launchWorker(opts: LaunchOptions): Launched {
   }
 
   const banner = [
-    `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} stage=${opts.dispatch.stage}`,
+    `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} shard=${opts.dispatch.shard ?? ""}`,
     `[launch] bin=${bin}${shell ? "（经 shell）" : ""}${viaStdin ? " prompt=stdin" : " prompt=argv"}`,
     /* 模型与会话写入日志一行：`.cmd` shim 下 argv 会被包装，命令行不足以核对实际使用的模型与续接的会话。 */
     `[launch] model=${opts.model ?? "（宿主默认）"} session=${session.id}${session.resume ? " resume" : " new"} lane=${session.resume ? "续" : "新"}`,
@@ -946,7 +965,6 @@ export function launchWorker(opts: LaunchOptions): Launched {
     ai_session: session.id,
     dispatch: opts.dispatch.id,
     shard: opts.dispatch.shard ?? "",
-    stage: opts.dispatch.stage,
     started_at: now,
     heartbeat_at: now,
     heartbeat_ts: Date.now() / 1000,
@@ -1080,7 +1098,7 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
     `title capitalist ${id}`,
     `cd /d "${opts.root}"`,
     `echo [capitalist] worker ${id}`,
-    `echo [capitalist] dispatch ${opts.dispatch.id} / stage ${opts.dispatch.stage}`,
+    `echo [capitalist] dispatch ${opts.dispatch.id} / shard ${opts.dispatch.shard ?? "-"}`,
     `echo [capitalist] closing this window does NOT report failure.`,
     `echo [capitalist] if aborted, run: capitalist report ${opts.dispatch.id} failed --note "aborted"`,
     "echo.",
@@ -1126,7 +1144,7 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
     appendFileSync(
       log,
       [
-        `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} stage=${opts.dispatch.stage}`,
+        `[launch] ${new Date().toISOString()} host=${opts.host} dispatch=${opts.dispatch.id} shard=${opts.dispatch.shard ?? "-"}`,
         `[launch] bin=${bin} 模式=可见窗口（cmd start）`,
         `[launch] prompt=${promptFile}`,
         `[launch] command=cmd /k ${id}.launch.cmd（cwd=${dirname(log)}）`,
@@ -1146,7 +1164,6 @@ export function openVisibleWorker(opts: LaunchOptions): Launched {
     ai_session: session.id,
     dispatch: opts.dispatch.id,
     shard: opts.dispatch.shard ?? "",
-    stage: opts.dispatch.stage,
     started_at: now,
     heartbeat_at: now,
     heartbeat_ts: Date.now() / 1000,
