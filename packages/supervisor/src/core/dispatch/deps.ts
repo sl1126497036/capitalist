@@ -43,10 +43,30 @@ export function splitPrerequisites(d: { id?: string; parent?: string; after?: st
 }
 
 /**
+ * 组边覆盖它的成员边：同一张单同时挂着组与组内成员时，只按组计一次。
+ *
+ * 组边是整批前置的概括，成员边是其中一条。挂组之后仍留着指向成员的 `after`
+ * 会让同一批前置被记两遍：界面只报成员号，组解散后也仍被成员边挡住。
+ */
+function coveredByGroups(groupIds: readonly string[], idx: GroupIndex | undefined): Set<string> {
+  const out = new Set<string>();
+  if (!idx) return out;
+  for (const gid of groupIds) {
+    for (const m of idx.members.get(gid) ?? []) out.add(String(m));
+    /* 组号本身也常被重复写进 `after`，与 `parent` 指向同一个组，同样去重。 */
+    out.add(gid);
+  }
+  return out;
+}
+
+/**
  * 还差哪些前置没满足。
  *
  * 返回值里组号原样给出（`G1`），供界面显示“等待 #G1”。顺序固定：
- * 先派单后组，各自保持声明顺序。界面取第一个未满足项作为卡点，顺序必须稳定。
+ * 先组后派单，各自保持声明顺序。界面取第一个未满足项作为卡点，顺序必须稳定；
+ * 组比单条成员更能说明“还差整组”，所以排在前面。
+ *
+ * 指向已声明组的成员的派单前置不再单独计入：组边已覆盖这一批，避免同一批前置记两遍。
  */
 export function pendingOf(
   d: { id: string; parent?: string; after?: string[] },
@@ -55,19 +75,6 @@ export function pendingOf(
 ): string[] {
   const { dispatchIds, groupIds, barrier } = splitPrerequisites(d);
   const pending: string[] = [];
-
-  if (dispatchIds.length > 0 || barrier) {
-    /*
-     * 交给原判定：把拆出的派单前置重新装成 `after`，不传 `parent`，
-     * 因为 `parent` 可能正是组号。只有一个派单前置时 `parentOf` 会把它当父节点，
-     * 但原判定内部走的是 `prerequisitesOf`，两条路径结果相同。
-     */
-    const view = {
-      id: d.id,
-      ...(barrier ? { after: ["*", ...dispatchIds] } : { after: dispatchIds }),
-    };
-    pending.push(...pendingPrerequisites(view, rows as Dispatch[]));
-  }
 
   if (groupIds.length > 0 && idx) {
     for (const gid of groupIds) {
@@ -79,6 +86,23 @@ export function pendingOf(
      * 调度侧一律传索引；命令行只读视图缺索引说明组台账缺失，应显式提示该组状态未知。
      */
     pending.push(...groupIds);
+  }
+
+  /* 缺索引时查不到成员，无法去重，按原样逐条判定。 */
+  const covered = coveredByGroups(groupIds, idx);
+  const ownDispatchIds = dispatchIds.filter((id) => !covered.has(id));
+
+  if (ownDispatchIds.length > 0 || barrier) {
+    /*
+     * 交给原判定：把拆出的派单前置重新装成 `after`，不传 `parent`，
+     * 因为 `parent` 可能正是组号。只有一个派单前置时 `parentOf` 会把它当父节点，
+     * 但原判定内部走的是 `prerequisitesOf`，两条路径结果相同。
+     */
+    const view = {
+      id: d.id,
+      ...(barrier ? { after: ["*", ...ownDispatchIds] } : { after: ownDispatchIds }),
+    };
+    pending.push(...pendingPrerequisites(view, rows as Dispatch[]));
   }
 
   return pending;

@@ -987,14 +987,21 @@ function onHotkey(e) {
 
 /* /api/capitalist-chat 为流式响应：正文逐字追加，思考与工具调用各占一行，返回最终的 done 事件供调用方收尾。 */
 async function streamChat(text, thread, onDelta, via = "", quote = null, skills = []) {
+  /*
+   * 监工窗口不绑定任务线程：线程键只对任务线程有效，混进来会让服务端把动作当成线程内要求
+   * 折算成对某张单的追加。这里统一归一：空串或监工选择值都不下发。
+   */
+  const threadKey = String(thread || "").trim();
+  const scoped = threadKey && threadKey !== "capitalist" ? threadKey : "";
   const res = await fetch("./api/capitalist-chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
     /* 请求随带 ref 与首行摘要；后端按 ref 取不到原文时用摘要回落，被引原文拼进发给模型的内容。 */
     body: JSON.stringify({
       text,
-      thread: thread || "",
-      via: via || "",
+      thread: scoped,
+      /* 介入标记只在任务线程里有意义，监工窗口一律不带。 */
+      via: scoped ? via || "" : "",
       ...(quote && quote.ref ? { quote: quote.ref, quote_text: String(quote.text || "").slice(0, 200) } : {}),
       /* 界面选中的技能：后端写进派单正文，工作进程据此加载对应 SKILL.md。 */
       ...(Array.isArray(skills) && skills.length ? { skills } : {}),

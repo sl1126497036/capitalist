@@ -5,6 +5,7 @@ import { readJson, writeJson } from "../../core/record/json";
 import { Dispatch, WorkerRecord, loadSupervisor, dispatchPaused, workerLivenessOf, DEFAULT_LOG_STALL_SEC, parentOf } from "../../core/record/supervisor";
 import { isSettled } from "../../core/record/dispatchState";
 import { pendingOf } from "../../core/dispatch/deps";
+import { groupSettled } from "../../core/dispatch/groupGraph";
 import { groupIndexFrom } from "../../core/dispatch/groupOps";
 import { isGroupRef, label } from "../../core/record/nodeRef";
 import { laneKeyOf } from "../../core/dispatch/commands";
@@ -662,9 +663,20 @@ export function buildThreadsPageUncached(
      */
     if (why) t.parent_reason = maskBoardText(why, noOfDispatch);
     const stuck = pendingOf(d, dispatches, gidx).filter((id) => id !== "*")[0] ?? "";
-    /* 卡点可能是组号（归一后的 `G1`），显示形态由 `nodeRef.label` 统一补 `#`。 */
-    t.stuck_on = stuck && isGroupRef(stuck) ? label(stuck) : stuck;
-    t.stuck_on_no = stuck ? noOfDispatch.get(stuck) || threadNoOf(root, stuck) : "";
+    /*
+     * 卡点是组时按组上报：落地写 `#G2` 形态，编号位留空，前端走“等待 #G02”。
+     * 组内首个未完成成员另放 `stuck_member_no`，只在需要细节时附注，
+     * 不作为卡点本身 —— 成员号会让人以为只差这一张单。
+     */
+    if (stuck && isGroupRef(stuck)) {
+      t.stuck_on = label(stuck);
+      t.stuck_on_no = "";
+      const member = groupSettled(stuck, dispatches, gidx).pending[0] ?? "";
+      if (member) t.stuck_member_no = noOfDispatch.get(member) || threadNoOf(root, member);
+    } else {
+      t.stuck_on = stuck;
+      t.stuck_on_no = stuck ? noOfDispatch.get(stuck) || threadNoOf(root, stuck) : "";
+    }
   }
 
   const holdByThread = new Map<string, { at: string; why: string }>();

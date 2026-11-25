@@ -205,6 +205,12 @@ export interface ThreadSummary {
   /** 等所有单的 "*" 按空串处理。 */
   stuck_on: string;
   stuck_on_no: string;
+  /**
+   * 卡点是组时，组内首个未完成成员的任务号（裸号）。
+   *
+   * 只作附注：卡点本身是组号，成员号写成卡点会让人以为只差这一张单。
+   */
+  stuck_member_no?: string;
   retry_verdict?: string;
   retry_why?: string;
   output_bytes: number;

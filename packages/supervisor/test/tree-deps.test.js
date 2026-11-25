@@ -64,7 +64,7 @@ test("组前置：组断链同样不放行，且给出的是组号", () => {
   assert.deepStrictEqual(pendingOf(rows[2], rows, idx), ["G1"]);
 });
 
-test("同时挂组与派单：两类都查，顺序为派单在前、组在后", () => {
+test("同时挂组与组外派单：两类都查，顺序为组在前、派单在后", () => {
   const rows = [
     d("1-1", "claimed"),
     d("2-1", "claimed", { group: "G1" }),
@@ -72,8 +72,29 @@ test("同时挂组与派单：两类都查，顺序为派单在前、组在后",
   ];
   const idx = groupIndexOf(rows, [g("G1")]);
   const pending = pendingOf(rows[2], rows, idx);
-  assert.strictEqual(pending[0], "1-1");
-  assert.strictEqual(pending[1], "G1");
+  assert.strictEqual(pending[0], "G1");
+  assert.strictEqual(pending[1], "1-1");
+});
+
+test("组边覆盖组内成员边：同一批前置只计一次", () => {
+  const rows = [
+    d("1-1", "claimed", { group: "G1" }),
+    d("2-1", "open", { group: "G1" }),
+    d("3-1", "open", { parent: "G1", after: ["1-1", "2-1"] }),
+  ];
+  const idx = groupIndexOf(rows, [g("G1")]);
+  assert.deepStrictEqual(pendingOf(rows[2], rows, idx), ["G1"]);
+  assert.strictEqual(isReady(rows[2], rows, idx), false);
+});
+
+test("解散组后按已收尾放行：残留的成员边不再挡住", () => {
+  const rows = [
+    d("1-1", "open", { group: "G1" }),
+    d("2-1", "open", { parent: "G1", after: ["1-1"] }),
+  ];
+  const idx = groupIndexOf(rows, [{ ...g("G1"), state: "closed" }]);
+  assert.deepStrictEqual(pendingOf(rows[1], rows, idx), []);
+  assert.strictEqual(isReady(rows[1], rows, idx), true);
 });
 
 test("组前置已完成、派单前置未完成：仍不放行", () => {

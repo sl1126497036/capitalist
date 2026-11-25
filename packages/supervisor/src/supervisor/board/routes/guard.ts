@@ -107,7 +107,7 @@ export function handleGuardDecision(ctx: BoardCtx): void {
 
     const rec = readGuardRequests(ctx.opts.root).find((r) => r.id === id);
     if (!rec) {
-      sendJson(ctx, { error: `没有 ${id} 这条申请` }, 404);
+      sendJson(ctx, { error: `未找到编号为 ${id} 的申请` }, 404);
       return;
     }
     if (rec.status === "allowed" || rec.status === "denied") {
@@ -126,10 +126,10 @@ export function handleGuardDecision(ctx: BoardCtx): void {
       ctx.opts.root,
       { worker: rec.worker, dispatch: rec.dispatch, paths: rec.paths },
       verdict === "allow"
-        ? `【用户已批准】${rec.paths.join("、")}\n按原命令重试一次。`
+        ? `【用户已批准】${rec.paths.join("、")}\n按原命令重新执行一次。`
         : [
             `【用户已拒绝】${rec.paths.join("、")}`,
-            alternative ? `改用这个做法：${alternative}` : "没有可替代的做法时，停下等用户进一步说明。",
+            alternative ? `替代方案：${alternative}` : "无替代方案时，暂停操作并等待用户进一步说明。",
           ].join("\n"),
     );
 

@@ -44,7 +44,7 @@ function workspaceDigest(root: string): string {
     if (!existsSync(join(root, probe))) continue;
     try {
       const head = readFileSync(join(root, probe), "utf8").slice(0, 400).replace(/\s+/g, " ").trim();
-      lines.push(`${probe} 开头：${head}`);
+      lines.push(`${probe} 首部：${head}`);
     } catch {
       /* 单个探测文件读取失败时跳过，摘要仍可生成。 */
     }
@@ -72,27 +72,27 @@ function loadedSkills(root: string): string[] {
 const SCHEMA_HINT = `只输出一个 JSON 对象，不要解释，不要代码块围栏。结构：
 {
   "name": "守卫名，英文短横线",
-  "domain": "这类任务的领域名，简短",
-  "context": "判据口径：什么算做完、什么算不合格、判据从哪来。分句写清，不写步骤",
+  "domain": "该任务所属领域名，简短",
+  "context": "判据口径：完成判定、不合格判定及判据来源。分句表述，不写步骤",
   "redlines": [
     {
       "id": "大写短横线标识",
       "level": "BLOCK 或 NEED_USER 或 WARN",
-      "label": "一句话说明禁止什么",
+      "label": "以一句话描述所禁止的行为",
       "pattern": "匹配命令或操作的正则",
-      "fix": "被拦下时该怎么做"
+      "fix": "命中该红线时的处置说明：应执行的修正动作"
     }
   ],
   "env_notes": { "summary": "本任务成立所依赖的环境与前提" }
 }
 
 规则：
-1. 只声明边界与判据，不声明流程：不写步骤顺序、不写并行度。编排由监工按目标拆任务树决定。
-2. redlines 只写这个目标下确实会出事的三类：破坏性操作、不可逆操作、越界访问敏感数据。没有就不写，不凑条数。
+1. 只声明边界与判据，不声明流程：不写步骤顺序、不写并行度。编排由监工按目标分解为任务树决定。
+2. redlines 仅列在该目标下确有风险的三类：破坏性操作、不可逆操作、越界访问敏感数据；不存在时留空，不为满足条数而填充。
 3. pattern 是正则，需要忽略大小写时用 (?i) 前缀；匹配面控制在“真会执行这件事”的写法上，避免把讨论、查看、文档提到也算命中。
 4. level 取 BLOCK（直接拒绝，用于不可逆与越界）、NEED_USER（需当次授权）、WARN（只提示）。
-5. context 写判据来源，例：用户原话优先，验收看产出物本身。不要写成鼓励性说明。
-6. name 用英文短横线，从目标语义取，不用 generated、task 这类空词。`;
+5. context 填写判据来源，例如：以用户原话为准，验收以产出物本身为准。不要写成鼓励性说明。
+6. name 使用英文短横线，依目标语义命名，不使用 generated、task 等无实义的泛词。`;
 
 /**
  * 生成一份守卫。
@@ -116,7 +116,7 @@ export async function generateGuard(opts: {
   const path = opts.out ?? join(dir, `generated-${new Date().toISOString().replace(/[:.]/g, "-")}.policy.json`);
   const skills = loadedSkills(opts.root);
   const prompt = [
-    "你在为一个通用任务监工起草守卫。守卫不安排流程，只声明这个任务里不许做什么、哪些位置不能动、什么算做完。",
+    "本提示词用于为通用任务监工起草守卫。守卫仅声明边界与判据：所禁止的操作、不可修改的位置以及完成判定标准，不安排流程。",
     "",
     `目标内容：${opts.target || "（未提供，按项目内容判断）"}`,
     "",

@@ -366,10 +366,10 @@ export function blockerLines(info?: BlockerInfo | null): string[] {
     .map((x) => String(x ?? "").trim())
     .filter(Boolean);
   if (parts.length === 0) {
-    return ["上一轮未记录失败原因。先复现一次，确认卡点位置再开始修改；不重复上一轮的做法；已完成的产出物不重做。"];
+    return ["上一轮未记录失败原因。须先复现一次，确认卡点位置后再修改；避免重复上一轮做法；已完成的产出物不重做。"];
   }
-  const lead = "上一轮卡在：";
-  const how = "不重复上一轮的路径：卡点仍在时改用其它可行路径，已解除时从上次进度继续；已完成的产出物不重做。";
+  const lead = "上一轮中止于：";
+  const how = "不重复上一轮的路径：卡点仍在时改用其他可行路径；卡点已解除时从上次进度继续；已完成的产出物不重做。";
   const budget = Math.max(
     24,
     BLOCKER_MAX_CHARS - BLOCKER_MARKER.length - 1 - lead.length - how.length - 1,
@@ -454,14 +454,14 @@ export function buildGroundingBlock(d?: { at?: string } | null, heading = "【�
 function buildBoundaryBlock(id: string): string[] {
   return [
     "【三、边界】",
-    `  1. 只认这一单：需要复查要求时读 .capitalist/workers/${id}/brief.md；`,
+    `  1. 仅执行本单：需要复查要求时读取 .capitalist/workers/${id}/brief.md；`,
     "     .capitalist/ledger/tasks.jsonl 只读本任务号的行（同一任务此前的结论），按本单派单号的 `任务号-` 前缀过滤，",
     "     不读其他任务的派单记录；不读 .capitalist/inbox/*.jsonl、其他 .capitalist/workers/* 或其他 brief。",
-    "     其他进程的日志与报告不算证据；不把其他任务的产出当作本单产出，本单未做即未完成。",
-    "  2. 本任务台账里 done / closed 的单是历史，不是待办：按历史结论核对已改过什么，",
-    "     不按历史描述“恢复”或“实现”任何东西。产物现状以实际为准，不以截图、旧日志、旧派单正文为准；",
+    "     其他进程的日志与报告不作为证据；不将其他任务的产出视为本单产出，本单未执行即视为未完成。",
+    "  2. 本任务台账里 done / closed 的单属历史，非待办：按历史结论核对已修改的内容，",
+    "     不按历史描述“恢复”或“实现”任何内容。产物现状以实际为准，不以截图、旧日志、旧派单正文为准；",
     "     历史描述与本单冲突时以本单为准，并在报告里写明冲突点。",
-    "  3. 不要执行 capitalist adopt / capitalist supervise，也不要手改 .capitalist/ 下的文件。",
+    "  3. 不执行 capitalist adopt / capitalist supervise，也不手动修改 .capitalist/ 下的文件。",
     "     那三项属于监工，工作进程代为执行会使执行与验收职责不分。",
     `  4. 因外部条件受阻（验证码、账号、授权）：capitalist block <类型> "<受阻原因>" 后停手。`,
     /*
@@ -480,18 +480,18 @@ function buildBoundaryBlock(id: string): string[] {
 function buildHelpBlock(dispatchId: string): string[] {
   return [
     "【六、受阻时如何申报】申报后继续执行剩余部分：",
-    `  capitalist notify stuck "<受阻原因、已经试过什么>"        同一件事连续失败两次、找不到执行入口、报错含义不明`,
-    `  capitalist notify question "<问题>" --needs decision   要求自相矛盾、不知道优先级、不知道该不该动`,
+    `  capitalist notify stuck "<受阻原因、已尝试的措施>"        同一件事连续失败两次、找不到执行入口、报错含义不明`,
+    `  capitalist notify question "<问题>" --needs decision   要求自相矛盾、优先级不明、是否应执行不明`,
     `  capitalist notify risk "<为什么觉得越界>"               可能越界：删数据、改发布配置、修改他人负责的文件`,
-    `  capitalist notify quality "<哪部分没做实>"              能交但质量不足，先如实申报`,
-    `  capitalist notify progress "<走到哪了>"                 只是让监工知道进度，不需要回复`,
+    `  capitalist notify quality "<未落实的部分>"              可交付但质量不足，须先如实申报`,
+    `  capitalist notify progress "<当前进度>"                 只是让监工知道进度，不需要回复`,
     "  监工会据此决定：继续、给出简要纠正、重开或转人工。",
-    `  需人工裁决：capitalist ask "<问题>" 后停手，等监工回填。`,
+    `  需人工裁决：使用 capitalist ask "<问题>" 后停止执行，等待监工回填。`,
     "",
     "【七、完成或失败】",
     `  完成：capitalist report ${dispatchId} done --note "<做了什么>" --evidence "<产出物在哪里 / 核对了什么 / 结果>"`,
     `  无法完成：capitalist report ${dispatchId} failed --note "<受阻原因>"`,
-    `  执行中收到用户追加的消息、你判断属于这一单：报告里加 --added "<新增/更正了什么>"。`,
+    `  执行期间收到用户追加消息、经判断属于本单的：在报告中附加 --added "<新增/更正了什么>"。`,
     `  这只是回报；要求是否成立由判定层确认，报告不改变本单要求。`,
   ];
 }
@@ -547,7 +547,7 @@ export function buildResumePrompt(opts: { root: string; target: string; id: stri
   const accept = buildAcceptBlock(d);
   /* 与首次派单同一套七块结构（见 buildPrompt 的说明），块内编号各自从 1 起。 */
   return [
-    "继续上一次被中断的执行，不从零开始。",
+    "继续上一次被中断的执行，无需从头重启。",
     "本提示词自包含：会话上下文丢失或压缩后，仍可凭以下正文与约束继续执行。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
@@ -625,16 +625,16 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     `     全局文件（.capitalist/runtime/state.json、.capitalist/runtime/supervisor.json、.capitalist/ledger/events.jsonl）只按本单 id（${d.id}）取相关行；`,
     `     不要读 .capitalist/ledger/tasks.jsonl、.capitalist/inbox/*.jsonl 里其他单的记录，也不要读其他工作进程的日志与会话。`,
     `  2. 再看实际执行路径：代码项目沿运行时生效的那条链路，不依据注释中的设计（注释可能已过期）。其他项目按实际执行路劲复现。`,
-    `  3. 能复现的复现一次（执行对应命令、脚本或流程），保留真实输出。复现前注意复现可能引发的影响，存在负面影响时需先申报。`,
+    `  3. 可复现的问题应复现一次（执行对应命令、脚本或流程），并保留真实输出；复现前须评估其可能影响，存在负面影响时先申报。`,
     `  4. 根因须能解释问题的必然性；只描述现象不算根因。`,
     ``,
     `【${CN[n]}、边界】`,
-    `  1. 不执行 capitalist adopt / capitalist supervise，也不手改 .capitalist/ 下的台账；`,
+    `  1. 不执行 capitalist adopt / capitalist supervise，也不手动修改 .capitalist/ 下的台账；`,
     `     台账只按本单 id 取本单的行，其他单不读。`,
     `  2. 不擅自重启服务、重跑既有流程；需要时申报，或按派单指令执行。`,
     readonly
       ? "  3. 只读：文件、配置、台账均不修改。"
-      : "  3. 可以修改，但只限与这个卡点直接相关的部分；不连带重构，不做其他单的任务。",
+      : "  3. 可以修改，但仅限与本卡点直接相关的部分；不连带重构，不处理其他单的任务。",
     ``,
     /* 修复单同样按业务单的结束口径验收：证据是修改点，以及与卡点直接相关的复现或核对结果。 */
     ...buildDispatchAcceptBlock(d),
@@ -642,7 +642,7 @@ function buildRepairPrompt(opts: { root: string; target: string; id: string; dis
     ``,
     `【${CN[n + 2]}、收尾】`,
     `  ${readonly ? "查清后" : "修完并验证后"}：capitalist report ${d.id} done --note "<${readonly ? "根因" : "修改了什么"}>" --evidence "<${readonly ? "支持这个根因的证据" : "核对了什么、结果如何"}>"`,
-    `排查受阻：capitalist report ${d.id} failed --note "<已排除什么、还差什么>"`,
+    `排查受阻：capitalist report ${d.id} failed --note "<已排除的项、尚缺的项>"`,
     `  需人工裁决：capitalist ask "<问题>" 后停手。`,
   ].join("\n");
 }
@@ -673,7 +673,7 @@ function buildSkillsBlock(root: string, actionText: string): string[] {
   if (named.length === 0) return [];
   const lines = [
     "【本单技能】",
-    "  需要的完整内容按下面路径自取（重点已在派单描述里）：",
+    "  所需完整内容按以下路径获取（要点已在派单描述中）：",
   ];
   for (const s of named) {
     lines.push(`  · ${s.name} — ${s.path}`);
@@ -725,7 +725,7 @@ export function buildPrompt(opts: {
     "你是独立的工作进程，不是监工。",
     `任务根：${opts.root}`,
     `任务目标：${opts.target}`,
-    `本单说明：.capitalist/workers/${opts.id}/brief.md（只有这一份属于你；内容与下面正文一致，需要复查时读取该文件）`,
+    `本单说明：.capitalist/workers/${opts.id}/brief.md（仅本份属于你；内容与下方正文一致，需要复查时读取该文件）`,
     ``,
     "【一、这一单要做什么】",
     "  （下面正文里若再出现【用户插话】【上一轮卡点】【上一轮已完成的部分】【本次验收】，都是这一块的子项，不是新的一节。）",

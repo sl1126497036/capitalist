@@ -313,3 +313,77 @@ test("tree move：缺 --under 时拒绝，不做默认挂载", () => {
     dropRoot(root);
   }
 });
+
+// ---------------------------------------------------------------- 改挂时的遗留前置清理
+
+const { appendDispatch } = require("../dist/core/record/supervisor");
+
+/** 直接写一条带 `after` 的派单：建单入口会把十个编号写成一条前置，这里按同一形态造数据。 */
+function putWithAfter(root, id, after, extra = {}) {
+  appendDispatch(root, {
+    id,
+    at: new Date().toISOString(),
+    stage: "S0",
+    lineage: id,
+    title: id,
+    action: `做 ${id}`,
+    status: extra.status ?? "open",
+    after,
+    ...(extra.parent ? { parent: extra.parent, parent_reason: "测试" } : {}),
+  });
+}
+
+test("tree move：挂组时清掉指向组内成员的遗留前置，组外前置保留", () => {
+  const root = makeRoot();
+  try {
+    put(root, "1-1");
+    put(root, "1-2");
+    run(root, ["group", "new", "并行", "1-1", "1-2"]);
+    put(root, "9-1");
+    putWithAfter(root, "2-1", ["1-1", "1-2", "9-1"]);
+
+    const r = runMove(root, ["move", "2-1"], { under: "#G01", reason: "整组完成才放行" });
+    assert.strictEqual(r.code, 0, r.out);
+    const d = readDispatches(root).find((x) => x.id === "2-1");
+    assert.strictEqual(d.parent, "G1");
+    assert.deepStrictEqual(d.after, ["9-1"], "成员边被组边覆盖，组外前置不动");
+  } finally {
+    dropRoot(root);
+  }
+});
+
+test("tree detach：摘成根时遗留前置一并清掉，不再原地等待", () => {
+  const root = makeRoot();
+  try {
+    put(root, "1-1");
+    putWithAfter(root, "2-1", ["1-1"], { parent: "1-1" });
+    const before = readDispatches(root).find((x) => x.id === "2-1");
+    assert.deepStrictEqual(before.after, ["1-1"], "前提：摘根前留着遗留前置");
+
+    const r = runMove(root, ["detach", "2-1"], {}, true);
+    assert.strictEqual(r.code, 0, r.out);
+    const d = readDispatches(root).find((x) => x.id === "2-1");
+    assert.strictEqual(d.parent, undefined);
+    assert.strictEqual(d.after, undefined, "摘根后不应再等任何前置");
+  } finally {
+    dropRoot(root);
+  }
+});
+
+test("tree move：先摘根再挂组，记录里只剩组边", () => {
+  const root = makeRoot();
+  try {
+    put(root, "1-1");
+    put(root, "1-2");
+    run(root, ["group", "new", "并行", "1-1", "1-2"]);
+    putWithAfter(root, "2-1", ["1-1", "1-2"]);
+
+    assert.strictEqual(runMove(root, ["detach", "2-1"], {}, true).code, 0);
+    assert.strictEqual(runMove(root, ["move", "2-1"], { under: "#G01", reason: "重新挂组" }).code, 0);
+    const d = readDispatches(root).find((x) => x.id === "2-1");
+    assert.strictEqual(d.parent, "G1");
+    assert.strictEqual(d.after, undefined);
+  } finally {
+    dropRoot(root);
+  }
+});

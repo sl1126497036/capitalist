@@ -751,8 +751,8 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
       `守卫文件已 ${fresh.age_hours} 小时未更新（最后修改 ` +
         `${String(fresh.mtime).slice(0, 16).replace("T", " ")}）。`,
     );
-    L.push("      下面的边界与判据可能已经过期。动手前先确认它是不是当前有效的口径；");
-    L.push("      过期就先更新守卫文件，不要照着旧口径做。");
+    L.push("      下面的边界与判据可能已经过期。执行前先确认其是否为当前有效口径；");
+    L.push("      若已过期，应先更新守卫文件，勿依据旧口径执行。");
     L.push("");
   }
   L.push("## 需求原文（逐字保留，非待办清单）");
@@ -787,7 +787,7 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   L.push("");
 
   const reverify = snap.items.filter((i) => i.state === "done_unverified");
-  L.push("## 待复验（已做但未验证，重载后必须派复验，不得当完成）");
+  L.push("## 待复验（已做但未验证，重载后必须派复验，不得视为完成）");
   if (reverify.length === 0) L.push("（无）");
   for (const i of reverify) L.push(`- ${i.title}：${i.why}`);
   L.push("");
@@ -798,12 +798,12 @@ export function buildReloadContext(snap: ReloadSnapshot): ReloadContextResult {
   for (const i of done) L.push(`- ${i.title}（${clipText(i.why, 100)}）`);
   L.push("");
 
-  L.push("## 用户未处理的插话（原话，按它执行）");
+  L.push("## 用户未处理的插话（原话，依原话执行）");
   if (snap.directives.length === 0) L.push("（无）");
   for (const d of snap.directives) L.push(`- ${d.shard ? `[${d.shard}] ` : ""}${d.text}`);
   L.push("");
 
-  L.push("## 未裁决提问（等用户回填，不自行裁决）");
+  L.push("## 未裁决提问（待用户回填，不自行裁决）");
   if (snap.asks.length === 0) L.push("（无）");
   /* 提问编号用“问N”：`#N` 保留给任务编号（`thread-no.json`），避免与任务号混淆。 */
   for (const a of snap.asks) L.push(`- 问${a.id} ${a.shard ? `[${a.shard}] ` : ""}${a.text}`);
@@ -877,9 +877,9 @@ export function readResumePlan(root: string): ResumePlan | null {
 function reverifyAction(item: ResumeReverifyItem): string {
   return [
     `复验（不是重做）：${item.title}`,
-    `上一轮已报完成，但没有可核对的确认（${item.why}），不能直接当完成。`,
-    "做三件事：1) 按下面的原要求逐条核对是否真的做到；2) 每条给出证据（命令输出、产出物位置、截图路径），结论用 capitalist ledger add 入账；",
-    "3) 成立就在回报里写“已验证”，不重写已经通过的部分，不改动其他分片的作用对象；不成立就写明缺少哪条。",
+    `上一轮已报完成，但缺少可核对的确认（${item.why}），不得直接视为完成。`,
+    "执行以下三项：1) 按下方原要求逐条核对是否达成；2) 每条附上证据（命令输出、产出物位置、截图路径），并以 capitalist ledger add 入账结论；",
+    "3) 核对成立的，在回报中注明“已验证”，不重写已通过部分，不改动其他分片的作用对象；核对不成立的，逐条列明缺失项。",
     `原要求：${clipText(oneLine(item.action), 1200)}`,
   ].join("\n");
 }
@@ -1799,7 +1799,7 @@ export async function beginReload(root: string, policy: Policy, opts: ReloadOpti
   const running = reloadStatus(root);
   if (running.active) {
     throw new Error(
-      `已有重载在进行中（第 ${running.gen} 次，当前进度 ${running.phase}，已 ${running.age_sec} 秒）。等它结束再重载。` +
+      `已有重载在进行中（第 ${running.gen} 次，当前进度 ${running.phase}，已 ${running.age_sec} 秒）。待其结束后再执行重载。` +
         `进程若已退出，${Math.round(RELOAD_STALE_MS / 60000)} 分钟后标记自动失效。`,
     );
   }

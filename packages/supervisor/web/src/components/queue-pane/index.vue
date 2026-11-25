@@ -112,7 +112,16 @@ function cell(t) {
     const no = String(t?.stuck_on_no || "").trim();
     if (no) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(no) }) };
     const id = String(t?.stuck_on || "").trim();
-    if (id) return { tone: "warn", kind: "word", text: tr("等待 #{no}", { no: bareNoLabel(id) }) };
+    if (id) {
+      /* 卡点是组时附注首个未完成成员：组是概括，成员号只作细节。 */
+      const m = String(t?.stuck_member_no || "").trim();
+      const isGroup = /^G\d+$/i.test(id.replace(/^#/, ""));
+      const text =
+        isGroup && m
+          ? tr("等待 #{no}（#{m} 未完成）", { no: bareNoLabel(id), m: bareNoLabel(m) })
+          : tr("等待 #{no}", { no: bareNoLabel(id) });
+      return { tone: "warn", kind: "word", text };
+    }
     return { tone: "warn", kind: "word", text: tr("排队") };
   }
   if (s === "suspended") return { tone: "warn", kind: "word", text: tr("已让位") };

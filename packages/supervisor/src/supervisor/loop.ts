@@ -940,7 +940,7 @@ async function judgeRetry(
 ): Promise<{ decision: "retry" | "give_up" | "hold"; why: string; fallback?: boolean }> {
   /* 只向模型提供事实（失败次数、原因、存活时长、末尾输出），不预设放弃阈值，由模型裁决。 */
   const facts: string[] = [
-    `这一单要做什么：${String(d.action ?? "").replace(/\s+/g, " ").slice(0, 700)}`,
+    `本单任务：${String(d.action ?? "").replace(/\s+/g, " ").slice(0, 700)}`,
     `这条链累计失败 ${attempts} 次`,
   ];
   const hist = chain
@@ -962,10 +962,10 @@ async function judgeRetry(
       const clean = withoutThinking(raw.split(/\r?\n/).filter((l) => l.trim()));
       const tail = tailWithinChars(clean.lines, 1800);
       facts.push(
-        `进程退出前日志的最后几行${clean.dropped ? `（另有 ${clean.dropped} 行思考过程，已略去）` : ""}：\n${tail}`,
+        `进程退出前日志的末尾部分${clean.dropped ? `（另有 ${clean.dropped} 行思考过程，已略去）` : ""}：\n${tail}`,
       );
     } catch {
-      facts.push("进程退出前未留下可读日志（进程被强杀或启动即失败）");
+      facts.push("进程退出前未留下可读日志（进程被强制终止或启动即失败）");
     }
   }
   /* 历史卡点记忆作为“卡点是否消除”的核对输入。 */
@@ -974,16 +974,16 @@ async function judgeRetry(
 
   const r = await decide({
     root,
-    question: "是否重试这一单？先核对上一轮卡点（失败原因、阻塞项）是否已消除，再作判断。",
+    question: "是否重试本单？先核对上一轮卡点（失败原因、阻塞项）是否已消除，再作判定。",
     facts,
     actions: [
       {
         name: "retry",
-        desc: "重试：卡点已消除，或失败由临时条件导致（环境抖动、端口/文件被临时占用、并发冲突、外部服务超时）",
+        desc: "重试：卡点已消除，或失败由临时条件导致（环境瞬时波动、端口/文件被临时占用、并发冲突、外部服务超时）",
       },
       {
         name: "give_up",
-        desc: "不再试：再试也一样（缺权限或缺依赖、要求本身做不到、方案方向错了）",
+        desc: "不再重试：重试结果相同（缺权限或依赖、要求无法实现、方案方向有误）",
       },
       {
         name: "hold",
@@ -5451,10 +5451,10 @@ async function summaryText(root: string, facts: string): Promise<string> {
     facts,
     "",
     "写法：",
-    "  · 开头一句话交代整体：几张单、成功几张、没成功的为什么失败。",
-    "  · 中间只讲没成功的；成功的不逐张复述，除非耗时值得说明。",
-    "  · 结尾一句话说有没有在途单。",
-    "  · 只写上面存在的内容。不推测原因，不评价好坏，不列改进建议。",
+    "  · 开头一句话交代整体：派单总数、成功数及失败原因。",
+    "  · 中间仅说明失败项；成功项不逐条复述，耗时值得说明者除外。",
+    "  · 结尾一句话说是否存在在途派单。",
+    "  · 只写上面存在的内容。不推测原因，不作评价，不列改进建议。",
     "  · 不逐条抄编号与状态，不用列表符号，不用感叹号。",
     "  · 用与用户相同的语言。",
   ].join("\n");
@@ -5556,16 +5556,16 @@ async function reviewLooping(args: {
   const clean = withoutThinking(args.tail);
   const shown = tailWithinChars(clean.lines, 3000);
   const prompt = [
-    "你在判断一个工作进程是否原地循环。",
+    "判断工作进程是否陷入循环。",
     "",
-    "【它这一单要做什么】",
+    "【该工作进程本单任务】",
     String(args.action || "（未记录）").slice(0, 400),
     "",
-    `【它日志的最后 ${args.tail.length} 行${clean.dropped ? `（其中 ${clean.dropped} 行思考过程已略去）` : ""}】`,
+    `【该进程日志末尾 ${args.tail.length} 行${clean.dropped ? `（其中 ${clean.dropped} 行思考过程已略去）` : ""}】`,
     shown,
     "",
-    "判断标准：内容在变化、在推进、在产出不同的东西 -> 推进；反复输出同一段、同一句命令、",
-    "同一段报错，没有任何新信息 -> 循环。",
+    "判断标准：日志持续更新、任务推进、产出不同结果 -> 推进；反复输出相同内容、相同命令或",
+    "相同报错且无新信息 -> 循环。",
     "",
     "只回答一个词：循环 / 推进。不要解释，不要加标点。",
   ].join("\n");

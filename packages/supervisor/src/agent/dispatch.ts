@@ -80,7 +80,7 @@ const INJECT_RULES: Record<BriefLang, string> = {
     "Rules:\n" +
     "- Run every `capitalist` command yourself; never ask the user to type one.\n" +
     "- This state was computed for you. Do not ask what to do next; follow `next`.\n" +
-    '- Unsure: register the question with `capitalist ask "<q>"`, then stop. That is a legitimate pause.',
+    '- When uncertain: register the question with `capitalist ask "<q>"`, then stop. This is a legitimate pause.',
 };
 
 function pickLang(prompt: string): BriefLang {
@@ -241,8 +241,8 @@ function deliverPendingDirectives(
       `【用户追加 · 派单 ${dispatchId}】执行期间收到用户追加的内容，本次工具调用暂停一次以完成送达。`,
       `编号：${directiveShortRef(rec)}`,
       "先判断是否属于本单要求，再按结论处理：",
-      "  是 -> 按下面的内容调整做法（与原要求冲突时以追加内容为准），然后继续原任务；",
-      "  不是 -> 不要改这一单的做法，但收尾时必须把这个编号报成 not_mine 并说明该归哪一单。",
+      "  是 -> 按下面的内容调整做法（与原要求冲突时以追加内容为准），随后继续原任务；",
+      "  不是 -> 不调整本单做法，但收尾时须将该编号标注为 not_mine，并说明其归属任务。",
       `回报方式：capitalist report … --outcome "${directiveShortRef(rec)}=done"` +
         "（也可 not_mine / blocked，多条用分号隔开）。未给出结论的本单无法通过收工闸。",
       "被暂停的调用仍需执行时重新发起。",
@@ -488,11 +488,11 @@ function guardFileLock(
       recordEvent(ctx, event, { lock: "denied", mode, path: p, holder: who, ahead: r.ahead ?? 0 });
       return hook.deny(
         [
-          `【文件锁】${p} 当前被 ${who} 持有${mode === "write" ? "写锁" : "读锁"}，等待 ${cfg.waitMs}ms 未获锁，排队 ${r.ahead ?? 0} 个。`,
+          `【文件锁】${p} 当前被 ${who} 持有${mode === "write" ? "写锁" : "读锁"}，等待 ${cfg.waitMs}ms 未获锁，前方等待 ${r.ahead ?? 0} 个。`,
           "",
           "不要无限等待，也不要反复重试同一个调用：",
           "  1) 先做与该文件无关的工作（修改其他文件、运行测试）；",
-          "  2) 确实只剩这一件事，过一会儿再试一次；",
+          "  2) 若仅剩此一项待处理，间隔一段时间后重试一次；",
           `  3) 持续无法获取时，capitalist ask "${p} 被 ${who} 长期占用" 登记后停止执行，等待监工裁决。`,
         ].join("\n"),
         event.point,
@@ -516,7 +516,7 @@ function guardFileLock(
           `【文件已被改】${p} 在读取之后被${st.by ? ` ${st.by} ` : "他人"}修改。`,
           st.why ? `· ${st.why}` : "",
           "",
-          "先重新 Read 这个文件，基于新内容再改；不要用旧内容覆盖他人的改动。",
+          "请重新读取该文件，基于最新内容修改；避免以旧内容覆盖他人改动。",
         ]
           .filter(Boolean)
           .join("\n"),
@@ -599,7 +599,7 @@ function describeBlock(policy: Policy, gate: GateResult, cmd: string): string {
   return (
     `【红线拦截】\n${head}\n命中：…${hit[0]?.snippet ?? cmd.slice(0, 80)}…\n` +
     (fix ? `正确做法：${fix}\n` : "") +
-    "换一条不越界的路径；不确定时 capitalist ask 由监工裁决。"
+    "请改用不越界的路径；如有不确定项，以 capitalist ask 登记后由监工裁决。"
   );
 }
 
@@ -624,7 +624,7 @@ function onIdle(hook: HookFacet, event: UnifiedEvent, ctx: Ctx): HookDecision {
     return hook.inject(
       `${
         lang === "zh"
-          ? `【capitalist${dlabel ? ` | ${dlabel}` : ""}】（监工已派单；只做这一单，结束时 capitalist report）`
+          ? `【capitalist${dlabel ? ` | ${dlabel}` : ""}】（监工已派单；仅执行本单，完成后执行 capitalist report）`
           : `【capitalist${dlabel ? ` | ${dlabel}` : ""}】(dispatched; do only this task, run \`capitalist report\` when done)`
       }\n${THINK_LANG[lang]}`,
       event.point,

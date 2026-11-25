@@ -224,6 +224,7 @@ const EN = {
   "未上报": "not reported",
   "模型": "Model",
   "等待 #{no}": "Waiting on #{no}",
+  "等待 #{no}（#{m} 未完成）": "Waiting on #{no} (#{m} unfinished)",
   "默认模型 {m}": "Default model {m}",
   "将清空 {n} 项：进程记录与派单移进归档目录，列表里不再出现。":
     "About to clear {n} items: process records and dispatches move to the archive and disappear from this list.",

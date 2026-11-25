@@ -189,6 +189,12 @@ function supervisorActClose() {
   supervisorAct.value = "";
 }
 
+/** 退出介入：开关与状态词一起清掉，后续消息不再带介入标记。 */
+function resetIntervention() {
+  viaSupervisor.value = false;
+  supervisorActClose();
+}
+
 const seen = ref(new Set());
 const newIds = ref(new Set());
 /** 按 root+sel 记录滚动位置，切回时回到原处。 */
@@ -221,6 +227,10 @@ function closeSelConfirm() {
 const isSupervisor = computed(() => props.sel === "capitalist");
 
 const viaSupervisor = ref(false);
+/* 关掉介入开关即退出介入：不把“介入中 / 已介入”留在状态条上，避免看着已退出其实还带着标记。 */
+watch(viaSupervisor, (on) => {
+  if (!on) supervisorActClose();
+});
 const held = computed(() => Boolean(props.thread?.held));
 
 
@@ -667,7 +677,14 @@ watch(squeezed, (v) => {
 });
 watch(isSupervisor, () => {
   auxOpen.value = false;
+  /*
+   * 切回监工窗口时立即退出介入：介入是“在某条任务线程里请监工代答”的临时状态，
+   * 留着会让下一条消息仍按工作进程线程下发，监工窗口里的派单被当成线程内要求折算成追加。
+   */
+  resetIntervention();
 });
+/* 切换窗口（换任务线程）同样清掉介入状态：上一条线程的选择不带进新窗口。 */
+watch(() => props.sel, () => resetIntervention());
 let squeezeRo = null;
 
 const thinkOpen = reactive({});

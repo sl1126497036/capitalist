@@ -31,22 +31,22 @@ const TEXTS: Record<BriefLang, Texts> = {
   zh: {
     fallbackHead: "通用守卫，无领域判据（不阻断）",
     fallbackBody: [
-      "  未指定领域守卫，只启用通用红线（破坏性删除、SQL 清库、凭据）。",
+      "  未指定领域守卫，只启用通用红线（破坏性删除、SQL 清空数据库、凭据）。",
       "  若这是明确领域任务：capitalist adopt --policy <守卫名>",
     ],
-    mode: (m) => `权限档位：${m}（非默认）。动作被拦截可能与档位有关，而非守卫红线。`,
+    mode: (m) => `权限档位：${m}（非默认）。拦截原因可能是权限档位，而非守卫红线。`,
     head: (domain, target) => `【capitalist | ${domain}】${target}`,
     next: (n) => `  下一步：${n}`,
-    asks: (n) => `  待裁决 ${n} 条，答复后才能继续：`,
+    asks: (n) => `  待裁决 ${n} 条，答复后方可继续：`,
     genericDomain: "通用任务",
   },
   en: {
-    fallbackHead: "▸ generic guard — no domain criteria (it will not block, but do not rely on it)",
+    fallbackHead: "▸ generic guard — no domain criteria (non-blocking; must not be treated as a domain guard)",
     fallbackBody: [
-      "  No domain guard was selected, so only the generic redlines apply (destructive deletes,",
+      "  No domain guard was selected; only the generic redlines apply (destructive deletes,",
       "  SQL drops, credentials). If this is a domain task: capitalist adopt --policy <name>",
     ],
-    mode: (m) => `▸ mode: ${m} (non-default — a blocked action may come from the mode, not a redline)`,
+    mode: (m) => `▸ mode: ${m} (non-default — a blocked action may be attributable to the mode rather than a redline)`,
     head: (domain, target) => `[capitalist · ${domain}] ${target}`,
     next: (n) => `  next: ${n}`,
     asks: (n) => `  ${n} open question(s) — answer before continuing:`,

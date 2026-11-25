@@ -95,7 +95,7 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
   const ledger = (input.directiveLedger ?? []).map((x) => String(x).trim()).filter(Boolean);
   if (added.length || words.length || ledger.length) {
     facts.push("【验收以本单最新要求为准，逐条核对送达记录】");
-    if (added.length) facts.push(`它在报告里承认的用户新增/更正：${added.join("；").slice(0, 900)}`);
+    if (added.length) facts.push(`报告中记录的用户新增/更正要求：${added.join("；").slice(0, 900)}`);
     for (const w of words.slice(-6)) facts.push(`本单收到的消息：${w.slice(0, 300)}`);
   }
   /* 对账清单由系统按送达记录列全，不由工作进程决定。 */
@@ -105,10 +105,10 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
       "【这一单送达过的要求，逐条核对：未给结论的按未完成处理】",
       ...ledger.map((x) => `  - ${x}`),
       "判定口径：出现“未给结论”，或结论写 not_mine 但内容明显属于本单 -> 判 reject 退回并指明具体条目；",
-      "结论写 done 但证据里找不到对应改动 -> 同样 reject。只有每条都有可信结论时才 accept。",
+      "结论为 done 但证据中无对应改动 -> 同样 reject。仅当每条均有可信结论时才 accept。",
     );
   }
-  facts.push(`局面：运行中 ${input.live}/${input.capacity} 个工作进程；同一分片已失败 ${input.failures} 次`);
+  facts.push(`当前状态：运行中 ${input.live}/${input.capacity} 个工作进程；同一分片已失败 ${input.failures} 次`);
   /* 本单验收判据由派单携带；没声明时只留通用口径，不另设门槛。 */
   const acceptance = String(input.acceptance ?? "").trim();
   if (acceptance) facts.push(`这一单的验收判据：${acceptance.replace(/\s+/g, " ").slice(0, 700)}`);
@@ -123,27 +123,27 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
 
   const r = await decide({
     root: input.root,
-    question: "一个工作进程发来这条申报，监工应如何处理？",
+    question: "收到工作进程提交的申报，监工应如何处理？",
     facts,
     actions: [
       { name: "continue", desc: "无需干预：误报、已知问题、可自行解决" },
       { name: "nudge", desc: "方向或做法有偏差但无需重开：参数里写明纠正内容（二十字以内）" },
       {
         name: "requeue",
-        desc: "这一单的做法不可行要重开（要求本身不可行时选 escalate）",
+        desc: "本单做法不可行，应重开（要求本身不可行时选 escalate）",
       },
-      { name: "pause_shard", desc: "继续执行代价更大（正在改动错误位置、在扩大破坏面），先停这一片" },
+      { name: "pause_shard", desc: "继续执行代价更大（正在改动错误位置、扩大影响范围），先暂停该分片" },
       {
         name: "escalate",
         desc: "需人工裁决，任务无法继续：缺权限或凭据、需求自相矛盾、外部依赖不可用、代价不可逆。该单转为等待用户决策，不再重派",
       },
       {
         name: "accept",
-        desc: "只用于工作进程报完成：证据足以结束（产出物与要求相符、核对结果一致）",
+        desc: "仅用于工作进程报告完成：证据足以结束（产出物与要求相符、核对结果一致）",
       },
       {
         name: "reject",
-        desc: "只用于工作进程报完成：报告还不足但工作可以继续（无可核对证据、仅完成表面工作、与最新要求不符）。退回后同一单重新执行",
+        desc: "仅用于工作进程报告完成：证据尚不充分但任务可继续（无可核对证据、仅完成表面工作、与最新要求不符）。退回后同一单重新执行",
       },
     ],
     session: "capitalist-brain-triage",
@@ -161,7 +161,7 @@ export async function triage(input: TriageInput): Promise<TriageVerdict> {
     };
   }
   const first = r.actions[0];
-  if (!first) return { decision: "continue", why: "模型未给出动作", fallback: true, error: "模型返回了内容，但没有可执行的动作。" };
+  if (!first) return { decision: "continue", why: "模型未给出动作", fallback: true, error: "模型有输出但无可执行的动作。" };
   const decision = first.name as TriageDecision;
   const say = decision === "nudge" || decision === "reject" ? String(first.arg ?? "").trim() : "";
   return {

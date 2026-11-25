@@ -160,15 +160,32 @@ export function reassignParent(
   for (const id of ids_) if (!byId.has(id)) errors.push({ id, reason: "派单不在台账里（可能已归档）：先核对编号" });
   if (errors.length > 0) return fail(errors);
 
+  /*
+   * 结构清理：`parent` 与遗留的 `after` 共同表达依赖，改挂时不能只改一半。
+   *
+   * 挂组时清掉指向该组成员的 `after`：组边已经是这一批的概括，成员边留着会让
+   * 同一批前置记两遍 —— 界面只报成员号，组解散后也仍被成员边挡住。
+   * 摘成根节点时清掉全部 `after`：摘根的语义就是“不再等待任何前置”，
+   * 只删 `parent` 会让单子摘了根却继续排在原地。
+   */
+  const gid = normalizeGroupId(parent);
+  const covered = new Set<string>(gid ? (idx.members.get(gid) ?? []) : []);
+  if (gid) covered.add(gid);
   const next = rows.map((d) => {
     if (!ids_.includes(String(d.id))) return d;
     const row = { ...d } as Dispatch;
     if (parent) {
       row.parent = parent;
       row.parent_reason = String(reason);
+      if (Array.isArray(row.after) && covered.size > 0) {
+        const kept = row.after.filter((x) => !covered.has(String(x ?? "").trim()));
+        if (kept.length > 0) row.after = kept;
+        else delete row.after;
+      }
     } else {
       delete row.parent;
       delete row.parent_reason;
+      delete row.after;
     }
     return row;
   });
